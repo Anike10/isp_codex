@@ -16,10 +16,12 @@
     <div class="actions">
         @if (! $invoice->isFinalized())
             <a class="btn secondary" href="{{ route('invoices.edit', $invoice) }}">Edit</a>
-            <form method="post" action="{{ route('invoices.finalize', $invoice) }}" onsubmit="return confirm('Finalize this invoice? You will not be able to edit it after finalizing.');">
-                @csrf
-                <button class="btn" type="submit">Final</button>
-            </form>
+            @if (auth()->user()?->hasPermission('finalize_invoices'))
+                <form method="post" action="{{ route('invoices.finalize', $invoice) }}" onsubmit="return confirm('Finalize this invoice? You will not be able to edit it after finalizing.');">
+                    @csrf
+                    <button class="btn" type="submit">Final</button>
+                </form>
+            @endif
         @endif
         <a class="btn light" href="{{ route('invoices.challan', $invoice) }}" target="_blank">Print Bill</a>
         <a class="btn light" href="{{ route('invoices.quotation', $invoice) }}" target="_blank">Print Quotation</a>

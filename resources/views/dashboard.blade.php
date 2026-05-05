@@ -6,11 +6,18 @@
         <h1>Dashboard</h1>
         <div class="muted">Computer service and internet billing overview</div>
     </div>
-    <form method="post" action="{{ route('invoices.generate') }}" class="actions">
-        @csrf
-        <input type="month" name="billing_month" value="{{ now()->format('Y-m') }}" required>
-        <button class="btn" type="submit">Generate Bills</button>
-    </form>
+    <div class="actions">
+        @if (auth()->user()?->hasPermission('download_backup'))
+            <a class="btn secondary" href="{{ route('backup.database') }}">Download DB Backup</a>
+        @endif
+        @if (auth()->user()?->hasPermission('manage_invoices'))
+            <form method="post" action="{{ route('invoices.generate') }}" class="actions">
+                @csrf
+                <input type="month" name="billing_month" value="{{ now()->format('Y-m') }}" required>
+                <button class="btn" type="submit">Generate Bills</button>
+            </form>
+        @endif
+    </div>
 </div>
 
 <div class="grid stats">

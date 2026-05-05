@@ -58,7 +58,7 @@
             <td>{{ number_format($cashCollected, 2) }}</td>
             <td>{{ number_format($cashCollected, 2) }}</td>
             <td><span class="badge active">active</span></td>
-            <td></td>
+            <td><a class="btn light" href="{{ route('payment-accounts.cash-ledger') }}">Ledger</a></td>
         </tr>
         @forelse ($accounts as $account)
             @php

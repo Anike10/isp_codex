@@ -9,18 +9,21 @@
         * { box-sizing: border-box; }
         body { margin:0; font-family: Arial, sans-serif; color:var(--ink); background:var(--bg); }
         a { color:inherit; text-decoration:none; }
-        .shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
-        .sidebar { background:#14213d; color:white; padding:24px 18px; }
-        .brand { font-size:20px; font-weight:700; margin-bottom:24px; }
-        .nav { display:grid; gap:8px; }
-        .nav a { color:#dbe7ff; padding:10px 12px; border-radius:6px; }
+        .shell { min-height:100vh; }
+        .app-header { position:sticky; top:0; z-index:50; background:#14213d; color:white; border-bottom:1px solid rgba(255,255,255,.12); }
+        .header-inner { max-width:1440px; margin:0 auto; padding:12px 20px; display:flex; align-items:center; gap:14px; }
+        .brand { font-size:20px; font-weight:700; white-space:nowrap; }
+        .nav { display:flex; gap:6px; align-items:center; overflow-x:auto; scrollbar-width:thin; flex:1; padding:2px 0; }
+        .nav a { color:#dbe7ff; padding:9px 11px; border-radius:6px; white-space:nowrap; font-size:14px; }
         .nav a:hover { background:rgba(255,255,255,.1); color:white; }
-        .main { padding:28px; }
+        .logout-form { margin:0; }
+        .logout-form .btn { min-height:34px; padding:8px 12px; white-space:nowrap; }
+        .main { max-width:1440px; margin:0 auto; padding:24px 20px 34px; }
         .topbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:20px; }
         h1 { margin:0; font-size:28px; }
         h2 { margin:0 0 14px; font-size:20px; }
         .grid { display:grid; gap:16px; }
-        .stats { grid-template-columns:repeat(6, minmax(0, 1fr)); }
+        .stats { grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); }
         .two { grid-template-columns:repeat(2, minmax(0, 1fr)); }
         .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; }
         .stat strong { display:block; font-size:26px; margin-top:8px; }
@@ -47,29 +50,72 @@
         .badge.open, .badge.processing { background:#eff6ff; color:#175cd3; }
         .badge.low { background:#fff1f3; color:#c01048; }
         @media (max-width: 980px) {
-            .shell { grid-template-columns:1fr; }
-            .sidebar { position:static; }
             .stats, .two, .form-grid { grid-template-columns:1fr; }
-            .main { padding:18px; }
+            .header-inner { align-items:flex-start; flex-wrap:wrap; padding:10px 12px; }
+            .brand { width:100%; }
+            .nav { order:3; width:100%; flex:0 0 100%; }
+            .main { padding:16px 12px 28px; }
+            .topbar { align-items:flex-start; flex-direction:column; }
+            .actions { width:100%; }
+            .actions .btn, .actions form, .actions input, .actions select { max-width:100%; }
             table { display:block; overflow-x:auto; }
+            th, td { padding:10px; }
+            h1 { font-size:24px; }
+            .stat strong { font-size:22px; }
+            .card { padding:14px; }
+        }
+        @media (max-width: 560px) {
+            .nav a { font-size:13px; padding:8px 9px; }
+            .btn { width:100%; justify-content:center; }
+            .logout-form { margin-left:auto; }
+            input, select, textarea { font-size:16px; }
         }
     </style>
 </head>
 <body>
 <div class="shell">
-    <aside class="sidebar">
+    <header class="app-header">
+    <div class="header-inner">
         <div class="brand">KPS ISP Manager</div>
         <nav class="nav">
-            <a href="{{ route('dashboard') }}">Dashboard</a>
-            <a href="{{ route('customers.index') }}">Customers</a>
-            <a href="{{ route('packages.index') }}">Packages</a>
-            <a href="{{ route('invoices.index') }}">Invoices</a>
-            <a href="{{ route('payments.index') }}">Payments</a>
-            <a href="{{ route('payment-accounts.index') }}">Payment Accounts</a>
-            <a href="{{ route('tickets.index') }}">Tickets</a>
-            <a href="{{ route('products.index') }}">Inventory</a>
+            @if (auth()->user()?->hasPermission('view_dashboard'))
+                <a href="{{ route('dashboard') }}">Dashboard</a>
+            @endif
+            @if (auth()->user()?->hasPermission('manage_customers'))
+                <a href="{{ route('customers.index') }}">Customers</a>
+            @endif
+            @if (auth()->user()?->hasPermission('manage_packages'))
+                <a href="{{ route('packages.index') }}">Packages</a>
+            @endif
+            @if (auth()->user()?->hasPermission('manage_invoices'))
+                <a href="{{ route('invoices.index') }}">Invoices</a>
+            @endif
+            @if (auth()->user()?->hasPermission('manage_payments'))
+                <a href="{{ route('payments.index') }}">Payments</a>
+            @endif
+            @if (auth()->user()?->hasPermission('manage_payment_accounts'))
+                <a href="{{ route('payment-accounts.index') }}">Payment Accounts</a>
+            @endif
+            @if (auth()->user()?->hasPermission('manage_tickets'))
+                <a href="{{ route('tickets.index') }}">Tickets</a>
+            @endif
+            @if (auth()->user()?->hasPermission('manage_products'))
+                <a href="{{ route('products.index') }}">Inventory</a>
+            @endif
+            @if (auth()->user()?->hasPermission('manage_users'))
+                <a href="{{ route('users.index') }}">Users</a>
+                <a href="{{ route('roles.index') }}">Roles</a>
+            @endif
+            @if (auth()->user()?->hasPermission('download_backup'))
+                <a href="{{ route('backup.database') }}">Download Backup</a>
+            @endif
         </nav>
-    </aside>
+        <form class="logout-form" method="post" action="{{ route('logout') }}">
+            @csrf
+            <button class="btn light" type="submit">Logout</button>
+        </form>
+    </div>
+    </header>
     <main class="main">
         @if (session('success'))
             <div class="alert success">{{ session('success') }}</div>

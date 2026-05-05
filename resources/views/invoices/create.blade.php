@@ -289,6 +289,10 @@
         .remove-item {
             width: 100%;
         }
+
+        .summary-total span {
+            font-size: 24px;
+        }
     }
 </style>
 

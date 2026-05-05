@@ -39,6 +39,18 @@ class PaymentAccountController extends Controller
         return view('payment_accounts.show', compact('paymentAccount'));
     }
 
+    public function cashLedger()
+    {
+        $payments = Payment::query()
+            ->with(['customer', 'invoice'])
+            ->where('payment_method', 'cash')
+            ->orderBy('payment_date')
+            ->orderBy('id')
+            ->get();
+
+        return view('payment_accounts.cash_ledger', compact('payments'));
+    }
+
     public function store(Request $request)
     {
         PaymentAccount::create($request->validate([
