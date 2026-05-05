@@ -10,7 +10,7 @@
     <thead><tr><th>Date</th><th>Customer</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Account</th></tr></thead>
     <tbody>
     @forelse ($payments as $payment)
-        <tr>
+        <tr data-href="{{ route('invoices.show', $payment->invoice) }}">
             <td>{{ $payment->payment_date->format('Y-m-d') }}</td>
             <td>{{ $payment->customer->name }}</td>
             <td><a href="{{ route('invoices.show', $payment->invoice) }}">{{ $payment->invoice->invoice_no }}</a></td>

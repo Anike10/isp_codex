@@ -10,7 +10,7 @@
     <thead><tr><th>Subject</th><th>Customer</th><th>Technician</th><th>Priority</th><th>Status</th></tr></thead>
     <tbody>
     @forelse ($tickets as $ticket)
-        <tr>
+        <tr data-href="{{ route('tickets.show', $ticket) }}">
             <td>{{ $ticket->subject }}</td>
             <td>{{ $ticket->customer->name }}</td>
             <td>{{ $ticket->technician?->name ?? 'Unassigned' }}</td>

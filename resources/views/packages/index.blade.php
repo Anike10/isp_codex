@@ -10,7 +10,7 @@
     <thead><tr><th>Name</th><th>Speed</th><th>Monthly Price</th><th>Status</th></tr></thead>
     <tbody>
     @forelse ($packages as $package)
-        <tr>
+        <tr data-href="{{ route('packages.show', $package) }}">
             <td>{{ $package->name }}</td>
             <td>{{ $package->speed }}</td>
             <td>{{ number_format($package->monthly_price, 2) }}</td>

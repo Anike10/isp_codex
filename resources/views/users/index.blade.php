@@ -10,7 +10,7 @@
     <thead><tr><th>Name</th><th>Email</th><th>Roles</th><th></th></tr></thead>
     <tbody>
     @forelse ($users as $user)
-        <tr>
+        <tr data-href="{{ route('users.edit', $user) }}">
             <td>{{ $user->name }}</td>
             <td>{{ $user->email }}</td>
             <td>{{ $user->roles->pluck('label')->join(', ') ?: 'No role' }}</td>

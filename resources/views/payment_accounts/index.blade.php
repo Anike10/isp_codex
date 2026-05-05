@@ -38,7 +38,7 @@
 
 <table>
     <thead>
-        <tr>
+        <tr data-href="{{ route('payment-accounts.cash-ledger') }}">
             <th>Method</th>
             <th>Account Name</th>
             <th>Account Number</th>
@@ -65,7 +65,7 @@
                 $collected = (float) ($account->collected_amount ?? 0);
                 $currentBalance = (float) $account->opening_balance + $collected;
             @endphp
-            <tr>
+            <tr data-href="{{ route('payment-accounts.show', $account) }}">
                 <td>{{ $methodLabels[$account->payment_method] ?? ucfirst($account->payment_method) }}</td>
                 <td>{{ $account->account_name }}</td>
                 <td>{{ $account->account_number }}</td>

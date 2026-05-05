@@ -19,6 +19,13 @@ class PackageController extends Controller
         return view('packages.create');
     }
 
+    public function show(InternetPackage $package)
+    {
+        $package->loadCount('subscriptions');
+
+        return view('packages.show', compact('package'));
+    }
+
     public function store(Request $request)
     {
         InternetPackage::create($request->validate([

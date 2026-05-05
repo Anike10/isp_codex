@@ -10,8 +10,8 @@
         body { margin:0; font-family: Arial, sans-serif; color:var(--ink); background:var(--bg); }
         a { color:inherit; text-decoration:none; }
         .shell { min-height:100vh; }
-        .app-header { position:sticky; top:0; z-index:50; background:#14213d; color:white; border-bottom:1px solid rgba(255,255,255,.12); }
-        .header-inner { max-width:1440px; margin:0 auto; padding:12px 20px; display:flex; align-items:center; gap:14px; }
+        .app-header { position:sticky; top:0; z-index:50; background:#14213d; color:white; border-bottom:1px solid rgba(255,255,255,.12); box-shadow:0 8px 24px rgba(15, 23, 42, .16); }
+        .header-inner { max-width:1440px; margin:0 auto; padding:12px 20px; display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:14px; }
         .brand { font-size:20px; font-weight:700; white-space:nowrap; }
         .nav { display:flex; gap:6px; align-items:center; overflow-x:auto; scrollbar-width:thin; flex:1; padding:2px 0; }
         .nav a { color:#dbe7ff; padding:9px 11px; border-radius:6px; white-space:nowrap; font-size:14px; }
@@ -33,6 +33,8 @@
         .btn.secondary { background:var(--accent); }
         .btn.light { background:#e8eef7; color:var(--ink); }
         table { width:100%; border-collapse:collapse; background:white; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+        tr[data-href] { cursor:pointer; }
+        tr[data-href]:hover td { background:#f6faf8; }
         th, td { padding:12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
         th { background:#edf2f7; font-size:13px; text-transform:uppercase; color:#475467; }
         tr:last-child td { border-bottom:0; }
@@ -51,9 +53,10 @@
         .badge.low { background:#fff1f3; color:#c01048; }
         @media (max-width: 980px) {
             .stats, .two, .form-grid { grid-template-columns:1fr; }
-            .header-inner { align-items:flex-start; flex-wrap:wrap; padding:10px 12px; }
-            .brand { width:100%; }
-            .nav { order:3; width:100%; flex:0 0 100%; }
+            .header-inner { grid-template-columns:1fr auto; gap:8px 10px; padding:10px 12px 8px; }
+            .brand { font-size:18px; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+            .nav { grid-column:1 / -1; width:100%; padding:2px 0 4px; gap:7px; }
+            .nav a { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.08); }
             .main { padding:16px 12px 28px; }
             .topbar { align-items:flex-start; flex-direction:column; }
             .actions { width:100%; }
@@ -65,10 +68,34 @@
             .card { padding:14px; }
         }
         @media (max-width: 560px) {
-            .nav a { font-size:13px; padding:8px 9px; }
+            .app-header { position:static; }
+            .header-inner { padding:9px 10px 7px; }
+            .brand { font-size:17px; }
+            .nav { margin:0 -10px; padding:4px 10px 6px; }
+            .nav a { font-size:12px; padding:7px 9px; border-radius:999px; }
             .btn { width:100%; justify-content:center; }
             .logout-form { margin-left:auto; }
+            .logout-form .btn { width:auto; min-height:32px; padding:7px 10px; font-size:12px; }
             input, select, textarea { font-size:16px; }
+            .main { padding:12px 10px 24px; }
+            .topbar { gap:10px; margin-bottom:12px; }
+            h1 { font-size:22px; line-height:1.2; }
+            h2 { font-size:18px; }
+            .muted { font-size:13px; line-height:1.4; }
+            .grid { gap:10px; }
+            .card { padding:12px; border-radius:7px; }
+            .stats { gap:10px; }
+            .stats { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+            .stat strong { font-size:20px; margin-top:4px; }
+            .actions { gap:8px; }
+            .btn { min-height:36px; padding:9px 11px; font-size:13px; }
+            th, td { padding:9px 8px; font-size:13px; }
+            th { font-size:11px; }
+            label { font-size:13px; }
+        }
+        @media (max-width: 360px) {
+            .stats { grid-template-columns:1fr; }
+            .nav a { font-size:11px; padding:7px 8px; }
         }
     </style>
 </head>
@@ -132,5 +159,17 @@
         @yield('content')
     </main>
 </div>
+<script>
+document.addEventListener('click', function (event) {
+    if (event.target.closest('a, button, input, select, textarea, label, form')) {
+        return;
+    }
+
+    const row = event.target.closest('tr[data-href]');
+    if (row?.dataset.href) {
+        window.location.href = row.dataset.href;
+    }
+});
+</script>
 </body>
 </html>

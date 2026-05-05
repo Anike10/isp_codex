@@ -34,7 +34,7 @@
     <thead><tr><th>Invoice</th><th>Customer</th><th>Month</th><th>Total</th><th>Paid</th><th>Due</th><th>Status</th><th></th></tr></thead>
     <tbody>
     @forelse ($invoices as $invoice)
-        <tr>
+        <tr data-href="{{ route('invoices.show', $invoice) }}">
             <td>{{ $invoice->invoice_no }}</td>
             <td>{{ $invoice->customer->name }}</td>
             <td>{{ $invoice->billing_month }}</td>

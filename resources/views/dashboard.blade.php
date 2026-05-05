@@ -36,7 +36,7 @@
             <thead><tr><th>Invoice</th><th>Customer</th><th>Due</th><th>Status</th></tr></thead>
             <tbody>
             @forelse ($recentInvoices as $invoice)
-                <tr>
+                <tr data-href="{{ route('invoices.show', $invoice) }}">
                     <td><a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a></td>
                     <td>{{ $invoice->customer->name }}</td>
                     <td>{{ number_format($invoice->due_amount, 2) }}</td>
@@ -54,7 +54,7 @@
             <thead><tr><th>Subject</th><th>Customer</th><th>Priority</th><th>Status</th></tr></thead>
             <tbody>
             @forelse ($recentTickets as $ticket)
-                <tr>
+                <tr data-href="{{ route('tickets.show', $ticket) }}">
                     <td>{{ $ticket->subject }}</td>
                     <td>{{ $ticket->customer->name }}</td>
                     <td>{{ $ticket->priority }}</td>

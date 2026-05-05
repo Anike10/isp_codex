@@ -16,7 +16,7 @@
     <thead><tr><th>Name</th><th>Phone</th><th>Connection</th><th>Package</th><th>Status</th><th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
-        <tr>
+        <tr data-href="{{ route('customers.show', $customer) }}">
             <td>{{ $customer->name }}</td>
             <td>{{ $customer->phone }}</td>
             <td>{{ $customer->connection_id }}</td>

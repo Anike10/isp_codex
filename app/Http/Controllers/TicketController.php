@@ -24,6 +24,13 @@ class TicketController extends Controller
         ]);
     }
 
+    public function show(SupportTicket $ticket)
+    {
+        $ticket->load(['customer', 'technician']);
+
+        return view('tickets.show', compact('ticket'));
+    }
+
     public function store(Request $request)
     {
         SupportTicket::create($request->validate([

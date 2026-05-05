@@ -29,7 +29,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_packages')->group(function () {
-        Route::resource('packages', PackageController::class)->only(['index', 'create', 'store']);
+        Route::resource('packages', PackageController::class)->only(['index', 'show', 'create', 'store']);
     });
 
     Route::middleware('permission:manage_invoices')->group(function () {
@@ -55,11 +55,11 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_tickets')->group(function () {
-        Route::resource('tickets', TicketController::class)->only(['index', 'create', 'store']);
+        Route::resource('tickets', TicketController::class)->only(['index', 'show', 'create', 'store']);
     });
 
     Route::middleware('permission:manage_products')->group(function () {
-        Route::resource('products', ProductController::class)->only(['index', 'create', 'store']);
+        Route::resource('products', ProductController::class)->only(['index', 'show', 'create', 'store']);
         Route::post('products/{product}/stock', [ProductController::class, 'moveStock'])->name('products.stock');
     });
 

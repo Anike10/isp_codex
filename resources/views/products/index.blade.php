@@ -10,7 +10,7 @@
     <thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Stock</th><th>Sale Price</th><th>Move Stock</th></tr></thead>
     <tbody>
     @forelse ($products as $product)
-        <tr>
+        <tr data-href="{{ route('products.show', $product) }}">
             <td>{{ $product->name }}</td>
             <td>{{ $product->sku }}</td>
             <td>{{ $product->category }}</td>

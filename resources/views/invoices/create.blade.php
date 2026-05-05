@@ -293,6 +293,57 @@
         .summary-total span {
             font-size: 24px;
         }
+
+        .invoice-page {
+            gap: 12px;
+        }
+
+        .invoice-hero {
+            padding: 14px;
+            gap: 10px;
+        }
+
+        .invoice-hero h1 {
+            font-size: 22px;
+        }
+
+        .section-head {
+            padding: 13px 14px;
+        }
+
+        .section-head h2 {
+            font-size: 16px;
+        }
+
+        .section-body {
+            padding: 14px;
+        }
+
+        .invoice-form-grid,
+        .items-list {
+            gap: 11px;
+        }
+
+        .item-row {
+            padding: 12px;
+            gap: 10px;
+        }
+
+        .add-item-bar {
+            gap: 10px;
+        }
+
+        .invoice-summary {
+            padding: 14px;
+        }
+
+        .summary-row {
+            padding: 9px 0;
+        }
+
+        .summary-total {
+            padding: 12px;
+        }
     }
 </style>
 

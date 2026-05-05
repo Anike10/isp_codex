@@ -10,7 +10,7 @@
     <thead><tr><th>Role</th><th>Users</th><th>Permissions</th><th></th></tr></thead>
     <tbody>
     @forelse ($roles as $role)
-        <tr>
+        <tr data-href="{{ route('roles.edit', $role) }}">
             <td>{{ $role->label }}<br><span class="muted">{{ $role->name }}</span></td>
             <td>{{ $role->users_count }}</td>
             <td>{{ $role->permissions->pluck('label')->join(', ') ?: 'No permissions' }}</td>

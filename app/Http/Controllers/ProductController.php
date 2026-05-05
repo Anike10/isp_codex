@@ -21,6 +21,13 @@ class ProductController extends Controller
         return view('products.create');
     }
 
+    public function show(Product $product)
+    {
+        $product->load(['stockMovements' => fn ($query) => $query->latest()]);
+
+        return view('products.show', compact('product'));
+    }
+
     public function store(Request $request)
     {
         Product::create($request->validate([
