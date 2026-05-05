@@ -6,6 +6,8 @@
     <a class="btn" href="{{ route('products.create') }}">Add Product</a>
 </div>
 
+@include('partials.per_page')
+
 <table>
     <thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Stock</th><th>Sale Price</th><th>Move Stock</th></tr></thead>
     <tbody>

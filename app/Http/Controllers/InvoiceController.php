@@ -16,10 +16,25 @@ class InvoiceController extends Controller
     {
         $invoices = Invoice::query()
             ->with('customer')
+            ->when($request->search, function ($query, string $search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('invoice_no', 'like', "%{$search}%")
+                        ->orWhere('billing_month', 'like', "%{$search}%")
+                        ->orWhereHas('customer', function ($query) use ($search) {
+                            $query->where('name', 'like', "%{$search}%")
+                                ->orWhere('phone', 'like', "%{$search}%")
+                                ->orWhere('connection_id', 'like', "%{$search}%");
+                        });
+                });
+            })
             ->when($request->status, fn ($query, string $status) => $query->where('status', $status))
             ->when($request->billing_month, fn ($query, string $month) => $query->where('billing_month', $month))
+            ->when($request->invoice_type, fn ($query, string $type) => $query->where('invoice_type', $type))
+            ->when($request->final_state === 'draft', fn ($query) => $query->whereNull('finalized_at'))
+            ->when($request->final_state === 'final', fn ($query) => $query->whereNotNull('finalized_at'))
             ->latest()
-            ->paginate(10);
+            ->paginate($this->perPage($request))
+            ->appends($request->query());
 
         return view('invoices.index', compact('invoices'));
     }

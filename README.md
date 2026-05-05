@@ -1,4 +1,4 @@
-# KPS Computer & ISP Manager
+# Ultimate Solution ISP Manager
 
 A Laravel 12 application for a computer service shop and internet service provider.
 

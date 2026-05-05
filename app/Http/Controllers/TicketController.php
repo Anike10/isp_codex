@@ -9,10 +9,13 @@ use Illuminate\Http\Request;
 
 class TicketController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         return view('tickets.index', [
-            'tickets' => SupportTicket::with(['customer', 'technician'])->latest()->paginate(10),
+            'tickets' => SupportTicket::with(['customer', 'technician'])
+                ->latest()
+                ->paginate($this->perPage($request))
+                ->appends($request->query()),
         ]);
     }
 

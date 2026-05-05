@@ -12,6 +12,8 @@
     <a class="btn light" href="{{ route('customers.index') }}">Reset</a>
 </form>
 
+@include('partials.per_page')
+
 <table>
     <thead><tr><th>Name</th><th>Phone</th><th>Connection</th><th>Package</th><th>Status</th><th></th></tr></thead>
     <tbody>

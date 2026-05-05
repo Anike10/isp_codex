@@ -9,7 +9,6 @@
     ];
 
     $runningBalance = (float) $paymentAccount->opening_balance;
-    $totalCollected = $paymentAccount->payments->sum('amount');
 @endphp
 
 <div class="topbar">
@@ -42,9 +41,11 @@
     </div>
     <div class="card stat">
         <span class="muted">Transactions</span>
-        <strong>{{ $paymentAccount->payments->count() }}</strong>
+        <strong>{{ $payments->total() }}</strong>
     </div>
 </div>
+
+@include('partials.per_page')
 
 <table>
     <thead>
@@ -66,7 +67,7 @@
             <td>{{ number_format($paymentAccount->opening_balance, 2) }}</td>
             <td>{{ number_format($runningBalance, 2) }}</td>
         </tr>
-        @forelse ($paymentAccount->payments as $payment)
+        @forelse ($payments as $payment)
             @php
                 $runningBalance += (float) $payment->amount;
             @endphp
@@ -85,4 +86,5 @@
         @endforelse
     </tbody>
 </table>
+<div style="margin-top:16px">{{ $payments->links() }}</div>
 @endsection

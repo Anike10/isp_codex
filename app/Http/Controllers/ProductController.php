@@ -9,10 +9,12 @@ use InvalidArgumentException;
 
 class ProductController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         return view('products.index', [
-            'products' => Product::latest()->paginate(10),
+            'products' => Product::latest()
+                ->paginate($this->perPage($request))
+                ->appends($request->query()),
         ]);
     }
 
@@ -21,11 +23,14 @@ class ProductController extends Controller
         return view('products.create');
     }
 
-    public function show(Product $product)
+    public function show(Request $request, Product $product)
     {
-        $product->load(['stockMovements' => fn ($query) => $query->latest()]);
+        $stockMovements = $product->stockMovements()
+            ->latest()
+            ->paginate($this->perPage($request))
+            ->appends($request->query());
 
-        return view('products.show', compact('product'));
+        return view('products.show', compact('product', 'stockMovements'));
     }
 
     public function store(Request $request)

@@ -10,10 +10,13 @@ use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         return view('users.index', [
-            'users' => User::with('roles')->latest()->paginate(10),
+            'users' => User::with('roles')
+                ->latest()
+                ->paginate($this->perPage($request))
+                ->appends($request->query()),
         ]);
     }
 

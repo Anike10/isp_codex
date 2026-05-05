@@ -3,7 +3,6 @@
 @section('content')
 @php
     $runningBalance = 0;
-    $totalCollected = $payments->sum('amount');
 @endphp
 
 <div class="topbar">
@@ -32,9 +31,11 @@
     </div>
     <div class="card stat">
         <span class="muted">Transactions</span>
-        <strong>{{ $payments->count() }}</strong>
+        <strong>{{ $payments->total() }}</strong>
     </div>
 </div>
+
+@include('partials.per_page')
 
 <table>
     <thead>
@@ -75,4 +76,5 @@
         @endforelse
     </tbody>
 </table>
+<div style="margin-top:16px">{{ $payments->links() }}</div>
 @endsection

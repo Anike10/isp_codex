@@ -11,10 +11,13 @@ use InvalidArgumentException;
 
 class PaymentController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         return view('payments.index', [
-            'payments' => Payment::with(['customer', 'invoice', 'account'])->latest()->paginate(10),
+            'payments' => Payment::with(['customer', 'invoice', 'account'])
+                ->latest()
+                ->paginate($this->perPage($request))
+                ->appends($request->query()),
         ]);
     }
 

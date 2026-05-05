@@ -6,6 +6,8 @@
     <a class="btn" href="{{ route('users.create') }}">Add User</a>
 </div>
 
+@include('partials.per_page')
+
 <table>
     <thead><tr><th>Name</th><th>Email</th><th>Roles</th><th></th></tr></thead>
     <tbody>

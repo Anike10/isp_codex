@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $title ?? 'Computer & ISP Manager' }}</title>
+    <title>{{ $title ?? 'Ultimate Solution' }}</title>
     <style>
         :root { color-scheme: light; --ink:#172033; --muted:#667085; --line:#d8dee9; --bg:#f4f7fb; --panel:#fff; --brand:#116149; --accent:#1d76c9; --warn:#b45309; --danger:#b42318; }
         * { box-sizing: border-box; }
@@ -103,7 +103,7 @@
 <div class="shell">
     <header class="app-header">
     <div class="header-inner">
-        <div class="brand">KPS ISP Manager</div>
+        <div class="brand">Ultimate Solution</div>
         <nav class="nav">
             @if (auth()->user()?->hasPermission('view_dashboard'))
                 <a href="{{ route('dashboard') }}">Dashboard</a>

@@ -25,7 +25,7 @@
     </div>
     @foreach (['bkash', 'nagad', 'bank'] as $method)
         @php
-            $methodAccounts = $accounts->where('payment_method', $method);
+            $methodAccounts = $allAccounts->where('payment_method', $method);
             $opening = $methodAccounts->sum(fn ($account) => (float) $account->opening_balance);
             $collected = $methodAccounts->sum(fn ($account) => (float) ($account->collected_amount ?? 0));
         @endphp
@@ -36,9 +36,11 @@
     @endforeach
 </div>
 
+@include('partials.per_page')
+
 <table>
     <thead>
-        <tr data-href="{{ route('payment-accounts.cash-ledger') }}">
+        <tr>
             <th>Method</th>
             <th>Account Name</th>
             <th>Account Number</th>
@@ -50,7 +52,7 @@
         </tr>
     </thead>
     <tbody>
-        <tr>
+        <tr data-href="{{ route('payment-accounts.cash-ledger') }}">
             <td>Cash</td>
             <td>Cash Collection</td>
             <td>N/A</td>
@@ -82,4 +84,5 @@
         @endforelse
     </tbody>
 </table>
+<div style="margin-top:16px">{{ $accounts->links() }}</div>
 @endsection

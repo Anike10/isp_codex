@@ -6,6 +6,8 @@
     <a class="btn" href="{{ route('roles.create') }}">Add Role</a>
 </div>
 
+@include('partials.per_page')
+
 <table>
     <thead><tr><th>Role</th><th>Users</th><th>Permissions</th><th></th></tr></thead>
     <tbody>
@@ -21,4 +23,5 @@
     @endforelse
     </tbody>
 </table>
+<div style="margin-top:16px">{{ $roles->links() }}</div>
 @endsection

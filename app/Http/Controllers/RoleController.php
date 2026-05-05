@@ -9,10 +9,14 @@ use Illuminate\Validation\Rule;
 
 class RoleController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         return view('roles.index', [
-            'roles' => Role::withCount('users')->with('permissions')->orderBy('label')->get(),
+            'roles' => Role::withCount('users')
+                ->with('permissions')
+                ->orderBy('label')
+                ->paginate($this->perPage($request))
+                ->appends($request->query()),
         ]);
     }
 

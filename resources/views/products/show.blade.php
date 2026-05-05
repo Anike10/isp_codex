@@ -27,10 +27,12 @@
     </form>
 </section>
 
+@include('partials.per_page')
+
 <table>
     <thead><tr><th>Date</th><th>Type</th><th>Quantity</th><th>Reason</th><th>Reference</th></tr></thead>
     <tbody>
-    @forelse ($product->stockMovements as $movement)
+    @forelse ($stockMovements as $movement)
         <tr>
             <td>{{ $movement->created_at->format('Y-m-d H:i') }}</td>
             <td>{{ ucfirst($movement->type) }}</td>
@@ -43,4 +45,5 @@
     @endforelse
     </tbody>
 </table>
+<div style="margin-top:16px">{{ $stockMovements->links() }}</div>
 @endsection

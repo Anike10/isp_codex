@@ -6,6 +6,8 @@
     <a class="btn" href="{{ route('tickets.create') }}">Add Ticket</a>
 </div>
 
+@include('partials.per_page')
+
 <table>
     <thead><tr><th>Subject</th><th>Customer</th><th>Technician</th><th>Priority</th><th>Status</th></tr></thead>
     <tbody>

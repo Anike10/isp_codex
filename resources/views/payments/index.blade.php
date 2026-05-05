@@ -6,6 +6,8 @@
     <a class="btn" href="{{ route('payments.create') }}">Record Payment</a>
 </div>
 
+@include('partials.per_page')
+
 <table>
     <thead><tr><th>Date</th><th>Customer</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Account</th></tr></thead>
     <tbody>

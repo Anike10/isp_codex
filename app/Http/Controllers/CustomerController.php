@@ -20,7 +20,8 @@ class CustomerController extends Controller
                     ->orWhere('connection_id', 'like', "%{$search}%");
             })
             ->latest()
-            ->paginate(10);
+            ->paginate($this->perPage($request))
+            ->appends($request->query());
 
         return view('customers.index', compact('customers'));
     }

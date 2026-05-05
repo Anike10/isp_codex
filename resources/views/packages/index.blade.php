@@ -6,6 +6,8 @@
     <a class="btn" href="{{ route('packages.create') }}">Add Package</a>
 </div>
 
+@include('partials.per_page')
+
 <table>
     <thead><tr><th>Name</th><th>Speed</th><th>Monthly Price</th><th>Status</th></tr></thead>
     <tbody>

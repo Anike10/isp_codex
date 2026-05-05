@@ -7,10 +7,12 @@ use Illuminate\Http\Request;
 
 class PackageController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         return view('packages.index', [
-            'packages' => InternetPackage::latest()->paginate(10),
+            'packages' => InternetPackage::latest()
+                ->paginate($this->perPage($request))
+                ->appends($request->query()),
         ]);
     }
 

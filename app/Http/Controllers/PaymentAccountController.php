@@ -8,13 +8,20 @@ use Illuminate\Http\Request;
 
 class PaymentAccountController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $accounts = PaymentAccount::query()
+        $allAccounts = PaymentAccount::query()
             ->withSum('payments as collected_amount', 'amount')
             ->orderBy('payment_method')
             ->orderBy('account_name')
             ->get();
+
+        $accounts = PaymentAccount::query()
+            ->withSum('payments as collected_amount', 'amount')
+            ->orderBy('payment_method')
+            ->orderBy('account_name')
+            ->paginate($this->perPage($request))
+            ->appends($request->query());
 
         $cashCollected = Payment::where('payment_method', 'cash')->sum('amount');
         $methodTotals = Payment::query()
@@ -22,7 +29,7 @@ class PaymentAccountController extends Controller
             ->groupBy('payment_method')
             ->pluck('total', 'payment_method');
 
-        return view('payment_accounts.index', compact('accounts', 'cashCollected', 'methodTotals'));
+        return view('payment_accounts.index', compact('accounts', 'allAccounts', 'cashCollected', 'methodTotals'));
     }
 
     public function create()
@@ -30,25 +37,33 @@ class PaymentAccountController extends Controller
         return view('payment_accounts.create');
     }
 
-    public function show(PaymentAccount $paymentAccount)
+    public function show(Request $request, PaymentAccount $paymentAccount)
     {
-        $paymentAccount->load([
-            'payments' => fn ($query) => $query->with(['customer', 'invoice'])->orderBy('payment_date')->orderBy('id'),
-        ]);
+        $payments = $paymentAccount->payments()
+            ->with(['customer', 'invoice'])
+            ->orderBy('payment_date')
+            ->orderBy('id')
+            ->paginate($this->perPage($request))
+            ->appends($request->query());
 
-        return view('payment_accounts.show', compact('paymentAccount'));
+        $totalCollected = $paymentAccount->payments()->sum('amount');
+
+        return view('payment_accounts.show', compact('paymentAccount', 'payments', 'totalCollected'));
     }
 
-    public function cashLedger()
+    public function cashLedger(Request $request)
     {
         $payments = Payment::query()
             ->with(['customer', 'invoice'])
             ->where('payment_method', 'cash')
             ->orderBy('payment_date')
             ->orderBy('id')
-            ->get();
+            ->paginate($this->perPage($request))
+            ->appends($request->query());
 
-        return view('payment_accounts.cash_ledger', compact('payments'));
+        $totalCollected = Payment::where('payment_method', 'cash')->sum('amount');
+
+        return view('payment_accounts.cash_ledger', compact('payments', 'totalCollected'));
     }
 
     public function store(Request $request)
