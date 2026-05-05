@@ -2,8 +2,25 @@
 
 @section('content')
 <div class="topbar">
-    <div><h1>{{ $invoice->invoice_no }}</h1><div class="muted">{{ $invoice->customer->name }} · {{ $invoice->billing_month }}</div></div>
+    <div>
+        <h1>{{ $invoice->invoice_no }}</h1>
+        <div class="muted">{{ $invoice->customer->name }} - {{ $invoice->billing_month }}</div>
+        <div style="margin-top:8px">
+            @if ($invoice->isFinalized())
+                <span class="badge active">Final</span>
+            @else
+                <span class="badge due">Draft</span>
+            @endif
+        </div>
+    </div>
     <div class="actions">
+        @if (! $invoice->isFinalized())
+            <a class="btn secondary" href="{{ route('invoices.edit', $invoice) }}">Edit</a>
+            <form method="post" action="{{ route('invoices.finalize', $invoice) }}" onsubmit="return confirm('Finalize this invoice? You will not be able to edit it after finalizing.');">
+                @csrf
+                <button class="btn" type="submit">Final</button>
+            </form>
+        @endif
         <a class="btn light" href="{{ route('invoices.challan', $invoice) }}" target="_blank">Print Bill</a>
         <a class="btn light" href="{{ route('invoices.quotation', $invoice) }}" target="_blank">Print Quotation</a>
         <a class="btn light" href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank">Print Challan</a>
@@ -23,6 +40,7 @@
         <p><strong>Paid:</strong> {{ number_format($invoice->paid_amount, 2) }}</p>
         <p><strong>Due:</strong> {{ number_format($invoice->due_amount, 2) }}</p>
         <p><strong>Status:</strong> <span class="badge {{ $invoice->status }}">{{ $invoice->status }}</span></p>
+        <p><strong>Finalized:</strong> {{ $invoice->finalized_at?->format('Y-m-d H:i') ?? 'Not finalized' }}</p>
     </section>
     <section class="card">
         <h2>Customer</h2>

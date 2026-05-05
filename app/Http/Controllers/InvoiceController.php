@@ -8,6 +8,7 @@ use App\Models\InvoiceItem;
 use App\Models\Subscription;
 use App\Services\BillingService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class InvoiceController extends Controller
 {
@@ -50,7 +51,94 @@ class InvoiceController extends Controller
 
     public function store(Request $request)
     {
-        $data = $request->validate([
+        $data = $this->validateInvoiceData($request);
+
+        [$customerId, $itemsData, $subtotal, $total] = $this->prepareInvoiceData($data);
+
+        $invoice = Invoice::create([
+            'customer_id' => $customerId,
+            'invoice_no' => Invoice::generateInvoiceNo($customerId, $data['billing_month']),
+            'billing_month' => $data['billing_month'],
+            'invoice_type' => 'product',
+            'subtotal' => $subtotal,
+            'discount' => $data['discount'],
+            'vat' => $data['vat'],
+            'total' => $total,
+            'paid_amount' => 0,
+            'due_amount' => max(0, $total),
+            'status' => $total <= 0 ? 'paid' : 'unpaid',
+            'due_date' => $data['due_date'] ?? null,
+        ]);
+
+        foreach ($itemsData as $itemData) {
+            $invoice->items()->create($itemData);
+        }
+
+        return redirect()->route('invoices.show', $invoice)->with('success', 'Invoice created as draft. You can edit it until finalizing.');
+    }
+
+    public function edit(Invoice $invoice)
+    {
+        if ($invoice->isFinalized()) {
+            return redirect()->route('invoices.show', $invoice)->withErrors([
+                'invoice' => 'Finalized invoices cannot be edited.',
+            ]);
+        }
+
+        $invoice->load(['customer', 'items']);
+        $customers = Customer::where('status', 'active')->orderBy('name')->get();
+
+        return view('invoices.create', compact('customers', 'invoice'));
+    }
+
+    public function update(Request $request, Invoice $invoice)
+    {
+        if ($invoice->isFinalized()) {
+            return redirect()->route('invoices.show', $invoice)->withErrors([
+                'invoice' => 'Finalized invoices cannot be edited.',
+            ]);
+        }
+
+        $data = $this->validateInvoiceData($request);
+        [$customerId, $itemsData, $subtotal, $total] = $this->prepareInvoiceData($data);
+
+        DB::transaction(function () use ($invoice, $data, $customerId, $itemsData, $subtotal, $total) {
+            $paidAmount = (float) $invoice->paid_amount;
+            $dueAmount = max(0, $total - $paidAmount);
+
+            $invoice->update([
+                'customer_id' => $customerId,
+                'billing_month' => $data['billing_month'],
+                'subtotal' => $subtotal,
+                'discount' => $data['discount'],
+                'vat' => $data['vat'],
+                'total' => $total,
+                'due_amount' => $dueAmount,
+                'status' => $dueAmount <= 0 ? 'paid' : ($paidAmount > 0 ? 'partial' : 'unpaid'),
+                'due_date' => $data['due_date'] ?? null,
+            ]);
+
+            $invoice->items()->delete();
+            foreach ($itemsData as $itemData) {
+                $invoice->items()->create($itemData);
+            }
+        });
+
+        return redirect()->route('invoices.show', $invoice)->with('success', 'Draft invoice updated successfully.');
+    }
+
+    public function finalize(Invoice $invoice)
+    {
+        if (! $invoice->isFinalized()) {
+            $invoice->update(['finalized_at' => now()]);
+        }
+
+        return redirect()->route('invoices.show', $invoice)->with('success', 'Invoice finalized. Editing is now locked.');
+    }
+
+    private function validateInvoiceData(Request $request): array
+    {
+        return $request->validate([
             'customer_id' => ['nullable', 'exists:customers,id'],
             'customer_name' => ['required_without:customer_id', 'nullable', 'string', 'max:255'],
             'customer_phone' => ['required_without:customer_id', 'nullable', 'string', 'max:30'],
@@ -63,7 +151,10 @@ class InvoiceController extends Controller
             'vat' => ['required', 'numeric', 'min:0'],
             'due_date' => ['nullable', 'date'],
         ]);
+    }
 
+    private function prepareInvoiceData(array $data): array
+    {
         $customerId = $data['customer_id'] ?? null;
 
         if (! $customerId) {
@@ -98,26 +189,7 @@ class InvoiceController extends Controller
 
         $total = $subtotal - $data['discount'] + $data['vat'];
 
-        $invoice = Invoice::create([
-            'customer_id' => $customerId,
-            'invoice_no' => Invoice::generateInvoiceNo($customerId, $data['billing_month']),
-            'billing_month' => $data['billing_month'],
-            'invoice_type' => 'product',
-            'subtotal' => $subtotal,
-            'discount' => $data['discount'],
-            'vat' => $data['vat'],
-            'total' => $total,
-            'paid_amount' => 0,
-            'due_amount' => max(0, $total),
-            'status' => $total <= 0 ? 'paid' : 'unpaid',
-            'due_date' => $data['due_date'] ?? null,
-        ]);
-
-        foreach ($itemsData as $itemData) {
-            $invoice->items()->create($itemData);
-        }
-
-        return redirect()->route('invoices.show', $invoice)->with('success', 'Invoice created successfully.');
+        return [$customerId, $itemsData, $subtotal, $total];
     }
 
     private function generateCustomerConnectionId(): string

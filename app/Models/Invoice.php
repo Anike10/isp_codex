@@ -23,6 +23,7 @@ class Invoice extends Model
         'paid_amount',
         'due_amount',
         'status',
+        'finalized_at',
         'due_date',
     ];
 
@@ -41,7 +42,13 @@ class Invoice extends Model
     {
         return [
             'due_date' => 'date',
+            'finalized_at' => 'datetime',
         ];
+    }
+
+    public function isFinalized(): bool
+    {
+        return $this->finalized_at !== null;
     }
 
     public function customer(): BelongsTo

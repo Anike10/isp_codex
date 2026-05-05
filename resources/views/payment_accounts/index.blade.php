@@ -46,6 +46,7 @@
             <th>Collected</th>
             <th>Current Balance</th>
             <th>Status</th>
+            <th></th>
         </tr>
     </thead>
     <tbody>
@@ -57,6 +58,7 @@
             <td>{{ number_format($cashCollected, 2) }}</td>
             <td>{{ number_format($cashCollected, 2) }}</td>
             <td><span class="badge active">active</span></td>
+            <td></td>
         </tr>
         @forelse ($accounts as $account)
             @php
@@ -71,10 +73,11 @@
                 <td>{{ number_format($collected, 2) }}</td>
                 <td>{{ number_format($currentBalance, 2) }}</td>
                 <td><span class="badge {{ $account->status }}">{{ $account->status }}</span></td>
+                <td><a class="btn light" href="{{ route('payment-accounts.show', $account) }}">Ledger</a></td>
             </tr>
         @empty
             <tr>
-                <td colspan="7">No bKash, Nagad, or bank accounts added yet.</td>
+                <td colspan="8">No bKash, Nagad, or bank accounts added yet.</td>
             </tr>
         @endforelse
     </tbody>

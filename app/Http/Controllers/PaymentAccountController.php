@@ -30,6 +30,15 @@ class PaymentAccountController extends Controller
         return view('payment_accounts.create');
     }
 
+    public function show(PaymentAccount $paymentAccount)
+    {
+        $paymentAccount->load([
+            'payments' => fn ($query) => $query->with(['customer', 'invoice'])->orderBy('payment_date')->orderBy('id'),
+        ]);
+
+        return view('payment_accounts.show', compact('paymentAccount'));
+    }
+
     public function store(Request $request)
     {
         PaymentAccount::create($request->validate([

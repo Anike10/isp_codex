@@ -2,7 +2,14 @@
 
 @section('content')
 @php
-    $invoiceItems = old('items', [
+    $isEdit = isset($invoice);
+    $invoiceItems = old('items', $isEdit
+        ? $invoice->items->map(fn ($item) => [
+            'product_name' => $item->product_name,
+            'quantity' => $item->quantity,
+            'unit_price' => $item->unit_price,
+        ])->toArray()
+        : [
         [
             'product_name' => '',
             'quantity' => 1,
@@ -11,7 +18,7 @@
     ]);
     $selectedCustomer = old('customer_id')
         ? $customers->firstWhere('id', (int) old('customer_id'))
-        : null;
+        : ($isEdit ? $invoice->customer : null);
 @endphp
 
 <style>
@@ -288,14 +295,17 @@
 <div class="invoice-page">
     <div class="invoice-hero">
         <div>
-            <h1>Create Invoice</h1>
-            <div class="muted">Create a clean product or one-time charge invoice, add multiple line items, apply discount and VAT, and review the payable amount before saving.</div>
+            <h1>{{ $isEdit ? 'Edit Invoice' : 'Create Invoice' }}</h1>
+            <div class="muted">{{ $isEdit ? 'Update this draft invoice before finalizing it.' : 'Create a clean product or one-time charge invoice, add multiple line items, apply discount and VAT, and review the payable amount before saving.' }}</div>
         </div>
         <a class="btn light" href="{{ route('invoices.index') }}">Back to Invoices</a>
     </div>
 
-    <form method="post" action="{{ route('invoices.store') }}" id="invoiceForm">
+    <form method="post" action="{{ $isEdit ? route('invoices.update', $invoice) : route('invoices.store') }}" id="invoiceForm">
         @csrf
+        @if ($isEdit)
+            @method('PUT')
+        @endif
         <div class="invoice-shell">
             <div class="grid">
                 <section class="invoice-panel">
@@ -323,24 +333,24 @@
 
                             <div>
                                 <label for="billing_month">Billing Month <span class="required-mark">*</span></label>
-                                <input id="billing_month" type="month" name="billing_month" value="{{ old('billing_month', now()->format('Y-m')) }}" required>
+                                <input id="billing_month" type="month" name="billing_month" value="{{ old('billing_month', $isEdit ? $invoice->billing_month : now()->format('Y-m')) }}" required>
                             </div>
 
                             <div>
                                 <label for="discount">Discount <span class="required-mark">*</span></label>
-                                <input id="discount" type="number" name="discount" step="0.01" min="0" value="{{ old('discount', '0.00') }}" required>
+                                <input id="discount" type="number" name="discount" step="0.01" min="0" value="{{ old('discount', $isEdit ? $invoice->discount : '0.00') }}" required>
                                 <span class="field-note">Discount is deducted from the item subtotal.</span>
                             </div>
 
                             <div>
                                 <label for="vat">VAT <span class="required-mark">*</span></label>
-                                <input id="vat" type="number" name="vat" step="0.01" min="0" value="{{ old('vat', '0.00') }}" required>
+                                <input id="vat" type="number" name="vat" step="0.01" min="0" value="{{ old('vat', $isEdit ? ($invoice->vat ?? '0.00') : '0.00') }}" required>
                                 <span class="field-note">VAT is added after discount.</span>
                             </div>
 
                             <div>
                                 <label for="due_date">Due Date</label>
-                                <input id="due_date" type="date" name="due_date" value="{{ old('due_date') }}">
+                                <input id="due_date" type="date" name="due_date" value="{{ old('due_date', $isEdit ? $invoice->due_date?->format('Y-m-d') : null) }}">
                             </div>
                         </div>
                     </div>
@@ -391,7 +401,7 @@
             <aside class="invoice-summary">
                 <div class="summary-title">
                     <h2>Invoice Summary</h2>
-                    <span class="badge">Draft</span>
+                    <span class="badge">{{ $isEdit ? 'Editing Draft' : 'Draft' }}</span>
                 </div>
 
                 <div class="summary-row">
@@ -417,8 +427,8 @@
                 </div>
 
                 <div class="summary-actions">
-                    <button class="btn" type="submit">Create Invoice</button>
-                    <a class="btn light" href="{{ route('invoices.index') }}">Cancel</a>
+                    <button class="btn" type="submit">{{ $isEdit ? 'Update Invoice' : 'Create Invoice' }}</button>
+                    <a class="btn light" href="{{ $isEdit ? route('invoices.show', $invoice) : route('invoices.index') }}">Cancel</a>
                 </div>
             </aside>
         </div>
