@@ -25,6 +25,7 @@
         <h2>Billing Summary</h2>
         <p><strong>Total invoices:</strong> {{ $customer->invoices->count() }}</p>
         <p><strong>Total due:</strong> {{ number_format($customer->invoices->sum('due_amount'), 2) }}</p>
+        <p><strong>Account Balance:</strong> {{ number_format($customer->account_balance, 2) }}</p>
     </section>
 </div>
 

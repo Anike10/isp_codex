@@ -22,6 +22,7 @@ class Customer extends Model
         'mikrotik_router_id',
         'address',
         'status',
+        'account_balance',
     ];
 
     protected $hidden = [
@@ -32,6 +33,7 @@ class Customer extends Model
     {
         return [
             'mikrotik_password' => 'encrypted',
+            'account_balance' => 'decimal:2',
         ];
     }
 

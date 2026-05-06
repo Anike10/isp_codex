@@ -49,6 +49,7 @@
         <p><strong>Name:</strong> {{ $invoice->customer->name }}</p>
         <p><strong>Phone:</strong> {{ $invoice->customer->phone }}</p>
         <p><strong>Connection:</strong> {{ $invoice->customer->connection_id }}</p>
+        <p><strong>Account Balance:</strong> {{ number_format($invoice->customer->account_balance, 2) }}</p>
         <p><strong>Address:</strong> {{ $invoice->customer->address }}</p>
     </section>
 </div>

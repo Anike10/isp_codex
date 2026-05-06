@@ -29,7 +29,11 @@
             @endforeach
         </select>
     </div>
-    <div><label>Amount</label><input type="number" step="0.01" name="amount" value="{{ old('amount') }}" required></div>
+    <div>
+        <label>Amount</label>
+        <input type="number" step="0.01" name="amount" value="{{ old('amount') }}" required>
+        <span class="muted">If amount is more than due, extra money will stay in the customer account.</span>
+    </div>
     <div>
         <label>Method</label>
         <select name="payment_method" id="paymentMethod" required>

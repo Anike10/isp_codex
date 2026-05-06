@@ -29,7 +29,7 @@ Artisan::command('mikrotik:sync-customers', function (MikrotikCustomerSyncServic
                 try {
                     $status = $syncService->sync($customer->refresh());
 
-                    if (in_array($status, ['created', 'updated'], true)) {
+                    if (str_contains($status, 'created') || str_contains($status, 'updated')) {
                         $createdOrUpdated++;
                     } else {
                         $skippedOrDisabled++;

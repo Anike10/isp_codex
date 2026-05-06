@@ -14,9 +14,17 @@
         .app-header { position:sticky; top:0; z-index:50; background:#14213d; color:white; border-bottom:1px solid rgba(255,255,255,.12); box-shadow:0 8px 24px rgba(15, 23, 42, .16); }
         .header-inner { max-width:1440px; margin:0 auto; padding:12px 20px; display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:14px; }
         .brand { font-size:20px; font-weight:700; white-space:nowrap; }
-        .nav { display:flex; gap:6px; align-items:center; overflow-x:auto; scrollbar-width:thin; flex:1; padding:2px 0; }
-        .nav a { color:#dbe7ff; padding:9px 11px; border-radius:6px; white-space:nowrap; font-size:14px; }
-        .nav a:hover { background:rgba(255,255,255,.1); color:white; }
+        .nav { display:flex; gap:6px; align-items:center; flex-wrap:wrap; flex:1; padding:2px 0; }
+        .nav a, .nav summary { color:#dbe7ff; padding:9px 11px; border-radius:6px; white-space:nowrap; font-size:14px; cursor:pointer; }
+        .nav a:hover, .nav summary:hover, .nav details[open] summary { background:rgba(255,255,255,.1); color:white; }
+        .nav summary { list-style:none; user-select:none; }
+        .nav summary::-webkit-details-marker { display:none; }
+        .nav summary::after { content:"▾"; margin-left:6px; font-size:11px; }
+        .nav-group { position:relative; }
+        .nav-menu { display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:80; min-width:190px; padding:6px; background:white; color:var(--ink); border:1px solid var(--line); border-radius:8px; box-shadow:0 16px 34px rgba(15, 23, 42, .18); }
+        .nav details[open] .nav-menu { display:grid; gap:2px; }
+        .nav-menu a { color:var(--ink); display:block; padding:9px 10px; border-radius:6px; }
+        .nav-menu a:hover { background:#eef4fb; color:var(--ink); }
         .logout-form { margin:0; }
         .logout-form .btn { min-height:34px; padding:8px 12px; white-space:nowrap; }
         .main { max-width:1440px; margin:0 auto; padding:24px 20px 34px; }
@@ -58,7 +66,8 @@
             .header-inner { grid-template-columns:1fr auto; gap:8px 10px; padding:10px 12px 8px; }
             .brand { font-size:18px; min-width:0; overflow:hidden; text-overflow:ellipsis; }
             .nav { grid-column:1 / -1; width:100%; padding:2px 0 4px; gap:7px; }
-            .nav a { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.08); }
+            .nav a, .nav summary { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.08); }
+            .nav-menu { position:static; min-width:100%; margin-top:6px; background:#fff; }
             .main { padding:16px 12px 28px; }
             .topbar { align-items:flex-start; flex-direction:column; }
             .actions { width:100%; }
@@ -74,7 +83,8 @@
             .header-inner { padding:9px 10px 7px; }
             .brand { font-size:17px; }
             .nav { margin:0 -10px; padding:4px 10px 6px; }
-            .nav a { font-size:12px; padding:7px 9px; border-radius:999px; }
+            .nav a, .nav summary { font-size:12px; padding:7px 9px; border-radius:999px; }
+            .nav-menu a { border-radius:6px; font-size:12px; }
             .btn { width:100%; justify-content:center; }
             .logout-form { margin-left:auto; }
             .logout-form .btn { width:auto; min-height:32px; padding:7px 10px; font-size:12px; }
@@ -97,7 +107,7 @@
         }
         @media (max-width: 360px) {
             .stats { grid-template-columns:1fr; }
-            .nav a { font-size:11px; padding:7px 8px; }
+            .nav a, .nav summary { font-size:11px; padding:7px 8px; }
         }
     </style>
 </head>
@@ -107,39 +117,74 @@
     <div class="header-inner">
         <div class="brand">Ultimate Solution</div>
         <nav class="nav">
+            @php
+                $canManageNetwork = auth()->user()?->hasPermission('manage_customers')
+                    || auth()->user()?->hasPermission('manage_packages')
+                    || auth()->user()?->hasPermission('manage_mikrotik_routers');
+                $canManageBilling = auth()->user()?->hasPermission('manage_invoices')
+                    || auth()->user()?->hasPermission('manage_payments')
+                    || auth()->user()?->hasPermission('manage_payment_accounts');
+                $canManageAdmin = auth()->user()?->hasPermission('manage_users')
+                    || auth()->user()?->hasPermission('download_backup');
+            @endphp
             @if (auth()->user()?->hasPermission('view_dashboard'))
                 <a href="{{ route('dashboard') }}">Dashboard</a>
             @endif
-            @if (auth()->user()?->hasPermission('manage_customers'))
-                <a href="{{ route('customers.index') }}">Customers</a>
+
+            @if ($canManageNetwork)
+                <details class="nav-group">
+                    <summary>Network</summary>
+                    <div class="nav-menu">
+                        @if (auth()->user()?->hasPermission('manage_customers'))
+                            <a href="{{ route('customers.index') }}">Customers</a>
+                        @endif
+                        @if (auth()->user()?->hasPermission('manage_packages'))
+                            <a href="{{ route('packages.index') }}">Packages</a>
+                        @endif
+                        @if (auth()->user()?->hasPermission('manage_mikrotik_routers'))
+                            <a href="{{ route('mikrotik-routers.index') }}">MikroTik Routers</a>
+                        @endif
+                    </div>
+                </details>
             @endif
-            @if (auth()->user()?->hasPermission('manage_packages'))
-                <a href="{{ route('packages.index') }}">Packages</a>
+
+            @if ($canManageBilling)
+                <details class="nav-group">
+                    <summary>Billing</summary>
+                    <div class="nav-menu">
+                        @if (auth()->user()?->hasPermission('manage_invoices'))
+                            <a href="{{ route('invoices.index') }}">Invoices</a>
+                        @endif
+                        @if (auth()->user()?->hasPermission('manage_payments'))
+                            <a href="{{ route('payments.index') }}">Payments</a>
+                        @endif
+                        @if (auth()->user()?->hasPermission('manage_payment_accounts'))
+                            <a href="{{ route('payment-accounts.index') }}">Payment Accounts</a>
+                        @endif
+                    </div>
+                </details>
             @endif
-            @if (auth()->user()?->hasPermission('manage_invoices'))
-                <a href="{{ route('invoices.index') }}">Invoices</a>
-            @endif
-            @if (auth()->user()?->hasPermission('manage_payments'))
-                <a href="{{ route('payments.index') }}">Payments</a>
-            @endif
-            @if (auth()->user()?->hasPermission('manage_payment_accounts'))
-                <a href="{{ route('payment-accounts.index') }}">Payment Accounts</a>
-            @endif
-            @if (auth()->user()?->hasPermission('manage_mikrotik_routers'))
-                <a href="{{ route('mikrotik-routers.index') }}">MikroTik</a>
-            @endif
+
             @if (auth()->user()?->hasPermission('manage_tickets'))
                 <a href="{{ route('tickets.index') }}">Tickets</a>
             @endif
             @if (auth()->user()?->hasPermission('manage_products'))
                 <a href="{{ route('products.index') }}">Inventory</a>
             @endif
-            @if (auth()->user()?->hasPermission('manage_users'))
-                <a href="{{ route('users.index') }}">Users</a>
-                <a href="{{ route('roles.index') }}">Roles</a>
-            @endif
-            @if (auth()->user()?->hasPermission('download_backup'))
-                <a href="{{ route('backup.database') }}">Download Backup</a>
+
+            @if ($canManageAdmin)
+                <details class="nav-group">
+                    <summary>Admin</summary>
+                    <div class="nav-menu">
+                        @if (auth()->user()?->hasPermission('manage_users'))
+                            <a href="{{ route('users.index') }}">Users</a>
+                            <a href="{{ route('roles.index') }}">Roles</a>
+                        @endif
+                        @if (auth()->user()?->hasPermission('download_backup'))
+                            <a href="{{ route('backup.database') }}">Download Backup</a>
+                        @endif
+                    </div>
+                </details>
             @endif
         </nav>
         <form class="logout-form" method="post" action="{{ route('logout') }}">
