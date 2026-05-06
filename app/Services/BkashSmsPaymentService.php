@@ -12,7 +12,10 @@ use InvalidArgumentException;
 
 class BkashSmsPaymentService
 {
-    public function __construct(private readonly PaymentService $paymentService)
+    public function __construct(
+        private readonly PaymentService $paymentService,
+        private readonly BillingService $billingService,
+    )
     {
     }
 
@@ -83,15 +86,19 @@ class BkashSmsPaymentService
                 ]);
             }
 
-            $customer = $this->findCustomer($parsed['customer_number']);
+            [$customer, $matchMessage] = $this->findCustomer($parsed['reference'], $parsed['customer_number']);
 
             if (! $customer) {
                 $smsPayment->update([
                     'status' => 'pending',
-                    'message' => 'No customer matched this bKash sender number.',
+                    'message' => $matchMessage,
                 ]);
 
                 return $smsPayment;
+            }
+
+            if (! $customer->never_suspend) {
+                $this->billingService->generateCurrentServiceBillForCustomer($customer);
             }
 
             $invoice = Invoice::where('customer_id', $customer->id)
@@ -106,7 +113,7 @@ class BkashSmsPaymentService
                 $smsPayment->update([
                     'status' => 'balance',
                     'customer_id' => $customer->id,
-                    'message' => 'No due invoice found. Amount added to customer account balance.',
+                    'message' => $matchMessage.' No due invoice found. Amount added to customer account balance.',
                 ]);
 
                 return $smsPayment;
@@ -136,7 +143,7 @@ class BkashSmsPaymentService
                 'customer_id' => $customer->id,
                 'invoice_id' => $invoice->id,
                 'payment_id' => $payment->id,
-                'message' => 'Payment recorded successfully.',
+                'message' => $matchMessage.' Payment recorded successfully.',
             ]);
 
             return $smsPayment;
@@ -171,15 +178,37 @@ class BkashSmsPaymentService
         ];
     }
 
-    private function findCustomer(?string $phone): ?Customer
+    private function findCustomer(?string $reference, ?string $phone): array
     {
-        if (! $phone) {
-            return null;
+        if ($reference) {
+            $referenceCustomer = Customer::query()
+                ->where('mikrotik_username', $reference)
+                ->orWhere('connection_id', $reference)
+                ->first();
+
+            if ($referenceCustomer) {
+                return [$referenceCustomer, 'Customer matched by reference user ID.'];
+            }
         }
 
-        return Customer::query()
+        if (! $phone) {
+            return [null, $reference ? 'Reference user ID did not match and no sender number was parsed.' : 'No reference or sender number found.'];
+        }
+
+        $matches = Customer::query()
             ->get()
-            ->first(fn (Customer $customer) => $this->normalizePhone($customer->phone) === $phone);
+            ->filter(fn (Customer $customer) => $this->normalizePhone($customer->phone) === $phone)
+            ->values();
+
+        if ($matches->count() === 1) {
+            return [$matches->first(), $reference ? 'Reference user ID did not match. Customer matched by sender number.' : 'Customer matched by sender number.'];
+        }
+
+        if ($matches->count() > 1) {
+            return [null, 'Multiple customers matched this bKash sender number. Manual review required.'];
+        }
+
+        return [null, $reference ? 'Reference user ID did not match and no customer matched this bKash sender number.' : 'No customer matched this bKash sender number.'];
     }
 
     private function normalizePhone(?string $phone): ?string

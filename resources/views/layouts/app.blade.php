@@ -43,6 +43,7 @@
         .btn.light { background:#e8eef7; color:var(--ink); }
         table { width:100%; border-collapse:collapse; background:white; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
         tr[data-href] { cursor:pointer; }
+        tbody tr:nth-child(even) td { background:#edf4f8; }
         tr[data-href]:hover td { background:#f6faf8; }
         th, td { padding:12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
         th { background:#edf2f7; font-size:13px; text-transform:uppercase; color:#475467; }
@@ -63,8 +64,15 @@
         .badge.pending { background:#fff7ed; color:var(--warn); }
         .badge.duplicate { background:#eef2ff; color:#175cd3; }
         .badge.failed { background:#fff0f0; color:var(--danger); }
+        .badge.online { background:#ecfdf3; color:#027a48; }
+        .badge.offline { background:#fff0f0; color:var(--danger); }
+        .badge.checking { background:#eef2ff; color:#175cd3; }
+        .badge.inactive { background:#f2f4f7; color:#475467; }
         .badge.open, .badge.processing { background:#eff6ff; color:#175cd3; }
         .badge.low { background:#fff1f3; color:#c01048; }
+        .connection-cell { min-width:132px; white-space:nowrap; }
+        .router-connection, .router-ping { min-width:104px; text-align:center; }
+        .router-checked-at { min-height:17px; white-space:nowrap; }
         @media (max-width: 980px) {
             .stats, .two, .form-grid { grid-template-columns:1fr; }
             .header-inner { grid-template-columns:1fr auto; gap:8px 10px; padding:10px 12px 8px; }
@@ -158,6 +166,7 @@
                     <div class="nav-menu">
                         @if (auth()->user()?->hasPermission('manage_invoices'))
                             <a href="{{ route('invoices.index') }}">Invoices</a>
+                            <a href="{{ route('invoices.create') }}">Create Invoice</a>
                         @endif
                         @if (auth()->user()?->hasPermission('manage_payments'))
                             <a href="{{ route('payments.index') }}">Payments</a>

@@ -22,6 +22,7 @@ class Customer extends Model
         'mikrotik_router_id',
         'address',
         'status',
+        'never_suspend',
         'account_balance',
     ];
 
@@ -33,6 +34,7 @@ class Customer extends Model
     {
         return [
             'mikrotik_password' => 'encrypted',
+            'never_suspend' => 'boolean',
             'account_balance' => 'decimal:2',
         ];
     }

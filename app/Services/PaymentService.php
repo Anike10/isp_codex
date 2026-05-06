@@ -22,6 +22,7 @@ class PaymentService
 
         $payment = DB::transaction(function () use ($invoice, $data) {
             $invoice->load('customer.activeSubscription');
+            $customer = $invoice->customer;
 
             $payment = Payment::create([
                 'customer_id' => $invoice->customer_id,
@@ -33,24 +34,40 @@ class PaymentService
                 'note' => $data['note'] ?? null,
             ]);
 
-            $dueBeforePayment = (float) $invoice->due_amount;
-            $paidAgainstInvoice = min((float) $payment->amount, $dueBeforePayment);
-            $extraAmount = max(0, (float) $payment->amount - $dueBeforePayment);
+            $availableAmount = (float) $customer->account_balance + (float) $payment->amount;
+            $dueInvoices = Invoice::query()
+                ->where('customer_id', $customer->id)
+                ->where('due_amount', '>', 0)
+                ->orderByRaw('id = ? desc', [$invoice->id])
+                ->orderBy('due_date')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
 
-            $invoice->paid_amount += $paidAgainstInvoice;
-            $invoice->due_amount = max(0, $invoice->total - $invoice->paid_amount);
-            $invoice->status = $invoice->due_amount <= 0 ? 'paid' : 'partial';
-            $invoice->save();
+            foreach ($dueInvoices as $dueInvoice) {
+                if ($availableAmount <= 0) {
+                    break;
+                }
 
-            if ($extraAmount > 0) {
-                $invoice->customer->increment('account_balance', $extraAmount);
+                $paidAgainstInvoice = min($availableAmount, (float) $dueInvoice->due_amount);
+
+                $dueInvoice->paid_amount += $paidAgainstInvoice;
+                $dueInvoice->due_amount = max(0, (float) $dueInvoice->total - (float) $dueInvoice->paid_amount);
+                $dueInvoice->status = $dueInvoice->due_amount <= 0 ? 'paid' : 'partial';
+                $dueInvoice->save();
+
+                $availableAmount -= $paidAgainstInvoice;
             }
 
-            if ($invoice->due_amount <= 0) {
-                $invoice->customer->update(['status' => 'active']);
+            $customer->update(['account_balance' => max(0, $availableAmount)]);
 
-                if ($invoice->customer->activeSubscription) {
-                    $invoice->customer->activeSubscription->update([
+            $remainingDue = Invoice::where('customer_id', $customer->id)->where('due_amount', '>', 0)->sum('due_amount');
+
+            if ((float) $remainingDue <= 0) {
+                $customer->update(['status' => 'active']);
+
+                if ($customer->activeSubscription) {
+                    $customer->activeSubscription->update([
                         'status' => 'active',
                         'end_date' => null,
                     ]);
@@ -62,7 +79,7 @@ class PaymentService
 
         $payment->load('invoice.customer');
 
-        if ((float) $payment->invoice->due_amount <= 0) {
+        if ((float) Invoice::where('customer_id', $payment->customer_id)->where('due_amount', '>', 0)->sum('due_amount') <= 0) {
             try {
                 $this->mikrotikSyncService->sync($payment->invoice->customer);
             } catch (Throwable) {

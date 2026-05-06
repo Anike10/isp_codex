@@ -252,12 +252,12 @@ class InvoiceController extends Controller
 
         $activeSubscriptions = Subscription::query()
             ->where('status', 'active')
-            ->whereHas('customer', fn ($query) => $query->where('status', 'active'))
+            ->whereHas('customer', fn ($query) => $query->where('status', 'active')->where('never_suspend', true))
             ->count();
 
         if ($activeSubscriptions === 0) {
             return back()->withErrors([
-                'billing_month' => 'No active customer subscription found. Add an active package to a customer first, then generate bills.',
+                'billing_month' => 'No special never-suspend customer subscription found. Only special customers are auto-generated from this button.',
             ]);
         }
 

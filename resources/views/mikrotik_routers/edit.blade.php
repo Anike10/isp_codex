@@ -26,6 +26,16 @@
         <input type="number" min="1" max="65535" name="api_port" value="{{ old('api_port', $mikrotikRouter->api_port) }}" required>
     </div>
     <div>
+        <label>PPPoE Sync Interval Minutes</label>
+        <input type="number" min="1" max="1440" name="pppoe_sync_interval_minutes" value="{{ old('pppoe_sync_interval_minutes', $mikrotikRouter->pppoe_sync_interval_minutes) }}" required>
+        <span class="muted">How often this router should verify all PPPoE users.</span>
+    </div>
+    <div>
+        <label>Inactive PPPoE Profile</label>
+        <input name="inactive_pppoe_profile" value="{{ old('inactive_pppoe_profile', $mikrotikRouter->inactive_pppoe_profile) }}" required>
+        <span class="muted">Inactive users will be moved to this profile, not disabled.</span>
+    </div>
+    <div>
         <label>Username</label>
         <input name="username" value="{{ old('username', $mikrotikRouter->username) }}" required>
     </div>

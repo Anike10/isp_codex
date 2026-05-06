@@ -13,6 +13,7 @@
     <section class="card">
         <h2>Profile</h2>
         <p><strong>Status:</strong> <span class="badge {{ $customer->status }}">{{ $customer->status }}</span></p>
+        <p><strong>Special Customer:</strong> {{ $customer->never_suspend ? 'Yes - never close line and auto-generate bill' : 'No' }}</p>
         <p><strong>Email:</strong> {{ $customer->email ?? 'Not provided' }}</p>
         <p><strong>Address:</strong> {{ $customer->address }}</p>
         <p><strong>Package:</strong> {{ $customer->activeSubscription?->package?->name ?? 'No active package' }}</p>
@@ -23,9 +24,14 @@
     </section>
     <section class="card">
         <h2>Billing Summary</h2>
+        @php
+            $totalDue = (float) $customer->invoices->sum('due_amount');
+            $netBalance = (float) $customer->account_balance - $totalDue;
+        @endphp
         <p><strong>Total invoices:</strong> {{ $customer->invoices->count() }}</p>
-        <p><strong>Total due:</strong> {{ number_format($customer->invoices->sum('due_amount'), 2) }}</p>
-        <p><strong>Account Balance:</strong> {{ number_format($customer->account_balance, 2) }}</p>
+        <p><strong>Total due:</strong> {{ number_format($totalDue, 2) }}</p>
+        <p><strong>Advance Balance:</strong> {{ number_format($customer->account_balance, 2) }}</p>
+        <p><strong>Net Balance:</strong> <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span></p>
     </section>
 </div>
 

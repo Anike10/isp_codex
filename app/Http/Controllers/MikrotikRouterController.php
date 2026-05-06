@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\MikrotikRouter;
+use App\Services\RouterOsClient;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Throwable;
 
 class MikrotikRouterController extends Controller
 {
@@ -29,6 +31,8 @@ class MikrotikRouterController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'ip_address' => ['required', 'ip', 'max:45', 'unique:mikrotik_routers,ip_address'],
             'api_port' => ['required', 'integer', 'min:1', 'max:65535'],
+            'pppoe_sync_interval_minutes' => ['required', 'integer', 'min:1', 'max:1440'],
+            'inactive_pppoe_profile' => ['required', 'string', 'max:255'],
             'username' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', 'max:255'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
@@ -43,6 +47,163 @@ class MikrotikRouterController extends Controller
         return view('mikrotik_routers.show', compact('mikrotikRouter'));
     }
 
+    public function connectionStatus(MikrotikRouter $mikrotikRouter)
+    {
+        $checkedAt = now();
+
+        if ($mikrotikRouter->status !== 'active') {
+            $mikrotikRouter->update([
+                'last_api_status' => 'inactive',
+                'last_ping_status' => 'inactive',
+                'api_status_since' => $mikrotikRouter->last_api_status === 'inactive' ? $mikrotikRouter->api_status_since : $checkedAt,
+                'ping_status_since' => $mikrotikRouter->last_ping_status === 'inactive' ? $mikrotikRouter->ping_status_since : $checkedAt,
+                'last_checked_at' => $checkedAt,
+                'last_connection_message' => 'Router is marked inactive in this app.',
+            ]);
+
+            return response()->json([
+                ...$this->routerStatusPayload($mikrotikRouter->refresh()),
+                'message' => 'Router is marked inactive in this app.',
+            ]);
+        }
+
+        $startedAt = microtime(true);
+        $client = new RouterOsClient();
+        $apiOnline = false;
+        $apiMessage = null;
+        $apiLatency = null;
+
+        try {
+            $client->connect(
+                $mikrotikRouter->ip_address,
+                $mikrotikRouter->api_port,
+                $mikrotikRouter->username,
+                $mikrotikRouter->password,
+                3
+            );
+
+            $apiOnline = true;
+            $apiMessage = 'MikroTik API login successful.';
+            $apiLatency = (int) round((microtime(true) - $startedAt) * 1000);
+        } catch (Throwable $exception) {
+            $apiMessage = $exception->getMessage();
+            $apiLatency = (int) round((microtime(true) - $startedAt) * 1000);
+        } finally {
+            $client->close();
+        }
+
+        $ping = $this->pingHost($mikrotikRouter->ip_address);
+
+        $update = [
+            'last_api_status' => $apiOnline ? 'online' : 'offline',
+            'last_ping_status' => $ping['online'] ? 'online' : 'offline',
+            'last_api_latency_ms' => $apiLatency,
+            'last_ping_latency_ms' => $ping['latency_ms'],
+            'last_checked_at' => $checkedAt,
+            'last_connection_message' => $apiMessage,
+        ];
+
+        $apiStatus = $apiOnline ? 'online' : 'offline';
+        $pingStatus = $ping['online'] ? 'online' : 'offline';
+
+        if ($mikrotikRouter->last_api_status !== $apiStatus) {
+            $update['api_status_since'] = $checkedAt;
+        }
+
+        if ($mikrotikRouter->last_ping_status !== $pingStatus) {
+            $update['ping_status_since'] = $checkedAt;
+        }
+
+        if ($apiOnline && $mikrotikRouter->last_api_status !== 'online') {
+            $update['last_online_at'] = $checkedAt;
+        } elseif (! $apiOnline && $mikrotikRouter->last_api_status !== 'offline') {
+            $update['last_offline_at'] = $checkedAt;
+        }
+
+        if ($ping['online'] && $mikrotikRouter->last_ping_status !== 'online') {
+            $update['last_ping_at'] = $checkedAt;
+        }
+
+        $mikrotikRouter->update($update);
+
+        return response()->json([
+            ...$this->routerStatusPayload($mikrotikRouter->refresh()),
+            'message' => $apiMessage,
+            'ping_message' => $ping['message'],
+        ]);
+    }
+
+    private function routerStatusPayload(MikrotikRouter $router): array
+    {
+        return [
+            'api_online' => $router->last_api_status === 'online',
+            'ping_online' => $router->last_ping_status === 'online',
+            'api_label' => ucfirst($router->last_api_status ?? 'unknown'),
+            'ping_label' => ucfirst($router->last_ping_status ?? 'unknown'),
+            'api_latency_ms' => $router->last_api_latency_ms,
+            'ping_latency_ms' => $router->last_ping_latency_ms,
+            'api_duration' => $this->durationSince($router->api_status_since),
+            'ping_duration' => $this->durationSince($router->ping_status_since),
+            'checked_at' => $router->last_checked_at?->format('Y-m-d H:i:s'),
+            'last_online_at' => $router->last_online_at?->format('Y-m-d H:i:s'),
+            'last_offline_at' => $router->last_offline_at?->format('Y-m-d H:i:s'),
+            'last_ping_at' => $router->last_ping_at?->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    private function durationSince($since): ?string
+    {
+        if (! $since) {
+            return null;
+        }
+
+        $seconds = max(0, (int) $since->diffInSeconds(now()));
+
+        if ($seconds < 60) {
+            return $seconds.'s';
+        }
+
+        $minutes = intdiv($seconds, 60);
+
+        if ($minutes < 60) {
+            return $minutes.'m '.($seconds % 60).'s';
+        }
+
+        $hours = intdiv($minutes, 60);
+
+        if ($hours < 24) {
+            return $hours.'h '.($minutes % 60).'m';
+        }
+
+        $days = intdiv($hours, 24);
+
+        return $days.'d '.($hours % 24).'h';
+    }
+
+    private function pingHost(string $host): array
+    {
+        $hostArg = escapeshellarg($host);
+        $command = PHP_OS_FAMILY === 'Windows'
+            ? "ping -n 1 -w 1000 {$hostArg}"
+            : "ping -c 1 -W 1 {$hostArg}";
+
+        $startedAt = microtime(true);
+        exec($command, $output, $exitCode);
+        $latency = (int) round((microtime(true) - $startedAt) * 1000);
+        $text = implode(' ', $output);
+        $matchedLatency = null;
+
+        if (preg_match('/(?:time[=<]|Average = )([0-9]+(?:\.[0-9]+)?)\s*ms/i', $text, $match)) {
+            $matchedLatency = (int) round((float) $match[1]);
+        }
+
+        return [
+            'online' => $exitCode === 0,
+            'latency_ms' => $matchedLatency ?? $latency,
+            'message' => $exitCode === 0 ? 'Ping successful.' : 'Ping failed.',
+        ];
+    }
+
     public function edit(MikrotikRouter $mikrotikRouter)
     {
         return view('mikrotik_routers.edit', compact('mikrotikRouter'));
@@ -54,6 +215,8 @@ class MikrotikRouterController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'ip_address' => ['required', 'ip', 'max:45', Rule::unique('mikrotik_routers', 'ip_address')->ignore($mikrotikRouter->id)],
             'api_port' => ['required', 'integer', 'min:1', 'max:65535'],
+            'pppoe_sync_interval_minutes' => ['required', 'integer', 'min:1', 'max:1440'],
+            'inactive_pppoe_profile' => ['required', 'string', 'max:255'],
             'username' => ['required', 'string', 'max:255'],
             'password' => ['nullable', 'string', 'max:255'],
             'status' => ['required', Rule::in(['active', 'inactive'])],

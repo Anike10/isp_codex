@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Customer;
+use App\Models\MikrotikRouter;
 use App\Services\MikrotikCustomerSyncService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -47,3 +48,47 @@ Artisan::command('mikrotik:sync-customers', function (MikrotikCustomerSyncServic
 
     return $failed === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Create or update MikroTik PPPoE users for all customers');
+
+Artisan::command('mikrotik:sync-router-users {--force : Sync every active router now, ignoring interval}', function (MikrotikCustomerSyncService $syncService) {
+    $synced = 0;
+    $failed = 0;
+
+    MikrotikRouter::where('status', 'active')
+        ->orderBy('id')
+        ->get()
+        ->each(function (MikrotikRouter $router) use ($syncService, &$synced, &$failed): void {
+            $isDue = $this->option('force')
+                || ! $router->last_pppoe_sync_at
+                || $router->last_pppoe_sync_at->addMinutes($router->pppoe_sync_interval_minutes)->lte(now());
+
+            if (! $isDue) {
+                $this->line("{$router->name} ({$router->ip_address}): skipped until next interval.");
+
+                return;
+            }
+
+            try {
+                $summary = $syncService->syncRouter($router);
+                $summaryText = "created={$summary['created']}, updated={$summary['updated']}, inactive_profile={$summary['moved_inactive']}, skipped={$summary['skipped']}, failed={$summary['failed']}";
+
+                $router->update([
+                    'last_pppoe_sync_at' => now(),
+                    'last_pppoe_sync_summary' => $summaryText.($summary['messages'] ? ' | '.implode(' | ', array_slice($summary['messages'], 0, 5)) : ''),
+                ]);
+
+                $synced++;
+                $this->line("{$router->name} ({$router->ip_address}): {$summaryText}");
+            } catch (\Throwable $exception) {
+                $failed++;
+                $router->update([
+                    'last_pppoe_sync_at' => now(),
+                    'last_pppoe_sync_summary' => 'failed: '.$exception->getMessage(),
+                ]);
+                $this->error("{$router->name} ({$router->ip_address}): failed - {$exception->getMessage()}");
+            }
+        });
+
+    $this->info("Router PPPoE sync finished. Synced: {$synced}. Failed: {$failed}.");
+
+    return $failed === 0 ? self::SUCCESS : self::FAILURE;
+})->purpose('Verify and sync PPPoE users on MikroTik routers by each router interval');

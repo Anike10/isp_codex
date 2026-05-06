@@ -15,15 +15,21 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Name</th><th>Phone</th><th>Connection</th><th>Package</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Phone</th><th>User ID</th><th>Connection</th><th>Package</th><th>Balance</th><th>Status</th><th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
+        @php
+            $netBalance = (float) $customer->account_balance - (float) ($customer->total_due_amount ?? 0);
+        @endphp
         <tr data-href="{{ route('customers.show', $customer) }}">
             <td>{{ $customer->name }}</td>
             <td>{{ $customer->phone }}</td>
+            <td>{{ $customer->mikrotik_username ?? $customer->connection_id }}</td>
             <td>{{ $customer->connection_id }}</td>
             <td>{{ $customer->activeSubscription?->package?->name ?? 'No package' }}</td>
-            <td>{{ number_format($customer->account_balance, 2) }}</td>
+            <td>
+                <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span>
+            </td>
             <td><span class="badge {{ $customer->status }}">{{ $customer->status }}</span></td>
             <td class="actions">
                 <a class="btn light" href="{{ route('customers.show', $customer) }}">View</a>
@@ -31,7 +37,7 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="7">No customers found.</td></tr>
+        <tr><td colspan="8">No customers found.</td></tr>
     @endforelse
     </tbody>
 </table>

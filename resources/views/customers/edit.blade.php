@@ -40,6 +40,13 @@
         </select>
     </div>
     <div>
+        <label>Special Customer</label>
+        <label style="font-weight:400; display:flex; gap:8px; align-items:center;">
+            <input type="checkbox" name="never_suspend" value="1" @checked(old('never_suspend', $customer->never_suspend)) style="width:auto;">
+            Never close line and auto-generate monthly bill
+        </label>
+    </div>
+    <div>
         <label>Internet Package</label>
         <select name="internet_package_id">
             <option value="">No active package</option>

@@ -14,7 +14,6 @@
             <input type="month" name="billing_month" value="{{ request('billing_month', now()->format('Y-m')) }}" required>
             <button class="btn" type="submit">Generate Bills</button>
         </form>
-        <a class="btn secondary" href="{{ route('invoices.create') }}">Create Invoice</a>
     </div>
 </div>
 

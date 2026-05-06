@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Invoice;
+use App\Models\Customer;
 use App\Models\Subscription;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -18,30 +19,10 @@ class BillingService
         Subscription::query()
             ->with(['customer', 'package'])
             ->where('status', 'active')
-            ->whereHas('customer', fn ($query) => $query->where('status', 'active'))
+            ->whereHas('customer', fn ($query) => $query->where('status', 'active')->where('never_suspend', true))
             ->chunkById(100, function ($subscriptions) use ($month, $createdInvoices) {
                 foreach ($subscriptions as $subscription) {
-                    $invoice = DB::transaction(function () use ($subscription, $month) {
-                        return Invoice::firstOrCreate(
-                            [
-                                'customer_id' => $subscription->customer_id,
-                                'billing_month' => $month->format('Y-m'),
-                                'invoice_type' => 'service',
-                            ],
-                            [
-                                'invoice_no' => Invoice::generateInvoiceNo($subscription->customer_id, $month->format('Y-m')),
-                                'subtotal' => $subscription->package->monthly_price,
-                                'discount' => 0,
-                                'vat' => 0,
-                                'total' => $subscription->package->monthly_price,
-                                'paid_amount' => 0,
-                                'due_amount' => $subscription->package->monthly_price,
-                                'status' => 'unpaid',
-                                'due_date' => $month->copy()->day(10),
-                                'invoice_type' => 'service',
-                            ]
-                        );
-                    });
+                    $invoice = $this->createServiceInvoice($subscription, $month);
 
                     if ($invoice->wasRecentlyCreated) {
                         $createdInvoices->push($invoice);
@@ -50,6 +31,46 @@ class BillingService
             });
 
         return $createdInvoices;
+    }
+
+    public function generateCurrentServiceBillForCustomer(Customer $customer, ?string $billingMonth = null): ?Invoice
+    {
+        $customer->loadMissing('activeSubscription.package');
+
+        if (! $customer->activeSubscription || $customer->activeSubscription->status !== 'active') {
+            return null;
+        }
+
+        $month = $billingMonth
+            ? Carbon::createFromFormat('Y-m', $billingMonth)->startOfMonth()
+            : now()->startOfMonth();
+
+        return $this->createServiceInvoice($customer->activeSubscription, $month);
+    }
+
+    private function createServiceInvoice(Subscription $subscription, Carbon $month): Invoice
+    {
+        return DB::transaction(function () use ($subscription, $month) {
+            return Invoice::firstOrCreate(
+                [
+                    'customer_id' => $subscription->customer_id,
+                    'billing_month' => $month->format('Y-m'),
+                    'invoice_type' => 'service',
+                ],
+                [
+                    'invoice_no' => Invoice::generateInvoiceNo($subscription->customer_id, $month->format('Y-m')),
+                    'subtotal' => $subscription->package->monthly_price,
+                    'discount' => 0,
+                    'vat' => 0,
+                    'total' => $subscription->package->monthly_price,
+                    'paid_amount' => 0,
+                    'due_amount' => $subscription->package->monthly_price,
+                    'status' => 'unpaid',
+                    'due_date' => $month->copy()->day(10),
+                    'invoice_type' => 'service',
+                ]
+            );
+        });
     }
 
 }

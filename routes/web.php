@@ -61,6 +61,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_mikrotik_routers')->group(function () {
+        Route::get('mikrotik-routers/{mikrotikRouter}/connection-status', [MikrotikRouterController::class, 'connectionStatus'])->name('mikrotik-routers.connection-status');
         Route::resource('mikrotik-routers', MikrotikRouterController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
     });
 

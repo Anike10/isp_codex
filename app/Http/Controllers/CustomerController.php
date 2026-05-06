@@ -17,6 +17,7 @@ class CustomerController extends Controller
     {
         $customers = Customer::query()
             ->with('activeSubscription.package')
+            ->withSum('invoices as total_due_amount', 'due_amount')
             ->when($request->search, function ($query, string $search) {
                 $query->where('name', 'like', "%{$search}%")
                     ->orWhere('phone', 'like', "%{$search}%")
@@ -46,6 +47,7 @@ class CustomerController extends Controller
             'connection_id' => ['required', 'string', 'max:100', 'unique:customers,connection_id'],
             'address' => ['required', 'string'],
             'status' => ['required', 'in:active,inactive'],
+            'never_suspend' => ['nullable', 'boolean'],
             'mikrotik_router_id' => ['nullable', 'exists:mikrotik_routers,id'],
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
             'start_date' => ['nullable', 'date'],
@@ -53,6 +55,7 @@ class CustomerController extends Controller
 
         $data['mikrotik_username'] = $data['connection_id'];
         $data['mikrotik_password'] = MikrotikCustomerSyncService::DEFAULT_PASSWORD;
+        $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
 
         $customer = Customer::create($data);
 
@@ -93,6 +96,7 @@ class CustomerController extends Controller
             'connection_id' => ['required', 'string', 'max:100', 'unique:customers,connection_id,'.$customer->id],
             'address' => ['required', 'string'],
             'status' => ['required', 'in:active,inactive'],
+            'never_suspend' => ['nullable', 'boolean'],
             'mikrotik_router_id' => ['nullable', 'exists:mikrotik_routers,id'],
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
             'start_date' => ['nullable', 'date'],
@@ -100,6 +104,7 @@ class CustomerController extends Controller
 
         $data['mikrotik_username'] = $data['connection_id'];
         $data['mikrotik_password'] = $customer->mikrotik_password ?: MikrotikCustomerSyncService::DEFAULT_PASSWORD;
+        $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
 
         $customer->update(Arr::except($data, ['internet_package_id', 'start_date']));
 
@@ -147,7 +152,10 @@ class CustomerController extends Controller
         try {
             $status = app(MikrotikCustomerSyncService::class)->sync($customer->refresh());
 
-            return ['status' => $status, 'warning' => null];
+            return [
+                'status' => $status,
+                'warning' => str_contains($status, 'failed -') ? 'Some MikroTik routers failed. '.$status : null,
+            ];
         } catch (Throwable $exception) {
             return [
                 'status' => 'not synced',
