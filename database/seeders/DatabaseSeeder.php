@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\Invoice;
+use App\Models\MikrotikRouter;
 use App\Models\Product;
 use App\Models\Subscription;
 use App\Models\SupportTicket;
@@ -25,6 +26,7 @@ class DatabaseSeeder extends Seeder
         $basic = InternetPackage::create([
             'name' => 'Home Basic',
             'speed' => '20 Mbps',
+            'mikrotik_profile' => 'Home Basic',
             'monthly_price' => 800,
             'description' => 'Entry level home internet package.',
             'status' => 'active',
@@ -33,6 +35,7 @@ class DatabaseSeeder extends Seeder
         $premium = InternetPackage::create([
             'name' => 'Home Premium',
             'speed' => '50 Mbps',
+            'mikrotik_profile' => 'Home Premium',
             'monthly_price' => 1500,
             'description' => 'Faster home and small office package.',
             'status' => 'active',
@@ -43,6 +46,8 @@ class DatabaseSeeder extends Seeder
             'phone' => '01700000000',
             'email' => 'rahim@example.com',
             'connection_id' => 'KPS-1001',
+            'mikrotik_username' => 'KPS-1001',
+            'mikrotik_password' => '4321',
             'address' => 'Dhaka, Bangladesh',
             'status' => 'active',
         ]);
@@ -94,6 +99,16 @@ class DatabaseSeeder extends Seeder
             'sale_price' => 20,
             'stock_quantity' => 300,
             'low_stock_alert' => 50,
+        ]);
+
+        MikrotikRouter::create([
+            'name' => 'Main MikroTik',
+            'ip_address' => '192.168.6.1',
+            'api_port' => 8728,
+            'username' => 'admin',
+            'password' => 'anikebd123',
+            'status' => 'active',
+            'notes' => 'Default router added from local setup.',
         ]);
     }
 }

@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <title>{{ $title ?? 'Ultimate Solution' }}</title>
     <style>
         :root { color-scheme: light; --ink:#172033; --muted:#667085; --line:#d8dee9; --bg:#f4f7fb; --panel:#fff; --brand:#116149; --accent:#1d76c9; --warn:#b45309; --danger:#b42318; }
@@ -45,6 +46,7 @@
         .full { grid-column:1 / -1; }
         .alert { padding:12px 14px; border-radius:6px; margin-bottom:16px; }
         .alert.success { background:#e7f7ef; color:#05603a; }
+        .alert.warning { background:#fffaeb; color:var(--warn); }
         .alert.error { background:#fff0f0; color:var(--danger); }
         .badge { display:inline-block; padding:4px 8px; border-radius:999px; background:#eef2ff; font-size:12px; font-weight:700; }
         .badge.due { background:#fff7ed; color:var(--warn); }
@@ -123,6 +125,9 @@
             @if (auth()->user()?->hasPermission('manage_payment_accounts'))
                 <a href="{{ route('payment-accounts.index') }}">Payment Accounts</a>
             @endif
+            @if (auth()->user()?->hasPermission('manage_mikrotik_routers'))
+                <a href="{{ route('mikrotik-routers.index') }}">MikroTik</a>
+            @endif
             @if (auth()->user()?->hasPermission('manage_tickets'))
                 <a href="{{ route('tickets.index') }}">Tickets</a>
             @endif
@@ -146,6 +151,10 @@
     <main class="main">
         @if (session('success'))
             <div class="alert success">{{ session('success') }}</div>
+        @endif
+
+        @if (session('warning'))
+            <div class="alert warning">{{ session('warning') }}</div>
         @endif
 
         @if ($errors->any())

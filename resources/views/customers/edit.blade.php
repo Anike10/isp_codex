@@ -14,6 +14,23 @@
     <div><label>Phone</label><input name="phone" value="{{ old('phone', $customer->phone) }}" required></div>
     <div><label>Email</label><input type="email" name="email" value="{{ old('email', $customer->email) }}"></div>
     <div><label>Connection ID</label><input name="connection_id" value="{{ old('connection_id', $customer->connection_id) }}" required></div>
+    <div>
+        <label>MikroTik Password</label>
+        <input value="4321" readonly>
+        <span class="muted">Connection ID will be used as the MikroTik user ID.</span>
+    </div>
+    <div>
+        <label>MikroTik Target</label>
+        <select name="mikrotik_router_id">
+            <option value="">All active MikroTik routers</option>
+            @foreach ($routers as $router)
+                <option value="{{ $router->id }}" @selected((int) old('mikrotik_router_id', $customer->mikrotik_router_id) === $router->id)>
+                    {{ $router->name }} - {{ $router->ip_address }}:{{ $router->api_port }}
+                </option>
+            @endforeach
+        </select>
+        <span class="muted">Choose one router, or keep all active routers selected.</span>
+    </div>
     <div class="full"><label>Address</label><textarea name="address" required>{{ old('address', $customer->address) }}</textarea></div>
     <div>
         <label>Status</label>

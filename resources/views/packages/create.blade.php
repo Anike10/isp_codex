@@ -10,6 +10,7 @@
     @csrf
     <div><label>Name</label><input name="name" value="{{ old('name') }}" required></div>
     <div><label>Speed</label><input name="speed" value="{{ old('speed') }}" placeholder="20 Mbps" required></div>
+    <div><label>MikroTik Profile</label><input name="mikrotik_profile" value="{{ old('mikrotik_profile') }}" placeholder="Same as RouterOS PPP profile"></div>
     <div><label>Monthly Price</label><input type="number" step="0.01" name="monthly_price" value="{{ old('monthly_price') }}" required></div>
     <div>
         <label>Status</label>

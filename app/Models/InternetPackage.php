@@ -13,6 +13,7 @@ class InternetPackage extends Model
     protected $fillable = [
         'name',
         'speed',
+        'mikrotik_profile',
         'monthly_price',
         'description',
         'status',

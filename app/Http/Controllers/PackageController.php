@@ -30,13 +30,18 @@ class PackageController extends Controller
 
     public function store(Request $request)
     {
-        InternetPackage::create($request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'speed' => ['required', 'string', 'max:100'],
+            'mikrotik_profile' => ['nullable', 'string', 'max:255'],
             'monthly_price' => ['required', 'numeric', 'min:0'],
             'description' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
-        ]));
+        ]);
+
+        $data['mikrotik_profile'] = $data['mikrotik_profile'] ?: $data['name'];
+
+        InternetPackage::create($data);
 
         return redirect()->route('packages.index')->with('success', 'Package created successfully.');
     }

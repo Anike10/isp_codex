@@ -9,17 +9,18 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Name</th><th>Speed</th><th>Monthly Price</th><th>Status</th></tr></thead>
+    <thead><tr><th>Name</th><th>Speed</th><th>MikroTik Profile</th><th>Monthly Price</th><th>Status</th></tr></thead>
     <tbody>
     @forelse ($packages as $package)
         <tr data-href="{{ route('packages.show', $package) }}">
             <td>{{ $package->name }}</td>
             <td>{{ $package->speed }}</td>
+            <td>{{ $package->mikrotik_profile }}</td>
             <td>{{ number_format($package->monthly_price, 2) }}</td>
             <td><span class="badge {{ $package->status }}">{{ $package->status }}</span></td>
         </tr>
     @empty
-        <tr><td colspan="4">No packages found.</td></tr>
+        <tr><td colspan="5">No packages found.</td></tr>
     @endforelse
     </tbody>
 </table>

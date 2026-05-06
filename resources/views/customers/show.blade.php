@@ -16,6 +16,10 @@
         <p><strong>Email:</strong> {{ $customer->email ?? 'Not provided' }}</p>
         <p><strong>Address:</strong> {{ $customer->address }}</p>
         <p><strong>Package:</strong> {{ $customer->activeSubscription?->package?->name ?? 'No active package' }}</p>
+        <p><strong>MikroTik User ID:</strong> {{ $customer->mikrotik_username ?? $customer->connection_id }}</p>
+        <p><strong>MikroTik Password:</strong> 4321</p>
+        <p><strong>MikroTik Target:</strong> {{ $customer->mikrotikRouter ? $customer->mikrotikRouter->name.' - '.$customer->mikrotikRouter->ip_address.':'.$customer->mikrotikRouter->api_port : 'All active MikroTik routers' }}</p>
+        <p><strong>MikroTik Profile:</strong> {{ $customer->activeSubscription?->package?->mikrotik_profile ?? 'No active profile' }}</p>
     </section>
     <section class="card">
         <h2>Billing Summary</h2>

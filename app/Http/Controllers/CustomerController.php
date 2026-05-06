@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\InternetPackage;
+use App\Models\MikrotikRouter;
 use App\Models\Subscription;
+use App\Services\MikrotikCustomerSyncService;
 use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
+use Throwable;
 
 class CustomerController extends Controller
 {
@@ -30,6 +33,7 @@ class CustomerController extends Controller
     {
         return view('customers.create', [
             'packages' => InternetPackage::where('status', 'active')->orderBy('name')->get(),
+            'routers' => MikrotikRouter::where('status', 'active')->orderBy('name')->get(),
         ]);
     }
 
@@ -42,9 +46,13 @@ class CustomerController extends Controller
             'connection_id' => ['required', 'string', 'max:100', 'unique:customers,connection_id'],
             'address' => ['required', 'string'],
             'status' => ['required', 'in:active,inactive'],
+            'mikrotik_router_id' => ['nullable', 'exists:mikrotik_routers,id'],
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
             'start_date' => ['nullable', 'date'],
         ]);
+
+        $data['mikrotik_username'] = $data['connection_id'];
+        $data['mikrotik_password'] = MikrotikCustomerSyncService::DEFAULT_PASSWORD;
 
         $customer = Customer::create($data);
 
@@ -57,7 +65,12 @@ class CustomerController extends Controller
             ]);
         }
 
-        return redirect()->route('customers.index')->with('success', 'Customer created successfully.');
+        $syncResult = $this->syncMikrotikCustomer($customer);
+
+        return redirect()
+            ->route('customers.index')
+            ->with('success', 'Customer created successfully. MikroTik user '.$syncResult['status'].'.')
+            ->with('warning', $syncResult['warning']);
     }
 
     public function edit(Customer $customer)
@@ -67,6 +80,7 @@ class CustomerController extends Controller
         return view('customers.edit', [
             'customer' => $customer,
             'packages' => InternetPackage::where('status', 'active')->orderBy('name')->get(),
+            'routers' => MikrotikRouter::where('status', 'active')->orderBy('name')->get(),
         ]);
     }
 
@@ -79,9 +93,13 @@ class CustomerController extends Controller
             'connection_id' => ['required', 'string', 'max:100', 'unique:customers,connection_id,'.$customer->id],
             'address' => ['required', 'string'],
             'status' => ['required', 'in:active,inactive'],
+            'mikrotik_router_id' => ['nullable', 'exists:mikrotik_routers,id'],
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
             'start_date' => ['nullable', 'date'],
         ]);
+
+        $data['mikrotik_username'] = $data['connection_id'];
+        $data['mikrotik_password'] = $customer->mikrotik_password ?: MikrotikCustomerSyncService::DEFAULT_PASSWORD;
 
         $customer->update(Arr::except($data, ['internet_package_id', 'start_date']));
 
@@ -109,13 +127,32 @@ class CustomerController extends Controller
             ]);
         }
 
-        return redirect()->route('customers.show', $customer)->with('success', 'Customer updated successfully.');
+        $syncResult = $this->syncMikrotikCustomer($customer);
+
+        return redirect()
+            ->route('customers.show', $customer)
+            ->with('success', 'Customer updated successfully. MikroTik user '.$syncResult['status'].'.')
+            ->with('warning', $syncResult['warning']);
     }
 
     public function show(Customer $customer)
     {
-        $customer->load(['activeSubscription.package', 'invoices' => fn ($query) => $query->latest(), 'tickets' => fn ($query) => $query->latest()]);
+        $customer->load(['activeSubscription.package', 'mikrotikRouter', 'invoices' => fn ($query) => $query->latest(), 'tickets' => fn ($query) => $query->latest()]);
 
         return view('customers.show', compact('customer'));
+    }
+
+    private function syncMikrotikCustomer(Customer $customer): array
+    {
+        try {
+            $status = app(MikrotikCustomerSyncService::class)->sync($customer->refresh());
+
+            return ['status' => $status, 'warning' => null];
+        } catch (Throwable $exception) {
+            return [
+                'status' => 'not synced',
+                'warning' => 'MikroTik sync failed: '.$exception->getMessage(),
+            ];
+        }
     }
 }
