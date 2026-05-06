@@ -15,6 +15,7 @@
 <section class="card" style="margin-bottom:16px">
     <h2>SMS Forwarder Setup</h2>
     <p><strong>Webhook URL:</strong> {{ url('/api/bkash/sms') }}</p>
+    <p><strong>LAN URL for phone:</strong> http://192.168.7.246/isp_codex/public/api/bkash/sms</p>
     <p><strong>Method:</strong> POST</p>
     <p><strong>Header:</strong> X-SMS-Token: your token from BKASH_SMS_WEBHOOK_TOKEN</p>
     <p><strong>Body:</strong> message=full SMS text, sender=bKash</p>

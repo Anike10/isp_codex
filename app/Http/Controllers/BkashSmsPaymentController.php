@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\BkashSmsPayment;
 use App\Services\BkashSmsPaymentService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 class BkashSmsPaymentController extends Controller
@@ -47,6 +48,17 @@ class BkashSmsPaymentController extends Controller
 
     public function store(Request $request, BkashSmsPaymentService $smsPaymentService)
     {
+        Log::info('bKash SMS webhook received', [
+            'ip' => $request->ip(),
+            'content_type' => $request->header('content-type'),
+            'headers' => [
+                'x_sms_token' => $request->header('X-SMS-Token') ? 'present' : 'missing',
+                'authorization' => $request->bearerToken() ? 'present' : 'missing',
+            ],
+            'payload' => $request->all(),
+            'raw' => $request->getContent(),
+        ]);
+
         $expectedToken = config('services.bkash_sms.token');
         $providedToken = $request->bearerToken() ?: $request->header('X-SMS-Token') ?: $request->input('token');
 
