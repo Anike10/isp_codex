@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'bkash_sms' => [
+        'token' => env('BKASH_SMS_WEBHOOK_TOKEN'),
+    ],
+
 ];

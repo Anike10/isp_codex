@@ -59,6 +59,10 @@
         .badge { display:inline-block; padding:4px 8px; border-radius:999px; background:#eef2ff; font-size:12px; font-weight:700; }
         .badge.due { background:#fff7ed; color:var(--warn); }
         .badge.paid, .badge.active { background:#ecfdf3; color:#027a48; }
+        .badge.processed, .badge.balance { background:#ecfdf3; color:#027a48; }
+        .badge.pending { background:#fff7ed; color:var(--warn); }
+        .badge.duplicate { background:#eef2ff; color:#175cd3; }
+        .badge.failed { background:#fff0f0; color:var(--danger); }
         .badge.open, .badge.processing { background:#eff6ff; color:#175cd3; }
         .badge.low { background:#fff1f3; color:#c01048; }
         @media (max-width: 980px) {
@@ -157,6 +161,7 @@
                         @endif
                         @if (auth()->user()?->hasPermission('manage_payments'))
                             <a href="{{ route('payments.index') }}">Payments</a>
+                            <a href="{{ route('bkash-sms-payments.index') }}">bKash SMS</a>
                         @endif
                         @if (auth()->user()?->hasPermission('manage_payment_accounts'))
                             <a href="{{ route('payment-accounts.index') }}">Payment Accounts</a>

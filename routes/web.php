@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BkashSmsPaymentController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\DashboardController;
@@ -48,6 +49,10 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('permission:manage_payments')->group(function () {
         Route::resource('payments', PaymentController::class)->only(['index', 'create', 'store']);
+        Route::get('bkash-sms-payments', [BkashSmsPaymentController::class, 'index'])->name('bkash-sms-payments.index');
+        Route::get('bkash-sms-payments/create', [BkashSmsPaymentController::class, 'create'])->name('bkash-sms-payments.create');
+        Route::post('bkash-sms-payments', [BkashSmsPaymentController::class, 'manualStore'])->name('bkash-sms-payments.store');
+        Route::get('bkash-sms-payments/{bkashSmsPayment}', [BkashSmsPaymentController::class, 'show'])->name('bkash-sms-payments.show');
     });
 
     Route::middleware('permission:manage_payment_accounts')->group(function () {
