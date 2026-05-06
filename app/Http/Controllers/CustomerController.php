@@ -18,6 +18,10 @@ class CustomerController extends Controller
         $customers = Customer::query()
             ->with('activeSubscription.package')
             ->withSum('invoices as total_due_amount', 'due_amount')
+            ->withMax(['invoices as latest_paid_billing_month' => function ($query) {
+                $query->where('invoice_type', 'service')
+                    ->where('due_amount', '<=', 0);
+            }], 'billing_month')
             ->when($request->search, function ($query, string $search) {
                 $query->where('name', 'like', "%{$search}%")
                     ->orWhere('phone', 'like', "%{$search}%")
@@ -145,6 +149,43 @@ class CustomerController extends Controller
         $customer->load(['activeSubscription.package', 'mikrotikRouter', 'invoices' => fn ($query) => $query->latest(), 'tickets' => fn ($query) => $query->latest()]);
 
         return view('customers.show', compact('customer'));
+    }
+
+    public function grantGracePeriod(Request $request, Customer $customer)
+    {
+        $data = $request->validate([
+            'grace_days' => ['required', 'integer', 'min:1', 'max:365'],
+        ]);
+
+        if ($customer->grace_used_at) {
+            return back()->withErrors(['grace_days' => 'Grace period was already used for this customer.']);
+        }
+
+        if ($customer->status !== 'inactive') {
+            return back()->withErrors(['grace_days' => 'Grace period can only be given to inactive customers.']);
+        }
+
+        $customer->update([
+            'status' => 'active',
+            'grace_days' => $data['grace_days'],
+            'grace_until' => now()->addDays((int) $data['grace_days'])->toDateString(),
+            'grace_used_at' => now(),
+        ]);
+
+        $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
+
+        if ($subscription) {
+            $subscription->update([
+                'status' => 'active',
+                'end_date' => null,
+            ]);
+        }
+
+        $syncResult = $this->syncMikrotikCustomer($customer);
+
+        return back()
+            ->with('success', 'Grace period added. MikroTik user '.$syncResult['status'].'.')
+            ->with('warning', $syncResult['warning']);
     }
 
     private function syncMikrotikCustomer(Customer $customer): array

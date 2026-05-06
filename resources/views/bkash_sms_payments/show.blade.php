@@ -12,6 +12,26 @@
     </div>
 </div>
 
+@if (in_array($bkashSmsPayment->status, ['pending', 'failed'], true))
+    <form method="post" action="{{ route('bkash-sms-payments.approve', $bkashSmsPayment) }}" class="card form-grid" style="margin-bottom:16px">
+        @csrf
+        <div class="full">
+            <label>Manual Match Customer</label>
+            <select name="customer_id" required>
+                <option value="">Select customer</option>
+                @foreach ($customers as $customer)
+                    <option value="{{ $customer->id }}">
+                        {{ $customer->name }} - {{ $customer->phone }} - {{ $customer->mikrotik_username ?? $customer->connection_id }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+        <div class="full">
+            <button class="btn" type="submit">Approve and Record Payment</button>
+        </div>
+    </form>
+@endif
+
 <div class="grid two">
     <section class="card">
         <h2>Parsed SMS</h2>

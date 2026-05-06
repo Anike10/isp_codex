@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\BkashSmsPayment;
 use App\Models\Customer;
 use App\Models\Invoice;
+use App\Models\PaymentAccount;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -120,10 +121,24 @@ class BkashSmsPaymentService
             }
 
             try {
+                $paymentAccount = $parsed['customer_number']
+                    ? PaymentAccount::firstOrCreate(
+                        [
+                            'payment_method' => 'bkash',
+                            'account_number' => $parsed['customer_number'],
+                        ],
+                        [
+                            'account_name' => 'bKash Sender '.$parsed['customer_number'],
+                            'opening_balance' => 0,
+                            'status' => 'active',
+                        ]
+                    )
+                    : null;
+
                 $payment = $this->paymentService->recordPayment($invoice, [
                     'amount' => $parsed['amount'],
                     'payment_method' => 'bkash',
-                    'payment_account_id' => null,
+                    'payment_account_id' => $paymentAccount?->id,
                     'payment_date' => $parsed['payment_date']?->toDateString() ?? now()->toDateString(),
                     'note' => 'Auto bKash SMS TrxID: '.$parsed['trx_id'],
                 ]);

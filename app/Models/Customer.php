@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Carbon\Carbon;
 
 class Customer extends Model
 {
@@ -23,6 +24,9 @@ class Customer extends Model
         'address',
         'status',
         'never_suspend',
+        'grace_until',
+        'grace_days',
+        'grace_used_at',
         'account_balance',
     ];
 
@@ -35,8 +39,45 @@ class Customer extends Model
         return [
             'mikrotik_password' => 'encrypted',
             'never_suspend' => 'boolean',
+            'grace_until' => 'date',
+            'grace_used_at' => 'datetime',
             'account_balance' => 'decimal:2',
         ];
+    }
+
+    public function hasActiveGracePeriod(): bool
+    {
+        return $this->grace_until && $this->grace_until->copy()->endOfDay()->gte(now());
+    }
+
+    public function activeUntil(): ?Carbon
+    {
+        if ($this->hasActiveGracePeriod()) {
+            return $this->grace_until->copy()->endOfDay();
+        }
+
+        $billingMonth = $this->latest_paid_billing_month
+            ?? $this->invoices()
+                ->where('invoice_type', 'service')
+                ->where('due_amount', '<=', 0)
+                ->max('billing_month');
+
+        if (! $billingMonth) {
+            return null;
+        }
+
+        return Carbon::createFromFormat('Y-m', $billingMonth)->endOfMonth();
+    }
+
+    public function activeDaysRemaining(): ?int
+    {
+        $activeUntil = $this->activeUntil();
+
+        if (! $activeUntil) {
+            return null;
+        }
+
+        return (int) max(0, now()->startOfDay()->diffInDays($activeUntil->copy()->startOfDay(), false));
     }
 
     public function subscriptions(): HasMany

@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AccountingLedgerController;
 use App\Http\Controllers\BkashSmsPaymentController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\CustomerPaymentController;
 use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InvoiceController;
@@ -27,6 +29,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->middleware('permission:view_dashboard')->name('dashboard');
 
     Route::middleware('permission:manage_customers')->group(function () {
+        Route::get('customers/{customer}/payments/create', [CustomerPaymentController::class, 'create'])->name('customers.payments.create');
+        Route::post('customers/{customer}/payments', [CustomerPaymentController::class, 'store'])->name('customers.payments.store');
+        Route::post('customers/{customer}/grace-period', [CustomerController::class, 'grantGracePeriod'])->name('customers.grace-period');
         Route::resource('customers', CustomerController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
     });
 
@@ -52,10 +57,12 @@ Route::middleware('auth')->group(function () {
         Route::get('bkash-sms-payments', [BkashSmsPaymentController::class, 'index'])->name('bkash-sms-payments.index');
         Route::get('bkash-sms-payments/create', [BkashSmsPaymentController::class, 'create'])->name('bkash-sms-payments.create');
         Route::post('bkash-sms-payments', [BkashSmsPaymentController::class, 'manualStore'])->name('bkash-sms-payments.store');
+        Route::post('bkash-sms-payments/{bkashSmsPayment}/approve', [BkashSmsPaymentController::class, 'approve'])->name('bkash-sms-payments.approve');
         Route::get('bkash-sms-payments/{bkashSmsPayment}', [BkashSmsPaymentController::class, 'show'])->name('bkash-sms-payments.show');
     });
 
     Route::middleware('permission:manage_payment_accounts')->group(function () {
+        Route::get('accounting/ledger', [AccountingLedgerController::class, 'index'])->name('accounting.ledger');
         Route::get('payment-accounts/cash/ledger', [PaymentAccountController::class, 'cashLedger'])->name('payment-accounts.cash-ledger');
         Route::resource('payment-accounts', PaymentAccountController::class)->only(['index', 'show', 'create', 'store']);
     });

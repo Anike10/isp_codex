@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Customer;
+use App\Models\Invoice;
 use App\Models\MikrotikRouter;
 use App\Services\MikrotikCustomerSyncService;
 use Illuminate\Foundation\Inspiring;
@@ -92,3 +93,48 @@ Artisan::command('mikrotik:sync-router-users {--force : Sync every active router
 
     return $failed === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Verify and sync PPPoE users on MikroTik routers by each router interval');
+
+Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defaults to today}', function (MikrotikCustomerSyncService $syncService) {
+    $date = $this->option('date') ? \Carbon\Carbon::parse($this->option('date'))->toDateString() : now()->toDateString();
+    $disabled = 0;
+
+    $customerIds = Invoice::query()
+        ->where('due_amount', '>', 0)
+        ->whereDate('due_date', '<=', $date)
+        ->whereHas('customer', fn ($query) => $query
+            ->where('never_suspend', false)
+            ->where(function ($query) use ($date) {
+                $query->whereNull('grace_until')
+                    ->orWhereDate('grace_until', '<', $date);
+            }))
+        ->distinct()
+        ->pluck('customer_id');
+
+    Customer::whereIn('id', $customerIds)
+        ->with('activeSubscription.package')
+        ->chunkById(100, function ($customers) use ($syncService, &$disabled): void {
+            foreach ($customers as $customer) {
+                $customer->update(['status' => 'inactive']);
+
+                if ($customer->activeSubscription) {
+                    $customer->activeSubscription->update([
+                        'status' => 'inactive',
+                        'end_date' => now()->toDateString(),
+                    ]);
+                }
+
+                try {
+                    $syncService->sync($customer->refresh());
+                } catch (\Throwable $exception) {
+                    $this->warn("{$customer->connection_id}: disabled locally, MikroTik sync failed - {$exception->getMessage()}");
+                }
+
+                $disabled++;
+                $this->line("{$customer->connection_id}: disabled for overdue invoice.");
+            }
+        });
+
+    $this->info("Overdue disable finished. Disabled customers: {$disabled}.");
+
+    return self::SUCCESS;
+})->purpose('Disable non-special customers with overdue due invoices and sync MikroTik inactive profile');

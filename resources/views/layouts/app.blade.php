@@ -174,6 +174,7 @@
                         @endif
                         @if (auth()->user()?->hasPermission('manage_payment_accounts'))
                             <a href="{{ route('payment-accounts.index') }}">Payment Accounts</a>
+                            <a href="{{ route('accounting.ledger') }}">Accounting Ledger</a>
                         @endif
                     </div>
                 </details>
