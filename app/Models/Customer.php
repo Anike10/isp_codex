@@ -56,6 +56,16 @@ class Customer extends Model
             return $this->grace_until->copy()->endOfDay();
         }
 
+        $earliestUnpaidMonth = $this->earliest_unpaid_billing_month
+            ?? $this->invoices()
+                ->where('invoice_type', 'service')
+                ->where('due_amount', '>', 0)
+                ->min('billing_month');
+
+        if ($earliestUnpaidMonth) {
+            return Carbon::createFromFormat('Y-m', $earliestUnpaidMonth)->subMonthNoOverflow()->endOfMonth();
+        }
+
         $billingMonth = $this->latest_paid_billing_month
             ?? $this->invoices()
                 ->where('invoice_type', 'service')
@@ -103,6 +113,16 @@ class Customer extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function paymentAllocations(): HasMany
+    {
+        return $this->hasMany(PaymentAllocation::class);
+    }
+
+    public function balanceTransactions(): HasMany
+    {
+        return $this->hasMany(CustomerBalanceTransaction::class);
     }
 
     public function tickets(): HasMany

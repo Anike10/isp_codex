@@ -9,6 +9,7 @@ use App\Models\PaymentAccount;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class BkashSmsPaymentService
@@ -109,7 +110,15 @@ class BkashSmsPaymentService
                 ->first();
 
             if (! $invoice) {
-                $customer->increment('account_balance', $parsed['amount']);
+                $paymentAccount = $this->resolveSmsDeviceAccount($rawSms, $smsSender);
+                $this->paymentService->addAdvanceCredit($customer, [
+                    'amount' => $parsed['amount'],
+                    'payment_method' => 'bkash',
+                    'payment_account_id' => $paymentAccount?->id,
+                    'payment_date' => $parsed['payment_date']?->toDateString() ?? now()->toDateString(),
+                    'reference' => $parsed['trx_id'],
+                    'note' => 'Auto bKash SMS advance TrxID: '.$parsed['trx_id'],
+                ]);
 
                 $smsPayment->update([
                     'status' => 'balance',
@@ -121,25 +130,14 @@ class BkashSmsPaymentService
             }
 
             try {
-                $paymentAccount = $parsed['customer_number']
-                    ? PaymentAccount::firstOrCreate(
-                        [
-                            'payment_method' => 'bkash',
-                            'account_number' => $parsed['customer_number'],
-                        ],
-                        [
-                            'account_name' => 'bKash Sender '.$parsed['customer_number'],
-                            'opening_balance' => 0,
-                            'status' => 'active',
-                        ]
-                    )
-                    : null;
+                $paymentAccount = $this->resolveSmsDeviceAccount($rawSms, $smsSender);
 
                 $payment = $this->paymentService->recordPayment($invoice, [
                     'amount' => $parsed['amount'],
                     'payment_method' => 'bkash',
                     'payment_account_id' => $paymentAccount?->id,
                     'payment_date' => $parsed['payment_date']?->toDateString() ?? now()->toDateString(),
+                    'reference' => $parsed['trx_id'],
                     'note' => 'Auto bKash SMS TrxID: '.$parsed['trx_id'],
                 ]);
             } catch (InvalidArgumentException $exception) {
@@ -243,5 +241,58 @@ class BkashSmsPaymentService
         }
 
         return $digits;
+    }
+
+    public function resolveSmsDeviceAccount(string $rawSms, ?string $smsSender = null): ?PaymentAccount
+    {
+        $deviceName = $this->extractSmsDeviceName($rawSms, $smsSender);
+
+        if (! $deviceName) {
+            return null;
+        }
+
+        return PaymentAccount::firstOrCreate(
+            [
+                'payment_method' => 'bkash',
+                'account_number' => 'sms-device:'.Str::slug($deviceName),
+            ],
+            [
+                'account_name' => $deviceName,
+                'opening_balance' => 0,
+                'status' => 'active',
+            ]
+        );
+    }
+
+    private function extractSmsDeviceName(string $rawSms, ?string $smsSender = null): ?string
+    {
+        if ($smsSender && ! in_array(strtolower(trim($smsSender)), ['bkash', 'b-kash'], true)) {
+            return trim($smsSender);
+        }
+
+        $lines = collect(preg_split('/\R+/', trim($rawSms)))
+            ->map(fn ($line) => trim($line))
+            ->filter()
+            ->values();
+
+        for ($index = $lines->count() - 1; $index >= 0; $index--) {
+            $line = $lines[$index];
+
+            if (preg_match('/^(bkash|sim\d*_?|subid|subid[:：]|you have received|trxid|fee tk|balance tk)/i', $line)) {
+                continue;
+            }
+
+            if (preg_match('/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/', $line)) {
+                continue;
+            }
+
+            if (preg_match('/^\d+$/', $line)) {
+                continue;
+            }
+
+            return $line;
+        }
+
+        return $smsSender ? trim($smsSender) : null;
     }
 }

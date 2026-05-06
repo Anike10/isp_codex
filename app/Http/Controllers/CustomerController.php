@@ -22,10 +22,17 @@ class CustomerController extends Controller
                 $query->where('invoice_type', 'service')
                     ->where('due_amount', '<=', 0);
             }], 'billing_month')
+            ->withMin(['invoices as earliest_unpaid_billing_month' => function ($query) {
+                $query->where('invoice_type', 'service')
+                    ->where('due_amount', '>', 0);
+            }], 'billing_month')
             ->when($request->search, function ($query, string $search) {
-                $query->where('name', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%")
-                    ->orWhere('connection_id', 'like', "%{$search}%");
+                $query->where(function ($query) use ($search) {
+                    $query->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('connection_id', 'like', "%{$search}%")
+                        ->orWhere('mikrotik_username', 'like', "%{$search}%");
+                });
             })
             ->latest()
             ->paginate($this->perPage($request))
@@ -165,6 +172,12 @@ class CustomerController extends Controller
             return back()->withErrors(['grace_days' => 'Grace period can only be given to inactive customers.']);
         }
 
+        $subscription = $customer->activeSubscription ?: $customer->subscriptions()->with('package')->latest()->first();
+
+        if (! $subscription || ! $subscription->package) {
+            return back()->withErrors(['grace_days' => 'Grace period requires an existing package/subscription for this customer.']);
+        }
+
         $customer->update([
             'status' => 'active',
             'grace_days' => $data['grace_days'],
@@ -172,14 +185,10 @@ class CustomerController extends Controller
             'grace_used_at' => now(),
         ]);
 
-        $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
-
-        if ($subscription) {
-            $subscription->update([
-                'status' => 'active',
-                'end_date' => null,
-            ]);
-        }
+        $subscription->update([
+            'status' => 'active',
+            'end_date' => null,
+        ]);
 
         $syncResult = $this->syncMikrotikCustomer($customer);
 

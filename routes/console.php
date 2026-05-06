@@ -98,7 +98,7 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
     $date = $this->option('date') ? \Carbon\Carbon::parse($this->option('date'))->toDateString() : now()->toDateString();
     $disabled = 0;
 
-    $customerIds = Invoice::query()
+    $overdueCustomerIds = Invoice::query()
         ->where('due_amount', '>', 0)
         ->whereDate('due_date', '<=', $date)
         ->whereHas('customer', fn ($query) => $query
@@ -109,6 +109,18 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
             }))
         ->distinct()
         ->pluck('customer_id');
+
+    $expiredGraceCustomerIds = Customer::query()
+        ->where('status', 'active')
+        ->where('never_suspend', false)
+        ->whereNotNull('grace_until')
+        ->whereDate('grace_until', '<', $date)
+        ->pluck('id');
+
+    $customerIds = $overdueCustomerIds
+        ->merge($expiredGraceCustomerIds)
+        ->unique()
+        ->values();
 
     Customer::whereIn('id', $customerIds)
         ->with('activeSubscription.package')

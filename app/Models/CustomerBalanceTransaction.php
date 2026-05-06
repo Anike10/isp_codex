@@ -5,26 +5,30 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Payment extends Model
+class CustomerBalanceTransaction extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'customer_id',
-        'invoice_id',
-        'amount',
-        'payment_method',
+        'payment_id',
         'payment_account_id',
-        'payment_date',
+        'payment_method',
+        'direction',
+        'amount',
+        'balance_after',
+        'transaction_date',
+        'reference',
         'note',
     ];
 
     protected function casts(): array
     {
         return [
-            'payment_date' => 'date',
+            'amount' => 'decimal:2',
+            'balance_after' => 'decimal:2',
+            'transaction_date' => 'date',
         ];
     }
 
@@ -33,18 +37,13 @@ class Payment extends Model
         return $this->belongsTo(Customer::class);
     }
 
-    public function invoice(): BelongsTo
+    public function payment(): BelongsTo
     {
-        return $this->belongsTo(Invoice::class);
+        return $this->belongsTo(Payment::class);
     }
 
     public function account(): BelongsTo
     {
         return $this->belongsTo(PaymentAccount::class, 'payment_account_id');
-    }
-
-    public function allocations(): HasMany
-    {
-        return $this->hasMany(PaymentAllocation::class);
     }
 }

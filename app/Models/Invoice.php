@@ -61,6 +61,11 @@ class Invoice extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function allocations(): HasMany
+    {
+        return $this->hasMany(PaymentAllocation::class);
+    }
+
     public function items(): HasMany
     {
         return $this->hasMany(InvoiceItem::class);

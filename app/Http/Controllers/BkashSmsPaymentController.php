@@ -5,11 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\BkashSmsPayment;
 use App\Models\Customer;
 use App\Models\Invoice;
-use App\Models\PaymentAccount;
 use App\Services\BillingService;
 use App\Services\BkashSmsPaymentService;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -54,71 +54,78 @@ class BkashSmsPaymentController extends Controller
         ]);
     }
 
-    public function approve(Request $request, BkashSmsPayment $bkashSmsPayment, BillingService $billingService, PaymentService $paymentService)
+    public function approve(Request $request, BkashSmsPayment $bkashSmsPayment, BillingService $billingService, PaymentService $paymentService, BkashSmsPaymentService $smsPaymentService)
     {
         $data = $request->validate([
             'customer_id' => ['required', 'exists:customers,id'],
         ]);
 
-        if (! in_array($bkashSmsPayment->status, ['pending', 'failed'], true)) {
-            return back()->withErrors(['sms' => 'Only pending or failed SMS entries can be approved manually.']);
-        }
+        $result = DB::transaction(function () use ($bkashSmsPayment, $billingService, $paymentService, $smsPaymentService, $data) {
+            $smsPayment = BkashSmsPayment::whereKey($bkashSmsPayment->id)->lockForUpdate()->firstOrFail();
 
-        if (! $bkashSmsPayment->amount || ! $bkashSmsPayment->trx_id) {
-            return back()->withErrors(['sms' => 'This SMS does not have a valid amount or TrxID.']);
-        }
+            if (! in_array($smsPayment->status, ['pending', 'failed'], true)) {
+                return ['error' => 'Only pending or failed SMS entries can be approved manually.'];
+            }
 
-        $customer = Customer::findOrFail($data['customer_id']);
-        $billingService->generateCurrentServiceBillForCustomer($customer);
+            if (! $smsPayment->amount || ! $smsPayment->trx_id) {
+                return ['error' => 'This SMS does not have a valid amount or TrxID.'];
+            }
 
-        $invoice = Invoice::where('customer_id', $customer->id)
-            ->where('due_amount', '>', 0)
-            ->orderBy('due_date')
-            ->orderBy('id')
-            ->first();
+            $customer = Customer::findOrFail($data['customer_id']);
+            $billingService->generateCurrentServiceBillForCustomer($customer);
 
-        if (! $invoice) {
-            $customer->increment('account_balance', $bkashSmsPayment->amount);
-            $bkashSmsPayment->update([
-                'status' => 'balance',
-                'customer_id' => $customer->id,
-                'message' => 'Manually approved. No due invoice found. Amount added to customer balance.',
+            $invoice = Invoice::where('customer_id', $customer->id)
+                ->where('due_amount', '>', 0)
+                ->orderBy('due_date')
+                ->orderBy('id')
+                ->first();
+
+            $paymentAccount = $smsPaymentService->resolveSmsDeviceAccount($smsPayment->raw_sms, $smsPayment->sms_sender);
+
+            if (! $invoice) {
+                $paymentService->addAdvanceCredit($customer, [
+                    'amount' => $smsPayment->amount,
+                    'payment_method' => 'bkash',
+                    'payment_account_id' => $paymentAccount?->id,
+                    'payment_date' => $smsPayment->payment_date?->toDateString() ?? now()->toDateString(),
+                    'reference' => $smsPayment->trx_id,
+                    'note' => 'Manual approve bKash SMS advance TrxID: '.$smsPayment->trx_id,
+                ]);
+
+                $smsPayment->update([
+                    'status' => 'balance',
+                    'customer_id' => $customer->id,
+                    'message' => 'Manually approved. No due invoice found. Amount added to customer balance ledger.',
+                ]);
+
+                return ['success' => 'SMS approved and amount added to customer balance.'];
+            }
+
+            $payment = $paymentService->recordPayment($invoice, [
+                'amount' => $smsPayment->amount,
+                'payment_method' => 'bkash',
+                'payment_account_id' => $paymentAccount?->id,
+                'payment_date' => $smsPayment->payment_date?->toDateString() ?? now()->toDateString(),
+                'reference' => $smsPayment->trx_id,
+                'note' => 'Manual approve bKash SMS TrxID: '.$smsPayment->trx_id,
             ]);
 
-            return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)->with('success', 'SMS approved and amount added to customer balance.');
+            $smsPayment->update([
+                'status' => 'processed',
+                'customer_id' => $customer->id,
+                'invoice_id' => $invoice->id,
+                'payment_id' => $payment->id,
+                'message' => 'Manually approved and payment recorded.',
+            ]);
+
+            return ['success' => 'SMS approved and payment recorded.'];
+        });
+
+        if (isset($result['error'])) {
+            return back()->withErrors(['sms' => $result['error']]);
         }
 
-        $paymentAccount = $bkashSmsPayment->customer_number
-            ? PaymentAccount::firstOrCreate(
-                [
-                    'payment_method' => 'bkash',
-                    'account_number' => $bkashSmsPayment->customer_number,
-                ],
-                [
-                    'account_name' => 'bKash Sender '.$bkashSmsPayment->customer_number,
-                    'opening_balance' => 0,
-                    'status' => 'active',
-                ]
-            )
-            : null;
-
-        $payment = $paymentService->recordPayment($invoice, [
-            'amount' => $bkashSmsPayment->amount,
-            'payment_method' => 'bkash',
-            'payment_account_id' => $paymentAccount?->id,
-            'payment_date' => $bkashSmsPayment->payment_date?->toDateString() ?? now()->toDateString(),
-            'note' => 'Manual approve bKash SMS TrxID: '.$bkashSmsPayment->trx_id,
-        ]);
-
-        $bkashSmsPayment->update([
-            'status' => 'processed',
-            'customer_id' => $customer->id,
-            'invoice_id' => $invoice->id,
-            'payment_id' => $payment->id,
-            'message' => 'Manually approved and payment recorded.',
-        ]);
-
-        return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)->with('success', 'SMS approved and payment recorded.');
+        return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)->with('success', $result['success']);
     }
 
     public function store(Request $request, BkashSmsPaymentService $smsPaymentService)

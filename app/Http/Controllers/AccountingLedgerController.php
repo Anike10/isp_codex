@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CustomerBalanceTransaction;
 use App\Models\Invoice;
 use App\Models\Payment;
 use Illuminate\Http\Request;
@@ -28,22 +29,49 @@ class AccountingLedgerController extends Controller
                 'url' => route('invoices.show', $invoice),
             ]);
 
-        $payments = Payment::with(['customer', 'invoice', 'account'])
+        $payments = Payment::with(['customer', 'invoice', 'account', 'allocations.invoice'])
             ->when($from, fn ($query) => $query->whereDate('payment_date', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('payment_date', '<=', $to))
             ->get()
-            ->map(fn (Payment $payment) => [
-                'date' => $payment->payment_date,
-                'type' => 'Payment',
-                'customer' => $payment->customer->name,
-                'reference' => $payment->invoice->invoice_no,
+            ->map(function (Payment $payment) {
+                $allocationSummary = $payment->allocations
+                    ->map(fn ($allocation) => $allocation->invoice->invoice_no.' '.number_format((float) $allocation->amount, 2))
+                    ->join(', ');
+
+                return [
+                    'date' => $payment->payment_date,
+                    'type' => 'Payment',
+                    'customer' => $payment->customer->name,
+                    'reference' => 'Payment #'.$payment->id,
+                    'debit' => 0,
+                    'credit' => (float) $payment->amount,
+                    'note' => $payment->payment_method
+                        .($payment->account ? ' - '.$payment->account->account_name : '')
+                        .($allocationSummary ? ' | Allocated: '.$allocationSummary : ' | Added to advance'),
+                    'url' => route('invoices.show', $payment->invoice),
+                ];
+            });
+
+        $advanceCredits = CustomerBalanceTransaction::with(['customer', 'account'])
+            ->where('direction', 'credit')
+            ->whereNull('payment_id')
+            ->when($from, fn ($query) => $query->whereDate('transaction_date', '>=', $from))
+            ->when($to, fn ($query) => $query->whereDate('transaction_date', '<=', $to))
+            ->get()
+            ->map(fn (CustomerBalanceTransaction $transaction) => [
+                'date' => $transaction->transaction_date,
+                'type' => 'Advance',
+                'customer' => $transaction->customer->name,
+                'reference' => $transaction->reference ?: 'Advance #'.$transaction->id,
                 'debit' => 0,
-                'credit' => (float) $payment->amount,
-                'note' => $payment->payment_method.($payment->account ? ' - '.$payment->account->account_number : ''),
-                'url' => route('invoices.show', $payment->invoice),
+                'credit' => (float) $transaction->amount,
+                'note' => ($transaction->payment_method ?: 'advance')
+                    .($transaction->account ? ' - '.$transaction->account->account_name : '')
+                    .' | Added to customer balance',
+                'url' => route('customers.show', $transaction->customer),
             ]);
 
-        $entries = $invoices->concat($payments)->sortBy('date')->values();
+        $entries = $invoices->concat($payments)->concat($advanceCredits)->sortBy('date')->values();
         $totalDebit = $entries->sum('debit');
         $totalCredit = $entries->sum('credit');
 

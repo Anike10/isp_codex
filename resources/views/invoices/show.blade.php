@@ -74,20 +74,20 @@
 @endif
 
 <section class="card" style="margin-top:16px">
-    <h2>Payments</h2>
+    <h2>Payment Allocations</h2>
     <table>
-        <thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Account</th><th>Note</th></tr></thead>
+        <thead><tr><th>Date</th><th>Amount</th><th>Source</th><th>Account</th><th>Note</th></tr></thead>
         <tbody>
-        @forelse ($invoice->payments as $payment)
+        @forelse ($invoice->allocations as $allocation)
             <tr>
-                <td>{{ $payment->payment_date->format('Y-m-d') }}</td>
-                <td>{{ number_format($payment->amount, 2) }}</td>
-                <td>{{ $payment->payment_method }}</td>
-                <td>{{ $payment->account ? $payment->account->account_name.' - '.$payment->account->account_number : 'N/A' }}</td>
-                <td>{{ $payment->note }}</td>
+                <td>{{ $allocation->allocated_at->format('Y-m-d') }}</td>
+                <td>{{ number_format($allocation->amount, 2) }}</td>
+                <td>{{ $allocation->source_type === 'advance' ? 'Advance Balance' : 'Payment #'.$allocation->payment_id }}</td>
+                <td>{{ $allocation->payment?->account ? $allocation->payment->account->account_name.' - '.$allocation->payment->account->account_number : 'N/A' }}</td>
+                <td>{{ $allocation->note }}</td>
             </tr>
         @empty
-            <tr><td colspan="5">No payments yet.</td></tr>
+            <tr><td colspan="5">No allocations yet.</td></tr>
         @endforelse
         </tbody>
     </table>
