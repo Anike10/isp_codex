@@ -33,6 +33,7 @@ class PaymentService
             $paymentDate = $data['payment_date'];
 
             $payment = Payment::create([
+                'entry_by' => $data['entry_by'] ?? null,
                 'customer_id' => $invoice->customer_id,
                 'invoice_id' => $invoice->id,
                 'amount' => $data['amount'],
@@ -45,7 +46,6 @@ class PaymentService
             $dueInvoices = Invoice::query()
                 ->where('customer_id', $customer->id)
                 ->where('due_amount', '>', 0)
-                ->orderByRaw('id = ? desc', [$invoice->id])
                 ->orderBy('due_date')
                 ->orderBy('id')
                 ->lockForUpdate()
@@ -61,6 +61,7 @@ class PaymentService
 
                 if ($advanceApplied > 0) {
                     PaymentAllocation::create([
+                        'entry_by' => $data['entry_by'] ?? null,
                         'customer_id' => $customer->id,
                         'invoice_id' => $dueInvoice->id,
                         'payment_id' => null,
@@ -78,6 +79,7 @@ class PaymentService
 
                 if ($paymentApplied > 0) {
                     PaymentAllocation::create([
+                        'entry_by' => $data['entry_by'] ?? null,
                         'customer_id' => $customer->id,
                         'invoice_id' => $dueInvoice->id,
                         'payment_id' => $payment->id,
@@ -107,6 +109,7 @@ class PaymentService
 
             if ($advanceUsed > 0) {
                 CustomerBalanceTransaction::create([
+                    'entry_by' => $data['entry_by'] ?? null,
                     'customer_id' => $customer->id,
                     'payment_id' => null,
                     'payment_account_id' => null,
@@ -115,13 +118,14 @@ class PaymentService
                     'amount' => $advanceUsed,
                     'balance_after' => $advanceRemaining,
                     'transaction_date' => $paymentDate,
-                    'reference' => 'INV-'.$invoice->id,
+                    'reference' => 'PAY-'.$payment->id,
                     'note' => 'Advance balance applied to due invoice(s).',
                 ]);
             }
 
             if ($paymentRemaining > 0) {
                 CustomerBalanceTransaction::create([
+                    'entry_by' => $data['entry_by'] ?? null,
                     'customer_id' => $customer->id,
                     'payment_id' => $payment->id,
                     'payment_account_id' => $data['payment_account_id'] ?? null,
@@ -183,6 +187,7 @@ class PaymentService
             $balanceAfter = (float) $customer->account_balance + (float) $data['amount'];
 
             $transaction = CustomerBalanceTransaction::create([
+                'entry_by' => $data['entry_by'] ?? null,
                 'customer_id' => $customer->id,
                 'payment_id' => null,
                 'payment_account_id' => $data['payment_account_id'] ?? null,

@@ -11,6 +11,7 @@ class CustomerBalanceTransaction extends Model
     use HasFactory;
 
     protected $fillable = [
+        'entry_by',
         'customer_id',
         'payment_id',
         'payment_account_id',

@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class BkashSmsPaymentController extends Controller
 {
@@ -35,9 +36,13 @@ class BkashSmsPaymentController extends Controller
         $data = $request->validate([
             'message' => ['required', 'string'],
             'sender' => ['nullable', 'string', 'max:100'],
+            'device_name' => ['nullable', 'string', 'max:255'],
+            'device' => ['nullable', 'string', 'max:255'],
+            'phone_name' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $smsPayment = $smsPaymentService->handle($data['message'], $data['sender'] ?? 'bKash');
+        $deviceName = $data['device_name'] ?? $data['device'] ?? $data['phone_name'] ?? null;
+        $smsPayment = $smsPaymentService->handle($data['message'], $data['sender'] ?? 'bKash', $deviceName);
 
         return redirect()
             ->route('bkash-sms-payments.show', $smsPayment)
@@ -60,7 +65,9 @@ class BkashSmsPaymentController extends Controller
             'customer_id' => ['required', 'exists:customers,id'],
         ]);
 
-        $result = DB::transaction(function () use ($bkashSmsPayment, $billingService, $paymentService, $smsPaymentService, $data) {
+        $deviceName = $request->input('device_name') ?: $request->input('device') ?: $request->input('phone_name');
+
+        $prepared = DB::transaction(function () use ($bkashSmsPayment, $smsPaymentService, $data, $deviceName) {
             $smsPayment = BkashSmsPayment::whereKey($bkashSmsPayment->id)->lockForUpdate()->firstOrFail();
 
             if (! in_array($smsPayment->status, ['pending', 'failed'], true)) {
@@ -71,7 +78,31 @@ class BkashSmsPaymentController extends Controller
                 return ['error' => 'This SMS does not have a valid amount or TrxID.'];
             }
 
-            $customer = Customer::findOrFail($data['customer_id']);
+            $paymentAccount = $smsPaymentService->resolveSmsDeviceAccount($smsPayment->raw_sms, $smsPayment->sms_sender, $deviceName);
+            $entryBy = $paymentAccount?->account_name ?: $smsPayment->sms_sender;
+
+            $smsPayment->forceFill([
+                'status' => 'processing',
+                'entry_by' => $smsPayment->entry_by ?: $entryBy,
+                'message' => 'Manual approval is processing.',
+            ])->save();
+
+            return [
+                'sms_payment_id' => $smsPayment->id,
+                'customer_id' => $data['customer_id'],
+                'payment_account_id' => $paymentAccount?->id,
+                'entry_by' => $entryBy,
+            ];
+        });
+
+        if (isset($prepared['error'])) {
+            return back()->withErrors(['sms' => $prepared['error']]);
+        }
+
+        $smsPayment = BkashSmsPayment::findOrFail($prepared['sms_payment_id']);
+        $customer = Customer::findOrFail($prepared['customer_id']);
+
+        try {
             $billingService->generateCurrentServiceBillForCustomer($customer);
 
             $invoice = Invoice::where('customer_id', $customer->id)
@@ -80,15 +111,14 @@ class BkashSmsPaymentController extends Controller
                 ->orderBy('id')
                 ->first();
 
-            $paymentAccount = $smsPaymentService->resolveSmsDeviceAccount($smsPayment->raw_sms, $smsPayment->sms_sender);
-
             if (! $invoice) {
                 $paymentService->addAdvanceCredit($customer, [
                     'amount' => $smsPayment->amount,
                     'payment_method' => 'bkash',
-                    'payment_account_id' => $paymentAccount?->id,
+                    'payment_account_id' => $prepared['payment_account_id'],
                     'payment_date' => $smsPayment->payment_date?->toDateString() ?? now()->toDateString(),
                     'reference' => $smsPayment->trx_id,
+                    'entry_by' => $prepared['entry_by'],
                     'note' => 'Manual approve bKash SMS advance TrxID: '.$smsPayment->trx_id,
                 ]);
 
@@ -98,15 +128,16 @@ class BkashSmsPaymentController extends Controller
                     'message' => 'Manually approved. No due invoice found. Amount added to customer balance ledger.',
                 ]);
 
-                return ['success' => 'SMS approved and amount added to customer balance.'];
+                return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)->with('success', 'SMS approved and amount added to customer balance.');
             }
 
             $payment = $paymentService->recordPayment($invoice, [
                 'amount' => $smsPayment->amount,
                 'payment_method' => 'bkash',
-                'payment_account_id' => $paymentAccount?->id,
+                'payment_account_id' => $prepared['payment_account_id'],
                 'payment_date' => $smsPayment->payment_date?->toDateString() ?? now()->toDateString(),
                 'reference' => $smsPayment->trx_id,
+                'entry_by' => $prepared['entry_by'],
                 'note' => 'Manual approve bKash SMS TrxID: '.$smsPayment->trx_id,
             ]);
 
@@ -117,15 +148,16 @@ class BkashSmsPaymentController extends Controller
                 'payment_id' => $payment->id,
                 'message' => 'Manually approved and payment recorded.',
             ]);
+        } catch (Throwable $exception) {
+            $smsPayment->update([
+                'status' => 'failed',
+                'message' => 'Manual approval failed: '.$exception->getMessage(),
+            ]);
 
-            return ['success' => 'SMS approved and payment recorded.'];
-        });
-
-        if (isset($result['error'])) {
-            return back()->withErrors(['sms' => $result['error']]);
+            return back()->withErrors(['sms' => 'Manual approval failed: '.$exception->getMessage()]);
         }
 
-        return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)->with('success', $result['success']);
+        return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)->with('success', 'SMS approved and payment recorded.');
     }
 
     public function store(Request $request, BkashSmsPaymentService $smsPaymentService)
@@ -152,9 +184,13 @@ class BkashSmsPaymentController extends Controller
             'message' => ['required_without:sms', 'string'],
             'sms' => ['required_without:message', 'string'],
             'sender' => ['nullable', 'string', 'max:100'],
+            'device_name' => ['nullable', 'string', 'max:255'],
+            'device' => ['nullable', 'string', 'max:255'],
+            'phone_name' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $smsPayment = $smsPaymentService->handle($data['message'] ?? $data['sms'], $data['sender'] ?? null);
+        $deviceName = $data['device_name'] ?? $data['device'] ?? $data['phone_name'] ?? null;
+        $smsPayment = $smsPaymentService->handle($data['message'] ?? $data['sms'], $data['sender'] ?? null, $deviceName);
 
         return response()->json([
             'id' => $smsPayment->id,

@@ -10,6 +10,7 @@ class MikrotikRouter extends Model
     use HasFactory;
 
     protected $fillable = [
+        'entry_by',
         'name',
         'ip_address',
         'api_port',

@@ -11,6 +11,7 @@ class Role extends Model
     use HasFactory;
 
     protected $fillable = [
+        'entry_by',
         'name',
         'label',
     ];

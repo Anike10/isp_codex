@@ -11,6 +11,7 @@ class InternetPackage extends Model
     use HasFactory;
 
     protected $fillable = [
+        'entry_by',
         'name',
         'speed',
         'mikrotik_profile',

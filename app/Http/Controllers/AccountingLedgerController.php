@@ -52,26 +52,34 @@ class AccountingLedgerController extends Controller
                 ];
             });
 
-        $advanceCredits = CustomerBalanceTransaction::with(['customer', 'account'])
-            ->where('direction', 'credit')
-            ->whereNull('payment_id')
+        $balanceEntries = CustomerBalanceTransaction::with(['customer', 'account'])
+            ->where(function ($query) {
+                $query->where('direction', 'debit')
+                    ->orWhere(function ($query) {
+                        $query->where('direction', 'credit')->whereNull('payment_id');
+                    });
+            })
             ->when($from, fn ($query) => $query->whereDate('transaction_date', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('transaction_date', '<=', $to))
             ->get()
-            ->map(fn (CustomerBalanceTransaction $transaction) => [
-                'date' => $transaction->transaction_date,
-                'type' => 'Advance',
-                'customer' => $transaction->customer->name,
-                'reference' => $transaction->reference ?: 'Advance #'.$transaction->id,
-                'debit' => 0,
-                'credit' => (float) $transaction->amount,
-                'note' => ($transaction->payment_method ?: 'advance')
-                    .($transaction->account ? ' - '.$transaction->account->account_name : '')
-                    .' | Added to customer balance',
-                'url' => route('customers.show', $transaction->customer),
-            ]);
+            ->map(function (CustomerBalanceTransaction $transaction) {
+                $isCredit = $transaction->direction === 'credit';
 
-        $entries = $invoices->concat($payments)->concat($advanceCredits)->sortBy('date')->values();
+                return [
+                    'date' => $transaction->transaction_date,
+                    'type' => $isCredit ? 'Advance' : 'Advance Used',
+                    'customer' => $transaction->customer->name,
+                    'reference' => $transaction->reference ?: 'Advance #'.$transaction->id,
+                    'debit' => 0,
+                    'credit' => $isCredit ? (float) $transaction->amount : 0,
+                    'note' => ($transaction->payment_method ?: 'advance')
+                        .($transaction->account ? ' - '.$transaction->account->account_name : '')
+                        .' | '.($isCredit ? 'Added to customer balance' : 'Used from customer balance: '.number_format((float) $transaction->amount, 2)),
+                    'url' => route('customers.show', $transaction->customer),
+                ];
+            });
+
+        $entries = $invoices->concat($payments)->concat($balanceEntries)->sortBy('date')->values();
         $totalDebit = $entries->sum('debit');
         $totalCredit = $entries->sum('credit');
 

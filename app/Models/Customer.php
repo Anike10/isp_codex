@@ -14,6 +14,7 @@ class Customer extends Model
     use HasFactory;
 
     protected $fillable = [
+        'entry_by',
         'name',
         'phone',
         'email',

@@ -11,6 +11,7 @@ class PaymentAllocation extends Model
     use HasFactory;
 
     protected $fillable = [
+        'entry_by',
         'customer_id',
         'invoice_id',
         'payment_id',

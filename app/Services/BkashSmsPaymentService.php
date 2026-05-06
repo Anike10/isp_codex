@@ -21,16 +21,19 @@ class BkashSmsPaymentService
     {
     }
 
-    public function handle(string $rawSms, ?string $smsSender = null): BkashSmsPayment
+    public function handle(string $rawSms, ?string $smsSender = null, ?string $deviceName = null): BkashSmsPayment
     {
         $parsed = $this->parse($rawSms);
+        $entryBy = $this->extractSmsDeviceName($rawSms, $smsSender, $deviceName) ?: $smsSender;
 
         if (! $parsed['trx_id'] || ! $parsed['amount']) {
             return BkashSmsPayment::create([
+                'entry_by' => $entryBy,
                 'sms_sender' => $smsSender,
                 'raw_sms' => $rawSms,
                 'customer_number' => $parsed['customer_number'],
                 'trx_id' => $parsed['trx_id'],
+                'ledger_trx_id' => null,
                 'reference' => $parsed['reference'],
                 'amount' => $parsed['amount'],
                 'payment_date' => $parsed['payment_date'],
@@ -43,6 +46,7 @@ class BkashSmsPaymentService
 
         if ($existing) {
             return BkashSmsPayment::create([
+                'entry_by' => $entryBy,
                 'sms_sender' => $smsSender,
                 'raw_sms' => $rawSms,
                 'customer_number' => $parsed['customer_number'],
@@ -57,9 +61,10 @@ class BkashSmsPaymentService
             ]);
         }
 
-        return DB::transaction(function () use ($rawSms, $smsSender, $parsed): BkashSmsPayment {
+        return DB::transaction(function () use ($rawSms, $smsSender, $deviceName, $parsed, $entryBy): BkashSmsPayment {
             try {
                 $smsPayment = BkashSmsPayment::create([
+                    'entry_by' => $entryBy,
                     'sms_sender' => $smsSender,
                     'raw_sms' => $rawSms,
                     'customer_number' => $parsed['customer_number'],
@@ -74,10 +79,12 @@ class BkashSmsPaymentService
                 $existing = BkashSmsPayment::where('ledger_trx_id', $parsed['trx_id'])->first();
 
                 return BkashSmsPayment::create([
+                    'entry_by' => $entryBy,
                     'sms_sender' => $smsSender,
                     'raw_sms' => $rawSms,
                     'customer_number' => $parsed['customer_number'],
                     'trx_id' => $parsed['trx_id'],
+                    'ledger_trx_id' => null,
                     'reference' => $parsed['reference'],
                     'amount' => $parsed['amount'],
                     'payment_date' => $parsed['payment_date'],
@@ -110,13 +117,14 @@ class BkashSmsPaymentService
                 ->first();
 
             if (! $invoice) {
-                $paymentAccount = $this->resolveSmsDeviceAccount($rawSms, $smsSender);
+                $paymentAccount = $this->resolveSmsDeviceAccount($rawSms, $smsSender, $deviceName);
                 $this->paymentService->addAdvanceCredit($customer, [
                     'amount' => $parsed['amount'],
                     'payment_method' => 'bkash',
                     'payment_account_id' => $paymentAccount?->id,
                     'payment_date' => $parsed['payment_date']?->toDateString() ?? now()->toDateString(),
                     'reference' => $parsed['trx_id'],
+                    'entry_by' => $entryBy,
                     'note' => 'Auto bKash SMS advance TrxID: '.$parsed['trx_id'],
                 ]);
 
@@ -130,7 +138,7 @@ class BkashSmsPaymentService
             }
 
             try {
-                $paymentAccount = $this->resolveSmsDeviceAccount($rawSms, $smsSender);
+                $paymentAccount = $this->resolveSmsDeviceAccount($rawSms, $smsSender, $deviceName);
 
                 $payment = $this->paymentService->recordPayment($invoice, [
                     'amount' => $parsed['amount'],
@@ -138,6 +146,7 @@ class BkashSmsPaymentService
                     'payment_account_id' => $paymentAccount?->id,
                     'payment_date' => $parsed['payment_date']?->toDateString() ?? now()->toDateString(),
                     'reference' => $parsed['trx_id'],
+                    'entry_by' => $entryBy,
                     'note' => 'Auto bKash SMS TrxID: '.$parsed['trx_id'],
                 ]);
             } catch (InvalidArgumentException $exception) {
@@ -243,15 +252,15 @@ class BkashSmsPaymentService
         return $digits;
     }
 
-    public function resolveSmsDeviceAccount(string $rawSms, ?string $smsSender = null): ?PaymentAccount
+    public function resolveSmsDeviceAccount(string $rawSms, ?string $smsSender = null, ?string $deviceName = null): ?PaymentAccount
     {
-        $deviceName = $this->extractSmsDeviceName($rawSms, $smsSender);
+        $deviceName = $this->extractSmsDeviceName($rawSms, $smsSender, $deviceName);
 
         if (! $deviceName) {
             return null;
         }
 
-        return PaymentAccount::firstOrCreate(
+        $account = PaymentAccount::firstOrCreate(
             [
                 'payment_method' => 'bkash',
                 'account_number' => 'sms-device:'.Str::slug($deviceName),
@@ -260,12 +269,23 @@ class BkashSmsPaymentService
                 'account_name' => $deviceName,
                 'opening_balance' => 0,
                 'status' => 'active',
+                'entry_by' => $deviceName,
             ]
         );
+
+        if (! $account->entry_by) {
+            $account->forceFill(['entry_by' => $deviceName])->save();
+        }
+
+        return $account;
     }
 
-    private function extractSmsDeviceName(string $rawSms, ?string $smsSender = null): ?string
+    public function extractSmsDeviceName(string $rawSms, ?string $smsSender = null, ?string $deviceName = null): ?string
     {
+        if ($deviceName && trim($deviceName) !== '') {
+            return trim($deviceName);
+        }
+
         if ($smsSender && ! in_array(strtolower(trim($smsSender)), ['bkash', 'b-kash'], true)) {
             return trim($smsSender);
         }

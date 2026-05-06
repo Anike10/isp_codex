@@ -11,6 +11,7 @@ class PaymentAccount extends Model
     use HasFactory;
 
     protected $fillable = [
+        'entry_by',
         'payment_method',
         'account_name',
         'account_number',

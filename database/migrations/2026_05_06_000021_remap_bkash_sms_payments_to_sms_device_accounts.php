@@ -19,24 +19,32 @@ return new class extends Migration
                     return;
                 }
 
-                $accountId = DB::table('payment_accounts')->updateOrInsert(
-                    [
-                        'payment_method' => 'bkash',
-                        'account_number' => 'sms-device:'.Str::slug($deviceName),
-                    ],
-                    [
-                        'account_name' => $deviceName,
-                        'opening_balance' => 0,
-                        'status' => 'active',
-                        'updated_at' => now(),
-                        'created_at' => now(),
-                    ]
-                );
-
                 $account = DB::table('payment_accounts')
                     ->where('payment_method', 'bkash')
                     ->where('account_number', 'sms-device:'.Str::slug($deviceName))
                     ->first();
+
+                if (! $account) {
+                    DB::table('payment_accounts')->insert([
+                        'payment_method' => 'bkash',
+                        'account_number' => 'sms-device:'.Str::slug($deviceName),
+                        'account_name' => $deviceName,
+                        'opening_balance' => 0,
+                        'status' => 'active',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                    $account = DB::table('payment_accounts')
+                        ->where('payment_method', 'bkash')
+                        ->where('account_number', 'sms-device:'.Str::slug($deviceName))
+                        ->first();
+                } else {
+                    DB::table('payment_accounts')->where('id', $account->id)->update([
+                        'account_name' => $deviceName,
+                        'updated_at' => now(),
+                    ]);
+                }
 
                 if ($account) {
                     DB::table('payments')

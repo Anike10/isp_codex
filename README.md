@@ -168,6 +168,16 @@ Authentication is not enabled yet, so the admin user is prepared for the next ph
 - `resources/views`: Blade admin screens
 - `PROJECT_ROADMAP.md`: Longer roadmap and developer documentation
 
+## CWMP / TR-069 Note
+
+CWMP/TR-069 support should be implemented through an ACS server such as GenieACS, not directly inside Laravel. Laravel should integrate with the ACS API to list devices, link CPEs to customers, show last inform/status, and trigger safe actions like refresh/reboot.
+
+The full implementation plan, required tables, routes, security notes, MikroTik/CPE setup notes, and acceptance checklist are documented in:
+
+```text
+AI_MAINTAINER_GUIDE.md
+```
+
 ## Verification
 
 ```bash

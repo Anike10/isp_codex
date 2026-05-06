@@ -265,22 +265,27 @@ nagad
 bank
 ```
 
-Rules:
+Current rules:
 
 - Cash does not require a payment account.
 - bKash, Nagad, and Bank require a payment account.
 - The payment form can select an existing account.
 - The payment form can create a new account inline.
-- Payment amount cannot exceed invoice due amount.
+- Payment amount may be greater than the selected invoice due.
+- Oldest due invoices must be cleared first.
+- Any extra amount after all due invoices are cleared stays in customer advance balance.
 - Recording a payment updates:
   - `paid_amount`
   - `due_amount`
   - `status`
+  - `payment_allocations`
+  - `customer_balance_transactions` when advance is added or consumed
 
 Status update rules in `PaymentService`:
 
 - Due becomes 0: `paid`
 - Due remains after payment: `partial`
+- Customer line/subscription is activated only when total remaining due across all invoices is zero.
 
 ## Payment Accounts And Ledger
 
@@ -290,6 +295,8 @@ Tables:
 
 - `payment_accounts`
 - `payments.payment_account_id`
+- `payment_allocations`
+- `customer_balance_transactions`
 
 Important fields:
 
@@ -324,6 +331,15 @@ Ledger page shows:
 - Current balance
 - Transaction count
 - Transaction rows with invoice, customer, note, credit, and running balance
+- Payment allocation summary, so one payment can be audited across multiple invoices.
+- Advance balance credits and advance-used memo rows.
+
+Important accounting rule:
+
+- `payments` is the receipt row.
+- `payment_allocations` records exactly which invoice received how much.
+- `customer_balance_transactions` records advance balance increase/decrease.
+- Do not update `customers.account_balance` directly for payment/bKash flows; use `PaymentService`.
 
 ## Database Backup
 
@@ -564,8 +580,11 @@ account_balance - total_due_amount
 customer.account_balance + new payment amount
 ```
 
-- It pays due invoices for that customer, starting with the selected invoice, then other due invoices by due date/id.
+- It pays oldest due invoices first by due date/id.
+- The selected invoice is only the entry/reference invoice; it must not jump ahead of older due invoices.
 - Any remaining amount after all due invoices are paid is stored in `customer.account_balance`.
+- Every invoice payment portion must create a `payment_allocations` row.
+- Every advance balance add/use must create a `customer_balance_transactions` row.
 - Customer and active subscription are activated only when all invoice due is cleared.
 - MikroTik sync is attempted after all due clears.
 
@@ -587,6 +606,18 @@ Header: X-SMS-Token: us-bkash-sms-2026
 Body: sender=..., message=...
 ```
 
+Recommended JSON body from SmsForwarder:
+
+```json
+{
+  "sender": "{{from}}",
+  "message": "{{msg}}",
+  "device_name": "{{device_name}}"
+}
+```
+
+If the SMS app cannot send `device_name`, this app tries to parse the device name from the raw forwarded text. The final fallback is `sms_sender`.
+
 Manual entry:
 
 ```text
@@ -603,6 +634,23 @@ Matching rules:
 6. Duplicate `TrxID` creates a new log with status `duplicate`, but must not update ledger, invoice, or customer balance.
 
 SMS log stores raw SMS, amount, sender number, Ref, TrxID, status, customer, invoice, payment, and processing message.
+
+bKash account and `entry_by` rules:
+
+- The bKash sender/customer number must not become a `PaymentAccount`.
+- `PaymentAccount` for SMS payments represents the phone/device that forwarded the SMS.
+- Example: if the forwarded SMS device is `Anike Redmi`, create/use:
+
+```text
+payment_method: bkash
+account_name: Anike Redmi
+account_number: sms-device:anike-redmi
+entry_by: Anike Redmi
+entry_by_type: sms_device
+```
+
+- Web/manual user entries should use the logged-in user ID as `entry_by` and `entry_by_type=user`.
+- System/backfilled records may use `entry_by=system` and `entry_by_type=system`.
 
 ### MikroTik
 
@@ -628,3 +676,285 @@ PPPoE sync:
 - Inactive users are moved to the router's `inactive_pppoe_profile`.
 - If a profile/status changes, remove the active PPP session from `/ppp/active` so the new profile applies after reconnect.
 - If one router fails, sync should continue on other eligible routers.
+
+## CWMP / TR-069 Future Module
+
+This section documents the required plan for adding CWMP/TR-069 support. Do not try to implement TR-069 directly inside Laravel unless explicitly requested. Use a dedicated ACS server and let Laravel integrate with that server through API.
+
+### What TR-069 Is For
+
+TR-069, also called CWMP, is used for remote CPE/router management through an ACS (Auto Configuration Server).
+
+Good use cases:
+
+- Discover customer CPE devices automatically.
+- Read serial number, OUI, product class, software version, WAN status, WiFi SSID, and other parameters.
+- Reboot CPE.
+- Push WiFi SSID/password changes.
+- Push provisioning presets.
+- Run diagnostics where supported.
+- Track last inform/online status.
+
+Do not replace the existing MikroTik PPPoE billing/profile sync with TR-069 unless there is a clear reason. For PPPoE package/profile activation, the current MikroTik API flow is still the better fit.
+
+### Required Architecture
+
+Recommended design:
+
+```text
+Customer CPE/router -> ACS server (GenieACS) -> Laravel app
+```
+
+Laravel should not be the ACS. Laravel should:
+
+- Store device/customer mapping.
+- Call the ACS API.
+- Show device status and actions in customer pages.
+- Keep an audit trail of CPE actions.
+
+Recommended ACS:
+
+```text
+GenieACS
+Docs: https://docs.genieacs.com/en/
+```
+
+MikroTik TR-069 client documentation:
+
+```text
+https://help.mikrotik.com/docs/spaces/ROS/pages/9863195/TR-069
+```
+
+### Network Requirements
+
+The CPE must reach the ACS URL.
+
+Examples:
+
+```text
+http://acs.example.com:7547
+https://acs.example.com
+```
+
+For local testing:
+
+```text
+http://192.168.6.245:7547
+```
+
+Use a public domain or VPN for production. Do not expose an unsecured ACS to the internet without authentication, firewall rules, and HTTPS/reverse proxy where possible.
+
+Common ports:
+
+- `7547`: CWMP inform endpoint, often used by ACS.
+- `3000`: GenieACS UI, if using default local setup.
+- `7557`: GenieACS NBI/API, if using default local setup.
+
+Restrict access to ACS UI/API by firewall/VPN. Customer CPEs only need the CWMP inform URL.
+
+### MikroTik/CPE Setup
+
+MikroTik devices need TR-069 client support/package depending on RouterOS version/device.
+
+Conceptual MikroTik config:
+
+```routeros
+/tr069-client set enabled=yes acs-url=http://acs.example.com:7547
+```
+
+Also configure if needed:
+
+- periodic inform interval
+- ACS username/password
+- connection request username/password
+- NAT/firewall rules if connection request must work from ACS to CPE
+
+Important: some CPE vendors use different parameter trees and may not expose every desired field/action.
+
+### Laravel Database Plan
+
+Add these tables when implementing the module.
+
+`cwmp_devices`:
+
+```text
+id
+entry_by
+entry_by_type
+customer_id nullable
+acs_device_id unique
+serial_number nullable index
+oui nullable index
+product_class nullable
+manufacturer nullable
+model_name nullable
+software_version nullable
+hardware_version nullable
+ip_address nullable
+mac_address nullable
+status default unknown
+last_inform_at nullable
+last_sync_at nullable
+last_error nullable
+raw_summary json nullable
+timestamps
+```
+
+`cwmp_device_parameters`:
+
+```text
+id
+cwmp_device_id
+parameter_name index
+parameter_value text nullable
+writable boolean default false
+last_seen_at nullable
+timestamps
+```
+
+`cwmp_actions`:
+
+```text
+id
+entry_by
+entry_by_type
+cwmp_device_id
+customer_id nullable
+action
+status default pending
+request_payload json nullable
+response_payload json nullable
+error_message nullable
+started_at nullable
+finished_at nullable
+timestamps
+```
+
+Optional later:
+
+- `cwmp_presets`
+- `cwmp_provisioning_rules`
+- `cwmp_parameter_mappings`
+
+### Laravel Service Plan
+
+Create service:
+
+```text
+app/Services/GenieAcsClient.php
+```
+
+Responsibilities:
+
+- HTTP client wrapper for GenieACS NBI/API.
+- Search/list devices.
+- Get device parameters.
+- Refresh device task.
+- Reboot device task.
+- Set parameter values task.
+- Handle API errors consistently.
+
+Suggested `.env` keys:
+
+```env
+GENIEACS_API_URL=http://127.0.0.1:7557
+GENIEACS_UI_URL=http://127.0.0.1:3000
+GENIEACS_USERNAME=
+GENIEACS_PASSWORD=
+GENIEACS_TIMEOUT=10
+```
+
+Add config:
+
+```text
+config/services.php -> genieacs
+```
+
+### Laravel Routes And UI Plan
+
+Add permission:
+
+```text
+manage_cwmp_devices
+```
+
+Routes:
+
+```text
+GET /cwmp-devices
+GET /cwmp-devices/{device}
+POST /cwmp-devices/sync
+POST /cwmp-devices/{device}/refresh
+POST /cwmp-devices/{device}/reboot
+POST /cwmp-devices/{device}/set-parameters
+POST /customers/{customer}/cwmp-devices/{device}/attach
+POST /customers/{customer}/cwmp-devices/{device}/detach
+```
+
+UI:
+
+- Add menu item under Network: `CWMP Devices`.
+- Customer show page should display linked CPE/device section:
+  - status
+  - last inform
+  - serial number
+  - model/software version
+  - reboot button
+  - refresh button
+  - WiFi SSID/password fields if supported
+
+### Artisan Commands
+
+Add:
+
+```bash
+php artisan cwmp:sync-devices
+php artisan cwmp:refresh-device {device_id}
+```
+
+Schedule:
+
+```text
+cwmp:sync-devices every 5 minutes
+```
+
+The command should:
+
+- Pull device list from ACS.
+- Upsert `cwmp_devices`.
+- Update `last_inform_at`, status, serial/OUI/product class.
+- Link to customers by known serial number or manual mapping only. Do not auto-link by weak guesses.
+
+### Security Rules
+
+- Do not store ACS credentials in code.
+- Use `.env`.
+- Protect ACS UI/API by firewall/VPN/basic auth.
+- Prefer HTTPS for ACS URL in production.
+- Do not expose CPE connection request credentials in views.
+- Log actions in `cwmp_actions`.
+- Require permission for reboot/config changes.
+
+### Implementation Order
+
+1. Install and test GenieACS separately.
+2. Connect one test CPE/router to ACS.
+3. Confirm device appears in GenieACS UI.
+4. Add Laravel `.env` and `config/services.php` entries.
+5. Add migrations for `cwmp_devices`, `cwmp_device_parameters`, `cwmp_actions`.
+6. Add `GenieAcsClient`.
+7. Add sync command.
+8. Add `/cwmp-devices` list/details pages.
+9. Add customer-device attach/detach.
+10. Add safe actions: refresh first, then reboot, then parameter set.
+11. Add tests for sync mapping and action creation.
+
+### Acceptance Checklist
+
+- A test CPE can inform to ACS.
+- Laravel can list ACS devices.
+- Device can be linked to a customer.
+- Last inform/status appears in Laravel.
+- Reboot action is logged before and after execution.
+- Failed ACS calls show error without crashing the page.
+- No billing/MikroTik PPPoE behavior changes unless explicitly requested.

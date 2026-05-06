@@ -11,6 +11,7 @@ class BkashSmsPayment extends Model
     use HasFactory;
 
     protected $fillable = [
+        'entry_by',
         'sms_sender',
         'raw_sms',
         'customer_number',
