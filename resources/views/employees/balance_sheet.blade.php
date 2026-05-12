@@ -23,6 +23,7 @@
     <div class="card stat"><span class="muted">Salary Payable</span><strong>{{ number_format($salaryPayable, 2) }}</strong></div>
     <div class="card stat"><span class="muted">Salary Paid</span><strong>{{ number_format($salaryPaid, 2) }}</strong></div>
     <div class="card stat"><span class="muted">Salary Due</span><strong>{{ number_format($salaryDue, 2) }}</strong></div>
+    <div class="card stat"><span class="muted">Salary Advance</span><strong>{{ number_format($salaryAdvance, 2) }}</strong></div>
     <div class="card stat"><span class="muted">Net Due</span><strong>{{ number_format($netDue, 2) }}</strong></div>
 </div>
 
@@ -40,6 +41,9 @@
         <p><strong>Total Payable:</strong> {{ number_format($netPayable, 2) }}</p>
         <p><strong>Total Paid:</strong> {{ number_format($netPaid, 2) }}</p>
         <p><strong>Total Due:</strong> {{ number_format($netDue, 2) }}</p>
+        <p><strong>Advance Balance:</strong> {{ number_format($netAdvance, 2) }}</p>
+        <p><strong>Opening Salary Balance:</strong> {{ $openingSalaryBalance >= 0 ? 'Due ' : 'Advance ' }}{{ number_format(abs($openingSalaryBalance), 2) }}</p>
+        <p><strong>Closing Salary Balance:</strong> {{ $closingSalaryBalance >= 0 ? 'Due ' : 'Advance ' }}{{ number_format(abs($closingSalaryBalance), 2) }}</p>
         <p><strong>Current Salary:</strong> {{ number_format($employee->current_salary, 2) }}</p>
         <p><strong>Salary Effective From:</strong> {{ $employee->salary_effective_from?->format('Y-m-d') ?? 'N/A' }}</p>
     </div>
@@ -51,9 +55,12 @@
         <thead>
             <tr>
                 <th>Month</th>
+                <th>Opening</th>
                 <th>Payable Salary</th>
                 <th>Paid</th>
                 <th>Due</th>
+                <th>Advance</th>
+                <th>Closing</th>
                 <th>Status</th>
                 <th></th>
             </tr>
@@ -62,9 +69,12 @@
             @foreach ($rows as $row)
                 <tr>
                     <td>{{ $row['month_name'] }}</td>
+                    <td>{{ $row['opening_balance'] >= 0 ? 'Due ' : 'Advance ' }}{{ number_format(abs($row['opening_balance']), 2) }}</td>
                     <td>{{ number_format($row['payable'], 2) }}</td>
                     <td>{{ number_format($row['paid'], 2) }}</td>
                     <td>{{ number_format($row['due'], 2) }}</td>
+                    <td>{{ number_format($row['advance'], 2) }}</td>
+                    <td>{{ $row['closing_balance'] >= 0 ? 'Due ' : 'Advance ' }}{{ number_format(abs($row['closing_balance']), 2) }}</td>
                     <td>
                         <span class="badge {{ $row['status'] === 'paid' ? 'paid' : ($row['status'] === 'partial' ? 'pending' : 'due') }}">
                             {{ str_replace('_', ' ', $row['status']) }}

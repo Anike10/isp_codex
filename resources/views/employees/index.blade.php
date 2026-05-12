@@ -16,6 +16,7 @@
     <div class="card stat"><span class="muted">Active Employees</span><strong>{{ $activeEmployees }}</strong></div>
     <div class="card stat"><span class="muted">Monthly Salary Total</span><strong>{{ number_format($totalMonthlySalary, 2) }}</strong></div>
     <div class="card stat"><span class="muted">{{ $salaryMonth }} Salary Due</span><strong>{{ number_format($salaryDueThisMonth, 2) }}</strong></div>
+    <div class="card stat"><span class="muted">{{ $salaryMonth }} Advance</span><strong>{{ number_format($salaryAdvanceThisMonth, 2) }}</strong></div>
     <div class="card stat"><span class="muted">{{ $bonusYear }} Bonus Due</span><strong>{{ number_format($bonusDueThisYear, 2) }}</strong></div>
 </div>
 
@@ -59,7 +60,8 @@
                 <td>{{ number_format($employee->current_salary, 2) }}</td>
                 @php
                     $salaryPaid = (float) ($employee->selected_month_salary_paid ?? 0);
-                    $salaryDue = max(0, (float) $employee->current_salary - $salaryPaid);
+                    $salaryDue = (float) ($employee->selected_month_salary_due ?? 0);
+                    $salaryAdvance = (float) ($employee->selected_month_salary_advance ?? 0);
                     $singleBonus = round((float) $employee->current_salary * (float) $employee->bonus_percent / 100, 2);
                     $bonusEntitled = $singleBonus * (int) $employee->yearly_bonus_count;
                     $bonusPaid = (float) ($employee->selected_year_bonus_paid ?? 0);
@@ -68,6 +70,9 @@
                 <td>
                     Paid {{ number_format($salaryPaid, 2) }}
                     <div class="muted">Due {{ number_format($salaryDue, 2) }}</div>
+                    @if ($salaryAdvance > 0)
+                        <div class="muted">Advance {{ number_format($salaryAdvance, 2) }}</div>
+                    @endif
                 </td>
                 <td>
                     {{ $employee->yearly_bonus_count }} x {{ number_format($employee->bonus_percent, 2) }}%

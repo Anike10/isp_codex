@@ -18,6 +18,7 @@
 <div class="grid stats" style="margin-bottom:16px">
     <div class="card stat"><span class="muted">Current Salary</span><strong>{{ number_format($employee->current_salary, 2) }}</strong></div>
     <div class="card stat"><span class="muted">{{ $salaryMonth }} Salary Due</span><strong>{{ number_format($monthlySalaryDue, 2) }}</strong></div>
+    <div class="card stat"><span class="muted">{{ $salaryMonth }} Advance</span><strong>{{ number_format($monthlySalaryAdvance, 2) }}</strong></div>
     <div class="card stat"><span class="muted">{{ $bonusYear }} Bonus Due</span><strong>{{ number_format($bonusDue, 2) }}</strong></div>
     <div class="card stat"><span class="muted">Paid Salary Total</span><strong>{{ number_format($paidSalaryTotal, 2) }}</strong></div>
 </div>
@@ -33,9 +34,12 @@
     <div class="card">
         <h2>Salary Status</h2>
         <p><strong>Month:</strong> {{ $salaryMonth }}</p>
+        <p><strong>Opening Balance:</strong> {{ $monthlyOpeningBalance >= 0 ? 'Due ' : 'Advance ' }}{{ number_format(abs($monthlyOpeningBalance), 2) }}</p>
         <p><strong>Payable Salary:</strong> {{ number_format($employee->current_salary, 2) }}</p>
         <p><strong>Paid:</strong> {{ number_format($monthlySalaryPaid, 2) }}</p>
-        <p><strong>Remaining:</strong> {{ number_format($monthlySalaryDue, 2) }}</p>
+        <p><strong>Remaining Due:</strong> {{ number_format($monthlySalaryDue, 2) }}</p>
+        <p><strong>Advance Balance:</strong> {{ number_format($monthlySalaryAdvance, 2) }}</p>
+        <p><strong>Closing Balance:</strong> {{ $monthlyClosingBalance >= 0 ? 'Due ' : 'Advance ' }}{{ number_format(abs($monthlyClosingBalance), 2) }}</p>
         <p><strong>Effective From:</strong> {{ $employee->salary_effective_from?->format('Y-m-d') ?? 'N/A' }}</p>
     </div>
 

@@ -55,6 +55,7 @@ Route::middleware('auth')->group(function () {
         ->name('invoices.finalize');
 
     Route::middleware('permission:manage_payments')->group(function () {
+        Route::get('payments/{payment}/voucher', [PaymentController::class, 'voucher'])->name('payments.voucher');
         Route::resource('payments', PaymentController::class)->only(['index', 'create', 'store']);
         Route::get('bkash-sms-payments', [BkashSmsPaymentController::class, 'index'])->name('bkash-sms-payments.index');
         Route::get('bkash-sms-payments/create', [BkashSmsPaymentController::class, 'create'])->name('bkash-sms-payments.create');
@@ -73,6 +74,7 @@ Route::middleware('auth')->group(function () {
         Route::post('employees/{employee}/salary-revisions', [EmployeeController::class, 'storeSalaryRevision'])->name('employees.salary-revisions.store');
         Route::get('employees/{employee}/balance-sheet', [EmployeeController::class, 'balanceSheet'])->name('employees.balance-sheet');
         Route::resource('employees', EmployeeController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+        Route::get('expenses/{expense}/voucher', [ExpenseController::class, 'voucher'])->name('expenses.voucher');
         Route::resource('expenses', ExpenseController::class)->only(['index', 'create', 'store', 'show']);
     });
 

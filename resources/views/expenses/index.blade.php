@@ -86,7 +86,12 @@
                 </td>
                 <td>{{ number_format($expense->amount, 2) }}</td>
                 <td>{{ $expense->entry_by ?? 'N/A' }}</td>
-                <td><a class="btn light" href="{{ route('expenses.show', $expense) }}">View</a></td>
+                <td>
+                    <div class="actions">
+                        <a class="btn light" href="{{ route('expenses.show', $expense) }}">View</a>
+                        <a class="btn light" href="{{ route('expenses.voucher', $expense) }}">Voucher</a>
+                    </div>
+                </td>
             </tr>
         @empty
             <tr><td colspan="9">No salary or expense records found.</td></tr>

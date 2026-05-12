@@ -127,4 +127,33 @@ class ExpenseController extends Controller
             'categories' => Expense::CATEGORIES,
         ]);
     }
+
+    public function voucher(Expense $expense)
+    {
+        $expense->load(['account', 'employee']);
+        $typeLabel = $expense->category === 'bonus'
+            ? 'Bonus Payment'
+            : (Expense::TYPES[$expense->expense_type] ?? ucfirst($expense->expense_type));
+        $party = $expense->employee_name
+            ?: (Expense::CATEGORIES[$expense->category] ?? ucfirst($expense->category));
+
+        return view('accounting.voucher', [
+            'voucher' => [
+                'title' => 'Expense Voucher',
+                'voucher_no' => 'EXP-'.$expense->id,
+                'date' => $expense->expense_date,
+                'type' => $typeLabel,
+                'amount' => (float) $expense->amount,
+                'paid_to_label' => $expense->expense_type === 'salary' || $expense->category === 'bonus' ? 'Paid To' : 'Expense Head',
+                'paid_to' => $party,
+                'secondary_label' => $expense->expense_type === 'salary' ? 'Salary Month' : 'Category',
+                'secondary_value' => $expense->expense_type === 'salary' ? ($expense->salary_month ?: 'N/A') : (Expense::CATEGORIES[$expense->category] ?? ucfirst($expense->category)),
+                'method' => ucfirst($expense->payment_method),
+                'account' => $expense->account ? $expense->account->account_name.' - '.$expense->account->account_number : 'Cash',
+                'reference' => $expense->reference ?: 'Expense #'.$expense->id,
+                'note' => $expense->note ?: 'No note added.',
+                'back_url' => route('expenses.show', $expense),
+            ],
+        ]);
+    }
 }

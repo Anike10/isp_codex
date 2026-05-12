@@ -9,7 +9,7 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Date</th><th>Customer</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Account</th></tr></thead>
+    <thead><tr><th>Date</th><th>Customer</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Account</th><th></th></tr></thead>
     <tbody>
     @forelse ($payments as $payment)
         <tr data-href="{{ route('invoices.show', $payment->invoice) }}">
@@ -19,9 +19,10 @@
             <td>{{ number_format($payment->amount, 2) }}</td>
             <td>{{ $payment->payment_method }}</td>
             <td>{{ $payment->account ? $payment->account->account_name.' - '.$payment->account->account_number : 'N/A' }}</td>
+            <td><a class="btn light" href="{{ route('payments.voucher', $payment) }}">Voucher</a></td>
         </tr>
     @empty
-        <tr><td colspan="6">No payments recorded.</td></tr>
+        <tr><td colspan="7">No payments recorded.</td></tr>
     @endforelse
     </tbody>
 </table>

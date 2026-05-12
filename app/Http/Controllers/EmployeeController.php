@@ -36,12 +36,22 @@ class EmployeeController extends Controller
             ->paginate($this->perPage($request))
             ->appends($request->query());
 
+        $employees->getCollection()->transform(function (Employee $employee) use ($salaryMonth) {
+            $balance = $this->salaryBalanceForMonth($employee, $salaryMonth);
+            $employee->selected_month_opening_balance = $balance['opening_balance'];
+            $employee->selected_month_salary_paid = $balance['paid'];
+            $employee->selected_month_salary_due = $balance['due'];
+            $employee->selected_month_salary_advance = $balance['advance'];
+
+            return $employee;
+        });
+
         $activeEmployees = Employee::where('status', 'active')->get();
         $totalMonthlySalary = $activeEmployees->sum('current_salary');
-        $paidThisMonth = $activeEmployees->sum(fn (Employee $employee) => $employee->expenses()
-            ->where('expense_type', 'salary')
-            ->where('salary_month', $salaryMonth)
-            ->sum('amount'));
+        $salaryBalances = $activeEmployees->map(fn (Employee $employee) => $this->salaryBalanceForMonth($employee, $salaryMonth));
+        $paidThisMonth = $salaryBalances->sum('paid');
+        $salaryDueThisMonth = $salaryBalances->sum('due');
+        $salaryAdvanceThisMonth = $salaryBalances->sum('advance');
         $yearlyBonusEntitlement = $activeEmployees->sum(fn (Employee $employee) => $this->yearlyBonusEntitlement($employee));
         $paidBonusThisYear = $activeEmployees->sum(fn (Employee $employee) => $employee->expenses()
             ->where('category', 'bonus')
@@ -54,7 +64,8 @@ class EmployeeController extends Controller
             'bonusYear' => $bonusYear,
             'totalMonthlySalary' => $totalMonthlySalary,
             'paidThisMonth' => $paidThisMonth,
-            'salaryDueThisMonth' => max(0, $totalMonthlySalary - $paidThisMonth),
+            'salaryDueThisMonth' => $salaryDueThisMonth,
+            'salaryAdvanceThisMonth' => $salaryAdvanceThisMonth,
             'yearlyBonusEntitlement' => $yearlyBonusEntitlement,
             'paidBonusThisYear' => $paidBonusThisYear,
             'bonusDueThisYear' => max(0, $yearlyBonusEntitlement - $paidBonusThisYear),
@@ -100,10 +111,8 @@ class EmployeeController extends Controller
     {
         $salaryMonth = request('salary_month', now()->format('Y-m'));
         $bonusYear = (int) request('bonus_year', now()->year);
-        $monthlySalaryPaid = (float) $employee->expenses()
-            ->where('expense_type', 'salary')
-            ->where('salary_month', $salaryMonth)
-            ->sum('amount');
+        $salaryBalance = $this->salaryBalanceForMonth($employee, $salaryMonth);
+        $monthlySalaryPaid = $salaryBalance['paid'];
         $yearlyBonusEntitlement = $this->yearlyBonusEntitlement($employee);
         $bonusPaid = (float) $employee->expenses()
             ->where('category', 'bonus')
@@ -121,8 +130,11 @@ class EmployeeController extends Controller
             'paidSalaryTotal' => $employee->expenses()->where('expense_type', 'salary')->sum('amount'),
             'salaryMonth' => $salaryMonth,
             'bonusYear' => $bonusYear,
+            'monthlyOpeningBalance' => $salaryBalance['opening_balance'],
             'monthlySalaryPaid' => $monthlySalaryPaid,
-            'monthlySalaryDue' => max(0, (float) $employee->current_salary - $monthlySalaryPaid),
+            'monthlySalaryDue' => $salaryBalance['due'],
+            'monthlySalaryAdvance' => $salaryBalance['advance'],
+            'monthlyClosingBalance' => $salaryBalance['closing_balance'],
             'singleBonusAmount' => $singleBonusAmount,
             'yearlyBonusEntitlement' => $yearlyBonusEntitlement,
             'bonusPaid' => $bonusPaid,
@@ -152,18 +164,25 @@ class EmployeeController extends Controller
             ->orderBy('expense_date')
             ->get();
 
-        $rows = collect(range(1, 12))->map(function (int $month) use ($year, $employee, $revisions, $salaryPayments) {
+        $runningBalance = $this->salaryBalanceBeforeMonth($employee, Carbon::create($year, 1, 1));
+
+        $rows = collect(range(1, 12))->map(function (int $month) use ($year, $employee, $revisions, $salaryPayments, &$runningBalance) {
             $monthDate = Carbon::create($year, $month, 1);
             $salary = $this->salaryForMonth($employee, $revisions, $monthDate);
             $paid = (float) ($salaryPayments->get($monthDate->format('Y-m'))?->sum('amount') ?? 0);
+            $openingBalance = $runningBalance;
+            $runningBalance = round($runningBalance + $salary - $paid, 2);
 
             return [
                 'month' => $monthDate->format('Y-m'),
                 'month_name' => $monthDate->format('F Y'),
+                'opening_balance' => $openingBalance,
                 'payable' => $salary,
                 'paid' => $paid,
-                'due' => max(0, $salary - $paid),
-                'status' => $salary <= 0 ? 'not_applicable' : ($paid >= $salary ? 'paid' : ($paid > 0 ? 'partial' : 'due')),
+                'closing_balance' => $runningBalance,
+                'due' => max(0, $runningBalance),
+                'advance' => max(0, -$runningBalance),
+                'status' => $salary <= 0 ? 'not_applicable' : ($runningBalance <= 0 ? 'paid' : ($paid > 0 ? 'partial' : 'due')),
             ];
         });
 
@@ -173,7 +192,9 @@ class EmployeeController extends Controller
         $bonusDue = max(0, $yearlyBonusEntitlement - $bonusPaid);
         $salaryPayable = $rows->sum('payable');
         $salaryPaid = $rows->sum('paid');
-        $salaryDue = $rows->sum('due');
+        $closingSalaryBalance = (float) $rows->last()['closing_balance'];
+        $salaryDue = max(0, $closingSalaryBalance);
+        $salaryAdvance = max(0, -$closingSalaryBalance);
 
         return view('employees.balance_sheet', [
             'employee' => $employee,
@@ -183,6 +204,9 @@ class EmployeeController extends Controller
             'salaryPayable' => $salaryPayable,
             'salaryPaid' => $salaryPaid,
             'salaryDue' => $salaryDue,
+            'salaryAdvance' => $salaryAdvance,
+            'openingSalaryBalance' => $rows->first()['opening_balance'],
+            'closingSalaryBalance' => $closingSalaryBalance,
             'singleBonusAmount' => $singleBonusAmount,
             'yearlyBonusEntitlement' => $yearlyBonusEntitlement,
             'bonusPaid' => $bonusPaid,
@@ -190,6 +214,7 @@ class EmployeeController extends Controller
             'netPayable' => $salaryPayable + $yearlyBonusEntitlement,
             'netPaid' => $salaryPaid + $bonusPaid,
             'netDue' => $salaryDue + $bonusDue,
+            'netAdvance' => $salaryAdvance,
         ]);
     }
 
@@ -244,6 +269,70 @@ class EmployeeController extends Controller
     private function yearlyBonusEntitlement(Employee $employee): float
     {
         return round($this->singleBonusAmount($employee) * (int) $employee->yearly_bonus_count, 2);
+    }
+
+    private function salaryBalanceForMonth(Employee $employee, string $salaryMonth): array
+    {
+        $monthDate = Carbon::createFromFormat('Y-m-d', $salaryMonth.'-01');
+        $revisions = $employee->salaryRevisions()->orderBy('effective_from')->get();
+        $openingBalance = $this->salaryBalanceBeforeMonth($employee, $monthDate, $revisions);
+        $payable = $this->salaryForMonth($employee, $revisions, $monthDate);
+        $paid = (float) $employee->expenses()
+            ->where('expense_type', 'salary')
+            ->where('salary_month', $salaryMonth)
+            ->sum('amount');
+        $closingBalance = round($openingBalance + $payable - $paid, 2);
+
+        return [
+            'opening_balance' => $openingBalance,
+            'payable' => $payable,
+            'paid' => $paid,
+            'closing_balance' => $closingBalance,
+            'due' => max(0, $closingBalance),
+            'advance' => max(0, -$closingBalance),
+        ];
+    }
+
+    private function salaryBalanceBeforeMonth(Employee $employee, Carbon $monthDate, $revisions = null): float
+    {
+        $revisions ??= $employee->salaryRevisions()->orderBy('effective_from')->get();
+        $startMonth = $this->salaryLedgerStartMonth($employee, $monthDate, $revisions);
+        $balance = 0.0;
+
+        while ($startMonth->lt($monthDate)) {
+            $salaryMonth = $startMonth->format('Y-m');
+            $payable = $this->salaryForMonth($employee, $revisions, $startMonth);
+            $paid = (float) $employee->expenses()
+                ->where('expense_type', 'salary')
+                ->where('salary_month', $salaryMonth)
+                ->sum('amount');
+            $balance = round($balance + $payable - $paid, 2);
+            $startMonth->addMonth();
+        }
+
+        return $balance;
+    }
+
+    private function salaryLedgerStartMonth(Employee $employee, Carbon $targetMonth, $revisions): Carbon
+    {
+        $candidates = collect([
+            $employee->join_date,
+            $employee->salary_effective_from,
+            $revisions->min('effective_from'),
+        ])->filter();
+
+        $firstPaymentMonth = $employee->expenses()
+            ->where('expense_type', 'salary')
+            ->whereNotNull('salary_month')
+            ->min('salary_month');
+
+        if ($firstPaymentMonth) {
+            $candidates->push(Carbon::createFromFormat('Y-m-d', $firstPaymentMonth.'-01'));
+        }
+
+        $start = $candidates->min() ?: $targetMonth->copy()->startOfYear();
+
+        return Carbon::parse($start)->startOfMonth();
     }
 
     private function salaryForMonth(Employee $employee, $revisions, Carbon $monthDate): float
