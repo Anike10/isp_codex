@@ -1,4 +1,4 @@
-<form method="get" class="actions" style="justify-content:flex-end; margin:0 0 12px">
+<form method="get" class="actions per-page-form">
     @foreach (request()->except(['per_page', 'page']) as $key => $value)
         @if (is_array($value))
             @foreach ($value as $item)
@@ -9,9 +9,9 @@
         @endif
     @endforeach
 
-    <label style="margin:0; display:flex; align-items:center; gap:8px; font-weight:700;">
+    <label class="per-page-label">
         Entries
-        <select name="per_page" onchange="this.form.submit()" style="width:auto; min-width:90px">
+        <select name="per_page" class="per-page-select" onchange="this.form.submit()">
             @foreach ([25, 50, 100, 200] as $option)
                 <option value="{{ $option }}" @selected((int) request('per_page', 50) === $option)>{{ $option }}</option>
             @endforeach

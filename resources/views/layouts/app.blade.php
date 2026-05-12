@@ -73,6 +73,16 @@
         .connection-cell { min-width:132px; white-space:nowrap; }
         .router-connection, .router-ping { min-width:104px; text-align:center; }
         .router-checked-at { min-height:17px; white-space:nowrap; }
+        .per-page-form { justify-content:flex-end; margin:0 0 12px; }
+        .per-page-label { margin:0; display:flex; align-items:center; gap:8px; font-weight:700; }
+        .per-page-select { width:auto; min-width:90px; }
+        .pagination-wrap { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        .pagination-summary { color:var(--muted); font-size:14px; }
+        .pagination-links { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+        .page-link { min-width:38px; min-height:38px; padding:9px 12px; border:1px solid var(--line); border-radius:6px; background:white; color:var(--ink); display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+        .page-link:hover { background:#eef4fb; }
+        .page-link.active { background:var(--brand); border-color:var(--brand); color:white; }
+        .page-link.disabled, .page-link.dots { color:#98a2b3; background:#f8fafc; cursor:not-allowed; }
         @media (max-width: 980px) {
             .stats, .two, .form-grid { grid-template-columns:1fr; }
             .header-inner { grid-template-columns:1fr auto; gap:8px 10px; padding:10px 12px 8px; }
@@ -116,6 +126,13 @@
             th, td { padding:9px 8px; font-size:13px; }
             th { font-size:11px; }
             label { font-size:13px; }
+            .per-page-form { justify-content:flex-start; }
+            .per-page-label { width:100%; justify-content:space-between; }
+            .per-page-select { width:120px; min-width:120px; }
+            .pagination-wrap { align-items:stretch; gap:10px; }
+            .pagination-summary { width:100%; text-align:center; font-size:13px; }
+            .pagination-links { width:100%; justify-content:center; gap:5px; }
+            .page-link { min-width:34px; min-height:34px; padding:8px 10px; font-size:13px; }
         }
         @media (max-width: 360px) {
             .stats { grid-template-columns:1fr; }

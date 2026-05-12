@@ -35,7 +35,7 @@
         <h2>Salary Status</h2>
         <p><strong>Month:</strong> {{ $salaryMonth }}</p>
         <p><strong>Opening Balance:</strong> {{ $monthlyOpeningBalance >= 0 ? 'Due ' : 'Advance ' }}{{ number_format(abs($monthlyOpeningBalance), 2) }}</p>
-        <p><strong>Payable Salary:</strong> {{ number_format($employee->current_salary, 2) }}</p>
+        <p><strong>Payable Salary:</strong> {{ number_format($monthlyPayableSalary, 2) }}</p>
         <p><strong>Paid:</strong> {{ number_format($monthlySalaryPaid, 2) }}</p>
         <p><strong>Remaining Due:</strong> {{ number_format($monthlySalaryDue, 2) }}</p>
         <p><strong>Advance Balance:</strong> {{ number_format($monthlySalaryAdvance, 2) }}</p>

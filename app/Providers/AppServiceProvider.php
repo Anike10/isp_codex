@@ -20,6 +20,7 @@ use App\Models\Subscription;
 use App\Models\SupportTicket;
 use App\Models\User;
 use App\Observers\EntryByObserver;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -37,6 +38,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Paginator::defaultView('vendor.pagination.app');
+        Paginator::defaultSimpleView('vendor.pagination.app');
+
         foreach ([
             BkashSmsPayment::class,
             Customer::class,

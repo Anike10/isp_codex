@@ -131,6 +131,7 @@ class EmployeeController extends Controller
             'salaryMonth' => $salaryMonth,
             'bonusYear' => $bonusYear,
             'monthlyOpeningBalance' => $salaryBalance['opening_balance'],
+            'monthlyPayableSalary' => $salaryBalance['payable'],
             'monthlySalaryPaid' => $monthlySalaryPaid,
             'monthlySalaryDue' => $salaryBalance['due'],
             'monthlySalaryAdvance' => $salaryBalance['advance'],
@@ -164,10 +165,10 @@ class EmployeeController extends Controller
             ->orderBy('expense_date')
             ->get();
 
-        $runningBalance = $this->salaryBalanceBeforeMonth($employee, Carbon::create($year, 1, 1));
+        $runningBalance = $this->salaryBalanceBeforeMonth($employee, Carbon::create($year, 1, 1)->startOfDay());
 
         $rows = collect(range(1, 12))->map(function (int $month) use ($year, $employee, $revisions, $salaryPayments, &$runningBalance) {
-            $monthDate = Carbon::create($year, $month, 1);
+            $monthDate = Carbon::create($year, $month, 1)->startOfDay();
             $salary = $this->salaryForMonth($employee, $revisions, $monthDate);
             $paid = (float) ($salaryPayments->get($monthDate->format('Y-m'))?->sum('amount') ?? 0);
             $openingBalance = $runningBalance;
@@ -273,7 +274,7 @@ class EmployeeController extends Controller
 
     private function salaryBalanceForMonth(Employee $employee, string $salaryMonth): array
     {
-        $monthDate = Carbon::createFromFormat('Y-m-d', $salaryMonth.'-01');
+        $monthDate = Carbon::createFromFormat('Y-m-d', $salaryMonth.'-01')->startOfDay();
         $revisions = $employee->salaryRevisions()->orderBy('effective_from')->get();
         $openingBalance = $this->salaryBalanceBeforeMonth($employee, $monthDate, $revisions);
         $payable = $this->salaryForMonth($employee, $revisions, $monthDate);
