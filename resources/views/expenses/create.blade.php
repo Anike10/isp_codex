@@ -2,6 +2,16 @@
 
 @section('content')
 @php
+    $employeesForJs = $employees->mapWithKeys(fn ($employee) => [$employee->id => [
+        'name' => $employee->name,
+        'designation' => $employee->designation,
+        'current_salary' => $employee->current_salary,
+        'bonus_amount' => round((float) $employee->current_salary * (float) $employee->bonus_percent / 100, 2),
+        'yearly_bonus_count' => $employee->yearly_bonus_count,
+        'bonus_percent' => $employee->bonus_percent,
+        'salary_effective_from' => $employee->salary_effective_from?->format('Y-m-d'),
+    ]]);
+
     $accountsByMethod = $paymentAccounts
         ->groupBy('payment_method')
         ->map(fn ($accounts) => $accounts->map(fn ($account) => [
@@ -25,7 +35,7 @@
         <label>Type</label>
         <select name="expense_type" id="expenseType" required>
             @foreach ($types as $value => $label)
-                <option value="{{ $value }}" @selected(old('expense_type', 'salary') === $value)>{{ $label }}</option>
+                <option value="{{ $value }}" @selected(old('expense_type', request('expense_type', 'salary')) === $value)>{{ $label }}</option>
             @endforeach
         </select>
     </div>
@@ -33,25 +43,37 @@
         <label>Category</label>
         <select name="category" id="categorySelect" required>
             @foreach ($categories as $value => $label)
-                <option value="{{ $value }}" @selected(old('category', 'salary') === $value)>{{ $label }}</option>
+                <option value="{{ $value }}" @selected(old('category', request('category', 'salary')) === $value)>{{ $label }}</option>
             @endforeach
         </select>
     </div>
-    <div class="salary-field">
+    <div class="employee-cost-field">
+        <label>Employee</label>
+        <select name="employee_id" id="employeeSelect">
+            <option value="">Manual employee name</option>
+            @foreach ($employees as $employee)
+                <option value="{{ $employee->id }}" @selected((string) old('employee_id', request('employee_id')) === (string) $employee->id)>
+                    {{ $employee->name }}{{ $employee->designation ? ' - '.$employee->designation : '' }} - Salary {{ number_format($employee->current_salary, 2) }}
+                </option>
+            @endforeach
+        </select>
+        <span class="muted" id="employeeSalaryHint">Select an employee to fill salary details automatically.</span>
+    </div>
+    <div class="employee-cost-field">
         <label>Employee Name</label>
         <input name="employee_name" id="employeeName" value="{{ old('employee_name') }}">
     </div>
-    <div class="salary-field">
+    <div class="employee-cost-field">
         <label>Designation</label>
-        <input name="employee_designation" value="{{ old('employee_designation') }}" placeholder="Technician, Manager, Support">
+        <input name="employee_designation" id="employeeDesignation" value="{{ old('employee_designation') }}" placeholder="Technician, Manager, Support">
     </div>
     <div class="salary-field">
         <label>Salary Month</label>
-        <input type="month" name="salary_month" id="salaryMonth" value="{{ old('salary_month', now()->format('Y-m')) }}">
+        <input type="month" name="salary_month" id="salaryMonth" value="{{ old('salary_month', request('salary_month', now()->format('Y-m'))) }}">
     </div>
     <div>
         <label>Amount</label>
-        <input type="number" step="0.01" min="0.01" name="amount" value="{{ old('amount') }}" required>
+        <input type="number" step="0.01" min="0.01" name="amount" id="amountInput" value="{{ old('amount') }}" required>
     </div>
     <div>
         <label>Payment Method</label>
@@ -87,19 +109,28 @@
 
 <script>
 const accountsByMethod = @json($accountsByMethod);
+const employeesById = @json($employeesForJs);
 const oldAccountId = @json(old('payment_account_id'));
 const expenseType = document.getElementById('expenseType');
 const categorySelect = document.getElementById('categorySelect');
+const employeeSelect = document.getElementById('employeeSelect');
 const salaryFields = document.querySelectorAll('.salary-field');
+const employeeCostFields = document.querySelectorAll('.employee-cost-field');
 const employeeName = document.getElementById('employeeName');
+const employeeDesignation = document.getElementById('employeeDesignation');
 const salaryMonth = document.getElementById('salaryMonth');
+const amountInput = document.getElementById('amountInput');
+const employeeSalaryHint = document.getElementById('employeeSalaryHint');
 const methodSelect = document.getElementById('paymentMethod');
 const accountWrap = document.getElementById('accountSelectWrap');
 const accountSelect = document.getElementById('paymentAccount');
 
 function refreshType() {
     const isSalary = expenseType.value === 'salary';
+    const isBonus = expenseType.value === 'other' && categorySelect.value === 'bonus';
+    const isEmployeeCost = isSalary || isBonus;
 
+    employeeCostFields.forEach(field => field.style.display = isEmployeeCost ? 'block' : 'none');
     salaryFields.forEach(field => field.style.display = isSalary ? 'block' : 'none');
     employeeName.required = isSalary;
     salaryMonth.required = isSalary;
@@ -107,6 +138,24 @@ function refreshType() {
     if (isSalary) {
         categorySelect.value = 'salary';
     }
+}
+
+function refreshEmployeeDetails() {
+    const employee = employeesById[employeeSelect.value];
+
+    if (! employee) {
+        employeeSalaryHint.textContent = 'Select an employee to fill salary details automatically.';
+        return;
+    }
+
+    employeeName.value = employee.name || '';
+    employeeDesignation.value = employee.designation || '';
+
+    if (! amountInput.value) {
+        amountInput.value = categorySelect.value === 'bonus' ? (employee.bonus_amount || '') : (employee.current_salary || '');
+    }
+
+    employeeSalaryHint.textContent = `Salary ${Number(employee.current_salary || 0).toFixed(2)} from ${employee.salary_effective_from || 'N/A'} | Bonus ${employee.yearly_bonus_count} x ${Number(employee.bonus_percent || 0).toFixed(2)}% = ${Number(employee.bonus_amount || 0).toFixed(2)} each.`;
 }
 
 function refreshAccounts() {
@@ -129,8 +178,14 @@ function refreshAccounts() {
 }
 
 expenseType.addEventListener('change', refreshType);
+categorySelect.addEventListener('change', () => {
+    refreshType();
+    refreshEmployeeDetails();
+});
+employeeSelect.addEventListener('change', refreshEmployeeDetails);
 methodSelect.addEventListener('change', refreshAccounts);
 refreshType();
+refreshEmployeeDetails();
 refreshAccounts();
 </script>
 @endsection

@@ -178,6 +178,7 @@
                             <a href="{{ route('accounting.ledger') }}">Accounting Ledger</a>
                         @endif
                         @if (auth()->user()?->hasPermission('manage_expenses'))
+                            <a href="{{ route('employees.index') }}">Employees</a>
                             <a href="{{ route('expenses.index') }}">Salary & Expenses</a>
                         @endif
                     </div>
@@ -189,6 +190,9 @@
             @endif
             @if (auth()->user()?->hasPermission('manage_products'))
                 <a href="{{ route('products.index') }}">Inventory</a>
+            @endif
+            @if (auth()->user()?->hasPermission('manage_expenses'))
+                <a href="{{ route('expenses.index') }}">Expenses</a>
             @endif
 
             @if ($canManageAdmin)

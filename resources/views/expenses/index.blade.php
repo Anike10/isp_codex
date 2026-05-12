@@ -68,7 +68,11 @@
                 <td><span class="badge {{ $expense->expense_type === 'salary' ? 'active' : 'pending' }}">{{ $types[$expense->expense_type] ?? ucfirst($expense->expense_type) }}</span></td>
                 <td>{{ $categories[$expense->category] ?? ucfirst($expense->category) }}</td>
                 <td>
-                    {{ $expense->employee_name ?? 'N/A' }}
+                    @if ($expense->employee)
+                        <a href="{{ route('employees.show', $expense->employee) }}">{{ $expense->employee->name }}</a>
+                    @else
+                        {{ $expense->employee_name ?? 'N/A' }}
+                    @endif
                     @if ($expense->employee_designation)
                         <div class="muted">{{ $expense->employee_designation }}</div>
                     @endif

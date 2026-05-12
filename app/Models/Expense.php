@@ -33,6 +33,7 @@ class Expense extends Model
         'entry_by_type',
         'expense_type',
         'category',
+        'employee_id',
         'employee_name',
         'employee_designation',
         'salary_month',
@@ -55,5 +56,10 @@ class Expense extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(PaymentAccount::class, 'payment_account_id');
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
     }
 }

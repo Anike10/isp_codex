@@ -7,6 +7,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerPaymentController;
 use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MikrotikRouterController;
@@ -69,6 +70,9 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_expenses')->group(function () {
+        Route::post('employees/{employee}/salary-revisions', [EmployeeController::class, 'storeSalaryRevision'])->name('employees.salary-revisions.store');
+        Route::get('employees/{employee}/balance-sheet', [EmployeeController::class, 'balanceSheet'])->name('employees.balance-sheet');
+        Route::resource('employees', EmployeeController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
         Route::resource('expenses', ExpenseController::class)->only(['index', 'create', 'store', 'show']);
     });
 

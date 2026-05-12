@@ -108,6 +108,12 @@
         line-height: 1.35;
     }
 
+    .amount-mode {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 120px;
+        gap: 8px;
+    }
+
     .items-list {
         display: grid;
         gap: 12px;
@@ -393,14 +399,26 @@
 
                             <div>
                                 <label for="discount">Discount <span class="required-mark">*</span></label>
-                                <input id="discount" type="number" name="discount" step="0.01" min="0" value="{{ old('discount', $isEdit ? $invoice->discount : '0.00') }}" required>
-                                <span class="field-note">Discount is deducted from the item subtotal.</span>
+                                <div class="amount-mode">
+                                    <input id="discount" type="number" name="discount" step="0.01" min="0" value="{{ old('discount', $isEdit ? $invoice->discount : '0.00') }}" required>
+                                    <select id="discountType" name="discount_type" required>
+                                        <option value="amount" @selected(old('discount_type', 'amount') === 'amount')>BDT</option>
+                                        <option value="percent" @selected(old('discount_type') === 'percent')>%</option>
+                                    </select>
+                                </div>
+                                <span class="field-note">Use fixed taka amount or percentage of subtotal.</span>
                             </div>
 
                             <div>
                                 <label for="vat">VAT <span class="required-mark">*</span></label>
-                                <input id="vat" type="number" name="vat" step="0.01" min="0" value="{{ old('vat', $isEdit ? ($invoice->vat ?? '0.00') : '0.00') }}" required>
-                                <span class="field-note">VAT is added after discount.</span>
+                                <div class="amount-mode">
+                                    <input id="vat" type="number" name="vat" step="0.01" min="0" value="{{ old('vat', $isEdit ? ($invoice->vat ?? '0.00') : '0.00') }}" required>
+                                    <select id="vatType" name="vat_type" required>
+                                        <option value="amount" @selected(old('vat_type', 'amount') === 'amount')>BDT</option>
+                                        <option value="percent" @selected(old('vat_type') === 'percent')>%</option>
+                                    </select>
+                                </div>
+                                <span class="field-note">Use fixed taka amount or percentage after discount.</span>
                             </div>
 
                             <div>
@@ -469,11 +487,11 @@
                 </div>
                 <div class="summary-row">
                     <span>Discount</span>
-                    <strong>BDT <span id="discountAmount">0.00</span></strong>
+                    <strong><span id="discountLabel">BDT</span> <span id="discountAmount">0.00</span></strong>
                 </div>
                 <div class="summary-row">
                     <span>VAT</span>
-                    <strong>BDT <span id="vatAmount">0.00</span></strong>
+                    <strong><span id="vatLabel">BDT</span> <span id="vatAmount">0.00</span></strong>
                 </div>
 
                 <div class="summary-total">
@@ -617,11 +635,17 @@ document.addEventListener('click', function(e) {
 });
 
 document.addEventListener('input', function(e) {
-    if (e.target.classList.contains('quantity') || e.target.classList.contains('unit-price') || e.target.id === 'discount' || e.target.id === 'vat') {
+    if (e.target.classList.contains('quantity') || e.target.classList.contains('unit-price') || ['discount', 'vat', 'discountType', 'vatType'].includes(e.target.id)) {
         const row = e.target.closest('.item-row');
         if (row) {
             updateRowTotal(row);
         }
+        updateTotals();
+    }
+});
+
+document.addEventListener('change', function(e) {
+    if (['discountType', 'vatType'].includes(e.target.id)) {
         updateTotals();
     }
 });
@@ -642,14 +666,21 @@ function updateTotals() {
         subtotal += parseFloat(total.value) || 0;
     });
 
-    const discount = parseFloat(document.getElementById('discount').value) || 0;
-    const vat = parseFloat(document.getElementById('vat').value) || 0;
-    const grandTotal = Math.max(0, subtotal - discount + vat);
+    const discountInput = parseFloat(document.getElementById('discount').value) || 0;
+    const vatInput = parseFloat(document.getElementById('vat').value) || 0;
+    const discountType = document.getElementById('discountType').value;
+    const vatType = document.getElementById('vatType').value;
+    const discount = discountType === 'percent' ? subtotal * discountInput / 100 : discountInput;
+    const afterDiscount = Math.max(0, subtotal - discount);
+    const vat = vatType === 'percent' ? afterDiscount * vatInput / 100 : vatInput;
+    const grandTotal = Math.max(0, afterDiscount + vat);
 
     document.getElementById('itemCount').textContent = totals.length;
     document.getElementById('subtotalAmount').textContent = subtotal.toFixed(2);
     document.getElementById('discountAmount').textContent = discount.toFixed(2);
     document.getElementById('vatAmount').textContent = vat.toFixed(2);
+    document.getElementById('discountLabel').textContent = discountType === 'percent' ? `${discountInput.toFixed(2)}% = BDT` : 'BDT';
+    document.getElementById('vatLabel').textContent = vatType === 'percent' ? `${vatInput.toFixed(2)}% = BDT` : 'BDT';
     document.getElementById('grandTotal').textContent = grandTotal.toFixed(2);
 }
 

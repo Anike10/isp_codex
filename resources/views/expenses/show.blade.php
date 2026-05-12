@@ -38,12 +38,17 @@
         <p><strong>Entry By:</strong> {{ $expense->entry_by ?? 'N/A' }}</p>
     </div>
 
-    @if ($expense->expense_type === 'salary')
+    @if ($expense->expense_type === 'salary' || $expense->category === 'bonus')
         <div class="card">
-            <h2>Employee</h2>
+            <h2>{{ $expense->category === 'bonus' ? 'Bonus Employee' : 'Employee' }}</h2>
             <p><strong>Name:</strong> {{ $expense->employee_name }}</p>
+            @if ($expense->employee)
+                <p><strong>Profile:</strong> <a href="{{ route('employees.show', $expense->employee) }}">{{ $expense->employee->name }} salary profile</a></p>
+            @endif
             <p><strong>Designation:</strong> {{ $expense->employee_designation ?? 'N/A' }}</p>
-            <p><strong>Salary Month:</strong> {{ $expense->salary_month }}</p>
+            @if ($expense->expense_type === 'salary')
+                <p><strong>Salary Month:</strong> {{ $expense->salary_month }}</p>
+            @endif
         </div>
     @endif
 

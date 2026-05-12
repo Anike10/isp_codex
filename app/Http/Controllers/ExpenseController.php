@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Expense;
+use App\Models\Employee;
 use App\Models\PaymentAccount;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -28,7 +29,7 @@ class ExpenseController extends Controller
         $employeeCount = $summaryExpenses->where('expense_type', 'salary')->pluck('employee_name')->filter()->unique()->count();
 
         $expenses = $baseQuery
-            ->with('account')
+            ->with(['account', 'employee'])
             ->latest('expense_date')
             ->latest()
             ->paginate($this->perPage($request))
@@ -50,6 +51,7 @@ class ExpenseController extends Controller
         return view('expenses.create', [
             'types' => Expense::TYPES,
             'categories' => Expense::CATEGORIES,
+            'employees' => Employee::where('status', 'active')->orderBy('name')->get(),
             'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
         ]);
     }
@@ -59,6 +61,7 @@ class ExpenseController extends Controller
         $data = $request->validate([
             'expense_type' => ['required', Rule::in(array_keys(Expense::TYPES))],
             'category' => ['required', Rule::in(array_keys(Expense::CATEGORIES))],
+            'employee_id' => ['nullable', 'exists:employees,id'],
             'employee_name' => ['nullable', 'required_if:expense_type,salary', 'string', 'max:255'],
             'employee_designation' => ['nullable', 'string', 'max:255'],
             'salary_month' => ['nullable', 'required_if:expense_type,salary', 'date_format:Y-m'],
@@ -85,12 +88,25 @@ class ExpenseController extends Controller
             $data['payment_account_id'] = $account->id;
         }
 
-        if ($data['expense_type'] !== 'salary') {
+        $isEmployeeCost = $data['expense_type'] === 'salary' || $data['category'] === 'bonus';
+
+        if (! $isEmployeeCost) {
+            $data['employee_id'] = null;
             $data['employee_name'] = null;
             $data['employee_designation'] = null;
             $data['salary_month'] = null;
         } else {
-            $data['category'] = 'salary';
+            if ($data['expense_type'] === 'salary') {
+                $data['category'] = 'salary';
+            } else {
+                $data['salary_month'] = null;
+            }
+
+            if (! empty($data['employee_id'])) {
+                $employee = Employee::find($data['employee_id']);
+                $data['employee_name'] = $employee->name;
+                $data['employee_designation'] = $employee->designation;
+            }
         }
 
         $data['entry_by'] = $request->user()?->name;
@@ -103,7 +119,7 @@ class ExpenseController extends Controller
 
     public function show(Expense $expense)
     {
-        $expense->load('account');
+        $expense->load(['account', 'employee']);
 
         return view('expenses.show', [
             'expense' => $expense,

@@ -68,7 +68,7 @@ class InvoiceController extends Controller
     {
         $data = $this->validateInvoiceData($request);
 
-        [$customerId, $itemsData, $subtotal, $total] = $this->prepareInvoiceData($data);
+        [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
 
         $invoice = Invoice::create([
             'customer_id' => $customerId,
@@ -76,8 +76,8 @@ class InvoiceController extends Controller
             'billing_month' => $data['billing_month'],
             'invoice_type' => 'product',
             'subtotal' => $subtotal,
-            'discount' => $data['discount'],
-            'vat' => $data['vat'],
+            'discount' => $data['discount_amount'],
+            'vat' => $data['vat_amount'],
             'total' => $total,
             'paid_amount' => 0,
             'due_amount' => max(0, $total),
@@ -115,7 +115,7 @@ class InvoiceController extends Controller
         }
 
         $data = $this->validateInvoiceData($request);
-        [$customerId, $itemsData, $subtotal, $total] = $this->prepareInvoiceData($data);
+        [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
 
         DB::transaction(function () use ($invoice, $data, $customerId, $itemsData, $subtotal, $total) {
             $paidAmount = (float) $invoice->paid_amount;
@@ -125,8 +125,8 @@ class InvoiceController extends Controller
                 'customer_id' => $customerId,
                 'billing_month' => $data['billing_month'],
                 'subtotal' => $subtotal,
-                'discount' => $data['discount'],
-                'vat' => $data['vat'],
+                'discount' => $data['discount_amount'],
+                'vat' => $data['vat_amount'],
                 'total' => $total,
                 'due_amount' => $dueAmount,
                 'status' => $dueAmount <= 0 ? 'paid' : ($paidAmount > 0 ? 'partial' : 'unpaid'),
@@ -162,7 +162,9 @@ class InvoiceController extends Controller
             'items.*.product_name' => ['required', 'string', 'max:255'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'discount_type' => ['required', 'in:amount,percent'],
             'discount' => ['required', 'numeric', 'min:0'],
+            'vat_type' => ['required', 'in:amount,percent'],
             'vat' => ['required', 'numeric', 'min:0'],
             'due_date' => ['nullable', 'date'],
         ]);
@@ -202,9 +204,26 @@ class InvoiceController extends Controller
             ];
         }
 
-        $total = $subtotal - $data['discount'] + $data['vat'];
+        $discountAmount = $this->resolveAdjustmentAmount($subtotal, $data['discount'], $data['discount_type']);
+        $afterDiscount = max(0, $subtotal - $discountAmount);
+        $vatAmount = $this->resolveAdjustmentAmount($afterDiscount, $data['vat'], $data['vat_type']);
+        $total = $afterDiscount + $vatAmount;
 
-        return [$customerId, $itemsData, $subtotal, $total];
+        $data['discount_amount'] = $discountAmount;
+        $data['vat_amount'] = $vatAmount;
+
+        return [$customerId, $itemsData, $subtotal, $total, $data];
+    }
+
+    private function resolveAdjustmentAmount(float $baseAmount, float|int|string $value, string $type): float
+    {
+        $value = (float) $value;
+
+        if ($type === 'percent') {
+            return round($baseAmount * $value / 100, 2);
+        }
+
+        return round($value, 2);
     }
 
     private function generateCustomerConnectionId(): string
