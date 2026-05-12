@@ -7,6 +7,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerPaymentController;
 use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MikrotikRouterController;
 use App\Http\Controllers\PackageController;
@@ -65,6 +66,10 @@ Route::middleware('auth')->group(function () {
         Route::get('accounting/ledger', [AccountingLedgerController::class, 'index'])->name('accounting.ledger');
         Route::get('payment-accounts/cash/ledger', [PaymentAccountController::class, 'cashLedger'])->name('payment-accounts.cash-ledger');
         Route::resource('payment-accounts', PaymentAccountController::class)->only(['index', 'show', 'create', 'store']);
+    });
+
+    Route::middleware('permission:manage_expenses')->group(function () {
+        Route::resource('expenses', ExpenseController::class)->only(['index', 'create', 'store', 'show']);
     });
 
     Route::middleware('permission:manage_mikrotik_routers')->group(function () {

@@ -4,7 +4,7 @@
 <div class="topbar">
     <div>
         <h1>Accounting Ledger</h1>
-        <div class="muted">Invoices, payments, and running totals</div>
+        <div class="muted">Invoices, payments, salaries, expenses, and running totals</div>
     </div>
     <a class="btn light" href="{{ route('payment-accounts.index') }}">Back</a>
 </div>

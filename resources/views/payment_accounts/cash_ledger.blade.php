@@ -27,7 +27,11 @@
     </div>
     <div class="card stat">
         <span class="muted">Current Cash Balance</span>
-        <strong>{{ number_format($totalCollected, 2) }}</strong>
+        <strong>{{ number_format($totalCollected - $totalSpent, 2) }}</strong>
+    </div>
+    <div class="card stat">
+        <span class="muted">Total Cash Expense</span>
+        <strong>{{ number_format($totalSpent, 2) }}</strong>
     </div>
     <div class="card stat">
         <span class="muted">Transactions</span>

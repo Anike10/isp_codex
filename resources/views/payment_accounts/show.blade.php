@@ -37,7 +37,11 @@
     </div>
     <div class="card stat">
         <span class="muted">Current Balance</span>
-        <strong>{{ number_format((float) $paymentAccount->opening_balance + $totalCollected, 2) }}</strong>
+        <strong>{{ number_format((float) $paymentAccount->opening_balance + $totalCollected - $totalSpent, 2) }}</strong>
+    </div>
+    <div class="card stat">
+        <span class="muted">Total Expense</span>
+        <strong>{{ number_format($totalSpent, 2) }}</strong>
     </div>
     <div class="card stat">
         <span class="muted">Transactions</span>

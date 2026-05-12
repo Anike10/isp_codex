@@ -135,7 +135,8 @@
                     || auth()->user()?->hasPermission('manage_mikrotik_routers');
                 $canManageBilling = auth()->user()?->hasPermission('manage_invoices')
                     || auth()->user()?->hasPermission('manage_payments')
-                    || auth()->user()?->hasPermission('manage_payment_accounts');
+                    || auth()->user()?->hasPermission('manage_payment_accounts')
+                    || auth()->user()?->hasPermission('manage_expenses');
                 $canManageAdmin = auth()->user()?->hasPermission('manage_users')
                     || auth()->user()?->hasPermission('download_backup');
             @endphp
@@ -175,6 +176,9 @@
                         @if (auth()->user()?->hasPermission('manage_payment_accounts'))
                             <a href="{{ route('payment-accounts.index') }}">Payment Accounts</a>
                             <a href="{{ route('accounting.ledger') }}">Accounting Ledger</a>
+                        @endif
+                        @if (auth()->user()?->hasPermission('manage_expenses'))
+                            <a href="{{ route('expenses.index') }}">Salary & Expenses</a>
                         @endif
                     </div>
                 </details>

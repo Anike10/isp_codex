@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CustomerBalanceTransaction;
+use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
 use Illuminate\Http\Request;
@@ -79,7 +80,24 @@ class AccountingLedgerController extends Controller
                 ];
             });
 
-        $entries = $invoices->concat($payments)->concat($balanceEntries)->sortBy('date')->values();
+        $expenses = Expense::with('account')
+            ->when($from, fn ($query) => $query->whereDate('expense_date', '>=', $from))
+            ->when($to, fn ($query) => $query->whereDate('expense_date', '<=', $to))
+            ->get()
+            ->map(fn (Expense $expense) => [
+                'date' => $expense->expense_date,
+                'type' => $expense->expense_type === 'salary' ? 'Salary' : 'Expense',
+                'customer' => $expense->employee_name ?: 'Business Expense',
+                'reference' => $expense->reference ?: 'Expense #'.$expense->id,
+                'debit' => (float) $expense->amount,
+                'credit' => 0,
+                'note' => (Expense::CATEGORIES[$expense->category] ?? ucfirst($expense->category))
+                    .' | '.$expense->payment_method
+                    .($expense->account ? ' - '.$expense->account->account_name : ''),
+                'url' => route('expenses.show', $expense),
+            ]);
+
+        $entries = $invoices->concat($payments)->concat($balanceEntries)->concat($expenses)->sortBy('date')->values();
         $totalDebit = $entries->sum('debit');
         $totalCredit = $entries->sum('credit');
 

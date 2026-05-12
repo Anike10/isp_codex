@@ -21,17 +21,18 @@
 <div class="grid stats" style="margin-bottom:16px">
     <div class="card stat">
         <span class="muted">Cash Balance</span>
-        <strong>{{ number_format($cashCollected, 2) }}</strong>
+        <strong>{{ number_format($cashCollected - $cashSpent, 2) }}</strong>
     </div>
     @foreach (['bkash', 'nagad', 'bank'] as $method)
         @php
             $methodAccounts = $allAccounts->where('payment_method', $method);
             $opening = $methodAccounts->sum(fn ($account) => (float) $account->opening_balance);
             $collected = $methodAccounts->sum(fn ($account) => (float) ($account->collected_amount ?? 0));
+            $spent = $methodAccounts->sum(fn ($account) => (float) ($account->spent_amount ?? 0));
         @endphp
         <div class="card stat">
             <span class="muted">{{ $methodLabels[$method] }} Balance</span>
-            <strong>{{ number_format($opening + $collected, 2) }}</strong>
+            <strong>{{ number_format($opening + $collected - $spent, 2) }}</strong>
         </div>
     @endforeach
 </div>
@@ -46,6 +47,7 @@
             <th>Account Number</th>
             <th>Opening Balance</th>
             <th>Collected</th>
+            <th>Spent</th>
             <th>Current Balance</th>
             <th>Status</th>
             <th></th>
@@ -58,14 +60,16 @@
             <td>N/A</td>
             <td>{{ number_format(0, 2) }}</td>
             <td>{{ number_format($cashCollected, 2) }}</td>
-            <td>{{ number_format($cashCollected, 2) }}</td>
+            <td>{{ number_format($cashSpent, 2) }}</td>
+            <td>{{ number_format($cashCollected - $cashSpent, 2) }}</td>
             <td><span class="badge active">active</span></td>
             <td><a class="btn light" href="{{ route('payment-accounts.cash-ledger') }}">Ledger</a></td>
         </tr>
         @forelse ($accounts as $account)
             @php
                 $collected = (float) ($account->collected_amount ?? 0);
-                $currentBalance = (float) $account->opening_balance + $collected;
+                $spent = (float) ($account->spent_amount ?? 0);
+                $currentBalance = (float) $account->opening_balance + $collected - $spent;
             @endphp
             <tr data-href="{{ route('payment-accounts.show', $account) }}">
                 <td>{{ $methodLabels[$account->payment_method] ?? ucfirst($account->payment_method) }}</td>
@@ -73,13 +77,14 @@
                 <td>{{ $account->account_number }}</td>
                 <td>{{ number_format($account->opening_balance, 2) }}</td>
                 <td>{{ number_format($collected, 2) }}</td>
+                <td>{{ number_format($spent, 2) }}</td>
                 <td>{{ number_format($currentBalance, 2) }}</td>
                 <td><span class="badge {{ $account->status }}">{{ $account->status }}</span></td>
                 <td><a class="btn light" href="{{ route('payment-accounts.show', $account) }}">Ledger</a></td>
             </tr>
         @empty
             <tr>
-                <td colspan="8">No bKash, Nagad, or bank accounts added yet.</td>
+                <td colspan="9">No bKash, Nagad, or bank accounts added yet.</td>
             </tr>
         @endforelse
     </tbody>

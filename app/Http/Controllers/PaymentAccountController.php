@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Expense;
 use App\Models\Payment;
 use App\Models\PaymentAccount;
 use Illuminate\Http\Request;
@@ -12,24 +13,27 @@ class PaymentAccountController extends Controller
     {
         $allAccounts = PaymentAccount::query()
             ->withSum('payments as collected_amount', 'amount')
+            ->withSum('expenses as spent_amount', 'amount')
             ->orderBy('payment_method')
             ->orderBy('account_name')
             ->get();
 
         $accounts = PaymentAccount::query()
             ->withSum('payments as collected_amount', 'amount')
+            ->withSum('expenses as spent_amount', 'amount')
             ->orderBy('payment_method')
             ->orderBy('account_name')
             ->paginate($this->perPage($request))
             ->appends($request->query());
 
         $cashCollected = Payment::where('payment_method', 'cash')->sum('amount');
+        $cashSpent = Expense::where('payment_method', 'cash')->sum('amount');
         $methodTotals = Payment::query()
             ->selectRaw('payment_method, SUM(amount) as total')
             ->groupBy('payment_method')
             ->pluck('total', 'payment_method');
 
-        return view('payment_accounts.index', compact('accounts', 'allAccounts', 'cashCollected', 'methodTotals'));
+        return view('payment_accounts.index', compact('accounts', 'allAccounts', 'cashCollected', 'cashSpent', 'methodTotals'));
     }
 
     public function create()
@@ -47,8 +51,9 @@ class PaymentAccountController extends Controller
             ->appends($request->query());
 
         $totalCollected = $paymentAccount->payments()->sum('amount');
+        $totalSpent = $paymentAccount->expenses()->sum('amount');
 
-        return view('payment_accounts.show', compact('paymentAccount', 'payments', 'totalCollected'));
+        return view('payment_accounts.show', compact('paymentAccount', 'payments', 'totalCollected', 'totalSpent'));
     }
 
     public function cashLedger(Request $request)
@@ -62,8 +67,9 @@ class PaymentAccountController extends Controller
             ->appends($request->query());
 
         $totalCollected = Payment::where('payment_method', 'cash')->sum('amount');
+        $totalSpent = Expense::where('payment_method', 'cash')->sum('amount');
 
-        return view('payment_accounts.cash_ledger', compact('payments', 'totalCollected'));
+        return view('payment_accounts.cash_ledger', compact('payments', 'totalCollected', 'totalSpent'));
     }
 
     public function store(Request $request)
