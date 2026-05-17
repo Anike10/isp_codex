@@ -37,7 +37,12 @@ class Invoice extends Model
             ->where('billing_month', $billingMonth)
             ->count();
 
-        return $count === 0 ? $base : $base.'-'.str_pad((string) ($count + 1), 2, '0', STR_PAD_LEFT);
+        do {
+            $invoiceNo = $count === 0 ? $base : $base.'-'.str_pad((string) ($count + 1), 2, '0', STR_PAD_LEFT);
+            $count++;
+        } while (self::where('invoice_no', $invoiceNo)->exists());
+
+        return $invoiceNo;
     }
 
     protected function casts(): array
