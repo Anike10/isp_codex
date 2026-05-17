@@ -62,10 +62,11 @@
 <section class="card" style="margin-top:16px">
     <h2>Items</h2>
     <table>
-        <thead><tr><th>Product</th><th>Quantity</th><th>Unit Price</th><th>Total</th></tr></thead>
+        <thead><tr><th style="width:56px;">SL</th><th>Product</th><th>Quantity</th><th>Unit Price</th><th>Total</th></tr></thead>
         <tbody>
-        @foreach ($invoice->items as $item)
+        @foreach ($invoice->items as $index => $item)
             <tr>
+                <td>{{ $index + 1 }}</td>
                 <td>{{ $item->product_name }}</td>
                 <td>{{ $item->quantity }}</td>
                 <td>{{ number_format($item->unit_price, 2) }}</td>
