@@ -223,7 +223,7 @@ class InvoiceController extends Controller
                     'name' => $data['customer_name'],
                     'phone' => $data['customer_phone'],
                     'connection_id' => $this->generateCustomerConnectionId(),
-                    'address' => 'Not provided',
+                    'address' => '',
                     'status' => 'active',
                 ]);
             }
