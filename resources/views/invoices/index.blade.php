@@ -68,7 +68,7 @@
             <td>{{ $invoice->invoice_no }}</td>
             <td>{{ $invoice->customer->name }}</td>
             <td>{{ $invoice->customer->phone }}</td>
-            <td>{{ $invoice->billing_month }}</td>
+            <td>{{ $invoice->formatted_billing_month }}</td>
             <td>{{ ucfirst($invoice->invoice_type ?? 'service') }}</td>
             <td>{{ number_format($invoice->total, 2) }}</td>
             <td>{{ number_format($invoice->paid_amount, 2) }}</td>

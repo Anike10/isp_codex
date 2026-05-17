@@ -47,10 +47,61 @@
         body.no-signature .no-sign-note { display:block; }
         .footer { margin-top:18px; padding-top:10px; border-top:1px solid var(--line); text-align:center; color:var(--muted); font-size:12px; }
         @page { size:A4; margin:0; }
-        @media print { body { background:#fff; } .toolbar { display:none; } .page { width:210mm; min-height:297mm; margin:0; box-shadow:none; } }
+        @media print {
+            body { background:#fff; }
+            .toolbar { display:none; }
+            .page { width:210mm; min-height:297mm; margin:0; box-shadow:none; }
+
+            body.compact-print { font-size:10.5px; }
+            body.compact-print .page { height:297mm; min-height:0; padding:8mm 9mm; overflow:hidden; }
+            body.compact-print .brand-bar { gap:10px; border-bottom-width:2px; padding-bottom:6px; margin-bottom:7px; }
+            body.compact-print .company h1 { font-size:20px; }
+            body.compact-print .company p { margin-top:2px; line-height:1.2; }
+            body.compact-print .doc-title h2 { font-size:22px; }
+            body.compact-print .doc-no { margin-top:4px; }
+            body.compact-print .meta-grid { gap:8px; margin-bottom:7px; }
+            body.compact-print .box { border-radius:4px; }
+            body.compact-print .box h3 { padding:4px 6px; font-size:10px; }
+            body.compact-print .box-body { padding:5px 6px; line-height:1.25; }
+            body.compact-print .kv { grid-template-columns:86px 1fr; column-gap:5px; }
+            body.compact-print table { margin-top:6px; table-layout:fixed; }
+            body.compact-print th,
+            body.compact-print td { padding:3px 5px; line-height:1.12; }
+            body.compact-print th { font-size:9px; letter-spacing:0; }
+            body.compact-print tbody td:nth-child(2) { overflow-wrap:anywhere; }
+            body.compact-print .summary { grid-template-columns:1fr 58mm; gap:8px; margin-top:7px; }
+            body.compact-print .notes,
+            body.compact-print .amount-words { padding:5px 6px; line-height:1.25; }
+            body.compact-print .total-row { padding:4px 6px; gap:8px; }
+            body.compact-print .grand { font-size:12px; }
+            body.compact-print .amount-words { margin-top:6px; }
+            body.compact-print .signatures { gap:24px; margin-top:10mm; }
+            body.compact-print .signature-line { padding-top:5px; }
+            body.compact-print .no-sign-note { margin-top:8mm; padding:7px; line-height:1.3; }
+            body.compact-print .footer { margin-top:6px; padding-top:5px; font-size:9.5px; }
+
+            body.dense-print { font-size:9.5px; }
+            body.dense-print .page { padding:6mm 8mm; }
+            body.dense-print .brand-bar { padding-bottom:4px; margin-bottom:5px; }
+            body.dense-print .company h1 { font-size:18px; }
+            body.dense-print .company p { line-height:1.12; }
+            body.dense-print .doc-title h2 { font-size:20px; }
+            body.dense-print .meta-grid { margin-bottom:5px; }
+            body.dense-print .box h3 { padding:3px 5px; }
+            body.dense-print .box-body { padding:4px 5px; line-height:1.18; }
+            body.dense-print th,
+            body.dense-print td { padding:2px 4px; line-height:1.05; }
+            body.dense-print tbody td:nth-child(2) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+            body.dense-print .summary { margin-top:5px; }
+            body.dense-print .notes,
+            body.dense-print .amount-words { padding:4px 5px; line-height:1.15; }
+            body.dense-print .total-row { padding:3px 5px; }
+            body.dense-print .signatures { margin-top:6mm; }
+            body.dense-print .footer { margin-top:4px; padding-top:4px; font-size:9px; }
+        }
     </style>
 </head>
-<body>
+<body class="{{ $invoice->items->count() >= 30 ? 'compact-print dense-print' : ($invoice->items->count() >= 25 ? 'compact-print' : '') }}">
     @php
         $numberToWords = function (int $number) use (&$numberToWords): string {
             $ones = [0 => 'Zero', 1 => 'One', 2 => 'Two', 3 => 'Three', 4 => 'Four', 5 => 'Five', 6 => 'Six', 7 => 'Seven', 8 => 'Eight', 9 => 'Nine', 10 => 'Ten', 11 => 'Eleven', 12 => 'Twelve', 13 => 'Thirteen', 14 => 'Fourteen', 15 => 'Fifteen', 16 => 'Sixteen', 17 => 'Seventeen', 18 => 'Eighteen', 19 => 'Nineteen'];
@@ -104,7 +155,7 @@
                     <div class="kv"><span class="muted">Quotation No</span><span>QT-{{ $invoice->invoice_no }}</span></div>
                     <div class="kv"><span class="muted">Date</span><span>{{ now()->format('d M Y') }}</span></div>
                     <div class="kv"><span class="muted">Valid Until</span><span>{{ now()->addDays(15)->format('d M Y') }}</span></div>
-                    <div class="kv"><span class="muted">Reference Month</span><span>{{ $invoice->billing_month }}</span></div>
+                    <div class="kv"><span class="muted">Reference Month</span><span>{{ $invoice->formatted_billing_month }}</span></div>
                 </div>
             </div>
         </section>
@@ -115,7 +166,7 @@
                 @forelse ($invoice->items as $index => $item)
                     <tr><td class="center">{{ $index + 1 }}</td><td>{{ $item->product_name }}</td><td class="center">{{ $item->quantity }}</td><td class="right">{{ number_format($item->unit_price, 2) }}</td><td class="right">{{ number_format($item->total, 2) }}</td></tr>
                 @empty
-                    <tr><td class="center">1</td><td>Monthly internet service for {{ $invoice->billing_month }}</td><td class="center">1</td><td class="right">{{ number_format($invoice->subtotal, 2) }}</td><td class="right">{{ number_format($invoice->subtotal, 2) }}</td></tr>
+                    <tr><td class="center">1</td><td>Monthly internet service for {{ $invoice->formatted_billing_month }}</td><td class="center">1</td><td class="right">{{ number_format($invoice->subtotal, 2) }}</td><td class="right">{{ number_format($invoice->subtotal, 2) }}</td></tr>
                 @endforelse
             </tbody>
         </table>

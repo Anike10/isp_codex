@@ -4,7 +4,7 @@
 <div class="topbar">
     <div>
         <h1>{{ $invoice->invoice_no }}</h1>
-        <div class="muted">{{ $invoice->customer->name }} - {{ $invoice->billing_month }}</div>
+        <div class="muted">{{ $invoice->customer->name }} - {{ $invoice->formatted_billing_month }}</div>
         <div style="margin-top:8px">
             @if ($invoice->isFinalized())
                 <span class="badge active">Final</span>
@@ -26,6 +26,10 @@
         <a class="btn light" href="{{ route('invoices.challan', $invoice) }}" target="_blank">Print Bill</a>
         <a class="btn light" href="{{ route('invoices.quotation', $invoice) }}" target="_blank">Print Quotation</a>
         <a class="btn light" href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank">Print Challan</a>
+        <form method="post" action="{{ route('invoices.copy-next-month', $invoice) }}" onsubmit="return confirm('Copy this invoice for next month with same items and prices?');">
+            @csrf
+            <button class="btn light" type="submit">Copy for Next Month</button>
+        </form>
         <a class="btn light" href="{{ route('invoices.index') }}">Back</a>
     </div>
 </div>

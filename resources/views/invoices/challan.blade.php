@@ -266,10 +266,128 @@
                 margin: 0;
                 box-shadow: none;
             }
+
+            body.compact-print {
+                font-size: 10.5px;
+            }
+
+            body.compact-print .page {
+                height: 297mm;
+                min-height: 0;
+                padding: 8mm 9mm;
+                overflow: hidden;
+            }
+
+            body.compact-print .brand-bar {
+                gap: 10px;
+                border-bottom-width: 2px;
+                padding-bottom: 6px;
+                margin-bottom: 7px;
+            }
+
+            body.compact-print .company h1 { font-size: 20px; }
+            body.compact-print .company p { margin-top: 2px; line-height: 1.2; }
+            body.compact-print .bill-title h2 { font-size: 22px; }
+            body.compact-print .status { margin-top: 4px; padding: 3px 8px; font-size: 11px; border-width: 1px; }
+
+            body.compact-print .meta-grid {
+                gap: 8px;
+                margin-bottom: 7px;
+            }
+
+            body.compact-print .box { border-radius: 4px; }
+            body.compact-print .box h3 { padding: 4px 6px; font-size: 10px; }
+            body.compact-print .box-body { padding: 5px 6px; line-height: 1.25; }
+            body.compact-print .kv { grid-template-columns: 78px 1fr; column-gap: 5px; }
+
+            body.compact-print table {
+                margin-top: 6px;
+                table-layout: fixed;
+            }
+
+            body.compact-print th,
+            body.compact-print td {
+                padding: 3px 5px;
+                line-height: 1.12;
+            }
+
+            body.compact-print th {
+                font-size: 9px;
+                letter-spacing: 0;
+            }
+
+            body.compact-print tbody td:nth-child(2) {
+                overflow-wrap: anywhere;
+            }
+
+            body.compact-print .summary {
+                grid-template-columns: 1fr 58mm;
+                gap: 8px;
+                margin-top: 7px;
+            }
+
+            body.compact-print .notes {
+                min-height: 0;
+                padding: 5px 6px;
+                line-height: 1.25;
+            }
+
+            body.compact-print .totals { border-radius: 4px; }
+            body.compact-print .total-row { padding: 4px 6px; gap: 8px; }
+            body.compact-print .grand { font-size: 12px; }
+
+            body.compact-print .amount-words {
+                margin-top: 6px;
+                padding: 5px 6px;
+                line-height: 1.25;
+            }
+
+            body.compact-print .signatures {
+                gap: 24px;
+                margin-top: 10mm;
+            }
+
+            body.compact-print .signature-line { padding-top: 5px; }
+            body.compact-print .no-sign-note { margin-top: 8mm; padding: 7px; line-height: 1.3; }
+            body.compact-print .footer { margin-top: 6px; padding-top: 5px; font-size: 9.5px; }
+
+            body.dense-print {
+                font-size: 9.5px;
+            }
+
+            body.dense-print .page {
+                padding: 6mm 8mm;
+            }
+
+            body.dense-print .brand-bar {
+                padding-bottom: 4px;
+                margin-bottom: 5px;
+            }
+
+            body.dense-print .company h1 { font-size: 18px; }
+            body.dense-print .company p { line-height: 1.12; }
+            body.dense-print .bill-title h2 { font-size: 20px; }
+            body.dense-print .status { font-size: 10px; }
+            body.dense-print .meta-grid { margin-bottom: 5px; }
+            body.dense-print .box h3 { padding: 3px 5px; }
+            body.dense-print .box-body { padding: 4px 5px; line-height: 1.18; }
+            body.dense-print th,
+            body.dense-print td { padding: 2px 4px; line-height: 1.05; }
+            body.dense-print tbody td:nth-child(2) {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            body.dense-print .summary { margin-top: 5px; }
+            body.dense-print .notes,
+            body.dense-print .amount-words { padding: 4px 5px; line-height: 1.15; }
+            body.dense-print .total-row { padding: 3px 5px; }
+            body.dense-print .signatures { margin-top: 6mm; }
+            body.dense-print .footer { margin-top: 4px; padding-top: 4px; font-size: 9px; }
         }
     </style>
 </head>
-<body>
+<body class="{{ $invoice->items->count() >= 30 ? 'compact-print dense-print' : ($invoice->items->count() >= 25 ? 'compact-print' : '') }}">
     @php
         $numberToWords = function (int $number) use (&$numberToWords): string {
             $ones = [
@@ -364,7 +482,7 @@
                 <h3>Bill Details</h3>
                 <div class="box-body">
                     <div class="kv"><span class="muted">Bill No</span><span>{{ $invoice->invoice_no }}</span></div>
-                    <div class="kv"><span class="muted">Bill Month</span><span>{{ $invoice->billing_month }}</span></div>
+                    <div class="kv"><span class="muted">Bill Month</span><span>{{ $invoice->formatted_billing_month }}</span></div>
                     <div class="kv"><span class="muted">Bill Type</span><span>{{ ucfirst($invoice->invoice_type ?? 'service') }}</span></div>
                     <div class="kv"><span class="muted">Issue Date</span><span>{{ $invoice->created_at?->format('d M Y') }}</span></div>
                     <div class="kv"><span class="muted">Due Date</span><span>{{ $invoice->due_date?->format('d M Y') ?? 'N/A' }}</span></div>
@@ -394,7 +512,7 @@
                 @empty
                     <tr>
                         <td class="center">1</td>
-                        <td>Monthly internet service bill for {{ $invoice->billing_month }}</td>
+                        <td>Monthly internet service bill for {{ $invoice->formatted_billing_month }}</td>
                         <td class="center">1</td>
                         <td class="right">{{ number_format($invoice->subtotal, 2) }}</td>
                         <td class="right">{{ number_format($invoice->subtotal, 2) }}</td>

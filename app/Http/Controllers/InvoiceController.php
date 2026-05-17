@@ -9,6 +9,7 @@ use App\Models\Subscription;
 use App\Services\BillingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 
 class InvoiceController extends Controller
 {
@@ -151,6 +152,46 @@ class InvoiceController extends Controller
         return redirect()->route('invoices.show', $invoice)->with('success', 'Invoice finalized. Editing is now locked.');
     }
 
+    public function copyForNextMonth(Invoice $invoice)
+    {
+        $invoice->loadMissing('items');
+        $nextBillingMonth = Carbon::createFromFormat('!Y-m', $invoice->billing_month)
+            ->addMonthNoOverflow()
+            ->format('Y-m');
+
+        $newInvoice = DB::transaction(function () use ($invoice, $nextBillingMonth) {
+            $copy = Invoice::create([
+                'customer_id' => $invoice->customer_id,
+                'invoice_no' => Invoice::generateInvoiceNo($invoice->customer_id, $nextBillingMonth),
+                'billing_month' => $nextBillingMonth,
+                'invoice_type' => $invoice->invoice_type,
+                'subtotal' => $invoice->subtotal,
+                'discount' => $invoice->discount,
+                'vat' => $invoice->vat,
+                'total' => $invoice->total,
+                'paid_amount' => 0,
+                'due_amount' => $invoice->total,
+                'status' => ((float) $invoice->total) <= 0 ? 'paid' : 'unpaid',
+                'due_date' => $invoice->due_date?->copy()->addMonthNoOverflow(),
+            ]);
+
+            foreach ($invoice->items as $item) {
+                $copy->items()->create([
+                    'product_name' => $item->product_name,
+                    'quantity' => $item->quantity,
+                    'unit_price' => $item->unit_price,
+                    'total' => $item->total,
+                ]);
+            }
+
+            return $copy;
+        });
+
+        return redirect()
+            ->route('invoices.show', $newInvoice)
+            ->with('success', 'Invoice copied for '.$newInvoice->formatted_billing_month.'.');
+    }
+
     private function validateInvoiceData(Request $request): array
     {
         return $request->validate([
@@ -283,9 +324,11 @@ class InvoiceController extends Controller
         $created = $billingService->generateMonthlyBills($data['billing_month']);
 
         if ($created->isEmpty()) {
+            $formattedBillingMonth = Carbon::createFromFormat('!Y-m', $data['billing_month'])->format('F Y');
+
             return redirect()
                 ->route('invoices.index', ['billing_month' => $data['billing_month']])
-                ->with('success', 'Bills for '.$data['billing_month'].' are already generated.');
+                ->with('success', 'Bills for '.$formattedBillingMonth.' are already generated.');
         }
 
         return redirect()

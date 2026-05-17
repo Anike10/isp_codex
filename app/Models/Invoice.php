@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 class Invoice extends Model
 {
@@ -50,6 +51,15 @@ class Invoice extends Model
     public function isFinalized(): bool
     {
         return $this->finalized_at !== null;
+    }
+
+    public function getFormattedBillingMonthAttribute(): string
+    {
+        try {
+            return Carbon::createFromFormat('!Y-m', $this->billing_month)->format('F Y');
+        } catch (\Throwable) {
+            return (string) $this->billing_month;
+        }
     }
 
     public function customer(): BelongsTo

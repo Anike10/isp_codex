@@ -76,7 +76,7 @@
         @forelse ($customer->invoices as $invoice)
             <tr>
                 <td><a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a></td>
-                <td>{{ $invoice->billing_month }}</td>
+                <td>{{ $invoice->formatted_billing_month }}</td>
                 <td>{{ number_format($invoice->total, 2) }}</td>
                 <td>{{ number_format($invoice->due_amount, 2) }}</td>
                 <td><span class="badge {{ $invoice->status }}">{{ $invoice->status }}</span></td>

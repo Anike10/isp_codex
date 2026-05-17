@@ -84,7 +84,7 @@
             @forelse ($dueInvoices as $invoice)
                 <tr>
                     <td><a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a></td>
-                    <td>{{ $invoice->billing_month }}</td>
+                    <td>{{ $invoice->formatted_billing_month }}</td>
                     <td>{{ $invoice->due_date?->format('Y-m-d') ?? 'N/A' }}</td>
                     <td>{{ number_format($invoice->due_amount, 2) }}</td>
                 </tr>
