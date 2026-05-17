@@ -262,19 +262,26 @@
             .toolbar { display: none; }
             .page {
                 width: 210mm;
-                min-height: 297mm;
+                min-height: 287mm;
                 margin: 0;
+                padding: 12mm 14mm 10mm;
                 box-shadow: none;
+                page-break-after: avoid;
+                break-after: avoid;
             }
+
+            .signatures { margin-top: 22mm; }
+            .no-sign-note { margin-top: 18mm; }
+            .footer { margin-top: 10px; padding-top: 6px; }
 
             body.compact-print {
                 font-size: 10.5px;
             }
 
             body.compact-print .page {
-                height: 297mm;
+                height: 287mm;
                 min-height: 0;
-                padding: 8mm 9mm;
+                padding: 7mm 9mm 6mm;
                 overflow: hidden;
             }
 

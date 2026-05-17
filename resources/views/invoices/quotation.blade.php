@@ -50,10 +50,13 @@
         @media print {
             body { background:#fff; }
             .toolbar { display:none; }
-            .page { width:210mm; min-height:297mm; margin:0; box-shadow:none; }
+            .page { width:210mm; min-height:287mm; margin:0; padding:12mm 14mm 10mm; box-shadow:none; page-break-after:avoid; break-after:avoid; }
+            .signatures { margin-top:20mm; }
+            .no-sign-note { margin-top:17mm; }
+            .footer { margin-top:10px; padding-top:6px; }
 
             body.compact-print { font-size:10.5px; }
-            body.compact-print .page { height:297mm; min-height:0; padding:8mm 9mm; overflow:hidden; }
+            body.compact-print .page { height:287mm; min-height:0; padding:7mm 9mm 6mm; overflow:hidden; }
             body.compact-print .brand-bar { gap:10px; border-bottom-width:2px; padding-bottom:6px; margin-bottom:7px; }
             body.compact-print .company h1 { font-size:20px; }
             body.compact-print .company p { margin-top:2px; line-height:1.2; }
