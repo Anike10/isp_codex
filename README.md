@@ -7,6 +7,7 @@ A Laravel 12 application for an ISP and computer service business.
 - Dashboard with customers, income, due, tickets, and stock summary
 - Customer and internet package management
 - MikroTik router management and PPPoE user sync
+- OLT ONU live polling with status and optical power inventory
 - Monthly invoice generation
 - Customer direct payment and due tracking
 - bKash SMS payment parsing with duplicate TrxID protection
@@ -37,12 +38,47 @@ XAMPP/local public URL example:
 http://localhost/isp_codex/public
 ```
 
+## Production Deployment
+
+Live site:
+
+```text
+https://finalaccess.com
+```
+
+Production Laravel root:
+
+```text
+/home/finalaccess.com/public_html
+```
+
+Read the deployment runbook before updating production:
+
+```text
+DEPLOYMENT.md
+```
+
+Short version:
+
+```bash
+php artisan test
+git push origin main
+ssh anike@162.4.6.7
+sudo -u final4810 bash
+cd /home/finalaccess.com/public_html
+git pull --ff-only origin main
+php artisan optimize:clear
+```
+
+Do not commit SSH passwords, `.env` secrets, SMS tokens, or database passwords.
+
 ## Main Routes
 
 - `/` dashboard
 - `/customers`
 - `/packages`
 - `/mikrotik-routers`
+- `/olt-onus`
 - `/invoices`
 - `/payments`
 - `/bkash-sms-payments`
@@ -283,10 +319,22 @@ MikroTik sync প্রতি মিনিটে:
 * * * * * cd /var/www/isp_codex && php artisan mikrotik:sync-router-users >> /dev/null 2>&1
 ```
 
+Production path for finalaccess.com:
+
+```cron
+* * * * * cd /home/finalaccess.com/public_html && php artisan mikrotik:sync-router-users >> /dev/null 2>&1
+```
+
 Overdue/grace disable প্রতিদিন রাত ১২:০৫:
 
 ```cron
 5 0 * * * cd /var/www/isp_codex && php artisan billing:disable-overdue-customers >> /dev/null 2>&1
+```
+
+Production path for finalaccess.com:
+
+```cron
+5 0 * * * cd /home/finalaccess.com/public_html && php artisan billing:disable-overdue-customers >> /dev/null 2>&1
 ```
 
 Future CWMP/TR-069 sync প্রতি ৫ মিনিটে:
@@ -301,6 +349,12 @@ Production Laravel scheduler ব্যবহার করলে:
 * * * * * cd /var/www/isp_codex && php artisan schedule:run >> /dev/null 2>&1
 ```
 
+Production path for finalaccess.com:
+
+```cron
+* * * * * cd /home/finalaccess.com/public_html && php artisan schedule:run >> /dev/null 2>&1
+```
+
 তারপর commands `routes/console.php` বা scheduler config-এ schedule করতে হবে।
 
 ## Important Commands
@@ -312,6 +366,77 @@ php artisan test
 php artisan mikrotik:sync-router-users --force
 php artisan billing:disable-overdue-customers
 ```
+
+## OLT ONU Live Power
+
+Use this when you need to see HSGQ OLT ONU status and optical power in the software:
+
+```text
+/olt-onus
+```
+
+Add the OLT from:
+
+```text
+/olt-onus/olts/create
+```
+
+Then click `Refresh Live Data`. The app connects to the OLT over read-only SSH
+or Telnet and runs the configured live commands to collect:
+
+- PON/ONU ID
+- MAC address when present in command output
+- ONU status
+- RX optical power in dBm
+- distance when present in command output
+- raw live output per ONU for troubleshooting
+
+Recommended read context and live commands for the current HSGQ OLT:
+
+```text
+Read Context Commands:
+enable
+config
+
+PON Ports To Poll:
+1,2,3,4,5,6,7,8
+
+ONU Status/List Command:
+show onu-info all
+
+ONU Optical Power Command:
+show optical-info
+```
+
+Recommended settings for the current HSGQ OLT:
+
+```text
+Host/IP: 192.168.10.111
+Access Method: SSH read-only
+Port: 22
+Username: isp_app
+Password: from the secure credential source
+```
+
+The SSH client allows legacy OLT host key algorithms like `ssh-rsa` and
+`ssh-dss`, matching this manual command:
+
+```bash
+ssh -oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa isp_app@192.168.10.111
+```
+
+Safety rule:
+
+- The app only allows live data commands that start with `show` or `display`.
+- Read context commands are separately whitelisted to CLI navigation only: `enable`, `config`/`configure`, `interface epon 1-8`, and `exit`.
+- Commands containing `set`, `add`, `delete`, `bind`, `save`, `reboot`, `reset`, and similar write/change words are blocked before connecting.
+- Do not put configuration-changing commands in OLT command fields.
+- The app polls the selected PON ports one by one and sends `interface epon N` before the two show commands, so all PON ONU records can be refreshed from live OLT output.
+
+Network requirement:
+
+- The PHP server running this app must be able to reach `192.168.10.111:22`.
+- If `finalaccess.com` is hosted outside your LAN and has no VPN/route to the OLT, live polling will fail from production. In that case run the app inside the LAN or connect the production server to the management network through VPN.
 
 ## CWMP / TR-069 Note
 
@@ -325,6 +450,7 @@ AI_MAINTAINER_GUIDE.md
 
 ## Important Files
 
+- `DEPLOYMENT.md`: Production deployment, backup, rollback, cron, and finalaccess.com server notes.
 - `AI_MAINTAINER_GUIDE.md`: Read this first before asking another AI to modify billing, bKash SMS, customer status, MikroTik sync, or CWMP/TR-069 logic.
 - `routes/web.php`: Browser routes
 - `routes/api.php`: API/webhook routes
@@ -335,8 +461,31 @@ AI_MAINTAINER_GUIDE.md
 - `app/Services/PaymentService.php`: Payment allocation and advance balance logic
 - `app/Services/BkashSmsPaymentService.php`: bKash SMS parsing and matching
 - `app/Services/MikrotikCustomerSyncService.php`: MikroTik PPPoE sync
+- `app/Services/OltSshClient.php`: SSH client for live OLT polling with legacy HSGQ host key support
+- `app/Services/OltTelnetClient.php`: Telnet client for live OLT polling
+- `app/Services/OltLiveOutputParser.php`: Parses live OLT ONU status and power output
 - `resources/views`: Blade admin screens
 - `PROJECT_ROADMAP.md`: Longer roadmap and developer documentation
+
+## Documentation Rule
+
+After any code or production change, update the relevant Markdown files in the same work session:
+
+- `README.md`: user-facing features, routes, setup, commands, and operational notes
+- `AI_MAINTAINER_GUIDE.md`: architecture, business rules, important files, route/permission rules, limitations, and safe-change notes
+- `DEPLOYMENT.md`: production server path, deploy steps, migrations, cache commands, cron, rollback, and finalaccess.com operational details
+- `PROJECT_ROADMAP.md`: longer-term plans or module roadmap changes
+
+Always update docs when changing:
+
+- routes, menus, permissions, or URLs
+- database migrations or required artisan commands
+- payment, billing, bKash SMS, MikroTik, OLT, or customer-status business rules
+- production deployment steps or server paths
+- `.env` keys, external device credentials, webhook URLs, cron jobs, or scheduler commands
+- known limitations, troubleshooting steps, or rollback process
+
+Never write real passwords, API keys, database credentials, SMS tokens, or private keys in Markdown files.
 
 ## Verification
 

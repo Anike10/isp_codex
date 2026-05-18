@@ -9,6 +9,8 @@ use App\Models\InternetPackage;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\MikrotikRouter;
+use App\Models\OltOnu;
+use App\Models\OltDevice;
 use App\Models\Payment;
 use App\Models\PaymentAccount;
 use App\Models\PaymentAllocation;
@@ -49,6 +51,8 @@ class AppServiceProvider extends ServiceProvider
             Invoice::class,
             InvoiceItem::class,
             MikrotikRouter::class,
+            OltDevice::class,
+            OltOnu::class,
             Payment::class,
             PaymentAccount::class,
             PaymentAllocation::class,

@@ -180,6 +180,7 @@
                         @endif
                         @if (auth()->user()?->hasPermission('manage_mikrotik_routers'))
                             <a href="{{ route('mikrotik-routers.index') }}">MikroTik Routers</a>
+                            <a href="{{ route('olt-onus.index') }}">OLT ONUs</a>
                         @endif
                     </div>
                 </details>

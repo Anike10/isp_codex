@@ -11,6 +11,7 @@ Main capabilities:
 - Login-protected admin system
 - User, role, and permission management
 - Customers and internet packages
+- OLT ONU live polling and optical power inventory
 - Product/service invoices with draft/final workflow
 - Printable bill, quotation, and delivery challan
 - Monthly service bill generation from active subscriptions
@@ -46,8 +47,63 @@ php artisan test
 php artisan serve
 ```
 
+## Production Deployment
+
+Live production site:
+
+```text
+https://finalaccess.com
+```
+
+Production server/app details:
+
+```text
+SSH host: 162.4.6.7
+SSH user: anike
+Laravel root: /home/finalaccess.com/public_html
+Runtime user: final4810
+Git branch: main
+```
+
+Do not store real SSH passwords, `.env` secrets, database passwords, or SMS
+tokens in this repository.
+
+For complete production update steps, backup commands, rollback commands, cron
+paths, webhook URL, ownership notes, and troubleshooting, read:
+
+```text
+DEPLOYMENT.md
+```
+
+Minimum deploy flow:
+
+```bash
+php artisan test
+git push origin main
+ssh anike@162.4.6.7
+sudo -u final4810 bash
+cd /home/finalaccess.com/public_html
+git pull --ff-only origin main
+php artisan optimize:clear
+```
+
+If migrations are included:
+
+```bash
+php artisan migrate --force
+php artisan optimize:clear
+```
+
+Always check server-local changes before pulling:
+
+```bash
+cd /home/finalaccess.com/public_html
+git status -sb
+```
+
 ## Important Files
 
+- `DEPLOYMENT.md`: finalaccess.com production deployment runbook
 - `routes/web.php`: all browser routes and permission middleware
 - `resources/views/layouts/app.blade.php`: main authenticated layout and sidebar
 - `resources/views/auth/login.blade.php`: login page
@@ -66,6 +122,32 @@ php artisan serve
 - `app/Services/BillingService.php`: monthly service bill generation
 - `app/Services/PaymentService.php`: payment recording and invoice due update
 - `app/Http/Controllers/PaymentAccountController.php`: account balances and ledger
+- `app/Http/Controllers/OltOnuController.php`: OLT device setup, live refresh, and ONU inventory
+- `app/Services/OltTelnetClient.php`: Telnet client for live OLT polling
+- `app/Services/OltLiveOutputParser.php`: parses live OLT output into ONU records
+- `resources/views/olt_onus/*`: OLT setup, live refresh, and list pages
+
+## Documentation Maintenance
+
+Every AI agent or developer must update the Markdown docs whenever a change affects behavior, setup, deployment, or operations. Do this in the same task before saying the work is done.
+
+Update these files as needed:
+
+- `README.md`: user-facing feature list, routes, setup, commands, and basic operations
+- `AI_MAINTAINER_GUIDE.md`: architecture, important files, business rules, route/permission model, implementation notes, limitations, and testing guidance
+- `DEPLOYMENT.md`: finalaccess.com deployment steps, server paths, migrations, cache clearing, cron, rollback, and troubleshooting
+- `PROJECT_ROADMAP.md`: future plans, larger module direction, or roadmap-level decisions
+
+Documentation must be updated when changing:
+
+- routes, controllers, views, menus, permissions, or public URLs
+- database migrations, models, relationships, or required artisan commands
+- billing, payment allocation, bKash SMS, customer status, grace period, MikroTik sync, OLT live polling, or accounting rules
+- production deploy flow, server path, ownership, cache commands, migrations, cron, scheduler, webhook URLs, or backup/rollback process
+- external integrations, `.env` keys, device connection methods, command names, ports, or known limitations
+- tests, troubleshooting steps, or operational recovery instructions
+
+Never commit real secrets to Markdown. Use placeholders and tell maintainers to get passwords/tokens from the approved secure source.
 
 ## Route And Permission Model
 
@@ -676,6 +758,91 @@ PPPoE sync:
 - Inactive users are moved to the router's `inactive_pppoe_profile`.
 - If a profile/status changes, remove the active PPP session from `/ppp/active` so the new profile applies after reconnect.
 - If one router fails, sync should continue on other eligible routers.
+
+### OLT ONU Inventory
+
+Important files:
+
+- `app/Models/OltDevice.php`
+- `app/Models/OltOnu.php`
+- `app/Http/Controllers/OltOnuController.php`
+- `app/Services/OltSshClient.php`
+- `app/Services/OltTelnetClient.php`
+- `app/Services/OltLiveOutputParser.php`
+- `resources/views/olt_onus/index.blade.php`
+- `resources/views/olt_onus/create_olt.blade.php`
+
+Routes:
+
+```text
+GET /olt-onus
+GET /olt-onus/olts/create
+POST /olt-onus/olts
+POST /olt-onus/olts/{oltDevice}/refresh
+```
+
+Permission:
+
+```text
+manage_mikrotik_routers
+```
+
+The feature is for live data, not backup-file display. The app stores OLT access
+credentials in `olt_devices`, then the refresh action connects to the OLT and
+runs configured read-only commands.
+
+Current known OLT access:
+
+```text
+Host/IP: 192.168.10.111
+Access method: ssh
+Port: 22
+Username: isp_app
+Password: secure credential source
+```
+
+The OLT offers legacy SSH host keys (`ssh-rsa`, `ssh-dss`). `OltSshClient` uses
+phpseclib and explicitly prefers those host key algorithms so it can connect
+like this manual command:
+
+```bash
+ssh -oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa isp_app@192.168.10.111
+```
+
+Current HSGQ read context and live commands:
+
+```text
+Read Context Commands:
+enable
+config
+
+PON Ports To Poll:
+1,2,3,4,5,6,7,8
+
+ONU Status/List Command:
+show onu-info all
+
+ONU Optical Power Command:
+show optical-info
+```
+
+The live parser tries to extract:
+
+- PON port and ONU ID
+- MAC address
+- ONU online/offline status
+- RX optical power in dBm
+- distance if present
+- description/name if present
+
+Important limitation:
+
+- OLT polling must remain read-only. `OltOnuController::firstUnsafeShowCommand()` blocks live commands that do not start with `show` or `display`, and blocks write/change words such as `set`, `add`, `delete`, `bind`, `save`, `reboot`, and `reset`.
+- `OltOnuController::firstUnsafeContextCommand()` only permits CLI navigation needed for reading HSGQ data: `enable`, `config`/`configure`, `interface epon 1-8`, and `exit`.
+- Refresh loops through `pon_ports` and runs `interface epon N`, `show onu-info all`, then `show optical-info` for each selected PON.
+- Do not add pager/helper/config commands that change OLT state. `OltSshClient` handles `--More--` pagination interactively without sending persistent config.
+- The PHP server running the app must reach `192.168.10.111:22`. If production `finalaccess.com` is outside the LAN without VPN/routing, live OLT polling will fail from production.
+- HSGQ command names vary by firmware; keep commands configurable on the OLT record.
 
 ## CWMP / TR-069 Future Module
 

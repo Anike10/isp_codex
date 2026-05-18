@@ -11,6 +11,7 @@ use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MikrotikRouterController;
+use App\Http\Controllers\OltOnuController;
 use App\Http\Controllers\PackageController;
 use App\Http\Controllers\PaymentAccountController;
 use App\Http\Controllers\PaymentController;
@@ -80,6 +81,12 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_mikrotik_routers')->group(function () {
+        Route::get('olt-onus/olts/create', [OltOnuController::class, 'createOlt'])->name('olt-onus.olts.create');
+        Route::post('olt-onus/olts', [OltOnuController::class, 'storeOlt'])->name('olt-onus.olts.store');
+        Route::get('olt-onus/olts/{oltDevice}/edit', [OltOnuController::class, 'editOlt'])->name('olt-onus.olts.edit');
+        Route::put('olt-onus/olts/{oltDevice}', [OltOnuController::class, 'updateOlt'])->name('olt-onus.olts.update');
+        Route::post('olt-onus/olts/{oltDevice}/refresh', [OltOnuController::class, 'refresh'])->name('olt-onus.olts.refresh');
+        Route::get('olt-onus', [OltOnuController::class, 'index'])->name('olt-onus.index');
         Route::get('mikrotik-routers/{mikrotikRouter}/connection-status', [MikrotikRouterController::class, 'connectionStatus'])->name('mikrotik-routers.connection-status');
         Route::resource('mikrotik-routers', MikrotikRouterController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
     });

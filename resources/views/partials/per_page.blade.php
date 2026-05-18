@@ -12,8 +12,8 @@
     <label class="per-page-label">
         Entries
         <select name="per_page" class="per-page-select" onchange="this.form.submit()">
-            @foreach ([25, 50, 100, 200] as $option)
-                <option value="{{ $option }}" @selected((int) request('per_page', 50) === $option)>{{ $option }}</option>
+            @foreach (($perPageOptions ?? [25, 50, 100, 200]) as $option)
+                <option value="{{ $option }}" @selected((int) request('per_page', $perPageDefault ?? 50) === $option)>{{ $option }}</option>
             @endforeach
         </select>
     </label>
