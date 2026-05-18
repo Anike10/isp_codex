@@ -92,6 +92,7 @@ class OltOnuController extends Controller
                 'onu_power_command' => 'show optical-info',
                 'onu_alarm_command' => 'show onu-info-alarm {onu_id}',
                 'onu_vlan_command' => 'show port-vlan',
+                'onu_mac_command' => 'show mac-address epon all',
                 'status' => 'active',
                 'notes' => 'Read-only polling only. Do not use set/add/delete/save/reboot commands.',
             ]),
@@ -165,6 +166,10 @@ class OltOnuController extends Controller
             $showCommands[] = $oltDevice->onu_vlan_command;
         }
 
+        if ($oltDevice->onu_mac_command) {
+            $showCommands[] = $oltDevice->onu_mac_command;
+        }
+
         $blockedCommand = $this->firstUnsafeShowCommand($showCommands);
 
         if ($blockedCommand) {
@@ -196,6 +201,10 @@ class OltOnuController extends Controller
             }
 
             $outputs = [];
+
+            if ($oltDevice->onu_mac_command && $oltDevice->protocol_profile === 'hsgq_epon') {
+                $outputs[] = $client->command($oltDevice->onu_mac_command);
+            }
 
             foreach ($ponPorts as $ponPort) {
                 $client->command("interface epon {$ponPort}");
@@ -338,6 +347,7 @@ class OltOnuController extends Controller
             'onu_power_command' => ['required', 'string', 'max:255'],
             'onu_alarm_command' => ['nullable', 'string', 'max:255'],
             'onu_vlan_command' => ['nullable', 'string', 'max:255'],
+            'onu_mac_command' => ['nullable', 'string', 'max:255'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
             'notes' => ['nullable', 'string'],
         ]);
@@ -394,6 +404,7 @@ class OltOnuController extends Controller
             'raw_live_output',
             'raw_interface_config',
             'port_vlans',
+            'learned_macs',
             'last_registered_at',
             'last_deregistered_at',
             'last_deregister_reason',

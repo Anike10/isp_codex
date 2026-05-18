@@ -143,4 +143,30 @@ OUTPUT;
             ['port' => 3, 'mode' => 'transparent', 'vlan' => null, 'priority' => null],
         ], $records[0]['port_vlans']);
     }
+
+    public function test_it_parses_hsgq_epon_learned_mac_output(): void
+    {
+        $output = <<<'OUTPUT'
+show mac-address epon all
+Total PON mac address learning: 404
+----------------------------------------------------------------------------------------------------
+ PORT   ONU ID    MAC                     VLAN    MAC-Type  ONU-Name
+----------------------------------------------------------------------------------------------------
+ PON01  21        d4:01:c3:d7:dd:ed       999     dynamic   IBBL Kushtia Drick
+ PON01  21        aa:bb:cc:dd:ee:ff       21      dynamic   IBBL Kushtia Drick
+ PON02  3         98:25:4a:aa:13:da       1       dynamic   Kpi_Office_huawi
+OUTPUT;
+
+        $records = (new OltLiveOutputParser())->parse($output);
+
+        $this->assertCount(2, $records);
+        $this->assertSame(1, $records[0]['pon_port']);
+        $this->assertSame(21, $records[0]['onu_id']);
+        $this->assertSame([
+            ['mac' => 'd4:01:c3:d7:dd:ed', 'vlan' => 999, 'type' => 'dynamic', 'onu_name' => 'IBBL Kushtia Drick'],
+            ['mac' => 'aa:bb:cc:dd:ee:ff', 'vlan' => 21, 'type' => 'dynamic', 'onu_name' => 'IBBL Kushtia Drick'],
+        ], $records[0]['learned_macs']);
+        $this->assertSame(2, $records[1]['pon_port']);
+        $this->assertSame(3, $records[1]['onu_id']);
+    }
 }

@@ -99,6 +99,7 @@
             <th>OLT</th>
             <th>Name</th>
             <th>MAC</th>
+            <th>Device MACs</th>
             <th>Type</th>
             <th>Status</th>
             <th>Power</th>
@@ -116,6 +117,18 @@
                 <td>{{ $onu->oltDevice?->name ?? $onu->olt_name ?? 'N/A' }}</td>
                 <td>{{ $onu->name ?: 'N/A' }}</td>
                 <td>{{ $onu->mac_address ?: 'N/A' }}</td>
+                <td>
+                    @forelse (($onu->learned_macs ?? []) as $learnedMac)
+                        <div>
+                            <span class="badge">{{ $learnedMac['mac'] ?? '?' }}</span>
+                            @if (isset($learnedMac['vlan']))
+                                <span class="muted">VLAN {{ $learnedMac['vlan'] }}</span>
+                            @endif
+                        </div>
+                    @empty
+                        <span class="muted">No learned MAC</span>
+                    @endforelse
+                </td>
                 <td>{{ $onu->onu_type ?: 'N/A' }}</td>
                 <td><span class="badge {{ in_array($onu->status, ['online', 'active'], true) ? 'active' : ($onu->status ? 'pending' : 'inactive') }}">{{ $onu->status ?: 'unknown' }}</span></td>
                 <td>
@@ -149,7 +162,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="12">No live ONU data yet. Add an OLT and refresh live data.</td>
+                <td colspan="13">No live ONU data yet. Add an OLT and refresh live data.</td>
             </tr>
         @endforelse
     </tbody>

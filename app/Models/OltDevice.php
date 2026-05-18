@@ -27,6 +27,7 @@ class OltDevice extends Model
         'onu_power_command',
         'onu_alarm_command',
         'onu_vlan_command',
+        'onu_mac_command',
         'status',
         'last_polled_at',
         'last_error',

@@ -87,6 +87,11 @@
             <input id="onu_vlan_command" name="onu_vlan_command" value="{{ old('onu_vlan_command', $oltDevice->onu_vlan_command) }}">
             <div class="muted" style="margin-top:6px">For HSGQ EPON this runs inside interface onu PON/ONU context.</div>
         </div>
+        <div>
+            <label for="onu_mac_command">ONU Learned MAC Command</label>
+            <input id="onu_mac_command" name="onu_mac_command" value="{{ old('onu_mac_command', $oltDevice->onu_mac_command) }}">
+            <div class="muted" style="margin-top:6px">For HSGQ EPON use show mac-address epon all.</div>
+        </div>
         <div class="full">
             <label for="notes">Notes</label>
             <textarea id="notes" name="notes">{{ old('notes', $oltDevice->notes) }}</textarea>
@@ -118,5 +123,6 @@ document.getElementById('protocol_profile').addEventListener('change', event => 
     document.getElementById('onu_power_command').value ||= 'show optical-info';
     document.getElementById('onu_alarm_command').value ||= 'show onu-info-alarm {onu_id}';
     document.getElementById('onu_vlan_command').value ||= 'show port-vlan';
+    document.getElementById('onu_mac_command').value ||= 'show mac-address epon all';
 });
 </script>

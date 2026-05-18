@@ -45,6 +45,18 @@ class OltLiveOutputParser
                 continue;
             }
 
+            if ($record = $this->parseLearnedMacLine($line)) {
+                $current = $this->key($record['pon_port'], $record['onu_id']);
+                $records[$current] = $this->mergeRecord($records[$current] ?? [], [
+                    'pon_port' => $record['pon_port'],
+                    'onu_id' => $record['onu_id'],
+                    'learned_macs' => [$record['learned_mac']['mac'] => $record['learned_mac']],
+                ]);
+                $records[$current]['raw_live_output'] = trim(($records[$current]['raw_live_output'] ?? '')."\n".$line);
+
+                continue;
+            }
+
             if ($this->isNoiseLine($line)) {
                 continue;
             }
@@ -129,6 +141,10 @@ class OltLiveOutputParser
         return array_map(function (array $record): array {
             if (isset($record['port_vlans'])) {
                 $record['port_vlans'] = array_values($record['port_vlans']);
+            }
+
+            if (isset($record['learned_macs'])) {
+                $record['learned_macs'] = array_values($record['learned_macs']);
             }
 
             return $record;
@@ -251,6 +267,31 @@ class OltLiveOutputParser
         ];
     }
 
+    private function parseLearnedMacLine(string $line): ?array
+    {
+        if (! preg_match('/^PON\s*0?([1-8])\s+(\d{1,3})\s+([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s+(\d+)\s+(\S+)(?:\s+(.+?))?\s*$/i', $line, $match)) {
+            return null;
+        }
+
+        $ponPort = (int) $match[1];
+        $onuId = (int) $match[2];
+
+        if (! $this->isValidPonOnu($ponPort, $onuId)) {
+            return null;
+        }
+
+        return [
+            'pon_port' => $ponPort,
+            'onu_id' => $onuId,
+            'learned_mac' => [
+                'mac' => strtolower($match[3]),
+                'vlan' => (int) $match[4],
+                'type' => strtolower($match[5]),
+                'onu_name' => trim($match[6] ?? ''),
+            ],
+        ];
+    }
+
     private function parseTimestamp(string $value): ?Carbon
     {
         return Carbon::createFromFormat('Y/m/d H:i:s', $value);
@@ -275,6 +316,10 @@ class OltLiveOutputParser
 
     private function mergeRecord(array $existing, array $incoming): array
     {
+        if (isset($incoming['learned_macs'])) {
+            $incoming['learned_macs'] = $this->mergeLearnedMacs($existing['learned_macs'] ?? [], $incoming['learned_macs']);
+        }
+
         foreach (['last_registered_at', 'last_deregistered_at'] as $field) {
             if (! isset($incoming[$field], $existing[$field]) || $incoming[$field]->greaterThanOrEqualTo($existing[$field])) {
                 continue;
@@ -288,6 +333,15 @@ class OltLiveOutputParser
         }
 
         return array_merge($existing, $incoming);
+    }
+
+    private function mergeLearnedMacs(array $existing, array $incoming): array
+    {
+        foreach ($incoming as $mac => $entry) {
+            $existing[$mac] = $entry;
+        }
+
+        return $existing;
     }
 
     private function normalizeAlarmReason(string $message): string
