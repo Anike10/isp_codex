@@ -112,17 +112,20 @@ document.getElementById('access_method').addEventListener('change', event => {
 document.getElementById('port').addEventListener('input', event => {
     event.target.dataset.touched = '1';
 });
+const profileDefaults = @json($profileDefaults ?? []);
+
 document.getElementById('protocol_profile').addEventListener('change', event => {
-    if (event.target.value !== 'hsgq_epon') {
+    const defaults = profileDefaults[event.target.value];
+    if (!defaults) {
         return;
     }
 
-    document.getElementById('brand').value ||= 'HSGQ';
-    document.getElementById('read_context_commands').value ||= 'enable\nconfig';
-    document.getElementById('onu_status_command').value ||= 'show onu-info all';
-    document.getElementById('onu_power_command').value ||= 'show optical-info';
-    document.getElementById('onu_alarm_command').value ||= 'show onu-info-alarm {onu_id}';
-    document.getElementById('onu_vlan_command').value ||= 'show port-vlan';
-    document.getElementById('onu_mac_command').value ||= 'show mac-address epon all';
+    document.getElementById('brand').value ||= defaults.brand || '';
+    document.getElementById('read_context_commands').value ||= defaults.read_context_commands || '';
+    document.getElementById('onu_status_command').value ||= defaults.onu_status_command || '';
+    document.getElementById('onu_power_command').value ||= defaults.onu_power_command || '';
+    document.getElementById('onu_alarm_command').value ||= defaults.onu_alarm_command || '';
+    document.getElementById('onu_vlan_command').value ||= defaults.onu_vlan_command || '';
+    document.getElementById('onu_mac_command').value ||= defaults.onu_mac_command || '';
 });
 </script>

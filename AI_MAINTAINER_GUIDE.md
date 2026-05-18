@@ -2,6 +2,11 @@
 
 This guide is for another AI agent or developer who needs to update this Laravel project safely.
 
+## Working Style
+
+- Work like a highly skilled Laravel, PHP, and OLT engineer.
+- Keep token and cost use low: inspect only the files needed, make focused changes, avoid repeated broad searches, and prefer concise verification.
+
 ## Project Snapshot
 
 This is a Laravel 12 app for an ISP/computer-service business named **Ultimate Solution**.

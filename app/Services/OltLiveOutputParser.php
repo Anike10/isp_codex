@@ -13,6 +13,7 @@ class OltLiveOutputParser
 
         $records = [];
         $current = null;
+        $detailPonPort = null;
 
         foreach (preg_split('/\R/', $output) ?: [] as $line) {
             $line = trim($line);
@@ -22,6 +23,14 @@ class OltLiveOutputParser
             }
 
             if ($record = $this->parseHsgqOpticalInfoLine($line)) {
+                $current = $this->key($record['pon_port'], $record['onu_id']);
+                $records[$current] = $this->mergeRecord($records[$current] ?? [], $record);
+                $records[$current]['raw_live_output'] = trim(($records[$current]['raw_live_output'] ?? '')."\n".$line);
+
+                continue;
+            }
+
+            if ($record = $this->parseHsgqGponOpticalLine($line)) {
                 $current = $this->key($record['pon_port'], $record['onu_id']);
                 $records[$current] = $this->mergeRecord($records[$current] ?? [], $record);
                 $records[$current]['raw_live_output'] = trim(($records[$current]['raw_live_output'] ?? '')."\n".$line);
@@ -45,13 +54,31 @@ class OltLiveOutputParser
                 continue;
             }
 
-            if ($record = $this->parseLearnedMacLine($line)) {
+            if ($record = $this->parseGponServicePortLine($line)) {
                 $current = $this->key($record['pon_port'], $record['onu_id']);
                 $records[$current] = $this->mergeRecord($records[$current] ?? [], [
                     'pon_port' => $record['pon_port'],
                     'onu_id' => $record['onu_id'],
-                    'learned_macs' => [$record['learned_mac']['mac'] => $record['learned_mac']],
+                    'port_vlans' => [$record['port_vlan_key'] => $record['port_vlan']],
                 ]);
+                $records[$current]['raw_live_output'] = trim(($records[$current]['raw_live_output'] ?? '')."\n".$line);
+
+                continue;
+            }
+
+            if ($record = $this->parseLearnedMacLine($line)) {
+                $current = $this->key($record['pon_port'], $record['onu_id']);
+                $incoming = [
+                    'pon_port' => $record['pon_port'],
+                    'onu_id' => $record['onu_id'],
+                    'learned_macs' => [$record['learned_mac']['mac'] => $record['learned_mac']],
+                ];
+
+                if (isset($record['port_vlan'])) {
+                    $incoming['port_vlans'] = [$record['port_vlan_key'] => $record['port_vlan']];
+                }
+
+                $records[$current] = $this->mergeRecord($records[$current] ?? [], $incoming);
                 $records[$current]['raw_live_output'] = trim(($records[$current]['raw_live_output'] ?? '')."\n".$line);
 
                 continue;
@@ -61,9 +88,48 @@ class OltLiveOutputParser
                 continue;
             }
 
+            if (preg_match('/^PON\s+ID\s*:\s*(\d+)/i', $line, $match)) {
+                $detailPonPort = (int) $match[1];
+
+                continue;
+            }
+
+            if ($detailPonPort !== null && preg_match('/^ONU\s+ID\s*:\s*(\d+)/i', $line, $match)) {
+                $onuId = (int) $match[1];
+
+                if (! $this->isValidPonOnu($detailPonPort, $onuId)) {
+                    $current = null;
+                    continue;
+                }
+
+                $current = $this->key($detailPonPort, $onuId);
+                $records[$current] ??= [
+                    'pon_port' => $detailPonPort,
+                    'onu_id' => $onuId,
+                ];
+
+                continue;
+            }
+
             if ($record = $this->parseHsgqOnuInfoLine($line)) {
                 $current = $this->key($record['pon_port'], $record['onu_id']);
                 $records[$current] = $this->mergeRecord($records[$current] ?? [], $record);
+                $records[$current]['raw_live_output'] = trim(($records[$current]['raw_live_output'] ?? '')."\n".$line);
+
+                continue;
+            }
+
+            if ($record = $this->parseHsgqGponOntInfoLine($line)) {
+                $current = $this->key($record['pon_port'], $record['onu_id']);
+                $records[$current] = $this->mergeRecord($records[$current] ?? [], $record);
+                $records[$current]['raw_live_output'] = trim(($records[$current]['raw_live_output'] ?? '')."\n".$line);
+
+                continue;
+            }
+
+            if ($detail = $this->parseOntDetailLine($line, $records[$current] ?? [])) {
+                $current = $this->key($detail['pon_port'], $detail['onu_id']);
+                $records[$current] = $this->mergeRecord($records[$current] ?? [], $detail);
                 $records[$current]['raw_live_output'] = trim(($records[$current]['raw_live_output'] ?? '')."\n".$line);
 
                 continue;
@@ -190,9 +256,55 @@ class OltLiveOutputParser
         ];
     }
 
+    private function parseHsgqGponOntInfoLine(string $line): ?array
+    {
+        if (! preg_match('/^\s*(\d+)\/(\d+)\s+(\S+)\s+(Active|Inactive)\s+(\S+)\s+(\S+)\s+\S+\s+(.*?)\s{2,}(.+?)\s*$/i', $line, $match)) {
+            return null;
+        }
+
+        if (! $this->isValidPonOnu((int) $match[1], (int) $match[2])) {
+            return null;
+        }
+
+        $description = trim($match[7]);
+
+        $record = [
+            'pon_port' => (int) $match[1],
+            'onu_id' => (int) $match[2],
+            'mac_address' => $match[3],
+            'status' => strtolower($match[5]) === 'online' ? 'online' : strtolower($match[4]),
+            'name' => trim($match[8]),
+        ];
+
+        if ($description !== '') {
+            $record['description'] = $description;
+            $record['last_deregister_reason'] = $description;
+        }
+
+        return $record;
+    }
+
+    private function parseHsgqGponOpticalLine(string $line): ?array
+    {
+        if (! preg_match('/^\s*(\d+)\/(\d+)\s+(\S+)\s+.*?mA\s+(-?(?:inf|\d+(?:\.\d+)?))\s*dBm\s+(-?(?:inf|\d+(?:\.\d+)?))\s*dBm/i', $line, $match)) {
+            return null;
+        }
+
+        if (! $this->isValidPonOnu((int) $match[1], (int) $match[2]) || strtolower($match[5]) === '-inf') {
+            return null;
+        }
+
+        return [
+            'pon_port' => (int) $match[1],
+            'onu_id' => (int) $match[2],
+            'mac_address' => $match[3],
+            'rx_power_dbm' => (float) $match[5],
+        ];
+    }
+
     private function parseAlarmHistoryLine(string $line): ?array
     {
-        if (! preg_match('/^\[(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\]\s+(Info|Warning):\s+ONU\s+([1-8])\/(\d{1,3})\s+([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s+(.+?)(?:,\s*Reason:\s*(.*))?\s*$/i', $line, $match)) {
+        if (! preg_match('/^\[(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\]\s+(Info|Warning):\s+(?:ONU|ONT)\s+(\d{1,2})\/(\d{1,3})\s+(\S+)\s+(.+?)(?:,\s*Reason:\s*(.*))?\s*$/i', $line, $match)) {
             return null;
         }
 
@@ -208,7 +320,7 @@ class OltLiveOutputParser
         $record = [
             'pon_port' => $ponPort,
             'onu_id' => $onuId,
-            'mac_address' => strtolower($match[5]),
+            'mac_address' => str_contains($match[5], ':') ? strtolower($match[5]) : $match[5],
         ];
 
         if (preg_match('/\b(link\s+up|authorization\s+success)\b/i', $message)) {
@@ -225,7 +337,7 @@ class OltLiveOutputParser
 
     private function parsePortVlanContextLine(string $line): ?array
     {
-        if (! preg_match('/^ONU\s*:\s*([1-8])[:\/](\d{1,3})\b/i', $line, $match)) {
+        if (! preg_match('/^(?:ONU|ONT)\s*:\s*([1-8])[:\/](\d{1,3})\b/i', $line, $match)) {
             return null;
         }
 
@@ -267,9 +379,67 @@ class OltLiveOutputParser
         ];
     }
 
+    private function parseGponServicePortLine(string $line): ?array
+    {
+        if (! preg_match('/^\s*\d+\s+(\d+)\s+PON0?(\d{1,2})\s+(\d{1,3})\s+(\d+)\s+/i', $line, $match)) {
+            return null;
+        }
+
+        $ponPort = (int) $match[2];
+        $onuId = (int) $match[3];
+
+        if (! $this->isValidPonOnu($ponPort, $onuId)) {
+            return null;
+        }
+
+        return [
+            'pon_port' => $ponPort,
+            'onu_id' => $onuId,
+            'port_vlan' => [
+                'port' => (int) $match[4],
+                'mode' => 'service-port',
+                'vlan' => (int) $match[1],
+                'priority' => null,
+                'service_port' => (int) trim(strtok($line, ' ')),
+            ],
+            'port_vlan_key' => 'vlan-'.(int) $match[1],
+        ];
+    }
+
     private function parseLearnedMacLine(string $line): ?array
     {
-        if (! preg_match('/^PON\s*0?([1-8])\s+(\d{1,3})\s+([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s+(\d+)\s+(\S+)(?:\s+(.+?))?\s*$/i', $line, $match)) {
+        if (preg_match('/^\s*(\d+)\s+([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s+(\d+)\s+PON0?(\d{1,2})\s+(\d{1,3})\s+(\d+)\s+(\S+)(?:\s+(.+?))?\s*$/i', $line, $match)) {
+            $ponPort = (int) $match[4];
+            $onuId = (int) $match[5];
+
+            if (! $this->isValidPonOnu($ponPort, $onuId)) {
+                return null;
+            }
+
+            return [
+                'pon_port' => $ponPort,
+                'onu_id' => $onuId,
+                'learned_mac' => [
+                    'mac' => strtolower($match[2]),
+                    'vlan' => (int) $match[3],
+                    'type' => strtolower($match[7]),
+                    'onu_name' => trim($match[8] ?? ''),
+                    'service_port' => (int) $match[1],
+                    'gemport' => (int) $match[6],
+                ],
+                'port_vlan' => [
+                    'port' => 1,
+                    'mode' => 'learned-mac',
+                    'vlan' => (int) $match[3],
+                    'priority' => null,
+                    'service_port' => (int) $match[1],
+                    'gemport' => (int) $match[6],
+                ],
+                'port_vlan_key' => 'vlan-'.(int) $match[3],
+            ];
+        }
+
+        if (! preg_match('/^(?:PON|EPON|GPON)\s*0?([1-8])\s+(\d{1,3})\s+([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s+(\d+)\s+(\S+)(?:\s+(.+?))?\s*$/i', $line, $match)) {
             return null;
         }
 
@@ -292,6 +462,48 @@ class OltLiveOutputParser
         ];
     }
 
+    private function parseOntDetailLine(string $line, array $currentRecord): ?array
+    {
+        return $this->parseOntDetailValueLine($line, $currentRecord);
+    }
+
+    private function parseOntDetailValueLine(string $line, array $currentRecord): ?array
+    {
+        if (! isset($currentRecord['pon_port'], $currentRecord['onu_id'])) {
+            return null;
+        }
+
+        $record = [
+            'pon_port' => (int) $currentRecord['pon_port'],
+            'onu_id' => (int) $currentRecord['onu_id'],
+        ];
+
+        if (preg_match('/^ONU\s+Name\s*:\s*(.+)$/i', $line, $match)) {
+            $record['name'] = trim($match[1]);
+        } elseif (preg_match('/^SerialNumber\s*:\s*(\S+)/i', $line, $match)) {
+            $record['mac_address'] = $match[1];
+        } elseif (preg_match('/^Distance\s*:\s*(\d+)/i', $line, $match)) {
+            $record['distance_m'] = (int) $match[1];
+        } elseif (preg_match('/^Last\s+up\s+Time\s*:\s*(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})/i', $line, $match)) {
+            $record['last_registered_at'] = $this->parseTimestamp($match[1]);
+        } elseif (preg_match('/^Last\s+down\s+Time\s*:\s*(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})/i', $line, $match)) {
+            $record['last_deregistered_at'] = $this->parseTimestamp($match[1]);
+        } elseif (preg_match('/^Last\s+down\s+cause\s*:\s*(.+)$/i', $line, $match)) {
+            $reason = trim($match[1]);
+
+            if ($reason === '') {
+                return null;
+            }
+
+            $record['last_deregister_reason'] = $reason;
+            $record['description'] = $reason;
+        } else {
+            return null;
+        }
+
+        return $record;
+    }
+
     private function parseTimestamp(string $value): ?Carbon
     {
         return Carbon::createFromFormat('Y/m/d H:i:s', $value);
@@ -304,7 +516,7 @@ class OltLiveOutputParser
 
     private function isValidPonOnu(int $ponPort, int $onuId): bool
     {
-        return $ponPort >= 1 && $ponPort <= 8 && $onuId >= 1 && $onuId <= 256;
+        return $ponPort >= 1 && $ponPort <= 16 && $onuId >= 0 && $onuId <= 256;
     }
 
     private function isNoiseLine(string $line): bool
@@ -318,6 +530,10 @@ class OltLiveOutputParser
     {
         if (isset($incoming['learned_macs'])) {
             $incoming['learned_macs'] = $this->mergeLearnedMacs($existing['learned_macs'] ?? [], $incoming['learned_macs']);
+        }
+
+        if (isset($incoming['port_vlans'])) {
+            $incoming['port_vlans'] = $this->mergePortVlans($existing['port_vlans'] ?? [], $incoming['port_vlans']);
         }
 
         foreach (['last_registered_at', 'last_deregistered_at'] as $field) {
@@ -339,6 +555,19 @@ class OltLiveOutputParser
     {
         foreach ($incoming as $mac => $entry) {
             $existing[$mac] = $entry;
+        }
+
+        return $existing;
+    }
+
+    private function mergePortVlans(array $existing, array $incoming): array
+    {
+        foreach ($incoming as $key => $entry) {
+            if (isset($existing[$key]) && ($entry['mode'] ?? null) === 'learned-mac') {
+                continue;
+            }
+
+            $existing[$key] = $entry;
         }
 
         return $existing;

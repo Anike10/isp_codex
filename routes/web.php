@@ -86,6 +86,16 @@ Route::middleware('auth')->group(function () {
         Route::get('olt-onus/olts/{oltDevice}/edit', [OltOnuController::class, 'editOlt'])->name('olt-onus.olts.edit');
         Route::put('olt-onus/olts/{oltDevice}', [OltOnuController::class, 'updateOlt'])->name('olt-onus.olts.update');
         Route::post('olt-onus/olts/{oltDevice}/refresh', [OltOnuController::class, 'refresh'])->name('olt-onus.olts.refresh');
+        Route::post('olt-onus/olts/{oltDevice}/save-config', [OltOnuController::class, 'saveOltConfig'])->name('olt-onus.olts.save-config');
+        Route::get('olt-onus/deny-list', [OltOnuController::class, 'denyList'])->name('olt-onus.deny-list');
+        Route::get('olt-onus/auto-discovery', [OltOnuController::class, 'autoDiscoveryList'])->name('olt-onus.auto-discovery');
+        Route::post('olt-onus/auto-discovery/add', [OltOnuController::class, 'addDiscoveredOnu'])->name('olt-onus.auto-discovery.add');
+        Route::get('olt-onus/protocol-profiles', [OltOnuController::class, 'protocolProfiles'])->name('olt-onus.protocol-profiles.index');
+        Route::get('olt-onus/protocol-profiles/create', [OltOnuController::class, 'createProtocolProfile'])->name('olt-onus.protocol-profiles.create');
+        Route::post('olt-onus/protocol-profiles', [OltOnuController::class, 'storeProtocolProfile'])->name('olt-onus.protocol-profiles.store');
+        Route::get('olt-onus/protocol-profiles/{oltProtocolProfile}/edit', [OltOnuController::class, 'editProtocolProfile'])->name('olt-onus.protocol-profiles.edit');
+        Route::put('olt-onus/protocol-profiles/{oltProtocolProfile}', [OltOnuController::class, 'updateProtocolProfile'])->name('olt-onus.protocol-profiles.update');
+        Route::patch('olt-onus/{oltOnu}/vlan', [OltOnuController::class, 'updateVlan'])->name('olt-onus.vlan.update');
         Route::get('olt-onus', [OltOnuController::class, 'index'])->name('olt-onus.index');
         Route::get('mikrotik-routers/{mikrotikRouter}/connection-status', [MikrotikRouterController::class, 'connectionStatus'])->name('mikrotik-routers.connection-status');
         Route::resource('mikrotik-routers', MikrotikRouterController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);

@@ -181,6 +181,9 @@
                         @if (auth()->user()?->hasPermission('manage_mikrotik_routers'))
                             <a href="{{ route('mikrotik-routers.index') }}">MikroTik Routers</a>
                             <a href="{{ route('olt-onus.index') }}">OLT ONUs</a>
+                            <a href="{{ route('olt-onus.deny-list') }}">ONU Deny List</a>
+                            <a href="{{ route('olt-onus.auto-discovery') }}">Auto Discovery List</a>
+                            <a href="{{ route('olt-onus.protocol-profiles.index') }}">OLT Protocol/Profile</a>
                         @endif
                     </div>
                 </details>

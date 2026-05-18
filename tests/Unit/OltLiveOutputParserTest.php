@@ -118,6 +118,24 @@ OUTPUT;
         $this->assertSame('Laser out', $records[0]['last_deregister_reason']);
     }
 
+    public function test_it_parses_hsgq_gpon_ont_alarm_history(): void
+    {
+        $output = <<<'OUTPUT'
+[2026/05/18 17:10:11]  Info: ONT 1/12 XPONa4388257 ONT authorization success, Reason:
+[2026/05/18 17:08:05]  Warning: ONT 1/12 XPONa4388257 ONT deregister, Reason:LOS
+OUTPUT;
+
+        $records = (new OltLiveOutputParser())->parse($output);
+
+        $this->assertCount(1, $records);
+        $this->assertSame(1, $records[0]['pon_port']);
+        $this->assertSame(12, $records[0]['onu_id']);
+        $this->assertSame('XPONa4388257', $records[0]['mac_address']);
+        $this->assertSame('2026-05-18 17:10:11', $records[0]['last_registered_at']->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-05-18 17:08:05', $records[0]['last_deregistered_at']->format('Y-m-d H:i:s'));
+        $this->assertSame('LOS', $records[0]['last_deregister_reason']);
+    }
+
     public function test_it_parses_onu_port_vlan_output(): void
     {
         $output = <<<'OUTPUT'
@@ -168,5 +186,108 @@ OUTPUT;
         ], $records[0]['learned_macs']);
         $this->assertSame(2, $records[1]['pon_port']);
         $this->assertSame(3, $records[1]['onu_id']);
+    }
+
+    public function test_it_parses_hsgq_gpon_ont_info_and_optical_output(): void
+    {
+        $output = <<<'OUTPUT'
+PON/ONU  Serial            State     Run        Config    Match     Last Link         ONT
+         Number                      State      State     State     down reason       Name
+1/0      D0111d106890      Active    Online     normal    Initial                     tisha_Surovi 13.3
+1/12     XPONa4388257      Inactive  Initial    initial   Initial   LOS               Sabbir_Vagina
+PON/ONU    ONT-SN    Temp Voltage    Bias   Tx power     Rx power     OLT Rx       ONT-Name
+    1/0 D0111d106890 41 C 3.34 V   13.05 mA 1.8720 dBm   -13.4500 dBm -inf dBm     tisha_Surovi 13.3
+OUTPUT;
+
+        $records = (new OltLiveOutputParser())->parse($output);
+
+        $this->assertCount(2, $records);
+        $this->assertSame(1, $records[0]['pon_port']);
+        $this->assertSame(0, $records[0]['onu_id']);
+        $this->assertSame('D0111d106890', $records[0]['mac_address']);
+        $this->assertSame('online', $records[0]['status']);
+        $this->assertSame('tisha_Surovi 13.3', $records[0]['name']);
+        $this->assertSame(-13.45, $records[0]['rx_power_dbm']);
+        $this->assertSame(12, $records[1]['onu_id']);
+        $this->assertSame('XPONa4388257', $records[1]['mac_address']);
+        $this->assertSame('inactive', $records[1]['status']);
+        $this->assertSame('LOS', $records[1]['description']);
+    }
+
+    public function test_it_parses_hsgq_gpon_ont_vlan_context_output(): void
+    {
+        $output = <<<'OUTPUT'
+show port-vlan
+ ONT : 1:12
+----------------------------------------------------------------------------------------------------
+ Port ID         Mode            Default Vlan
+----------------------------------------------------------------------------------------------------
+ port1           tag             id:1108          pri:0
+ port2           transparent
+----------------------------------------------------------------------------------------------------
+OUTPUT;
+
+        $records = (new OltLiveOutputParser())->parse($output);
+
+        $this->assertCount(1, $records);
+        $this->assertSame(1, $records[0]['pon_port']);
+        $this->assertSame(12, $records[0]['onu_id']);
+        $this->assertSame([
+            ['port' => 1, 'mode' => 'tag', 'vlan' => 1108, 'priority' => 0],
+            ['port' => 2, 'mode' => 'transparent', 'vlan' => null, 'priority' => null],
+        ], $records[0]['port_vlans']);
+    }
+
+    public function test_it_parses_hsgq_gpon_service_port_and_learned_mac_tables(): void
+    {
+        $output = <<<'OUTPUT'
+show service-port all
+ INDEX VLAN PORT  ONT GEM  FLOW FLOW ETHER TAG           INNER STATE ADMIN   INSTALL MAC    TRAFFIC
+ 10    41   PON01 3   1    --   --   --    --            --    Up    Enable  Auto    --     0
+show mac-address all
+ SVP   MAC                 VLAN  Port    Ont  Gem   MAC-Type    ONT-Name
+ 10    80:af:ca:72:d3:d1   41    PON01   3    1     dynamic     Munna_Mamun
+ 39    80:af:ca:ba:ad:f3   21    PON02   3    1     dynamic     KPS_Prijom
+OUTPUT;
+
+        $records = (new OltLiveOutputParser())->parse($output);
+
+        $this->assertCount(2, $records);
+        $this->assertSame(1, $records[0]['pon_port']);
+        $this->assertSame(3, $records[0]['onu_id']);
+        $this->assertSame([
+            ['port' => 1, 'mode' => 'service-port', 'vlan' => 41, 'priority' => null, 'service_port' => 10],
+        ], $records[0]['port_vlans']);
+        $this->assertSame([
+            ['mac' => '80:af:ca:72:d3:d1', 'vlan' => 41, 'type' => 'dynamic', 'onu_name' => 'Munna_Mamun', 'service_port' => 10, 'gemport' => 1],
+        ], $records[0]['learned_macs']);
+        $this->assertSame(2, $records[1]['pon_port']);
+    }
+
+    public function test_it_parses_hsgq_gpon_ont_detail_times(): void
+    {
+        $output = <<<'OUTPUT'
+show ont-info 3
+ PON ID                        : 1
+ ONU ID                        : 3
+ ONU Name                      : Munna_Mamun
+ SerialNumber                  : DF1Ba6f9799d
+ Distance                      : 244
+ Last up Time                  : 2026/05/18 21:49:30
+ Last down Time                : 2026/05/18 21:39:14
+ Last down cause               : LOS
+OUTPUT;
+
+        $records = (new OltLiveOutputParser())->parse($output);
+
+        $this->assertCount(1, $records);
+        $this->assertSame(1, $records[0]['pon_port']);
+        $this->assertSame(3, $records[0]['onu_id']);
+        $this->assertSame('Munna_Mamun', $records[0]['name']);
+        $this->assertSame('DF1Ba6f9799d', $records[0]['mac_address']);
+        $this->assertSame(244, $records[0]['distance_m']);
+        $this->assertSame('2026-05-18 21:49:30', $records[0]['last_registered_at']->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-05-18 21:39:14', $records[0]['last_deregistered_at']->format('Y-m-d H:i:s'));
+        $this->assertSame('LOS', $records[0]['last_deregister_reason']);
     }
 }
