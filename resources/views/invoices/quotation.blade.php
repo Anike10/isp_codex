@@ -31,6 +31,7 @@
         table { width:100%; border-collapse:collapse; margin-top:12px; }
         th, td { border:1px solid var(--line); padding:9px 10px; vertical-align:top; }
         th { background:var(--brand); color:#fff; text-transform:uppercase; font-size:12px; }
+        tbody tr:nth-child(even) td { background:#f4f7fb; }
         .center { text-align:center; }
         .right { text-align:right; }
         .summary { display:grid; grid-template-columns:1fr 74mm; gap:18px; margin-top:16px; align-items:start; }
@@ -49,6 +50,7 @@
         @page { size:A4; margin:0; }
         @media print {
             body { background:#fff; }
+            table, th, td { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
             .toolbar { display:none; }
             .page { width:210mm; min-height:287mm; margin:0; padding:12mm 14mm 10mm; box-shadow:none; page-break-after:avoid; break-after:avoid; }
             .signatures { margin-top:20mm; }

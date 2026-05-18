@@ -26,6 +26,7 @@
         .box { border:1px solid var(--line); border-radius:6px; overflow:hidden; }
         .box h3 { background:var(--soft); border-bottom:1px solid var(--line); padding:8px 10px; font-size:12px; text-transform:uppercase; color:#0b3f31; }
         .box-body { padding:10px; line-height:1.75; }
+        .box-body .kv:nth-child(even) { background:#f4f7fb; }
         .kv { display:grid; grid-template-columns:105px 1fr; column-gap:8px; }
         .muted { color:var(--muted); }
         .strong { font-weight:700; }
@@ -34,6 +35,10 @@
         .signature { border-top:1px solid var(--ink); padding-top:8px; text-align:center; font-weight:700; }
         @media print {
             body { background:#fff; }
+            .box h3, .box-body .kv, .amount-box {
+                -webkit-print-color-adjust:exact;
+                print-color-adjust:exact;
+            }
             .toolbar { display:none; }
             .page { width:auto; min-height:auto; margin:0; padding:10mm; box-shadow:none; }
             @page { size:A5 portrait; margin:8mm; }

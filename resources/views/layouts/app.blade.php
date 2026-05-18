@@ -6,7 +6,7 @@
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <title>{{ $title ?? 'Ultimate Solution' }}</title>
     <style>
-        :root { color-scheme: light; --ink:#172033; --muted:#667085; --line:#d8dee9; --bg:#f4f7fb; --panel:#fff; --brand:#116149; --accent:#1d76c9; --warn:#b45309; --danger:#b42318; }
+        :root { color-scheme: light; --ink:#172033; --muted:#667085; --line:#d8dee9; --bg:#f4f7fb; --panel:#fff; --brand:#116149; --accent:#1d76c9; --warn:#b45309; --danger:#b42318; --zebra:#edf4f8; --zebra-soft:#f7fafc; }
         * { box-sizing: border-box; }
         body { margin:0; font-family: Arial, sans-serif; color:var(--ink); background:var(--bg); }
         a { color:inherit; text-decoration:none; }
@@ -43,11 +43,12 @@
         .btn.light { background:#e8eef7; color:var(--ink); }
         table { width:100%; border-collapse:collapse; background:white; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
         tr[data-href] { cursor:pointer; }
-        tbody tr:nth-child(even) td { background:#edf4f8; }
+        tbody tr:nth-child(even) td { background:var(--zebra); }
         tr[data-href]:hover td { background:#f6faf8; }
         th, td { padding:12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
         th { background:#edf2f7; font-size:13px; text-transform:uppercase; color:#475467; }
         tr:last-child td { border-bottom:0; }
+        .detail-list .detail-row:nth-child(even) { background:var(--zebra-soft); }
         label { display:block; font-weight:700; margin-bottom:6px; }
         input, select, textarea { width:100%; border:1px solid var(--line); border-radius:6px; padding:10px; font:inherit; background:white; }
         textarea { min-height:100px; resize:vertical; }
@@ -99,6 +100,12 @@
             h1 { font-size:24px; }
             .stat strong { font-size:22px; }
             .card { padding:14px; }
+        }
+        @media print {
+            table, th, td, .detail-list .detail-row {
+                -webkit-print-color-adjust:exact;
+                print-color-adjust:exact;
+            }
         }
         @media (max-width: 560px) {
             .app-header { position:static; }

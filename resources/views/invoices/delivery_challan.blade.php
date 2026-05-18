@@ -31,6 +31,7 @@
         table { width:100%; border-collapse:collapse; margin-top:12px; }
         th, td { border:1px solid var(--line); padding:10px; vertical-align:top; }
         th { background:var(--brand); color:#fff; text-transform:uppercase; font-size:12px; }
+        tbody tr:nth-child(even) td { background:#f4f7fb; }
         .center { text-align:center; }
         .notes { margin-top:16px; border:1px solid var(--line); border-radius:6px; padding:10px; line-height:1.7; min-height:76px; }
         .signatures { display:grid; grid-template-columns:1fr 1fr 1fr; gap:28px; margin-top:42mm; }
@@ -42,6 +43,7 @@
         @page { size:A4; margin:0; }
         @media print {
             body { background:#fff; }
+            table, th, td { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
             .toolbar { display:none; }
             .page { width:210mm; min-height:287mm; margin:0; padding:12mm 14mm 10mm; box-shadow:none; page-break-after:avoid; break-after:avoid; }
             .signatures { margin-top:22mm; }

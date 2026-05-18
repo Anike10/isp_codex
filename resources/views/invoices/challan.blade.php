@@ -167,6 +167,10 @@
             letter-spacing: .3px;
         }
 
+        tbody tr:nth-child(even) td {
+            background: #f4f7fb;
+        }
+
         .center { text-align: center; }
         .right { text-align: right; }
 
@@ -259,6 +263,10 @@
 
         @media print {
             body { background: #fff; }
+            table, th, td {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
             .toolbar { display: none; }
             .page {
                 width: 210mm;
