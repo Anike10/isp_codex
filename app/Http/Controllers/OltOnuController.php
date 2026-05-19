@@ -254,12 +254,12 @@ class OltOnuController extends Controller
         return $this->onuUtilityList($request, 'discovery');
     }
 
-    public function addDiscoveredOnu(Request $request)
+    public function addDiscoveredOnu(Request $request, OltLiveOutputParser $parser)
     {
         $data = $request->validate([
             'olt_device_id' => ['required', 'exists:olt_devices,id'],
             'pon_port' => ['required', 'integer', 'min:1', 'max:16'],
-            'onu_id' => ['required', 'integer', 'min:0', 'max:256'],
+            'onu_id' => ['nullable', 'integer', 'min:0', 'max:256'],
             'serial' => ['required', 'string', 'max:64'],
             'name' => ['required', 'string', 'max:255'],
             'vlan' => ['required', 'integer', 'min:1', 'max:4094'],
@@ -268,10 +268,36 @@ class OltOnuController extends Controller
 
         $oltDevice = OltDevice::findOrFail($data['olt_device_id']);
         $profile = $this->protocolProfile($oltDevice);
-        $commands = $this->authorizeOnuCommands($oltDevice, $profile, $data);
+        $existingOnus = null;
+        $existingOnu = null;
+
+        if ($oltDevice->protocol_profile === 'hsgq_gpon') {
+            try {
+                $existingOnus = $this->fetchExistingGponOnus($oltDevice, $parser);
+                $existingOnu = $this->findExistingGponOnuBySerial($existingOnus, $data['serial']);
+            } catch (Throwable $exception) {
+                $existingOnus = null;
+                $existingOnu = null;
+            }
+        }
+
+        if ($existingOnu) {
+            $data['onu_id'] = $existingOnu['onu_id'];
+            $commands = $this->authorizeExistingGponOnuCommands($oltDevice, $profile, $data);
+        } else {
+            $data['onu_id'] = $this->resolveOnuId($oltDevice, (int) $data['pon_port'], $data['onu_id'] ?? null, $existingOnus);
+            $commands = $this->authorizeOnuCommands($oltDevice, $profile, $data);
+        }
+
+        $nameRepair = ['name' => null, 'matched' => false, 'output' => ''];
 
         try {
             $output = $this->runOltWriteCommands($oltDevice, $commands);
+
+            if ($oltDevice->protocol_profile === 'hsgq_gpon') {
+                $nameRepair = $this->verifyAndRepairGponOnuName($oltDevice, $parser, $data);
+                $output = trim($output."\n".$nameRepair['output']);
+            }
         } catch (Throwable $exception) {
             return back()->withInput()->with('error', 'ONU add failed: '.(Utf8Text::clean($exception->getMessage()) ?? 'Unknown error'));
         }
@@ -285,7 +311,7 @@ class OltOnuController extends Controller
             [
                 'olt_name' => $oltDevice->name,
                 'mac_address' => $data['serial'],
-                'name' => $data['name'],
+                'name' => $nameRepair['name'] ?: $data['name'],
                 'status' => 'authorized',
                 'port_vlans' => [[
                     'port' => (int) $data['ethernet_port'],
@@ -298,8 +324,16 @@ class OltOnuController extends Controller
             ]
         );
 
+        $message = $existingOnu
+            ? 'Existing ONU '.$data['pon_port'].'/'.$data['onu_id'].' updated, VLAN '.$data['vlan'].' configured, and OLT config saved.'
+            : 'ONU '.$data['pon_port'].'/'.$data['onu_id'].' added, VLAN '.$data['vlan'].' configured, and OLT config saved.';
+
+        if ($oltDevice->protocol_profile === 'hsgq_gpon' && ! $nameRepair['matched']) {
+            $message .= ' OLT name did not confirm as requested; actual OLT name is '.($nameRepair['name'] ?: 'unknown').'.';
+        }
+
         return redirect()->route('olt-onus.auto-discovery', ['olt_device_id' => $oltDevice->id])
-            ->with('success', 'ONU '.$data['pon_port'].'/'.$data['onu_id'].' added, VLAN '.$data['vlan'].' configured, and OLT config saved.');
+            ->with('success', $message);
     }
 
     public function refresh(OltDevice $oltDevice, OltSshClient $sshClient, OltTelnetClient $telnetClient, OltLiveOutputParser $parser)
@@ -459,8 +493,14 @@ class OltOnuController extends Controller
         $selectedOlt = $oltDevices->firstWhere('id', $selectedOltId);
         $outputs = [];
         $rows = [];
+        $liveRefreshMessage = null;
 
         if ($selectedOlt) {
+            if ($type === 'discovery') {
+                $liveRefreshMessage = $this->refreshLiveDataBeforeUtilityList($selectedOlt);
+                $selectedOlt->refresh();
+            }
+
             foreach ($this->utilityListCommands($selectedOlt, $type) as $command) {
                 try {
                     $output = $this->runOltReadCommands($selectedOlt, [$command]);
@@ -481,7 +521,26 @@ class OltOnuController extends Controller
             'outputs' => $outputs,
             'rows' => $rows,
             'nextOnuId' => $selectedOlt ? $this->nextOnuId($selectedOlt, 1) : 1,
+            'liveRefreshMessage' => $liveRefreshMessage,
         ]);
+    }
+
+    private function refreshLiveDataBeforeUtilityList(OltDevice $oltDevice): ?string
+    {
+        $this->refresh(
+            $oltDevice,
+            app(OltSshClient::class),
+            app(OltTelnetClient::class),
+            app(OltLiveOutputParser::class)
+        );
+
+        $oltDevice->refresh();
+
+        if ($oltDevice->last_error) {
+            return 'Live data refresh failed before loading auto discovery: '.$oltDevice->last_error;
+        }
+
+        return 'Live ONU data refreshed before loading auto discovery.';
     }
 
     private function utilityListCommands(OltDevice $oltDevice, string $type): array
@@ -508,12 +567,17 @@ class OltOnuController extends Controller
                 continue;
             }
 
-            if (! preg_match('/\b(\d{1,2})[\/:\s]+(\d{1,3})\b/', $line, $match)) {
+            if (! preg_match('/\b(\d{1,2})(?:[\/:\s]+(\d{1,3}))?\b/', $line, $match)) {
                 continue;
             }
 
             $ponPort = (int) $match[1];
-            $onuId = (int) $match[2];
+            $sourceOnuId = isset($match[2]) ? (int) $match[2] : null;
+
+            if ($type === 'deny' && $sourceOnuId === null) {
+                continue;
+            }
+
             $serial = $this->parseUtilitySerial($line, $match[0]);
 
             if ($serial === null) {
@@ -524,8 +588,8 @@ class OltOnuController extends Controller
                 'olt_device_id' => $oltDevice->id,
                 'olt_name' => $oltDevice->name,
                 'pon_port' => $ponPort,
-                'onu_id' => $type === 'discovery' ? $this->nextOnuId($oltDevice, $ponPort) : $onuId,
-                'source_onu_id' => $onuId,
+                'onu_id' => $type === 'discovery' ? $this->nextOnuId($oltDevice, $ponPort) : $sourceOnuId,
+                'source_onu_id' => $sourceOnuId,
                 'serial' => $serial,
                 'status' => $type === 'deny' ? 'deny' : 'discovered',
                 'raw' => $line,
@@ -537,12 +601,186 @@ class OltOnuController extends Controller
 
     private function nextOnuId(OltDevice $oltDevice, int $ponPort): int
     {
-        $max = OltOnu::query()
+        $usedOnuIds = OltOnu::query()
             ->where('olt_device_id', $oltDevice->id)
             ->where('pon_port', $ponPort)
-            ->max('onu_id');
+            ->whereNull('last_deregistered_at')
+            ->where('status', '!=', 'deregistered')
+            ->orderBy('onu_id')
+            ->pluck('onu_id')
+            ->all();
 
-        return max(0, ((int) $max) + 1);
+        $startId = $oltDevice->protocol_profile === 'hsgq_gpon' ? 1 : 0;
+
+        for ($onuId = $startId; $onuId <= 256; $onuId++) {
+            if (! in_array($onuId, $usedOnuIds, true)) {
+                return $onuId;
+            }
+        }
+
+        return ((int) end($usedOnuIds)) + 1;
+    }
+
+    private function resolveOnuId(OltDevice $oltDevice, int $ponPort, ?int $requestedOnuId = null, ?array $existingOnus = null): int
+    {
+        if ($requestedOnuId === 0 && $oltDevice->protocol_profile === 'hsgq_gpon') {
+            $requestedOnuId = null;
+        }
+
+        if ($existingOnus !== null) {
+            $usedOnuIds = array_values(array_unique(array_map(function (array $onuRecord) use ($ponPort): int {
+                return $onuRecord['pon_port'] === $ponPort ? (int) $onuRecord['onu_id'] : -1;
+            }, $existingOnus)));
+
+            $usedOnuIds = array_values(array_filter($usedOnuIds, fn (int $id): bool => $id >= 0));
+
+            if ($requestedOnuId !== null && ! in_array($requestedOnuId, $usedOnuIds, true)) {
+                return $requestedOnuId;
+            }
+
+            $startId = $oltDevice->protocol_profile === 'hsgq_gpon' ? 1 : 0;
+
+            for ($onuId = $startId; $onuId <= 256; $onuId++) {
+                if (! in_array($onuId, $usedOnuIds, true)) {
+                    return $onuId;
+                }
+            }
+
+            return ((int) end($usedOnuIds)) + 1;
+        }
+
+        if ($requestedOnuId !== null) {
+            $exists = OltOnu::query()
+                ->where('olt_device_id', $oltDevice->id)
+                ->where('pon_port', $ponPort)
+                ->where('onu_id', $requestedOnuId)
+                ->exists();
+
+            if (! $exists) {
+                return $requestedOnuId;
+            }
+        }
+
+        return $this->nextOnuId($oltDevice, $ponPort);
+    }
+
+    private function fetchExistingGponOnus(OltDevice $oltDevice, OltLiveOutputParser $parser): array
+    {
+        $output = $this->runOltReadCommands($oltDevice, ['show ont-info all']);
+
+        return $parser->parse($output);
+    }
+
+    private function findExistingGponOnuBySerial(array $records, string $serial): ?array
+    {
+        $serial = strtolower($serial);
+
+        foreach ($records as $record) {
+            if (isset($record['mac_address']) && strtolower($record['mac_address']) === $serial) {
+                return $record;
+            }
+        }
+
+        return null;
+    }
+
+    private function authorizeExistingGponOnuCommands(OltDevice $oltDevice, ?OltProtocolProfile $profile, array $data): array
+    {
+        $ponPort = (int) $data['pon_port'];
+        $onuId = (int) $data['onu_id'];
+        $vlan = (int) $data['vlan'];
+        $ethernetPort = (int) $data['ethernet_port'];
+        $name = $this->oltQuoted($data['name']);
+
+        return array_values(array_filter([
+            "interface gpon {$ponPort}",
+            "?ont modify {$ponPort} {$onuId} desc {$name}",
+            "ont port native-vlan {$onuId} eth {$ethernetPort} vlan {$vlan} 0",
+            'exit',
+            $profile?->save_config_command ?: 'save',
+        ]));
+    }
+
+    private function verifyAndRepairGponOnuName(OltDevice $oltDevice, OltLiveOutputParser $parser, array $data): array
+    {
+        $ponPort = (int) $data['pon_port'];
+        $onuId = (int) $data['onu_id'];
+        $desiredName = trim((string) $data['name']);
+        $output = [];
+
+        $record = $this->queryGponOnuRecord($oltDevice, $parser, $ponPort, $onuId);
+        $currentName = trim((string) ($record['name'] ?? ''));
+        $output[] = 'Name verify before repair: '.($currentName !== '' ? $currentName : 'not found');
+
+        if ($this->oltNamesMatch($currentName, $desiredName)) {
+            return [
+                'name' => $currentName,
+                'matched' => true,
+                'output' => implode("\n", $output),
+            ];
+        }
+
+        try {
+            $output[] = $this->runOltWriteCommands($oltDevice, $this->gponOnuNameRepairCommands($data));
+        } catch (Throwable $exception) {
+            $output[] = 'Name repair command failed: '.(Utf8Text::clean($exception->getMessage()) ?? 'Unknown error');
+        }
+
+        $record = $this->queryGponOnuRecord($oltDevice, $parser, $ponPort, $onuId);
+        $currentName = trim((string) ($record['name'] ?? $currentName));
+        $output[] = 'Name verify after repair: '.($currentName !== '' ? $currentName : 'not found');
+
+        return [
+            'name' => $currentName !== '' ? $currentName : null,
+            'matched' => $this->oltNamesMatch($currentName, $desiredName),
+            'output' => implode("\n", array_filter($output)),
+        ];
+    }
+
+    private function queryGponOnuRecord(OltDevice $oltDevice, OltLiveOutputParser $parser, int $ponPort, int $onuId): ?array
+    {
+        try {
+            $output = $this->runOltReadCommands($oltDevice, [
+                "interface gpon {$ponPort}",
+                'show ont-info all',
+                "show ont-info {$onuId}",
+            ]);
+        } catch (Throwable) {
+            return null;
+        }
+
+        foreach ($parser->parse($output) as $record) {
+            if ((int) ($record['pon_port'] ?? 0) === $ponPort && (int) ($record['onu_id'] ?? -1) === $onuId) {
+                return $record;
+            }
+        }
+
+        return null;
+    }
+
+    private function gponOnuNameRepairCommands(array $data): array
+    {
+        $ponPort = (int) $data['pon_port'];
+        $onuId = (int) $data['onu_id'];
+        $name = $this->oltQuoted($data['name']);
+
+        return [
+            "interface gpon {$ponPort}",
+            "?ont name {$onuId} {$name}",
+            "?ont rename {$onuId} {$name}",
+            "?ont modify {$onuId} name {$name}",
+            "?ont modify {$onuId} desc {$name}",
+            "?ont modify {$ponPort} {$onuId} name {$name}",
+            "?ont modify {$ponPort} {$onuId} desc {$name}",
+            "?ont description {$onuId} {$name}",
+            "?ont set {$onuId} name {$name}",
+            'exit',
+        ];
+    }
+
+    private function oltNamesMatch(?string $actual, string $expected): bool
+    {
+        return mb_strtolower(trim((string) $actual)) === mb_strtolower(trim($expected));
     }
 
     private function parseUtilitySerial(string $line, string $matchedKey): ?string
@@ -885,6 +1123,17 @@ class OltOnuController extends Controller
         }
     }
 
+    private function optionalWriteOltCommand($client, string $command): string
+    {
+        $output = $client->command($command);
+
+        if ($this->hasOltCommandError($output)) {
+            return 'Optional OLT command failed: '.$command.' - '.$this->summarizeOltOutput($output);
+        }
+
+        return $output;
+    }
+
     private function writeOnuVlanToOlt(OltOnu $oltOnu, OltProtocolProfile $profile, int $vlan, array $portVlans): string
     {
         $commands = [];
@@ -989,10 +1238,21 @@ class OltOnuController extends Controller
             }
 
             foreach ($commands as $command) {
-                $output = $client->command($command);
+                if (str_contains($command, '||')) {
+                    $outputs[] = $this->runFirstAcceptedOltCommand($client, $command);
+
+                    continue;
+                }
+
+                $isOptional = str_starts_with($command, '?');
+                $command = $isOptional ? ltrim(substr($command, 1)) : $command;
+
+                $output = $isOptional
+                    ? $this->optionalWriteOltCommand($client, $command)
+                    : $client->command($command);
                 $outputs[] = $output;
 
-                if ($this->hasOltCommandError($output)) {
+                if (! $isOptional && $this->hasOltCommandError($output)) {
                     throw new \RuntimeException('OLT rejected command "'.$command.'": '.$this->summarizeOltOutput($output));
                 }
             }
@@ -1008,6 +1268,24 @@ class OltOnuController extends Controller
         } finally {
             $client->close();
         }
+    }
+
+    private function runFirstAcceptedOltCommand($client, string $commandAlternatives): string
+    {
+        $outputs = [];
+        $lastCommand = '';
+
+        foreach (array_filter(array_map('trim', explode('||', $commandAlternatives))) as $command) {
+            $lastCommand = $command;
+            $output = $client->command($command);
+            $outputs[] = $output;
+
+            if (! $this->hasOltCommandError($output)) {
+                return implode("\n", $outputs);
+            }
+        }
+
+        throw new \RuntimeException('OLT rejected command "'.$lastCommand.'": '.$this->summarizeOltOutput(end($outputs) ?: ''));
     }
 
     private function runOltReadCommands(OltDevice $oltDevice, array $commands): string
@@ -1048,7 +1326,8 @@ class OltOnuController extends Controller
         if ($oltDevice->protocol_profile === 'hsgq_gpon') {
             return array_values(array_filter([
                 "interface gpon {$ponPort}",
-                "ont add {$onuId} sn-auth {$serial} omci ont-lineprofile-id 0 ont-srvprofile-id 0",
+                "ont add {$onuId} sn-auth {$serial} desc {$name} omci ont-lineprofile-id 0 ont-srvprofile-id 0 || ont add {$onuId} sn-auth {$serial} desc {$name} ont-lineprofile-id 0 ont-srvprofile-id 0 || ont add {$onuId} sn-auth {$serial} omci ont-lineprofile-id 0 ont-srvprofile-id 0",
+                "?ont modify {$ponPort} {$onuId} desc {$name}",
                 "ont port native-vlan {$onuId} eth {$ethernetPort} vlan {$vlan} 0",
                 'exit',
                 $profile?->save_config_command ?: 'save',

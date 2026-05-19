@@ -11,6 +11,12 @@
     </div>
 </div>
 
+@if (! empty($liveRefreshMessage))
+    <div class="card" style="margin-bottom:16px">
+        <span class="badge {{ str_contains($liveRefreshMessage, 'failed') ? 'failed' : 'active' }}">{{ $liveRefreshMessage }}</span>
+    </div>
+@endif
+
 <form method="get" class="card" style="margin-bottom:16px">
     <div class="form-grid">
         <div>
@@ -38,16 +44,18 @@
     @if ($type === 'discovery')
         <div class="card" style="margin-bottom:16px">
             <h2>Manual Add ONU</h2>
-            <form method="post" action="{{ route('olt-onus.auto-discovery.add') }}">
+            <form autocomplete="off" method="post" action="{{ route('olt-onus.auto-discovery.add') }}">
                 @csrf
+                <input type="text" name="fakeuser" autocomplete="username" style="display:none;">
+                <input type="password" name="fakepass" autocomplete="new-password" style="display:none;">
                 <input type="hidden" name="olt_device_id" value="{{ $selectedOlt->id }}">
                 <div class="form-grid">
-                    <div><label>PON Port</label><input name="pon_port" type="number" min="1" max="16" value="{{ old('pon_port', 1) }}" required></div>
-                    <div><label>ONU ID</label><input name="onu_id" type="number" min="0" max="256" value="{{ old('onu_id', $nextOnuId) }}" required></div>
-                    <div><label>Serial / MAC</label><input name="serial" value="{{ old('serial') }}" required></div>
-                    <div><label>ONU Name</label><input name="name" value="{{ old('name') }}" required></div>
-                    <div><label>VLAN</label><input name="vlan" type="number" min="1" max="4094" value="{{ old('vlan') }}" required></div>
-                    <div><label>Ethernet Port</label><input name="ethernet_port" type="number" min="1" max="8" value="{{ old('ethernet_port', 1) }}" required></div>
+                    <div><label>PON Port</label><input autocomplete="off" name="pon_port" type="number" min="1" max="16" value="{{ old('pon_port', 1) }}" required></div>
+                    <div><label>ONU ID</label><input autocomplete="off" name="onu_id" type="number" min="{{ $selectedOlt->protocol_profile === 'hsgq_gpon' ? 1 : 0 }}" max="256" value="{{ old('onu_id', $nextOnuId) }}" required></div>
+                    <div><label>Serial / MAC</label><input autocomplete="off" name="serial" value="{{ old('serial') }}" required></div>
+                    <div><label>ONU Name</label><input autocomplete="new-name" type="text" name="name" value="{{ old('name') }}" required></div>
+                    <div><label>VLAN</label><input autocomplete="off" name="vlan" type="number" min="1" max="4094" value="{{ old('vlan') }}" required></div>
+                    <div><label>Ethernet Port</label><input autocomplete="off" name="ethernet_port" type="number" min="1" max="8" value="{{ old('ethernet_port', 1) }}" required></div>
                 </div>
                 <div class="actions" style="margin-top:14px"><button class="btn secondary" type="submit">Add ONU to OLT</button></div>
             </form>
@@ -71,22 +79,41 @@
             @forelse ($rows as $row)
                 <tr>
                     <td>{{ $row['pon_port'] }}</td>
-                    <td>{{ $row['source_onu_id'] }} @if ($type === 'discovery')<span class="muted">add as {{ $row['onu_id'] }}</span>@endif</td>
+                    <td>{{ $row['source_onu_id'] ?? '—' }} @if ($type === 'discovery')<span class="muted">add as {{ $row['onu_id'] }}</span>@endif</td>
                     <td>{{ $row['serial'] }}</td>
                     <td><span class="badge {{ $type === 'deny' ? 'failed' : 'pending' }}">{{ $row['status'] }}</span></td>
                     <td>{{ $row['raw'] }}</td>
                     @if ($type === 'discovery')
                         <td>
-                            <form method="post" action="{{ route('olt-onus.auto-discovery.add') }}">
+                            <form autocomplete="off" method="post" action="{{ route('olt-onus.auto-discovery.add') }}">
                                 @csrf
+                                <input type="text" name="fakeuser" autocomplete="username" style="display:none;">
+                                <input type="password" name="fakepass" autocomplete="new-password" style="display:none;">
                                 <input type="hidden" name="olt_device_id" value="{{ $row['olt_device_id'] }}">
                                 <input type="hidden" name="pon_port" value="{{ $row['pon_port'] }}">
                                 <input type="hidden" name="serial" value="{{ $row['serial'] }}">
-                                <div style="display:grid; gap:6px; min-width:220px">
-                                    <input name="onu_id" type="number" min="0" max="256" value="{{ $row['onu_id'] }}" required>
-                                    <input name="name" placeholder="ONU Name" required>
-                                    <input name="vlan" type="number" min="1" max="4094" placeholder="VLAN" required>
-                                    <input name="ethernet_port" type="number" min="1" max="8" value="1" required>
+                                <div style="display:grid; gap:8px; min-width:240px">
+                                    @if ($row['source_onu_id'] !== null)
+                                        <label style="display:flex; flex-direction:column; gap:4px; font-size:0.9em;">
+                                            ONU ID
+                                            <input autocomplete="off" name="onu_id" type="number" min="{{ $selectedOlt->protocol_profile === 'hsgq_gpon' ? 1 : 0 }}" max="256" value="{{ $row['onu_id'] }}" required>
+                                        </label>
+                                    @else
+                                        <input type="hidden" name="onu_id" value="{{ $row['onu_id'] }}">
+                                        <div style="font-size:0.9em; color:#555;">Suggested ONU ID: {{ $row['onu_id'] }}</div>
+                                    @endif
+                                    <label style="display:flex; flex-direction:column; gap:4px; font-size:0.9em;">
+                                        ONU Name
+                                        <input autocomplete="new-name" type="text" name="name" value="{{ old('name') }}" placeholder="ONU Name" required>
+                                    </label>
+                                    <label style="display:flex; flex-direction:column; gap:4px; font-size:0.9em;">
+                                        VLAN
+                                        <input autocomplete="off" name="vlan" type="number" min="1" max="4094" placeholder="VLAN" required>
+                                    </label>
+                                    <label style="display:flex; flex-direction:column; gap:4px; font-size:0.9em;">
+                                        Ethernet Port
+                                        <input autocomplete="off" name="ethernet_port" type="number" min="1" max="8" value="1" required>
+                                    </label>
                                     <button class="btn secondary" type="submit">Add ONU</button>
                                 </div>
                             </form>
