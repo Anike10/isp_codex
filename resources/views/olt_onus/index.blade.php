@@ -110,10 +110,11 @@
 <table>
     <thead>
         <tr>
+            <th>No.</th>
             <th><a href="{{ $sortUrl('pon_onu') }}">PON/ONU{{ $sortMark('pon_onu') }}</a></th>
             <th><a href="{{ $sortUrl('olt') }}">OLT{{ $sortMark('olt') }}</a></th>
             <th><a href="{{ $sortUrl('name') }}">Name{{ $sortMark('name') }}</a></th>
-            <th><a href="{{ $sortUrl('mac') }}">MAC{{ $sortMark('mac') }}</a></th>
+            <th><a href="{{ $sortUrl('serial') }}">Serial / MAC{{ $sortMark('serial') }}</a></th>
             <th><a href="{{ $sortUrl('device_macs') }}">Device MACs{{ $sortMark('device_macs') }}</a></th>
             <th><a href="{{ $sortUrl('type') }}">Type{{ $sortMark('type') }}</a></th>
             <th><a href="{{ $sortUrl('status') }}">Status{{ $sortMark('status') }}</a></th>
@@ -127,10 +128,22 @@
     </thead>
     <tbody>
         @forelse ($onus as $onu)
-            <tr>
-                <td><strong>{{ $onu->pon_port }}/{{ $onu->onu_id }}</strong></td>
+            <tr style="cursor:auto;">
+                <td><strong>{{ $onus->firstItem() + $loop->iteration - 1 }}</strong></td>
+                <td data-onu-click="{{ route('olt-onus.show', $onu) }}" style="cursor:pointer;"><strong>{{ $onu->pon_port }}/{{ $onu->onu_id }}</strong></td>
                 <td>{{ $onu->oltDevice?->name ?? $onu->olt_name ?? 'N/A' }}</td>
-                <td>{{ $onu->name ?: 'N/A' }}</td>
+                <td class="name-edit-cell" data-name-cell data-onu-id="{{ $onu->id }}" data-onu-name="{{ $onu->name }}">
+                    <span class="name-display">{{ $onu->name ?: 'N/A' }}</span>
+                    <form class="name-inline-form" method="post" action="{{ route('olt-onus.name.update', $onu) }}" style="display:none; margin-top:8px">
+                        @csrf
+                        @method('PATCH')
+                        <div class="actions" style="gap:6px; flex-wrap:nowrap">
+                            <input name="name" type="text" value="{{ $onu->name }}" placeholder="ONU Name" style="width:150px; padding:7px" required>
+                            <button class="btn secondary" type="submit" style="min-height:32px; padding:7px 9px">Save</button>
+                            <button class="btn light" type="button" data-name-cancel style="min-height:32px; padding:7px 9px">Cancel</button>
+                        </div>
+                    </form>
+                </td>
                 <td>{{ $onu->mac_address ?: 'N/A' }}</td>
                 <td>
                     @forelse (($onu->learned_macs ?? []) as $learnedMac)
@@ -189,7 +202,18 @@
                     @endif
                 </td>
                 <td>{{ $onu->last_live_polled_at?->format('Y-m-d H:i:s') ?? 'Never' }}</td>
-                <td>{{ $onu->description ?: 'N/A' }}</td>
+                <td class="desc-edit-cell" data-desc-cell data-onu-id="{{ $onu->id }}" data-onu-desc="{{ $onu->description }}">
+                    <span class="desc-display">{{ $onu->description ?: 'N/A' }}</span>
+                    <form class="desc-inline-form" method="post" action="{{ route('olt-onus.description.update', $onu) }}" style="display:none; margin-top:8px">
+                        @csrf
+                        @method('PATCH')
+                        <div class="actions" style="gap:6px; flex-wrap:nowrap">
+                            <input name="description" type="text" value="{{ $onu->description }}" placeholder="Description" style="width:150px; padding:7px">
+                            <button class="btn secondary" type="submit" style="min-height:32px; padding:7px 9px">Save</button>
+                            <button class="btn light" type="button" data-desc-cancel style="min-height:32px; padding:7px 9px">Cancel</button>
+                        </div>
+                    </form>
+                </td>
             </tr>
         @empty
             <tr>
@@ -201,12 +225,16 @@
 
 <div style="margin-top:16px">{{ $onus->links() }}</div>
 <script>
+// Handle VLAN cell double-click
 document.addEventListener('dblclick', function (event) {
     const cell = event.target.closest('[data-vlan-cell]');
 
     if (! cell || event.target.closest('form, input, button, a')) {
         return;
     }
+
+    event.stopPropagation();
+    event.preventDefault();
 
     document.querySelectorAll('.vlan-inline-form').forEach(function (form) {
         form.style.display = 'none';
@@ -221,14 +249,73 @@ document.addEventListener('dblclick', function (event) {
     }
 });
 
-document.addEventListener('click', function (event) {
-    const cancel = event.target.closest('[data-vlan-cancel]');
+// Handle Name cell double-click
+document.addEventListener('dblclick', function (event) {
+    const cell = event.target.closest('[data-name-cell]');
 
-    if (! cancel) {
+    if (! cell || event.target.closest('form, input, button, a')) {
         return;
     }
 
-    cancel.closest('form').style.display = 'none';
+    event.stopPropagation();
+    event.preventDefault();
+
+    document.querySelectorAll('.name-inline-form').forEach(function (form) {
+        form.style.display = 'none';
+    });
+
+    const form = cell.querySelector('.name-inline-form');
+
+    if (form) {
+        form.style.display = 'block';
+        form.querySelector('input[name="name"]')?.focus();
+        form.querySelector('input[name="name"]')?.select();
+    }
+});
+
+// Handle Description cell double-click
+document.addEventListener('dblclick', function (event) {
+    const cell = event.target.closest('[data-desc-cell]');
+
+    if (! cell || event.target.closest('form, input, button, a')) {
+        return;
+    }
+
+    event.stopPropagation();
+    event.preventDefault();
+
+    document.querySelectorAll('.desc-inline-form').forEach(function (form) {
+        form.style.display = 'none';
+    });
+
+    const form = cell.querySelector('.desc-inline-form');
+
+    if (form) {
+        form.style.display = 'block';
+        form.querySelector('input[name="description"]')?.focus();
+        form.querySelector('input[name="description"]')?.select();
+    }
+});
+
+// Handle Cancel buttons
+document.addEventListener('click', function (event) {
+    const cancel = event.target.closest('[data-vlan-cancel], [data-name-cancel], [data-desc-cancel]');
+
+    if (cancel) {
+        cancel.closest('form').style.display = 'none';
+        return;
+    }
+});
+
+// Handle ONU click to navigate to details
+document.addEventListener('click', function (event) {
+    const cell = event.target.closest('[data-onu-click]');
+
+    if (! cell || event.target.closest('a, button, input, select, textarea, form')) {
+        return;
+    }
+
+    window.location = cell.dataset.onuClick;
 });
 </script>
 @endsection

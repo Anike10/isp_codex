@@ -79,6 +79,7 @@ Do not commit SSH passwords, `.env` secrets, SMS tokens, or database passwords.
 - `/packages`
 - `/mikrotik-routers`
 - `/olt-onus`
+- `/olt-onus/{oltOnu}` - ONU detail page and live refresh button
 - `/invoices`
 - `/payments`
 - `/bkash-sms-payments`

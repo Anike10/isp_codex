@@ -193,8 +193,15 @@ class OltLiveOutputParser
                 $records[$current]['distance_m'] = (int) $match[2];
             }
 
-            if (preg_match('/(?:name|description|desc)\s*[:=]\s*(.+)$/i', $line, $match)) {
-                $records[$current]['name'] ??= trim($match[1], '" ');
+            if (preg_match('/\b(name|description|desc)\s*[:=]\s*(.+)$/i', $line, $match)) {
+                $key = strtolower($match[1]);
+                $value = trim($match[2], '" ');
+
+                if ($key === 'name') {
+                    $records[$current]['name'] ??= $value;
+                } else {
+                    $records[$current]['description'] ??= $value;
+                }
             }
 
             if ($vlan = $this->parsePortVlanLine($line)) {

@@ -86,6 +86,7 @@ Route::middleware('auth')->group(function () {
         Route::get('olt-onus/olts/{oltDevice}/edit', [OltOnuController::class, 'editOlt'])->name('olt-onus.olts.edit');
         Route::put('olt-onus/olts/{oltDevice}', [OltOnuController::class, 'updateOlt'])->name('olt-onus.olts.update');
         Route::post('olt-onus/olts/{oltDevice}/refresh', [OltOnuController::class, 'refresh'])->name('olt-onus.olts.refresh');
+        Route::post('olt-onus/olts/{oltDevice}/refresh-auto-discovery', [OltOnuController::class, 'refreshForAutoDiscovery'])->name('olt-onus.olts.refresh-auto-discovery');
         Route::post('olt-onus/olts/{oltDevice}/save-config', [OltOnuController::class, 'saveOltConfig'])->name('olt-onus.olts.save-config');
         Route::get('olt-onus/deny-list', [OltOnuController::class, 'denyList'])->name('olt-onus.deny-list');
         Route::get('olt-onus/auto-discovery', [OltOnuController::class, 'autoDiscoveryList'])->name('olt-onus.auto-discovery');
@@ -96,6 +97,10 @@ Route::middleware('auth')->group(function () {
         Route::get('olt-onus/protocol-profiles/{oltProtocolProfile}/edit', [OltOnuController::class, 'editProtocolProfile'])->name('olt-onus.protocol-profiles.edit');
         Route::put('olt-onus/protocol-profiles/{oltProtocolProfile}', [OltOnuController::class, 'updateProtocolProfile'])->name('olt-onus.protocol-profiles.update');
         Route::patch('olt-onus/{oltOnu}/vlan', [OltOnuController::class, 'updateVlan'])->name('olt-onus.vlan.update');
+        Route::patch('olt-onus/{oltOnu}/name', [OltOnuController::class, 'updateName'])->name('olt-onus.name.update');
+        Route::patch('olt-onus/{oltOnu}/description', [OltOnuController::class, 'updateDescription'])->name('olt-onus.description.update');
+        Route::post('olt-onus/{oltOnu}/refresh', [OltOnuController::class, 'refreshOnu'])->name('olt-onus.refresh');
+        Route::get('olt-onus/{oltOnu}', [OltOnuController::class, 'show'])->name('olt-onus.show');
         Route::get('olt-onus', [OltOnuController::class, 'index'])->name('olt-onus.index');
         Route::get('mikrotik-routers/{mikrotikRouter}/connection-status', [MikrotikRouterController::class, 'connectionStatus'])->name('mikrotik-routers.connection-status');
         Route::resource('mikrotik-routers', MikrotikRouterController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);

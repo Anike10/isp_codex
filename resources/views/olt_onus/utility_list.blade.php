@@ -11,17 +11,12 @@
     </div>
 </div>
 
-@if (! empty($liveRefreshMessage))
-    <div class="card" style="margin-bottom:16px">
-        <span class="badge {{ str_contains($liveRefreshMessage, 'failed') ? 'failed' : 'active' }}">{{ $liveRefreshMessage }}</span>
-    </div>
-@endif
-
 <form method="get" class="card" style="margin-bottom:16px">
     <div class="form-grid">
         <div>
             <label for="olt_device_id">OLT</label>
             <select id="olt_device_id" name="olt_device_id" onchange="this.form.submit()">
+                <option value="" @selected($showingAllOlts)>All active OLTs</option>
                 @foreach ($oltDevices as $oltDevice)
                     <option value="{{ $oltDevice->id }}" @selected($selectedOlt?->id === $oltDevice->id)>{{ $oltDevice->name }} - {{ $oltDevice->host }}:{{ $oltDevice->port }}</option>
                 @endforeach
@@ -33,38 +28,40 @@
     </div>
 </form>
 
-@if (! $selectedOlt)
+@if ($oltDevices->isEmpty())
     <div class="card">No active OLT found.</div>
 @else
     <div class="card" style="margin-bottom:16px">
-        <h2>{{ $selectedOlt->name }}</h2>
-        <div class="muted">{{ $selectedOlt->host }}:{{ $selectedOlt->port }} | {{ $selectedOlt->brand }} | {{ $selectedOlt->protocol_profile }}</div>
-    </div>
-
-    @if ($type === 'discovery')
-        <div class="card" style="margin-bottom:16px">
-            <h2>Manual Add ONU</h2>
-            <form autocomplete="off" method="post" action="{{ route('olt-onus.auto-discovery.add') }}">
-                @csrf
-                <input type="text" name="fakeuser" autocomplete="username" style="display:none;">
-                <input type="password" name="fakepass" autocomplete="new-password" style="display:none;">
-                <input type="hidden" name="olt_device_id" value="{{ $selectedOlt->id }}">
-                <div class="form-grid">
-                    <div><label>PON Port</label><input autocomplete="off" name="pon_port" type="number" min="1" max="16" value="{{ old('pon_port', 1) }}" required></div>
-                    <div><label>ONU ID</label><input autocomplete="off" name="onu_id" type="number" min="{{ $selectedOlt->protocol_profile === 'hsgq_gpon' ? 1 : 0 }}" max="256" value="{{ old('onu_id', $nextOnuId) }}" required></div>
-                    <div><label>Serial / MAC</label><input autocomplete="off" name="serial" value="{{ old('serial') }}" required></div>
-                    <div><label>ONU Name</label><input autocomplete="new-name" type="text" name="name" value="{{ old('name') }}" required></div>
-                    <div><label>VLAN</label><input autocomplete="off" name="vlan" type="number" min="1" max="4094" value="{{ old('vlan') }}" required></div>
-                    <div><label>Ethernet Port</label><input autocomplete="off" name="ethernet_port" type="number" min="1" max="8" value="{{ old('ethernet_port', 1) }}" required></div>
+        <h2>{{ $showingAllOlts ? 'All Active OLTs' : $selectedOlt->name }}</h2>
+        @if ($showingAllOlts)
+            <div class="muted">{{ $oltDevices->count() }} active OLT(s) shown serially.</div>
+            @if ($type === 'discovery')
+                <div class="actions" style="margin-top:14px">
+                    @foreach ($oltDevices as $oltDevice)
+                        <form method="post" action="{{ route('olt-onus.olts.refresh-auto-discovery', $oltDevice) }}">
+                            @csrf
+                            <button class="btn secondary" type="submit">Refresh {{ $oltDevice->name }}</button>
+                        </form>
+                    @endforeach
                 </div>
-                <div class="actions" style="margin-top:14px"><button class="btn secondary" type="submit">Add ONU to OLT</button></div>
-            </form>
-        </div>
-    @endif
+            @endif
+        @else
+            <div class="muted">{{ $selectedOlt->host }}:{{ $selectedOlt->port }} | {{ $selectedOlt->brand }} | {{ $selectedOlt->protocol_profile }}</div>
+            @if ($type === 'discovery')
+                <form method="post" action="{{ route('olt-onus.olts.refresh-auto-discovery', $selectedOlt) }}" style="margin-top:14px">
+                    @csrf
+                    <button class="btn secondary" type="submit">Refresh Live Data</button>
+                </form>
+            @endif
+        @endif
+    </div>
 
     <table>
         <thead>
             <tr>
+                @if ($showingAllOlts)
+                    <th>OLT</th>
+                @endif
                 <th>PON</th>
                 <th>ONU ID</th>
                 <th>Serial / MAC</th>
@@ -78,8 +75,11 @@
         <tbody>
             @forelse ($rows as $row)
                 <tr>
+                    @if ($showingAllOlts)
+                        <td>{{ $row['olt_name'] }}</td>
+                    @endif
                     <td>{{ $row['pon_port'] }}</td>
-                    <td>{{ $row['source_onu_id'] ?? '—' }} @if ($type === 'discovery')<span class="muted">add as {{ $row['onu_id'] }}</span>@endif</td>
+                    <td>{{ $row['source_onu_id'] ?? 'N/A' }} @if ($type === 'discovery')<span class="muted">add as {{ $row['onu_id'] }}</span>@endif</td>
                     <td>{{ $row['serial'] }}</td>
                     <td><span class="badge {{ $type === 'deny' ? 'failed' : 'pending' }}">{{ $row['status'] }}</span></td>
                     <td>{{ $row['raw'] }}</td>
@@ -96,7 +96,7 @@
                                     @if ($row['source_onu_id'] !== null)
                                         <label style="display:flex; flex-direction:column; gap:4px; font-size:0.9em;">
                                             ONU ID
-                                            <input autocomplete="off" name="onu_id" type="number" min="{{ $selectedOlt->protocol_profile === 'hsgq_gpon' ? 1 : 0 }}" max="256" value="{{ $row['onu_id'] }}" required>
+                                            <input autocomplete="off" name="onu_id" type="number" min="{{ ($row['olt_protocol_profile'] ?? null) === 'hsgq_gpon' ? 1 : 0 }}" max="256" value="{{ $row['onu_id'] }}" required>
                                         </label>
                                     @else
                                         <input type="hidden" name="onu_id" value="{{ $row['onu_id'] }}">
@@ -121,7 +121,7 @@
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="{{ $type === 'discovery' ? 6 : 5 }}">No parsed rows found. Check raw command output below.</td></tr>
+                <tr><td colspan="{{ ($type === 'discovery' ? 6 : 5) + ($showingAllOlts ? 1 : 0) }}">No parsed rows found. Check raw command output below.</td></tr>
             @endforelse
         </tbody>
     </table>
@@ -134,5 +134,26 @@
             </div>
         @endforeach
     </div>
+
+    @if ($type === 'discovery' && ! $showingAllOlts)
+        <div class="card" style="margin-top:16px">
+            <h2>Manual Add ONU</h2>
+            <form autocomplete="off" method="post" action="{{ route('olt-onus.auto-discovery.add') }}">
+                @csrf
+                <input type="text" name="fakeuser" autocomplete="username" style="display:none;">
+                <input type="password" name="fakepass" autocomplete="new-password" style="display:none;">
+                <input type="hidden" name="olt_device_id" value="{{ $selectedOlt->id }}">
+                <div class="form-grid">
+                    <div><label>PON Port</label><input autocomplete="off" name="pon_port" type="number" min="1" max="16" value="{{ old('pon_port', 1) }}" required></div>
+                    <div><label>ONU ID</label><input autocomplete="off" name="onu_id" type="number" min="{{ $selectedOlt->protocol_profile === 'hsgq_gpon' ? 1 : 0 }}" max="256" value="{{ old('onu_id', $nextOnuId) }}" required></div>
+                    <div><label>Serial / MAC</label><input autocomplete="off" name="serial" value="{{ old('serial') }}" required></div>
+                    <div><label>ONU Name</label><input autocomplete="new-name" type="text" name="name" value="{{ old('name') }}" required></div>
+                    <div><label>VLAN</label><input autocomplete="off" name="vlan" type="number" min="1" max="4094" value="{{ old('vlan') }}" required></div>
+                    <div><label>Ethernet Port</label><input autocomplete="off" name="ethernet_port" type="number" min="1" max="8" value="{{ old('ethernet_port', 1) }}" required></div>
+                </div>
+                <div class="actions" style="margin-top:14px"><button class="btn secondary" type="submit">Add ONU to OLT</button></div>
+            </form>
+        </div>
+    @endif
 @endif
 @endsection

@@ -44,6 +44,21 @@ class OltOnuControllerCommandTest extends TestCase
         ], $commands);
     }
 
+    public function test_utility_parser_ignores_olt_unknown_command_output(): void
+    {
+        $rows = $this->callPrivateCommandBuilder('parseUtilityRows', [
+            'vty% [VTY] vty[node:7],Unknown command: show onu-autofindall',
+            new OltDevice([
+                'id' => 1,
+                'name' => 'US_EPON',
+                'protocol_profile' => 'hsgq_epon',
+            ]),
+            'discovery',
+        ]);
+
+        $this->assertSame([], $rows);
+    }
+
     private function callPrivateCommandBuilder(string $method, array $arguments): array
     {
         $reflection = new ReflectionMethod(OltOnuController::class, $method);

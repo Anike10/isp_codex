@@ -631,6 +631,7 @@ For controller/view changes, also run `php -l` on touched PHP/Blade files.
 - Keep printable documents standalone; they should not include the sidebar layout.
 - Existing database may contain user data. Avoid `migrate:fresh` unless the user explicitly approves data loss.
 - When adding migrations, prefer forward-compatible changes with defaults.
+- When changing OLT/ONU behavior, OLT command sequences, parser rules, firmware-specific workarounds, migrations, troubleshooting findings, or operational decisions, update this guide in the same change. Do not wait for the operator to ask for documentation separately.
 
 ## Latest Business Rules
 
@@ -848,6 +849,15 @@ Important limitation:
 - Do not add pager/helper/config commands that change OLT state. `OltSshClient` handles `--More--` pagination interactively without sending persistent config.
 - The PHP server running the app must reach `192.168.10.111:22`. If production `finalaccess.com` is outside the LAN without VPN/routing, live OLT polling will fail from production.
 - HSGQ command names vary by firmware; keep commands configurable on the OLT record.
+
+HSGQ GPON ONU add/name caveat:
+
+- The GPON OLT may add an ONT successfully but keep the default name like `ONT01/005`.
+- Known rejected forms on this firmware include `interface ont 1/5`, `ont add 1 5 ...`, `ont add ... desc "name"` in the wrong argument position, and `ont modify 5 desc "name"`.
+- Current add flow enters `interface gpon {pon_port}` and tries multiple `ont add` syntaxes, preferring variants that include `desc "requested name"` before falling back to a no-name add so service provisioning does not fail.
+- After add/VLAN, the app queries `show ont-info all` and `show ont-info {onu_id}`. If the OLT still reports a default name, the app tries several optional rename/description commands and then queries again.
+- Name repair is best-effort. Optional rename command failures must not fail ONU add/VLAN/save. The final OLT-reported name is stored back to the app so operators can see whether the OLT accepted the requested name.
+- Auto-discovery defaults to showing all active OLTs serially. Do not run live ONU refresh automatically on page load because it is slow; use the page's manual refresh buttons.
 
 ## CWMP / TR-069 Future Module
 
