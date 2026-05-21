@@ -172,6 +172,7 @@ Total PON mac address learning: 404
 ----------------------------------------------------------------------------------------------------
  PON01  21        d4:01:c3:d7:dd:ed       999     dynamic   IBBL Kushtia Drick
  PON01  21        aa:bb:cc:dd:ee:ff       21      dynamic   IBBL Kushtia Drick
+ PON01  21        aa:bb:cc:dd:ee:ff       115     dynamic   IBBL Kushtia Drick
  PON02  3         98:25:4a:aa:13:da       1       dynamic   Kpi_Office_huawi
 OUTPUT;
 
@@ -183,6 +184,7 @@ OUTPUT;
         $this->assertSame([
             ['mac' => 'd4:01:c3:d7:dd:ed', 'vlan' => 999, 'type' => 'dynamic', 'onu_name' => 'IBBL Kushtia Drick'],
             ['mac' => 'aa:bb:cc:dd:ee:ff', 'vlan' => 21, 'type' => 'dynamic', 'onu_name' => 'IBBL Kushtia Drick'],
+            ['mac' => 'aa:bb:cc:dd:ee:ff', 'vlan' => 115, 'type' => 'dynamic', 'onu_name' => 'IBBL Kushtia Drick'],
         ], $records[0]['learned_macs']);
         $this->assertSame(2, $records[1]['pon_port']);
         $this->assertSame(3, $records[1]['onu_id']);

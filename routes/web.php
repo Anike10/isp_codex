@@ -99,6 +99,7 @@ Route::middleware('auth')->group(function () {
         Route::patch('olt-onus/{oltOnu}/vlan', [OltOnuController::class, 'updateVlan'])->name('olt-onus.vlan.update');
         Route::patch('olt-onus/{oltOnu}/name', [OltOnuController::class, 'updateName'])->name('olt-onus.name.update');
         Route::patch('olt-onus/{oltOnu}/description', [OltOnuController::class, 'updateDescription'])->name('olt-onus.description.update');
+        Route::patch('olt-onus/{oltOnu}/note', [OltOnuController::class, 'updateNote'])->name('olt-onus.note.update');
         Route::post('olt-onus/{oltOnu}/refresh', [OltOnuController::class, 'refreshOnu'])->name('olt-onus.refresh');
         Route::get('olt-onus/{oltOnu}', [OltOnuController::class, 'show'])->name('olt-onus.show');
         Route::get('olt-onus', [OltOnuController::class, 'index'])->name('olt-onus.index');

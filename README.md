@@ -442,6 +442,20 @@ EPON deny-list note:
 - For this EPON firmware, SSH command entry can lose spaces (`bind-onu 0 mac ...` becomes `bind-onu 0mac...`), so EPON deny-list reads and ONU add/write commands use Telnet port `23`.
 - Adding from the deny-list first removes the MAC with `blacklist delete mac {mac}`, then binds the ONU and writes VLAN/name/description.
 
+EPON refresh speed note:
+
+- EPON `Refresh Live Data` uses a fast status-only path.
+- It reads `show onu-info all` for each configured PON and skips slower optical, alarm, VLAN-detail, and global MAC polling.
+- EPON `Full Power/VLAN Refresh` is intentionally separate from fast refresh. Use the PON selector beside the button when you need fresh optical power for a single PON; scanning all EPON ports must run one optical table per PON and can take tens of seconds on this firmware.
+- EPON full refresh skips per-ONU alarm polling. It updates power from the OLT optical table, reads the fast global `show mac-address epon all` table for learned MACs, and keeps VLAN data from the stored ONU port VLAN records unless a row is missing VLAN detail and needs the slower per-ONU `show port-vlan` read.
+- Refresh flash messages include elapsed OLT query time, e.g. `370 live ONU record(s) refreshed from US_EPON in 3.25 seconds`.
+- GPON `Refresh Live Data` reads global `show ont-info all` from config context. Full Power/VLAN refresh keeps optical and service-port polling but skips slow MAC polling; this keeps US_GPON Power/VLAN refresh under about one second while preserving the full ONT count.
+- GPON learned MAC refresh is a separate per-PON action. Use `MAC Refresh` with the PON selector; it runs `show mac-address port gpon {pon}` instead of the slow global `show mac-address all`.
+- `OltTelnetClient` handles `--More--` pagination and uses non-blocking socket reads so large OLT outputs return when the prompt appears instead of waiting for socket timeout.
+- OLT list pages select only the columns needed for the table and default to 200 rows per page for faster browser rendering.
+- ONU detail pages preview large raw output instead of rendering the full text into the page.
+- A small timing badge appears in the bottom-right corner showing server render time and browser load time.
+
 Network requirement:
 
 - The PHP server running this app must be able to reach `192.168.10.111:22`.

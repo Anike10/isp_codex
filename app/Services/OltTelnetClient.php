@@ -22,6 +22,7 @@ class OltTelnetClient
         }
 
         stream_set_timeout($this->socket, $timeout);
+        stream_set_blocking($this->socket, false);
 
         $banner = $this->readUntilPrompt();
 
@@ -71,11 +72,32 @@ class OltTelnetClient
     private function readUntilPrompt(): string
     {
         $output = '';
-        $startedAt = time();
+        $startedAt = microtime(true);
 
         while (true) {
             if (! is_resource($this->socket)) {
                 throw new RuntimeException('OLT socket is not connected.');
+            }
+
+            if ($output !== '' && (preg_match('/(?:login|username|user name|password)\s*:\s*$/i', $output) || preg_match('/[#>]\s*$/', $output))) {
+                return $output;
+            }
+
+            $read = [$this->socket];
+            $write = null;
+            $except = null;
+            $ready = @stream_select($read, $write, $except, 0, 200000);
+
+            if ($ready === false) {
+                return $output;
+            }
+
+            if ($ready === 0) {
+                if (microtime(true) - $startedAt >= $this->timeout) {
+                    return $output;
+                }
+
+                continue;
             }
 
             $chunk = fread($this->socket, 4096);
@@ -83,14 +105,19 @@ class OltTelnetClient
             if ($chunk !== false && $chunk !== '') {
                 $output .= $this->stripTelnetNegotiation($chunk);
 
+                if (str_contains($output, '--More--')) {
+                    $this->writeRaw(' ');
+                    $output = str_replace('--More--', '', $output);
+
+                    continue;
+                }
+
                 if (preg_match('/(?:login|username|user name|password)\s*:\s*$/i', $output) || preg_match('/[#>]\s*$/', $output)) {
                     return $output;
                 }
             }
 
-            $meta = stream_get_meta_data($this->socket);
-
-            if ($meta['timed_out'] || time() - $startedAt >= $this->timeout) {
+            if (microtime(true) - $startedAt >= $this->timeout) {
                 return $output;
             }
         }
@@ -105,9 +132,20 @@ class OltTelnetClient
         fwrite($this->socket, $value."\r\n");
     }
 
+    private function writeRaw(string $value): void
+    {
+        if (! is_resource($this->socket)) {
+            throw new RuntimeException('OLT socket is not connected.');
+        }
+
+        fwrite($this->socket, $value);
+    }
+
     private function stripTelnetNegotiation(string $value): string
     {
         $value = preg_replace('/\xFF[\xFB-\xFE]./s', '', $value) ?? $value;
+
+        $value = str_replace(["--More--", "\x08", "\r"], ['', '', ''], $value);
 
         return Utf8Text::clean($value) ?? '';
     }

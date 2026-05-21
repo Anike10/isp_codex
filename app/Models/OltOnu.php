@@ -20,6 +20,7 @@ class OltOnu extends Model
         'status',
         'name',
         'description',
+        'note',
         'parent_splitter',
         'port_vlans',
         'learned_macs',

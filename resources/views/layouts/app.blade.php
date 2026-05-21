@@ -74,6 +74,7 @@
         .connection-cell { min-width:132px; white-space:nowrap; }
         .router-connection, .router-ping { min-width:104px; text-align:center; }
         .router-checked-at { min-height:17px; white-space:nowrap; }
+        .page-timing { position:fixed; right:12px; bottom:10px; z-index:120; padding:6px 9px; border-radius:6px; background:rgba(20,33,61,.9); color:white; font-size:12px; box-shadow:0 8px 20px rgba(15,23,42,.18); }
         .per-page-form { justify-content:flex-end; margin:0 0 12px; }
         .per-page-label { margin:0; display:flex; align-items:center; gap:8px; font-weight:700; }
         .per-page-select { width:auto; min-width:90px; }
@@ -268,7 +269,25 @@
         @yield('content')
     </main>
 </div>
+@php
+    $serverRenderMs = defined('LARAVEL_START') ? round((microtime(true) - LARAVEL_START) * 1000) : null;
+@endphp
+@if ($serverRenderMs !== null)
+    <div class="page-timing">Server: {{ number_format($serverRenderMs) }} ms</div>
+@endif
 <script>
+window.addEventListener('load', function () {
+    const timing = document.querySelector('.page-timing');
+    if (! timing || ! performance?.timing) {
+        return;
+    }
+
+    const browserMs = performance.timing.loadEventEnd - performance.timing.navigationStart;
+    if (browserMs > 0) {
+        timing.textContent += ' | Browser: ' + browserMs.toLocaleString() + ' ms';
+    }
+});
+
 document.addEventListener('click', function (event) {
     if (event.target.closest('a, button, input, select, textarea, label, form')) {
         return;

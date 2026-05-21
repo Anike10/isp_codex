@@ -859,6 +859,19 @@ PON/ONU     Mac-Address        Blacklist_Reject_Count  Reason                  O
 
 - For US_EPON, SSH accepts login but loses spaces in interactive write/read commands such as `show onu-info all` and `bind-onu 0 mac ...`, producing broken commands like `show onu-infoall` and `bind-onu 0mac...`.
 - EPON utility/read and write/add flows should use Telnet port `23` when the OLT record says SSH but the protocol profile is `hsgq_epon`.
+- `OltTelnetClient` must handle HSGQ `--More--` pagination and use non-blocking socket reads. Blocking `fread()` waits until timeout after large command output and makes refresh look much slower than PuTTY.
+- EPON `Refresh Live Data` uses a fast status-only path: it polls `show onu-info all` per configured PON, skips per-ONU alarms/VLAN detail, skips global MAC polling, and skips `show optical-info`. This keeps the OLT query close to PuTTY speed; optical power refresh should be a separate explicit slow/diagnostic action if reintroduced.
+- EPON `Full Power/VLAN Refresh` is the explicit optical-power path. It still loops through selected `pon_ports`, but it now skips per-ONU alarm polling, reads the fast global `show mac-address epon all` table for learned MACs, and supports a `pon_port` request value so operators can refresh one PON at a time. On US_EPON, sampled optical timing was about 4-13 seconds per PON and about 49 seconds for all 8 PONs, because the OLT only exposes optical power as a per-PON CLI table.
+- EPON VLAN polling via `show port-vlan` is only available inside `interface onu {pon}/{onu}` on this firmware. Bulk PON/global VLAN commands were not available, so the app keeps stored VLAN records from add/edit flows and only reads per-ONU VLAN detail for rows missing VLAN data.
+- GPON `Refresh Live Data` must run `show ont-info all` in global/config context for this firmware. Running it inside `interface gpon 1` returns only a partial set. Fast GPON refresh skips service-port/MAC/alarm detail polling. Full Power/VLAN mode keeps status, optical, and service-port data but still skips `show mac-address all`, because MAC polling alone takes about 8 seconds after the Device MAC column was removed from the list.
+- GPON learned MAC refresh is intentionally separate from normal/full refresh. The UI shows PON 1-16 for GPON MAC refresh and runs `show mac-address port gpon {pon}`. On US_GPON, this tested around 0.13 seconds for PON 1, while global `show mac-address all` took about 15 seconds.
+- Refresh success/error flash messages include the elapsed OLT query time, for example `370 live ONU record(s) refreshed from US_EPON in 3.25 seconds`.
+- EPON single-ONU refresh should keep `show onu-info all` inside the selected PON context and then filter the parsed result in PHP. Do not rewrite it to `show onu-info {onu_id}` for this firmware; that can return a different/unsupported format and make the UI report "current ONU was not found".
+- The `/olt-onus` list supports per-row `Update Now` refresh. It calls `POST /olt-onus/{oltOnu}/refresh` with JSON headers, refreshes only that ONU, persists the DB row, and updates the row's status/MAC/VLAN/power/last-poll cells without refreshing all 370 ONUs.
+- Opening an ONU details page runs one single-ONU refresh before rendering, unless `skip_auto_refresh=1` is present after a manual POST refresh redirect. The details page also has optional browser-side auto update with a user-selected interval; each tick refreshes the ONU and saves the DB.
+- ONU operator notes are stored in `olt_onus.note` and can be edited from both the list row and the details page.
+- OLT list/detail pages must not load or render huge raw output unless the operator explicitly needs it. The list query selects only table columns and defaults to 200 rows per page; the detail page shows bounded raw-output previews to avoid slow browser rendering.
+- The shared layout displays server and browser page timing in the bottom-right corner. Keep this visible while diagnosing OLT page performance.
 - When adding from the EPON deny-list, remove the MAC from blacklist before binding. The command is optional because a previous failed/retried add attempt may already have removed it:
 
 ```text
@@ -882,7 +895,7 @@ Important limitation:
 
 - OLT polling must remain read-only. `OltOnuController::firstUnsafeShowCommand()` blocks live commands that do not start with `show` or `display`, and blocks write/change words such as `set`, `add`, `delete`, `bind`, `save`, `reboot`, and `reset`.
 - `OltOnuController::firstUnsafeContextCommand()` only permits CLI navigation needed for reading HSGQ data: `enable`, `config`/`configure`, `interface epon 1-8`, and `exit`.
-- Refresh loops through `pon_ports` and runs `interface epon N`, `show onu-info all`, then `show optical-info` for each selected PON.
+- Full EPON refresh loops through the selected `pon_ports` and runs `interface epon N`, `show onu-info all`, then `show optical-info` for each selected PON. Prefer the UI PON selector for day-to-day optical updates.
 - Do not add pager/helper/config commands that change OLT state. `OltSshClient` handles `--More--` pagination interactively without sending persistent config.
 - The PHP server running the app must reach `192.168.10.111:22`. If production `finalaccess.com` is outside the LAN without VPN/routing, live OLT polling will fail from production.
 - HSGQ command names vary by firmware; keep commands configurable on the OLT record.

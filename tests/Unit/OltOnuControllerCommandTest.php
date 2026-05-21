@@ -67,6 +67,40 @@ class OltOnuControllerCommandTest extends TestCase
         ], $commands);
     }
 
+    public function test_hsgq_epon_auto_authorize_omits_zero_onu_id(): void
+    {
+        $commands = $this->callPrivateCommandBuilder('authorizeAutoEponOnuCommands', [
+            array_merge($this->onuData(), [
+                'onu_id' => 0,
+                'serial' => '70:a8:e3:f3:75:47',
+                'source_type' => 'deny',
+            ]),
+        ]);
+
+        $this->assertSame([
+            'interface epon 1',
+            '?blacklist delete mac 70:a8:e3:f3:75:47',
+            'bind-onu mac 70:a8:e3:f3:75:47 onu-type 1ge name "Customer 5"',
+            'show onu-info all',
+            'exit',
+        ], $commands);
+    }
+
+    public function test_hsgq_epon_finds_auto_assigned_onu_id_from_output(): void
+    {
+        $onuId = $this->callPrivateCommandBuilder('findEponOnuIdInOutput', [
+            "1/6  70:a8:e3:f3:75:47 Online TRUE TRUE 2026/05/21 15:00:00 alom",
+            new OltDevice([
+                'id' => 1,
+                'name' => 'US_EPON',
+                'protocol_profile' => 'hsgq_epon',
+            ]),
+            '70:a8:e3:f3:75:47',
+        ]);
+
+        $this->assertSame(6, $onuId);
+    }
+
     public function test_utility_parser_ignores_olt_unknown_command_output(): void
     {
         $rows = $this->callPrivateCommandBuilder('parseUtilityRows', [
@@ -182,7 +216,7 @@ class OltOnuControllerCommandTest extends TestCase
         $this->assertSame(['enable'], $commands);
     }
 
-    private function callPrivateCommandBuilder(string $method, array $arguments): array
+    private function callPrivateCommandBuilder(string $method, array $arguments): mixed
     {
         $reflection = new ReflectionMethod(OltOnuController::class, $method);
         $reflection->setAccessible(true);

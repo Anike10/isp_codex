@@ -71,7 +71,7 @@ class OltLiveOutputParser
                 $incoming = [
                     'pon_port' => $record['pon_port'],
                     'onu_id' => $record['onu_id'],
-                    'learned_macs' => [$record['learned_mac']['mac'] => $record['learned_mac']],
+                    'learned_macs' => [$this->learnedMacKey($record['learned_mac']) => $record['learned_mac']],
                 ];
 
                 if (isset($record['port_vlan'])) {
@@ -561,11 +561,22 @@ class OltLiveOutputParser
 
     private function mergeLearnedMacs(array $existing, array $incoming): array
     {
-        foreach ($incoming as $mac => $entry) {
-            $existing[$mac] = $entry;
+        $merged = [];
+
+        foreach ($existing as $key => $entry) {
+            $merged[is_string($key) && str_contains($key, '|') ? $key : $this->learnedMacKey($entry)] = $entry;
         }
 
-        return $existing;
+        foreach ($incoming as $entry) {
+            $merged[$this->learnedMacKey($entry)] = $entry;
+        }
+
+        return $merged;
+    }
+
+    private function learnedMacKey(array $entry): string
+    {
+        return strtolower((string) ($entry['mac'] ?? '')).'|'.(string) ($entry['vlan'] ?? '');
     }
 
     private function mergePortVlans(array $existing, array $incoming): array

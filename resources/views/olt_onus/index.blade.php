@@ -36,8 +36,35 @@
                     </form>
                     <form method="post" action="{{ route('olt-onus.olts.refresh', $oltDevice) }}">
                         @csrf
-                        <button class="btn secondary" type="submit">Refresh Live Data</button>
+                        <button class="btn secondary" type="submit">Fast Refresh</button>
                     </form>
+                    <form method="post" action="{{ route('olt-onus.olts.refresh', $oltDevice) }}">
+                        @csrf
+                        <input type="hidden" name="refresh_mode" value="full">
+                        <select name="pon_port" aria-label="PON port for full refresh" style="width:120px">
+                            <option value="">All PONs</option>
+                            @foreach (($oltPonPorts[$oltDevice->id] ?? []) as $oltPonPort)
+                                <option value="{{ $oltPonPort }}" @selected((string) request('pon_port') === (string) $oltPonPort && (string) request('olt_device_id') === (string) $oltDevice->id)>
+                                    PON {{ $oltPonPort }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <button class="btn light" type="submit">Full Power/VLAN Refresh</button>
+                    </form>
+                    @if ($oltDevice->protocol_profile === 'hsgq_gpon')
+                        <form method="post" action="{{ route('olt-onus.olts.refresh', $oltDevice) }}">
+                            @csrf
+                            <input type="hidden" name="refresh_mode" value="mac">
+                            <select name="pon_port" aria-label="PON port for MAC refresh" style="width:120px">
+                                @foreach (($oltPonPorts[$oltDevice->id] ?? []) as $oltPonPort)
+                                    <option value="{{ $oltPonPort }}" @selected((string) request('pon_port') === (string) $oltPonPort && (string) request('olt_device_id') === (string) $oltDevice->id)>
+                                        PON {{ $oltPonPort }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <button class="btn light" type="submit">MAC Refresh</button>
+                        </form>
+                    @endif
                 </div>
             @endforeach
         </div>
@@ -114,6 +141,7 @@
             <th><a href="{{ $sortUrl('pon_onu') }}">PON/ONU{{ $sortMark('pon_onu') }}</a></th>
             <th><a href="{{ $sortUrl('olt') }}">OLT{{ $sortMark('olt') }}</a></th>
             <th><a href="{{ $sortUrl('name') }}">Name{{ $sortMark('name') }}</a></th>
+            <th>Note</th>
             <th><a href="{{ $sortUrl('serial') }}">Serial / MAC{{ $sortMark('serial') }}</a></th>
             <th><a href="{{ $sortUrl('device_macs') }}">Device MACs{{ $sortMark('device_macs') }}</a></th>
             <th><a href="{{ $sortUrl('type') }}">Type{{ $sortMark('type') }}</a></th>
@@ -128,7 +156,13 @@
     </thead>
     <tbody>
         @forelse ($onus as $onu)
-            <tr style="cursor:auto;">
+            <tr
+                id="onu-row-{{ $onu->id }}"
+                data-onu-row
+                data-refresh-url="{{ route('olt-onus.refresh', $onu) }}"
+                data-note-url="{{ route('olt-onus.note.update', $onu) }}"
+                style="cursor:auto;"
+            >
                 <td><strong>{{ $onus->firstItem() + $loop->iteration - 1 }}</strong></td>
                 <td data-onu-click="{{ route('olt-onus.show', $onu) }}" style="cursor:pointer;"><strong>{{ $onu->pon_port }}/{{ $onu->onu_id }}</strong></td>
                 <td>{{ $onu->oltDevice?->name ?? $onu->olt_name ?? 'N/A' }}</td>
@@ -144,9 +178,32 @@
                         </div>
                     </form>
                 </td>
-                <td>{{ $onu->mac_address ?: 'N/A' }}</td>
                 <td>
-                    @forelse (($onu->learned_macs ?? []) as $learnedMac)
+                    <textarea data-field="note" rows="2" placeholder="Note" style="min-width:180px; padding:7px">{{ $onu->note }}</textarea>
+                    <button class="btn light" type="button" data-action="save-note" style="margin-top:6px; min-height:30px; padding:6px 9px">Save</button>
+                </td>
+                <td data-field="mac_address">{{ $onu->mac_address ?: 'N/A' }}</td>
+                <td data-field="learned_macs_html">
+                    @php
+                        $displayLearnedMacs = $onu->learned_macs ?? [];
+                        $displayVlans = collect($onu->port_vlans ?? [])
+                            ->pluck('vlan')
+                            ->filter(fn ($vlan) => $vlan !== null && $vlan !== '')
+                            ->unique()
+                            ->values();
+
+                        if (count($displayLearnedMacs) === 1 && $displayVlans->count() > 1 && ! empty($displayLearnedMacs[0]['mac'])) {
+                            $displayLearnedMacs = $displayVlans
+                                ->map(function ($vlan) use ($displayLearnedMacs) {
+                                    $entry = $displayLearnedMacs[0];
+                                    $entry['vlan'] = (int) $vlan;
+
+                                    return $entry;
+                                })
+                                ->all();
+                        }
+                    @endphp
+                    @forelse ($displayLearnedMacs as $learnedMac)
                         <div>
                             <span class="badge">{{ $learnedMac['mac'] ?? '?' }}</span>
                             @if (isset($learnedMac['vlan']))
@@ -158,32 +215,35 @@
                     @endforelse
                 </td>
                 <td>{{ $onu->onu_type ?: 'N/A' }}</td>
-                <td><span class="badge {{ in_array($onu->status, ['online', 'active'], true) ? 'active' : ($onu->status ? 'pending' : 'inactive') }}">{{ $onu->status ?: 'unknown' }}</span></td>
                 <td>
+                    <span data-field="status_badge" class="badge {{ in_array($onu->status, ['online', 'active'], true) ? 'active' : ($onu->status ? 'pending' : 'inactive') }}">{{ $onu->status ?: 'unknown' }}</span>
+                    <button class="btn secondary" type="button" data-action="refresh-onu" style="margin-top:8px; min-height:30px; padding:6px 9px">Update Now</button>
+                    <div class="muted" data-field="refresh_message" style="margin-top:6px"></div>
+                </td>
+                <td data-field="power_cell">
                     @if ($onu->rx_power_dbm !== null)
                         <span class="badge {{ $onu->rx_power_dbm <= -25 ? 'failed' : 'active' }}">{{ number_format((float) $onu->rx_power_dbm, 2) }} dBm</span>
                     @else
                         <span class="muted">No live power</span>
                     @endif
                 </td>
-                @php
-                    $firstVlan = collect($onu->port_vlans ?? [])->first(fn ($vlan) => array_key_exists('vlan', $vlan) && $vlan['vlan'] !== null);
-                    $currentVlan = $firstVlan['vlan'] ?? '';
-                @endphp
+                @php($onuCurrentVlan = data_get(collect($onu->port_vlans ?? [])->first(fn ($vlan) => array_key_exists('vlan', $vlan) && $vlan['vlan'] !== null), 'vlan', ''))
                 <td class="vlan-edit-cell" data-vlan-cell>
-                    @forelse (($onu->port_vlans ?? []) as $vlan)
-                        <span class="badge">
-                            {{ $vlan['port'] ?? '?' }}:
-                            {{ array_key_exists('vlan', $vlan) && $vlan['vlan'] !== null ? $vlan['vlan'] : ($vlan['mode'] ?? '?') }}
-                        </span>
-                    @empty
-                        <span class="muted">No VLAN config</span>
-                    @endforelse
+                    <div data-field="vlans_html">
+                        @forelse (($onu->port_vlans ?? []) as $vlan)
+                            <span class="badge">
+                                {{ $vlan['port'] ?? '?' }}:
+                                {{ array_key_exists('vlan', $vlan) && $vlan['vlan'] !== null ? $vlan['vlan'] : ($vlan['mode'] ?? '?') }}
+                            </span>
+                        @empty
+                            <span class="muted">No VLAN config</span>
+                        @endforelse
+                    </div>
                     <form class="vlan-inline-form" method="post" action="{{ route('olt-onus.vlan.update', $onu) }}" style="display:none; margin-top:8px">
                         @csrf
                         @method('PATCH')
                         <div class="actions" style="gap:6px; flex-wrap:nowrap">
-                            <input name="vlan" type="number" min="1" max="4094" value="{{ $currentVlan }}" placeholder="VLAN" style="width:96px; padding:7px" required>
+                            <input name="vlan" type="number" min="1" max="4094" value="{{ $onuCurrentVlan }}" placeholder="VLAN" style="width:96px; padding:7px" required>
                             <button class="btn secondary" type="submit" style="min-height:32px; padding:7px 9px">Write OLT</button>
                             <button class="btn light" type="button" data-vlan-cancel style="min-height:32px; padding:7px 9px">Cancel</button>
                         </div>
@@ -201,7 +261,7 @@
                         <span class="muted">Never</span>
                     @endif
                 </td>
-                <td>{{ $onu->last_live_polled_at?->format('Y-m-d H:i:s') ?? 'Never' }}</td>
+                <td data-field="last_live_polled_at">{{ $onu->last_live_polled_at?->format('Y-m-d H:i:s') ?? 'Never' }}</td>
                 <td class="desc-edit-cell" data-desc-cell data-onu-id="{{ $onu->id }}" data-onu-desc="{{ $onu->description }}">
                     <span class="desc-display">{{ $onu->description ?: 'N/A' }}</span>
                     <form class="desc-inline-form" method="post" action="{{ route('olt-onus.description.update', $onu) }}" style="display:none; margin-top:8px">
@@ -217,7 +277,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="13">No live ONU data yet. Add an OLT and refresh live data.</td>
+                <td colspan="15">No live ONU data yet. Add an OLT and refresh live data.</td>
             </tr>
         @endforelse
     </tbody>
@@ -225,6 +285,100 @@
 
 <div style="margin-top:16px">{{ $onus->links() }}</div>
 <script>
+const oltOnuCsrfToken = @json(csrf_token());
+
+async function oltOnuJsonRequest(url, method, body = null) {
+    const options = {
+        method,
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': oltOnuCsrfToken,
+        },
+    };
+
+    if (body !== null) {
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(url, options);
+    const data = await response.json();
+
+    if (! response.ok) {
+        throw new Error(data.message || 'Request failed');
+    }
+
+    return data;
+}
+
+function setBadge(element, label, badgeClass) {
+    element.className = 'badge ' + (badgeClass || '');
+    element.textContent = label || 'unknown';
+}
+
+function updateOnuRow(row, onu) {
+    row.querySelector('[data-field="mac_address"]').textContent = onu.mac_address;
+    row.querySelector('[data-field="learned_macs_html"]').innerHTML = onu.learned_macs_html;
+    row.querySelector('[data-field="vlans_html"]').innerHTML = onu.vlans_html;
+    row.querySelector('[data-field="last_live_polled_at"]').textContent = onu.last_live_polled_at;
+    row.querySelector('[data-field="note"]').value = onu.note || '';
+
+    const powerCell = row.querySelector('[data-field="power_cell"]');
+    powerCell.innerHTML = onu.power_badge_class
+        ? `<span class="badge ${onu.power_badge_class}">${onu.rx_power_dbm}</span>`
+        : '<span class="muted">No live power</span>';
+
+    setBadge(row.querySelector('[data-field="status_badge"]'), onu.status, onu.status_badge_class);
+}
+
+document.addEventListener('click', async function (event) {
+    const refreshButton = event.target.closest('[data-action="refresh-onu"]');
+    const noteButton = event.target.closest('[data-action="save-note"]');
+
+    if (refreshButton) {
+        const row = refreshButton.closest('[data-onu-row]');
+        const message = row.querySelector('[data-field="refresh_message"]');
+        refreshButton.disabled = true;
+        refreshButton.textContent = 'Updating...';
+        message.textContent = '';
+
+        try {
+            const data = await oltOnuJsonRequest(row.dataset.refreshUrl, 'POST');
+            updateOnuRow(row, data.onu);
+            message.textContent = 'Updated';
+        } catch (error) {
+            message.textContent = error.message;
+        } finally {
+            refreshButton.disabled = false;
+            setTimeout(function () {
+                refreshButton.textContent = 'Update Now';
+            }, 900);
+        }
+    }
+
+    if (noteButton) {
+        const row = noteButton.closest('[data-onu-row]');
+        const message = row.querySelector('[data-field="refresh_message"]');
+        noteButton.disabled = true;
+        noteButton.textContent = 'Saving...';
+
+        try {
+            const data = await oltOnuJsonRequest(row.dataset.noteUrl, 'PATCH', {
+                note: row.querySelector('[data-field="note"]').value,
+            });
+            updateOnuRow(row, data.onu);
+            message.textContent = 'Note saved';
+        } catch (error) {
+            message.textContent = error.message;
+        } finally {
+            noteButton.disabled = false;
+            setTimeout(function () {
+                noteButton.textContent = 'Save';
+            }, 900);
+        }
+    }
+});
+
 // Handle VLAN cell double-click
 document.addEventListener('dblclick', function (event) {
     const cell = event.target.closest('[data-vlan-cell]');
