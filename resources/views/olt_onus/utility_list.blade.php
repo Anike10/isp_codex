@@ -67,7 +67,7 @@
                 <th>Serial / MAC</th>
                 <th>Status</th>
                 <th>Raw</th>
-                @if ($type === 'discovery')
+                @if (in_array($type, ['discovery', 'deny'], true))
                     <th>Add</th>
                 @endif
             </tr>
@@ -83,12 +83,13 @@
                     <td>{{ $row['serial'] }}</td>
                     <td><span class="badge {{ $type === 'deny' ? 'failed' : 'pending' }}">{{ $row['status'] }}</span></td>
                     <td>{{ $row['raw'] }}</td>
-                    @if ($type === 'discovery')
+                    @if (in_array($type, ['discovery', 'deny'], true))
                         <td>
                             <form autocomplete="off" method="post" action="{{ route('olt-onus.auto-discovery.add') }}">
                                 @csrf
                                 <input type="text" name="fakeuser" autocomplete="username" style="display:none;">
                                 <input type="password" name="fakepass" autocomplete="new-password" style="display:none;">
+                                <input type="hidden" name="source_type" value="{{ $type }}">
                                 <input type="hidden" name="olt_device_id" value="{{ $row['olt_device_id'] }}">
                                 <input type="hidden" name="pon_port" value="{{ $row['pon_port'] }}">
                                 <input type="hidden" name="serial" value="{{ $row['serial'] }}">
@@ -111,6 +112,10 @@
                                         <input autocomplete="off" name="vlan" type="number" min="1" max="4094" placeholder="VLAN" required>
                                     </label>
                                     <label style="display:flex; flex-direction:column; gap:4px; font-size:0.9em;">
+                                        Description
+                                        <input autocomplete="off" type="text" name="description" value="{{ old('description') }}" placeholder="Description">
+                                    </label>
+                                    <label style="display:flex; flex-direction:column; gap:4px; font-size:0.9em;">
                                         Ethernet Port
                                         <input autocomplete="off" name="ethernet_port" type="number" min="1" max="8" value="1" required>
                                     </label>
@@ -121,7 +126,7 @@
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="{{ ($type === 'discovery' ? 6 : 5) + ($showingAllOlts ? 1 : 0) }}">No parsed rows found. Check raw command output below.</td></tr>
+                <tr><td colspan="{{ (in_array($type, ['discovery', 'deny'], true) ? 6 : 5) + ($showingAllOlts ? 1 : 0) }}">No parsed rows found. Check raw command output below.</td></tr>
             @endforelse
         </tbody>
     </table>
@@ -142,6 +147,7 @@
                 @csrf
                 <input type="text" name="fakeuser" autocomplete="username" style="display:none;">
                 <input type="password" name="fakepass" autocomplete="new-password" style="display:none;">
+                <input type="hidden" name="source_type" value="manual">
                 <input type="hidden" name="olt_device_id" value="{{ $selectedOlt->id }}">
                 <div class="form-grid">
                     <div><label>PON Port</label><input autocomplete="off" name="pon_port" type="number" min="1" max="16" value="{{ old('pon_port', 1) }}" required></div>
@@ -149,6 +155,7 @@
                     <div><label>Serial / MAC</label><input autocomplete="off" name="serial" value="{{ old('serial') }}" required></div>
                     <div><label>ONU Name</label><input autocomplete="new-name" type="text" name="name" value="{{ old('name') }}" required></div>
                     <div><label>VLAN</label><input autocomplete="off" name="vlan" type="number" min="1" max="4094" value="{{ old('vlan') }}" required></div>
+                    <div><label>Description</label><input autocomplete="off" name="description" type="text" value="{{ old('description') }}"></div>
                     <div><label>Ethernet Port</label><input autocomplete="off" name="ethernet_port" type="number" min="1" max="8" value="{{ old('ethernet_port', 1) }}" required></div>
                 </div>
                 <div class="actions" style="margin-top:14px"><button class="btn secondary" type="submit">Add ONU to OLT</button></div>

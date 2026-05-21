@@ -413,7 +413,7 @@ Recommended settings for the current HSGQ OLT:
 
 ```text
 Host/IP: 192.168.10.111
-Access Method: SSH read-only
+Access Method: SSH for general polling; EPON deny/add uses Telnet fallback
 Port: 22
 Username: isp_app
 Password: from the secure credential source
@@ -433,6 +433,14 @@ Safety rule:
 - Commands containing `set`, `add`, `delete`, `bind`, `save`, `reboot`, `reset`, and similar write/change words are blocked before connecting.
 - Do not put configuration-changing commands in OLT command fields.
 - The app polls the selected PON ports one by one and sends `interface epon N` before the two show commands, so all PON ONU records can be refreshed from live OLT output.
+
+EPON deny-list note:
+
+- US_EPON does not expose the deny list through `show black-onu all`.
+- Use `show blacklist onu-info all` inside each `interface epon N` context.
+- The deny-list page scans all configured EPON ports in one OLT session for speed.
+- For this EPON firmware, SSH command entry can lose spaces (`bind-onu 0 mac ...` becomes `bind-onu 0mac...`), so EPON deny-list reads and ONU add/write commands use Telnet port `23`.
+- Adding from the deny-list first removes the MAC with `blacklist delete mac {mac}`, then binds the ONU and writes VLAN/name/description.
 
 Network requirement:
 

@@ -832,6 +832,43 @@ ONU Optical Power Command:
 show optical-info
 ```
 
+HSGQ EPON deny-list / blacklist behavior:
+
+- On the current US_EPON firmware, `show black-onu all` is not supported in the expected context.
+- Denied/blacklisted EPON ONUs are listed per PON interface with `show blacklist onu-info all`.
+- The deny-list page must enter `config`, then scan the configured EPON ports in one OLT session:
+
+```text
+config
+interface epon 1
+show blacklist onu-info all
+exit
+interface epon 2
+show blacklist onu-info all
+exit
+...
+```
+
+- Do not open one OLT connection per PON for the deny-list page. It is much slower than a PuTTY session because every connection repeats login and prompt setup.
+- Known real blacklist row format:
+
+```text
+PON/ONU     Mac-Address        Blacklist_Reject_Count  Reason                  ONU-Name
+7/1         70:a8:e3:f3:75:47  67                                              B_ONU07/01
+```
+
+- For US_EPON, SSH accepts login but loses spaces in interactive write/read commands such as `show onu-info all` and `bind-onu 0 mac ...`, producing broken commands like `show onu-infoall` and `bind-onu 0mac...`.
+- EPON utility/read and write/add flows should use Telnet port `23` when the OLT record says SSH but the protocol profile is `hsgq_epon`.
+- When adding from the EPON deny-list, remove the MAC from blacklist before binding. The command is optional because a previous failed/retried add attempt may already have removed it:
+
+```text
+blacklist delete mac 70:a8:e3:f3:75:47
+bind-onu {onu_id} mac {mac} onu-type 1ge name "{name}"
+interface onu {pon_port}/{onu_id}
+port-vlan {ethernet_port} mode tag {vlan} pri 0
+save
+```
+
 The live parser tries to extract:
 
 - PON port and ONU ID

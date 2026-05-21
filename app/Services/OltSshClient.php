@@ -32,7 +32,7 @@ class OltSshClient
             throw new RuntimeException('OLT SSH client is not connected.');
         }
 
-        $this->ssh->write($command."\r");
+        $this->writeInteractiveLine($command);
 
         $output = '';
         $loops = 0;
@@ -57,6 +57,20 @@ class OltSshClient
     {
         $this->ssh?->disconnect();
         $this->ssh = null;
+    }
+
+    private function writeInteractiveLine(string $command): void
+    {
+        if (! $this->ssh) {
+            throw new RuntimeException('OLT SSH client is not connected.');
+        }
+
+        foreach (str_split($command) as $character) {
+            $this->ssh->write($character);
+            usleep($character === ' ' ? 300000 : 20000);
+        }
+
+        $this->ssh->write("\r");
     }
 
     private function cleanOutput(string $output): string

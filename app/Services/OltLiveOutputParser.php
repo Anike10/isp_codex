@@ -201,6 +201,7 @@ class OltLiveOutputParser
                     $records[$current]['name'] ??= $value;
                 } else {
                     $records[$current]['description'] ??= $value;
+                    $records[$current]['name'] ??= $value;
                 }
             }
 
