@@ -86,6 +86,18 @@ class OltOnuControllerCommandTest extends TestCase
         ], $commands);
     }
 
+    public function test_hsgq_epon_write_access_uses_telnet_even_with_normalized_profile_key(): void
+    {
+        $method = $this->callPrivateCommandBuilder('writeAccessMethod', [
+            new OltDevice([
+                'access_method' => 'ssh',
+                'protocol_profile' => ' HSGQ_EPON ',
+            ]),
+        ]);
+
+        $this->assertSame('telnet', $method);
+    }
+
     public function test_hsgq_epon_finds_auto_assigned_onu_id_from_output(): void
     {
         $onuId = $this->callPrivateCommandBuilder('findEponOnuIdInOutput', [

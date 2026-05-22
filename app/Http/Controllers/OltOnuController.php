@@ -502,7 +502,11 @@ class OltOnuController extends Controller
         $profile = $this->protocolProfile($oltDevice);
         $existingOnus = null;
         $existingOnu = null;
-        $autoAssignEponOnu = $oltDevice->protocol_profile === 'hsgq_epon' && (int) ($data['onu_id'] ?? -1) === 0;
+        $autoAssignEponOnu = $this->usesHsgqEpon($oltDevice) && (int) ($data['onu_id'] ?? -1) === 0;
+
+        if (! $autoAssignEponOnu && $oltDevice->protocol_profile !== 'hsgq_gpon' && (int) ($data['onu_id'] ?? -1) === 0) {
+            $data['onu_id'] = null;
+        }
 
         if ($oltDevice->protocol_profile === 'hsgq_gpon') {
             try {
@@ -1023,7 +1027,7 @@ class OltOnuController extends Controller
                 : 'show onu-info all';
         }
 
-        if ($oltDevice->protocol_profile === 'hsgq_epon' && preg_match('/\bshow\s+onu-info\s+all\b/i', $command)) {
+        if ($this->usesHsgqEpon($oltDevice) && preg_match('/\bshow\s+onu-info\s+all\b/i', $command)) {
             $command = 'show onu-info all';
         } elseif (preg_match('/\ball\b/i', $command)) {
             $command = preg_replace('/\ball\b/i', (string) $oltOnu->onu_id, $command);
@@ -1127,7 +1131,7 @@ class OltOnuController extends Controller
     private function utilityListCommandGroups(OltDevice $oltDevice, string $type): array
     {
         if ($type === 'deny') {
-            if ($oltDevice->protocol_profile === 'hsgq_epon') {
+            if ($this->usesHsgqEpon($oltDevice)) {
                 $ports = $this->ponPorts($oltDevice->pon_ports) ?: range(1, 8);
                 $commands = ['config'];
 
@@ -1184,7 +1188,7 @@ class OltOnuController extends Controller
 
             if (
                 $type === 'deny'
-                && $oltDevice->protocol_profile === 'hsgq_epon'
+                && $this->usesHsgqEpon($oltDevice)
                 && $this->isEponOnuInfoRow($line)
                 && ! $this->isEponDenyCandidate($line)
             ) {
@@ -1272,7 +1276,7 @@ class OltOnuController extends Controller
             ->pluck('onu_id')
             ->all();
 
-        $startId = $oltDevice->protocol_profile === 'hsgq_gpon' ? 1 : 0;
+        $startId = $this->usesHsgqEpon($oltDevice) ? 0 : 1;
 
         for ($onuId = $startId; $onuId <= 256; $onuId++) {
             if (! in_array($onuId, $usedOnuIds, true)) {
@@ -1300,7 +1304,7 @@ class OltOnuController extends Controller
                 return $requestedOnuId;
             }
 
-            $startId = $oltDevice->protocol_profile === 'hsgq_gpon' ? 1 : 0;
+            $startId = $this->usesHsgqEpon($oltDevice) ? 0 : 1;
 
             for ($onuId = $startId; $onuId <= 256; $onuId++) {
                 if (! in_array($onuId, $usedOnuIds, true)) {
@@ -1572,7 +1576,7 @@ class OltOnuController extends Controller
 
     private function utilityAccessMethod(OltDevice $oltDevice): string
     {
-        if ($oltDevice->access_method === 'ssh' && $oltDevice->protocol_profile === 'hsgq_epon') {
+        if ($oltDevice->access_method === 'ssh' && $this->usesHsgqEpon($oltDevice)) {
             return 'telnet';
         }
 
@@ -1581,7 +1585,7 @@ class OltOnuController extends Controller
 
     private function readAccessMethod(OltDevice $oltDevice): string
     {
-        if ($oltDevice->access_method === 'ssh' && $oltDevice->protocol_profile === 'hsgq_epon') {
+        if ($oltDevice->access_method === 'ssh' && $this->usesHsgqEpon($oltDevice)) {
             return 'telnet';
         }
 
@@ -1590,7 +1594,7 @@ class OltOnuController extends Controller
 
     private function usesFastEponRefresh(OltDevice $oltDevice): bool
     {
-        return $oltDevice->protocol_profile === 'hsgq_epon';
+        return $this->usesHsgqEpon($oltDevice);
     }
 
     private function usesFastInventoryRefresh(OltDevice $oltDevice): bool
@@ -1600,12 +1604,12 @@ class OltOnuController extends Controller
 
     private function usesStatusOnlyRefresh(OltDevice $oltDevice): bool
     {
-        return $oltDevice->protocol_profile === 'hsgq_epon';
+        return $this->usesHsgqEpon($oltDevice);
     }
 
     private function usesEponPowerVlanRefresh(OltDevice $oltDevice, bool $fullDetailRefresh): bool
     {
-        return $fullDetailRefresh && $oltDevice->protocol_profile === 'hsgq_epon';
+        return $fullDetailRefresh && $this->usesHsgqEpon($oltDevice);
     }
 
     private function refreshPonOptions(OltDevice $oltDevice): array
@@ -1735,7 +1739,7 @@ class OltOnuController extends Controller
     private function shouldRetryUtilityOverTelnet(OltDevice $oltDevice, string $output): bool
     {
         return $oltDevice->access_method === 'ssh'
-            && $oltDevice->protocol_profile === 'hsgq_epon'
+            && $this->usesHsgqEpon($oltDevice)
             && preg_match('/Unknown command:\s*show\s+(?:onu-info|black-onu)all/i', $output) === 1;
     }
 
@@ -2224,11 +2228,16 @@ class OltOnuController extends Controller
 
     private function writeAccessMethod(OltDevice $oltDevice): string
     {
-        if ($oltDevice->access_method === 'ssh' && $oltDevice->protocol_profile === 'hsgq_epon') {
+        if ($oltDevice->access_method === 'ssh' && $this->usesHsgqEpon($oltDevice)) {
             return 'telnet';
         }
 
         return $oltDevice->access_method;
+    }
+
+    private function usesHsgqEpon(OltDevice $oltDevice): bool
+    {
+        return strtolower(trim((string) $oltDevice->protocol_profile)) === 'hsgq_epon';
     }
 
     private function runOltWriteCommandsWithMethod(OltDevice $oltDevice, array $commands, string $accessMethod, int $port): string
@@ -2280,7 +2289,7 @@ class OltOnuController extends Controller
     private function shouldRetryWriteOverTelnet(OltDevice $oltDevice, Throwable $exception): bool
     {
         return $oltDevice->access_method === 'ssh'
-            && $oltDevice->protocol_profile === 'hsgq_epon'
+            && $this->usesHsgqEpon($oltDevice)
             && preg_match('/Unknown command:.*(?:bind-onu|blacklist|port-vlan)\S+/is', $exception->getMessage()) === 1;
     }
 

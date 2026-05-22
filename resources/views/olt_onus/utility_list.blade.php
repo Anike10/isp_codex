@@ -97,7 +97,7 @@
                                     @if ($row['source_onu_id'] !== null)
                                         <label style="display:flex; flex-direction:column; gap:4px; font-size:0.9em;">
                                             ONU ID
-                                            <input autocomplete="off" name="onu_id" type="number" min="{{ ($row['olt_protocol_profile'] ?? null) === 'hsgq_gpon' ? 1 : 0 }}" max="256" value="{{ $row['onu_id'] }}" required>
+                                            <input autocomplete="off" name="onu_id" type="number" min="{{ ($row['olt_protocol_profile'] ?? null) === 'hsgq_epon' ? 0 : 1 }}" max="256" value="{{ $row['onu_id'] }}" required>
                                         </label>
                                     @else
                                         <input type="hidden" name="onu_id" value="{{ $row['onu_id'] }}">
@@ -151,7 +151,7 @@
                 <input type="hidden" name="olt_device_id" value="{{ $selectedOlt->id }}">
                 <div class="form-grid">
                     <div><label>PON Port</label><input autocomplete="off" name="pon_port" type="number" min="1" max="16" value="{{ old('pon_port', 1) }}" required></div>
-                    <div><label>ONU ID</label><input autocomplete="off" name="onu_id" type="number" min="{{ $selectedOlt->protocol_profile === 'hsgq_gpon' ? 1 : 0 }}" max="256" value="{{ old('onu_id', $nextOnuId) }}" required></div>
+                    <div><label>ONU ID</label><input autocomplete="off" name="onu_id" type="number" min="{{ $selectedOlt->protocol_profile === 'hsgq_epon' ? 0 : 1 }}" max="256" value="{{ old('onu_id', $nextOnuId) }}" required></div>
                     <div><label>Serial / MAC</label><input autocomplete="off" name="serial" value="{{ old('serial') }}" required></div>
                     <div><label>ONU Name</label><input autocomplete="new-name" type="text" name="name" value="{{ old('name') }}" required></div>
                     <div><label>VLAN</label><input autocomplete="off" name="vlan" type="number" min="1" max="4094" value="{{ old('vlan') }}" required></div>
