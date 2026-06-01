@@ -41,10 +41,17 @@
     </div>
 </div>
 
-<form method="post" action="{{ route('customers.payments.store', $customer) }}" class="card form-grid">
+<form method="post" action="{{ route('customers.payments.store', $customer) }}" class="card form-grid" id="paymentForm">
     @csrf
     <div class="full">
-        <h2>Pay Due Invoice</h2>
+        <h2>Payment Entry</h2>
+    </div>
+    <div class="full">
+        <label>
+            <input type="checkbox" id="payDueToggle" @checked($totalDue > 0)>
+            Pay due invoice
+        </label>
+        <span class="muted" id="modeHint">Checked payments will clear due invoices first. Unchecked payments will stay as advance balance.</span>
     </div>
     <div>
         <label>Amount</label>
@@ -71,58 +78,20 @@
         <input type="date" name="payment_date" value="{{ old('payment_date', now()->toDateString()) }}" required>
     </div>
     <div class="full">
+        <label>Reference</label>
+        <input name="reference" value="{{ old('reference') }}" placeholder="TrxID, receipt no, or note reference">
+    </div>
+    <div class="full">
         <label>Note</label>
         <textarea name="note">{{ old('note') }}</textarea>
     </div>
     <div class="full">
-        <button class="btn" type="submit">Save Payment</button>
+        <button class="btn" type="submit" id="paymentSubmit">Save Payment</button>
     </div>
 </form>
 
-<div class="grid two" style="margin-top:16px">
-    <form method="post" action="{{ route('customers.advance-payments.store', $customer) }}" class="card form-grid">
-        @csrf
-        <div class="full">
-            <h2>Add Advance Balance</h2>
-        </div>
-        <div>
-            <label>Amount</label>
-            <input type="number" step="0.01" min="1" name="amount" value="{{ old('amount') }}" required>
-        </div>
-        <div>
-            <label>Method</label>
-            <select name="payment_method" id="advancePaymentMethod" required>
-                <option value="cash" @selected(old('payment_method', 'cash') === 'cash')>Cash</option>
-                <option value="bkash" @selected(old('payment_method') === 'bkash')>bKash</option>
-                <option value="nagad" @selected(old('payment_method') === 'nagad')>Nagad</option>
-                <option value="bank" @selected(old('payment_method') === 'bank')>Bank</option>
-            </select>
-        </div>
-        <div id="advanceAccountSelectWrap">
-            <label>Account</label>
-            <select name="payment_account_id" id="advancePaymentAccount">
-                <option value="">Select account</option>
-            </select>
-        </div>
-        <div>
-            <label>Payment Date</label>
-            <input type="date" name="payment_date" value="{{ old('payment_date', now()->toDateString()) }}" required>
-        </div>
-        <div class="full">
-            <label>Reference</label>
-            <input name="reference" value="{{ old('reference') }}" placeholder="TrxID, receipt no, or note reference">
-        </div>
-        <div class="full">
-            <label>Note</label>
-            <textarea name="note">{{ old('note') }}</textarea>
-        </div>
-        <div class="full">
-            <button class="btn secondary" type="submit">Save As Advance</button>
-        </div>
-    </form>
-
-    <section class="card">
-        <h2>Apply Advance To Invoice</h2>
+<section class="card" style="margin-top:16px">
+    <h2>Apply Existing Advance To Invoice</h2>
         <table>
             <thead><tr><th>Invoice</th><th>Due</th><th>Apply</th></tr></thead>
             <tbody>
@@ -155,8 +124,7 @@
                 @endforelse
             </tbody>
         </table>
-    </section>
-</div>
+</section>
 
 <section class="card" style="margin-top:16px">
     <h2>Advance Balance History</h2>
@@ -184,12 +152,15 @@ const accountsByMethod = @json($accountsByMethod);
 const oldAccountId = @json(old('payment_account_id'));
 const totalDue = Number(@json($totalDue));
 const advanceBalance = Number(@json($advanceBalance));
+const paymentUrl = @json(route('customers.payments.store', $customer));
+const advanceUrl = @json(route('customers.advance-payments.store', $customer));
+const paymentForm = document.getElementById('paymentForm');
+const payDueToggle = document.getElementById('payDueToggle');
+const paymentSubmit = document.getElementById('paymentSubmit');
+const modeHint = document.getElementById('modeHint');
 const methodSelect = document.getElementById('paymentMethod');
 const accountWrap = document.getElementById('accountSelectWrap');
 const accountSelect = document.getElementById('paymentAccount');
-const advanceMethodSelect = document.getElementById('advancePaymentMethod');
-const advanceAccountWrap = document.getElementById('advanceAccountSelectWrap');
-const advanceAccountSelect = document.getElementById('advancePaymentAccount');
 const amountInput = document.getElementById('amountInput');
 const afterPayment = document.getElementById('afterPayment');
 const paymentPreview = document.getElementById('paymentPreview');
@@ -200,12 +171,18 @@ function money(value) {
 
 function refreshPreview() {
     const amount = Number(amountInput.value || 0);
-    const available = advanceBalance + amount;
+    const payDue = payDueToggle.checked;
+    const available = payDue ? advanceBalance + amount : advanceBalance;
     const duePaid = Math.min(available, totalDue);
     const remainingDue = Math.max(0, totalDue - available);
-    const remainingAdvance = Math.max(0, available - totalDue);
+    const remainingAdvance = payDue ? Math.max(0, available - totalDue) : advanceBalance + amount;
     const netAfter = remainingAdvance - remainingDue;
 
+    paymentForm.action = payDue ? paymentUrl : advanceUrl;
+    paymentSubmit.textContent = payDue ? 'Save Payment' : 'Save As Advance';
+    modeHint.textContent = payDue
+        ? 'Checked payments will clear due invoices first. Extra money will stay as advance balance.'
+        : 'Unchecked payments will be recorded only as advance balance.';
     afterPayment.textContent = money(netAfter);
 
     if (amount <= 0) {
@@ -213,7 +190,9 @@ function refreshPreview() {
         return;
     }
 
-    paymentPreview.textContent = `Due paid: ${money(duePaid)} | Remaining due: ${money(remainingDue)} | Advance balance: ${money(remainingAdvance)} | Line: ${remainingDue <= 0 ? 'can be active' : 'still due'}`;
+    paymentPreview.textContent = payDue
+        ? `Due paid: ${money(duePaid)} | Remaining due: ${money(remainingDue)} | Advance balance: ${money(remainingAdvance)} | Line: ${remainingDue <= 0 ? 'can be active' : 'still due'}`
+        : `Advance balance after entry: ${money(remainingAdvance)} | Existing due stays: ${money(totalDue)}`;
 }
 
 function refreshAccounts() {
@@ -238,33 +217,10 @@ function refreshAccounts() {
     });
 }
 
-function refreshAdvanceAccounts() {
-    const method = advanceMethodSelect.value;
-    const needsAccount = method !== 'cash';
-
-    advanceAccountWrap.style.display = needsAccount ? 'block' : 'none';
-    advanceAccountSelect.required = needsAccount;
-    advanceAccountSelect.innerHTML = '<option value="">Select account</option>';
-
-    if (! needsAccount) {
-        advanceAccountSelect.value = '';
-        return;
-    }
-
-    (accountsByMethod[method] || []).forEach(account => {
-        const option = document.createElement('option');
-        option.value = account.id;
-        option.textContent = account.label;
-        option.selected = String(oldAccountId) === String(account.id);
-        advanceAccountSelect.appendChild(option);
-    });
-}
-
 methodSelect.addEventListener('change', refreshAccounts);
-advanceMethodSelect.addEventListener('change', refreshAdvanceAccounts);
+payDueToggle.addEventListener('change', refreshPreview);
 amountInput.addEventListener('input', refreshPreview);
 refreshAccounts();
-refreshAdvanceAccounts();
 refreshPreview();
 </script>
 @endsection
