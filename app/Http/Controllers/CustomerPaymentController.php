@@ -40,14 +40,27 @@ class CustomerPaymentController extends Controller
             return back()->withInput()->withErrors(['payment_account_id' => 'Please select an account for this payment method.']);
         }
 
-        $invoice = $billingService->generateCurrentServiceBillForCustomer($customer)
-            ?: $customer->invoices()->where('due_amount', '>', 0)->orderBy('due_date')->orderBy('id')->first();
+        $invoice = $billingService->generateCurrentServiceBillForCustomer($customer);
 
-        if (! $invoice) {
-            return back()->withInput()->withErrors(['amount' => 'No active package or due invoice found for this customer.']);
+        if (! $invoice || (float) $invoice->due_amount <= 0) {
+            $invoice = $customer->invoices()->where('due_amount', '>', 0)->orderBy('due_date')->orderBy('id')->first();
         }
 
-        $paymentService->recordPayment($invoice, $data);
+        if (! $invoice) {
+            try {
+                $paymentService->addAdvanceCredit($customer, $data);
+            } catch (InvalidArgumentException $exception) {
+                return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
+            }
+
+            return redirect()->route('customers.show', $customer)->with('success', 'No due invoice found. Payment was added to customer advance balance.');
+        }
+
+        try {
+            $paymentService->recordPayment($invoice, $data);
+        } catch (InvalidArgumentException $exception) {
+            return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
+        }
 
         return redirect()->route('customers.show', $customer)->with('success', 'Customer payment recorded successfully.');
     }
