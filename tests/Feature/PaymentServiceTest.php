@@ -3,7 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\InternetPackage;
 use App\Models\Invoice;
+use App\Models\Permission;
+use App\Models\Subscription;
+use App\Models\User;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -116,6 +120,47 @@ class PaymentServiceTest extends TestCase
         $this->assertSame(0.0, (float) $invoice->refresh()->due_amount);
         $this->assertSame(700.0, (float) $invoice->paid_amount);
         $this->assertSame('paid', $invoice->status);
+    }
+
+    public function test_customer_payment_route_auto_pays_oldest_due_invoice_first(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = $this->createCustomer();
+        $package = InternetPackage::create([
+            'name' => 'Home Basic',
+            'speed' => '20 Mbps',
+            'mikrotik_profile' => 'Home Basic',
+            'monthly_price' => 1000,
+            'description' => 'Basic package',
+            'status' => 'active',
+        ]);
+
+        Subscription::create([
+            'customer_id' => $customer->id,
+            'internet_package_id' => $package->id,
+            'start_date' => '2026-04-01',
+            'status' => 'active',
+        ]);
+
+        $olderInvoice = $this->createInvoice($customer, '2026-04', 500, '2026-04-10');
+
+        $this->actingAs($user)->post(route('customers.payments.store', $customer), [
+            'amount' => 500,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-06-02',
+        ])->assertRedirect(route('customers.show', $customer));
+
+        $this->assertSame(0.0, (float) $olderInvoice->refresh()->due_amount);
+        $this->assertSame('paid', $olderInvoice->status);
+
+        $currentInvoice = Invoice::where('customer_id', $customer->id)
+            ->where('billing_month', now()->format('Y-m'))
+            ->where('invoice_type', 'service')
+            ->firstOrFail();
+
+        $this->assertSame(1000.0, (float) $currentInvoice->due_amount);
+        $this->assertSame('unpaid', $currentInvoice->status);
     }
 
     private function paymentService(): PaymentService

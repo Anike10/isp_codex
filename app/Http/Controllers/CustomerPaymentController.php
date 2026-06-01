@@ -41,11 +41,9 @@ class CustomerPaymentController extends Controller
             return back()->withInput()->withErrors(['payment_account_id' => 'Please select an account for this payment method.']);
         }
 
-        $invoice = $billingService->generateCurrentServiceBillForCustomer($customer);
+        $billingService->generateCurrentServiceBillForCustomer($customer);
 
-        if (! $invoice || (float) $invoice->due_amount <= 0) {
-            $invoice = $customer->invoices()->where('due_amount', '>', 0)->orderBy('due_date')->orderBy('id')->first();
-        }
+        $invoice = $customer->invoices()->where('due_amount', '>', 0)->orderBy('due_date')->orderBy('id')->first();
 
         if (! $invoice) {
             try {

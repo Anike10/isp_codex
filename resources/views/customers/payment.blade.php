@@ -15,46 +15,27 @@
 @endphp
 
 <style>
-    .payment-mode {
-        display:grid;
-        grid-template-columns:repeat(2, minmax(0, 1fr));
-        gap:12px;
-    }
-    .payment-mode-option {
-        position:relative;
-        display:grid;
-        gap:6px;
-        min-height:92px;
-        padding:14px 14px 14px 44px;
+    .advance-choice {
+        display:flex;
+        align-items:flex-start;
+        gap:10px;
+        padding:12px 14px;
         border:1px solid var(--line);
         border-radius:8px;
         background:#f8fafc;
         cursor:pointer;
     }
-    .payment-mode-option input {
-        position:absolute;
-        left:14px;
-        top:18px;
+    .advance-choice input {
         width:18px;
         height:18px;
-        margin:0;
-        accent-color:var(--brand);
+        margin-top:2px;
+        accent-color:var(--accent);
     }
-    .payment-mode-option strong {
-        font-size:16px;
-        line-height:1.25;
+    .advance-choice strong {
+        display:block;
+        margin-bottom:3px;
     }
-    .payment-mode-option span {
-        color:var(--muted);
-        font-size:13px;
-        line-height:1.4;
-    }
-    .payment-mode-option.selected {
-        border-color:var(--brand);
-        background:#eef8f4;
-        box-shadow:0 0 0 2px rgba(17, 97, 73, .12);
-    }
-    .payment-mode-option.advance.selected {
+    .advance-choice.selected {
         border-color:var(--accent);
         background:#eef6ff;
         box-shadow:0 0 0 2px rgba(29, 118, 201, .12);
@@ -101,7 +82,6 @@
         min-width:140px;
     }
     @media (max-width: 700px) {
-        .payment-mode,
         .payment-field-row {
             grid-template-columns:1fr;
         }
@@ -141,19 +121,13 @@
         <h2>Payment Entry</h2>
     </div>
     <div class="full">
-        <label>Payment Type</label>
-        <div class="payment-mode">
-            <label class="payment-mode-option" id="dueModeCard">
-                <input type="radio" name="payment_mode_choice" value="due" id="paymentModeDue" @checked($totalDue > 0)>
-                <strong>Pay Invoice Due</strong>
-                <span>Use this received money to clear this customer's unpaid invoice first. Extra money will become advance balance.</span>
-            </label>
-            <label class="payment-mode-option advance" id="advanceModeCard">
-                <input type="radio" name="payment_mode_choice" value="advance" id="paymentModeAdvance" @checked($totalDue <= 0)>
-                <strong>Keep As Advance</strong>
-                <span>Use this when no invoice should be paid now. The full amount stays in the customer's advance balance.</span>
-            </label>
-        </div>
+        <label class="advance-choice" id="advanceChoice">
+            <input type="checkbox" id="keepAsAdvance">
+            <span>
+                <strong>Keep as advance</strong>
+                <span class="muted">Tick only when this payment should not auto-adjust the oldest due invoice. You can still choose invoice amounts below.</span>
+            </span>
+        </label>
     </div>
     <div class="payment-field-row">
         <div>
@@ -186,8 +160,8 @@
     <div class="advance-allocation-panel" id="advanceAllocationPanel">
         <div class="allocation-heading">
             <div>
-                <h3>Invoice Adjustment From This Entry</h3>
-                <div class="muted">Put an amount beside any due invoice you want to pay now. Leave all amounts 0 to keep the full payment as advance.</div>
+                <h3>Optional Invoice Adjustment From This Entry</h3>
+                <div class="muted">Enter amounts only if part of this advance should pay old invoices now. Leave all amounts 0 to keep the full payment as advance.</div>
             </div>
             <span class="badge pending">Optional</span>
         </div>
@@ -253,10 +227,8 @@ const advanceBalance = Number(@json($advanceBalance));
 const paymentUrl = @json(route('customers.payments.store', $customer));
 const advanceUrl = @json(route('customers.advance-payments.store', $customer));
 const paymentForm = document.getElementById('paymentForm');
-const paymentModeDue = document.getElementById('paymentModeDue');
-const paymentModeAdvance = document.getElementById('paymentModeAdvance');
-const dueModeCard = document.getElementById('dueModeCard');
-const advanceModeCard = document.getElementById('advanceModeCard');
+const keepAsAdvance = document.getElementById('keepAsAdvance');
+const advanceChoice = document.getElementById('advanceChoice');
 const paymentSubmit = document.getElementById('paymentSubmit');
 const methodSelect = document.getElementById('paymentMethod');
 const accountWrap = document.getElementById('accountSelectWrap');
@@ -273,23 +245,22 @@ function money(value) {
 
 function refreshPreview() {
     const amount = Number(amountInput.value || 0);
-    const payDue = paymentModeDue.checked;
+    const saveAsAdvance = keepAsAdvance.checked;
     const allocationTotal = allocationInputs.reduce((sum, input) => sum + Number(input.value || 0), 0);
-    const available = payDue ? advanceBalance + amount : advanceBalance;
-    const duePaid = payDue ? Math.min(available, totalDue) : Math.min(allocationTotal, totalDue);
+    const available = saveAsAdvance ? advanceBalance : advanceBalance + amount;
+    const duePaid = saveAsAdvance ? Math.min(allocationTotal, totalDue) : Math.min(available, totalDue);
     const remainingDue = Math.max(0, totalDue - available);
     const advanceAfterManualAllocation = advanceBalance + amount - allocationTotal;
-    const remainingAdvance = payDue ? Math.max(0, available - totalDue) : Math.max(0, advanceAfterManualAllocation);
+    const remainingAdvance = saveAsAdvance ? Math.max(0, advanceAfterManualAllocation) : Math.max(0, available - totalDue);
     const dueAfterManualAllocation = Math.max(0, totalDue - allocationTotal);
-    const netAfter = payDue ? remainingAdvance - remainingDue : remainingAdvance - dueAfterManualAllocation;
+    const netAfter = saveAsAdvance ? remainingAdvance - dueAfterManualAllocation : remainingAdvance - remainingDue;
 
-    paymentForm.action = payDue ? paymentUrl : advanceUrl;
-    paymentSubmit.textContent = payDue ? 'Save Payment' : 'Save Advance Payment';
-    dueModeCard.classList.toggle('selected', payDue);
-    advanceModeCard.classList.toggle('selected', ! payDue);
-    advanceAllocationPanel.classList.toggle('visible', ! payDue);
+    paymentForm.action = saveAsAdvance ? advanceUrl : paymentUrl;
+    paymentSubmit.textContent = saveAsAdvance ? 'Save Advance Payment' : 'Save Payment';
+    advanceChoice.classList.toggle('selected', saveAsAdvance);
+    advanceAllocationPanel.classList.toggle('visible', saveAsAdvance);
     allocationInputs.forEach(input => {
-        input.disabled = payDue;
+        input.disabled = ! saveAsAdvance;
     });
     afterPayment.textContent = money(netAfter);
 
@@ -298,9 +269,9 @@ function refreshPreview() {
         return;
     }
 
-    paymentPreview.textContent = payDue
-        ? `Due paid: ${money(duePaid)} | Remaining due: ${money(remainingDue)} | Advance balance: ${money(remainingAdvance)} | Line: ${remainingDue <= 0 ? 'can be active' : 'still due'}`
-        : `Invoice adjusted: ${money(duePaid)} | Remaining due: ${money(dueAfterManualAllocation)} | Advance balance: ${money(remainingAdvance)}`;
+    paymentPreview.textContent = saveAsAdvance
+        ? `Invoice adjusted: ${money(duePaid)} | Remaining due: ${money(dueAfterManualAllocation)} | Advance balance: ${money(remainingAdvance)}`
+        : `Auto-adjust oldest dues: ${money(duePaid)} | Remaining due: ${money(remainingDue)} | Advance balance: ${money(remainingAdvance)}`;
 }
 
 function refreshAccounts() {
@@ -326,8 +297,7 @@ function refreshAccounts() {
 }
 
 methodSelect.addEventListener('change', refreshAccounts);
-paymentModeDue.addEventListener('change', refreshPreview);
-paymentModeAdvance.addEventListener('change', refreshPreview);
+keepAsAdvance.addEventListener('change', refreshPreview);
 amountInput.addEventListener('input', refreshPreview);
 allocationInputs.forEach(input => input.addEventListener('input', refreshPreview));
 refreshAccounts();
