@@ -56,15 +56,11 @@
         gap:16px;
     }
     .advance-allocation-panel {
-        display:none;
         grid-column:1 / -1;
         border:1px solid var(--line);
         border-radius:8px;
         background:#fbfcfe;
         padding:14px;
-    }
-    .advance-allocation-panel.visible {
-        display:block;
     }
     .allocation-heading {
         display:flex;
@@ -122,7 +118,7 @@
     </div>
     <div class="full">
         <label class="advance-choice" id="advanceChoice">
-            <input type="checkbox" id="keepAsAdvance">
+            <input type="checkbox" id="keepAsAdvance" name="keep_as_advance" value="1" @checked(old('keep_as_advance') === '1')>
             <span>
                 <strong>Keep as advance</strong>
                 <span class="muted">Tick only when this payment should not auto-adjust the oldest due invoice. You can still choose invoice amounts below.</span>
@@ -160,10 +156,10 @@
     <div class="advance-allocation-panel" id="advanceAllocationPanel">
         <div class="allocation-heading">
             <div>
-                <h3>Optional Invoice Adjustment From This Entry</h3>
-                <div class="muted">Enter amounts only if part of this advance should pay old invoices now. Leave all amounts 0 to keep the full payment as advance.</div>
+                <h3 id="allocationTitle">Invoice Adjustment From This Entry</h3>
+                <div class="muted" id="allocationHelp">Oldest due invoices will be adjusted automatically from this payment.</div>
             </div>
-            <span class="badge pending">Optional</span>
+            <span class="badge pending" id="allocationBadge">Auto</span>
         </div>
         <table>
             <thead><tr><th>Invoice</th><th>Due</th><th>Pay From This Entry</th></tr></thead>
@@ -176,7 +172,7 @@
                         </td>
                         <td>{{ number_format($invoice->due_amount, 2) }}</td>
                         <td>
-                            <input class="allocation-input" type="number" step="0.01" min="0" max="{{ $invoice->due_amount }}" name="invoice_allocations[{{ $invoice->id }}]" value="{{ old('invoice_allocations.'.$invoice->id, 0) }}">
+                            <input class="allocation-input" type="number" step="0.01" min="0" max="{{ $invoice->due_amount }}" data-due="{{ $invoice->due_amount }}" name="invoice_allocations[{{ $invoice->id }}]" value="{{ old('invoice_allocations.'.$invoice->id, 0) }}">
                         </td>
                     </tr>
                 @empty
@@ -236,8 +232,11 @@ const accountSelect = document.getElementById('paymentAccount');
 const amountInput = document.getElementById('amountInput');
 const afterPayment = document.getElementById('afterPayment');
 const paymentPreview = document.getElementById('paymentPreview');
-const advanceAllocationPanel = document.getElementById('advanceAllocationPanel');
 const allocationInputs = Array.from(document.querySelectorAll('.allocation-input'));
+const allocationTitle = document.getElementById('allocationTitle');
+const allocationHelp = document.getElementById('allocationHelp');
+const allocationBadge = document.getElementById('allocationBadge');
+let lastSaveAsAdvance = keepAsAdvance.checked;
 
 function money(value) {
     return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
@@ -246,6 +245,25 @@ function money(value) {
 function refreshPreview() {
     const amount = Number(amountInput.value || 0);
     const saveAsAdvance = keepAsAdvance.checked;
+
+    if (saveAsAdvance !== lastSaveAsAdvance) {
+        allocationInputs.forEach(input => {
+            input.value = '0';
+        });
+        lastSaveAsAdvance = saveAsAdvance;
+    }
+
+    if (! saveAsAdvance) {
+        let remaining = amount;
+
+        allocationInputs.forEach(input => {
+            const due = Number(input.dataset.due || 0);
+            const applied = Math.min(remaining, due);
+            input.value = applied > 0 ? applied.toFixed(2) : '0';
+            remaining = Math.max(0, remaining - applied);
+        });
+    }
+
     const allocationTotal = allocationInputs.reduce((sum, input) => sum + Number(input.value || 0), 0);
     const available = saveAsAdvance ? advanceBalance : advanceBalance + amount;
     const duePaid = saveAsAdvance ? Math.min(allocationTotal, totalDue) : Math.min(available, totalDue);
@@ -258,7 +276,11 @@ function refreshPreview() {
     paymentForm.action = saveAsAdvance ? advanceUrl : paymentUrl;
     paymentSubmit.textContent = saveAsAdvance ? 'Save Advance Payment' : 'Save Payment';
     advanceChoice.classList.toggle('selected', saveAsAdvance);
-    advanceAllocationPanel.classList.toggle('visible', saveAsAdvance);
+    allocationTitle.textContent = saveAsAdvance ? 'Optional Invoice Adjustment From This Entry' : 'Invoice Adjustment From This Entry';
+    allocationHelp.textContent = saveAsAdvance
+        ? 'Enter amounts only if part of this advance should pay old invoices now. Leave all amounts 0 to keep the full payment as advance.'
+        : 'Oldest due invoices will be adjusted automatically from this payment.';
+    allocationBadge.textContent = saveAsAdvance ? 'Optional' : 'Auto';
     allocationInputs.forEach(input => {
         input.disabled = ! saveAsAdvance;
     });
