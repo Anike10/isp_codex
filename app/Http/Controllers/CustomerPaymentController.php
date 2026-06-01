@@ -80,6 +80,8 @@ class CustomerPaymentController extends Controller
             'payment_date' => ['required', 'date'],
             'reference' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string'],
+            'invoice_allocations' => ['nullable', 'array'],
+            'invoice_allocations.*' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         if ($data['payment_method'] !== 'cash' && empty($data['payment_account_id'])) {
@@ -98,12 +100,20 @@ class CustomerPaymentController extends Controller
         }
 
         try {
-            $paymentService->addAdvanceCredit($customer, $data);
+            $invoiceAllocations = collect($data['invoice_allocations'] ?? [])
+                ->filter(fn ($amount) => (float) $amount > 0)
+                ->all();
+
+            if ($invoiceAllocations) {
+                $paymentService->addAdvanceCreditAndApplyToInvoices($customer, $data, $invoiceAllocations);
+            } else {
+                $paymentService->addAdvanceCredit($customer, $data);
+            }
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
         }
 
-        return redirect()->route('customers.advance-payments.create', $customer)->with('success', 'Advance payment added successfully.');
+        return redirect()->route('customers.payments.create', $customer)->with('success', 'Advance payment saved successfully.');
     }
 
     public function applyAdvance(Request $request, Customer $customer, PaymentService $paymentService)

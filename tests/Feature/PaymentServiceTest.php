@@ -98,6 +98,26 @@ class PaymentServiceTest extends TestCase
         $this->assertSame(700.0, (float) $allocation->amount);
     }
 
+    public function test_advance_payment_entry_can_allocate_part_to_due_invoice_and_keep_remainder(): void
+    {
+        $customer = $this->createCustomer();
+        $invoice = $this->createInvoice($customer, '2026-05', 700, '2026-05-10');
+
+        $this->paymentService()->addAdvanceCreditAndApplyToInvoices($customer, [
+            'amount' => 1000,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-05-15',
+            'note' => 'Advance entry with invoice allocation.',
+        ], [
+            $invoice->id => 700,
+        ]);
+
+        $this->assertSame(300.0, (float) $customer->refresh()->account_balance);
+        $this->assertSame(0.0, (float) $invoice->refresh()->due_amount);
+        $this->assertSame(700.0, (float) $invoice->paid_amount);
+        $this->assertSame('paid', $invoice->status);
+    }
+
     private function paymentService(): PaymentService
     {
         return new PaymentService($this->createMock(MikrotikCustomerSyncService::class));

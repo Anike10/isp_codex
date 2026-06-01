@@ -311,4 +311,29 @@ class PaymentService
 
         return $allocation;
     }
+
+    public function addAdvanceCreditAndApplyToInvoices(Customer $customer, array $data, array $invoiceAmounts): CustomerBalanceTransaction
+    {
+        return DB::transaction(function () use ($customer, $data, $invoiceAmounts) {
+            $transaction = $this->addAdvanceCredit($customer, $data);
+
+            foreach ($invoiceAmounts as $invoiceId => $amount) {
+                $amount = (float) $amount;
+
+                if ($amount <= 0) {
+                    continue;
+                }
+
+                $invoice = Invoice::where('customer_id', $customer->id)->findOrFail($invoiceId);
+
+                $this->applyAdvanceToInvoice($customer->refresh(), $invoice, [
+                    'amount' => $amount,
+                    'payment_date' => $data['payment_date'] ?? now()->toDateString(),
+                    'note' => $data['note'] ?? 'Applied from advance payment entry.',
+                ]);
+            }
+
+            return $transaction;
+        });
+    }
 }

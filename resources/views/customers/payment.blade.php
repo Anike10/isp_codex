@@ -74,10 +74,31 @@
         grid-template-columns:repeat(2, minmax(0, 1fr));
         gap:16px;
     }
-    .advance-apply-summary {
-        cursor:pointer;
-        font-size:20px;
-        font-weight:700;
+    .advance-allocation-panel {
+        display:none;
+        grid-column:1 / -1;
+        border:1px solid var(--line);
+        border-radius:8px;
+        background:#fbfcfe;
+        padding:14px;
+    }
+    .advance-allocation-panel.visible {
+        display:block;
+    }
+    .allocation-heading {
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:12px;
+        flex-wrap:wrap;
+        margin-bottom:10px;
+    }
+    .allocation-heading h3 {
+        margin:0;
+        font-size:18px;
+    }
+    .allocation-input {
+        min-width:140px;
     }
     @media (max-width: 700px) {
         .payment-mode,
@@ -162,6 +183,34 @@
             </select>
         </div>
     </div>
+    <div class="advance-allocation-panel" id="advanceAllocationPanel">
+        <div class="allocation-heading">
+            <div>
+                <h3>Invoice Adjustment From This Entry</h3>
+                <div class="muted">Put an amount beside any due invoice you want to pay now. Leave all amounts 0 to keep the full payment as advance.</div>
+            </div>
+            <span class="badge pending">Optional</span>
+        </div>
+        <table>
+            <thead><tr><th>Invoice</th><th>Due</th><th>Pay From This Entry</th></tr></thead>
+            <tbody>
+                @forelse ($dueInvoices as $invoice)
+                    <tr>
+                        <td>
+                            <a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a>
+                            <div class="muted">{{ $invoice->formatted_billing_month }} - {{ $invoice->due_date?->format('Y-m-d') ?? 'No due date' }}</div>
+                        </td>
+                        <td>{{ number_format($invoice->due_amount, 2) }}</td>
+                        <td>
+                            <input class="allocation-input" type="number" step="0.01" min="0" max="{{ $invoice->due_amount }}" name="invoice_allocations[{{ $invoice->id }}]" value="{{ old('invoice_allocations.'.$invoice->id, 0) }}">
+                        </td>
+                    </tr>
+                @empty
+                    <tr><td colspan="3">No due invoice found. The full amount will stay as advance.</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
     <div class="full">
         <label>Reference</label>
         <input name="reference" value="{{ old('reference') }}" placeholder="TrxID, receipt no, or note reference">
@@ -174,45 +223,6 @@
         <button class="btn" type="submit" id="paymentSubmit">Save Payment</button>
     </div>
 </form>
-
-@if ($advanceBalance > 0 && $dueInvoices->isNotEmpty())
-<details class="card" style="margin-top:16px">
-    <summary class="advance-apply-summary">Use Existing Advance Balance</summary>
-    <div class="muted" style="margin:8px 0 14px">Open this only when you want to use the customer's saved advance balance to pay an unpaid invoice.</div>
-        <table>
-            <thead><tr><th>Invoice</th><th>Due</th><th>Apply</th></tr></thead>
-            <tbody>
-                @forelse ($dueInvoices as $invoice)
-                    @php
-                        $maxApply = min($advanceBalance, (float) $invoice->due_amount);
-                    @endphp
-                    <tr>
-                        <td>
-                            <a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a>
-                            <div class="muted">{{ $invoice->formatted_billing_month }} - {{ $invoice->due_date?->format('Y-m-d') ?? 'No due date' }}</div>
-                        </td>
-                        <td>{{ number_format($invoice->due_amount, 2) }}</td>
-                        <td>
-                            @if ($maxApply > 0)
-                                <form method="post" action="{{ route('customers.advance-payments.apply', $customer) }}" class="actions">
-                                    @csrf
-                                    <input type="hidden" name="invoice_id" value="{{ $invoice->id }}">
-                                    <input type="hidden" name="payment_date" value="{{ now()->toDateString() }}">
-                                    <input type="number" step="0.01" min="1" max="{{ $maxApply }}" name="amount" value="{{ number_format($maxApply, 2, '.', '') }}" required>
-                                    <button class="btn secondary" type="submit">Apply</button>
-                                </form>
-                            @else
-                                <span class="muted">No balance</span>
-                            @endif
-                        </td>
-                    </tr>
-                @empty
-                    <tr><td colspan="3">No due invoice found.</td></tr>
-                @endforelse
-            </tbody>
-        </table>
-</details>
-@endif
 
 <section class="card" style="margin-top:16px">
     <h2>Advance Balance History</h2>
@@ -254,6 +264,8 @@ const accountSelect = document.getElementById('paymentAccount');
 const amountInput = document.getElementById('amountInput');
 const afterPayment = document.getElementById('afterPayment');
 const paymentPreview = document.getElementById('paymentPreview');
+const advanceAllocationPanel = document.getElementById('advanceAllocationPanel');
+const allocationInputs = Array.from(document.querySelectorAll('.allocation-input'));
 
 function money(value) {
     return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
@@ -262,16 +274,23 @@ function money(value) {
 function refreshPreview() {
     const amount = Number(amountInput.value || 0);
     const payDue = paymentModeDue.checked;
+    const allocationTotal = allocationInputs.reduce((sum, input) => sum + Number(input.value || 0), 0);
     const available = payDue ? advanceBalance + amount : advanceBalance;
-    const duePaid = Math.min(available, totalDue);
+    const duePaid = payDue ? Math.min(available, totalDue) : Math.min(allocationTotal, totalDue);
     const remainingDue = Math.max(0, totalDue - available);
-    const remainingAdvance = payDue ? Math.max(0, available - totalDue) : advanceBalance + amount;
-    const netAfter = remainingAdvance - remainingDue;
+    const advanceAfterManualAllocation = advanceBalance + amount - allocationTotal;
+    const remainingAdvance = payDue ? Math.max(0, available - totalDue) : Math.max(0, advanceAfterManualAllocation);
+    const dueAfterManualAllocation = Math.max(0, totalDue - allocationTotal);
+    const netAfter = payDue ? remainingAdvance - remainingDue : remainingAdvance - dueAfterManualAllocation;
 
     paymentForm.action = payDue ? paymentUrl : advanceUrl;
-    paymentSubmit.textContent = payDue ? 'Save Payment' : 'Save As Advance';
+    paymentSubmit.textContent = payDue ? 'Save Payment' : 'Save Advance Payment';
     dueModeCard.classList.toggle('selected', payDue);
     advanceModeCard.classList.toggle('selected', ! payDue);
+    advanceAllocationPanel.classList.toggle('visible', ! payDue);
+    allocationInputs.forEach(input => {
+        input.disabled = payDue;
+    });
     afterPayment.textContent = money(netAfter);
 
     if (amount <= 0) {
@@ -281,7 +300,7 @@ function refreshPreview() {
 
     paymentPreview.textContent = payDue
         ? `Due paid: ${money(duePaid)} | Remaining due: ${money(remainingDue)} | Advance balance: ${money(remainingAdvance)} | Line: ${remainingDue <= 0 ? 'can be active' : 'still due'}`
-        : `Advance balance after entry: ${money(remainingAdvance)} | Existing due stays: ${money(totalDue)}`;
+        : `Invoice adjusted: ${money(duePaid)} | Remaining due: ${money(dueAfterManualAllocation)} | Advance balance: ${money(remainingAdvance)}`;
 }
 
 function refreshAccounts() {
@@ -310,6 +329,7 @@ methodSelect.addEventListener('change', refreshAccounts);
 paymentModeDue.addEventListener('change', refreshPreview);
 paymentModeAdvance.addEventListener('change', refreshPreview);
 amountInput.addEventListener('input', refreshPreview);
+allocationInputs.forEach(input => input.addEventListener('input', refreshPreview));
 refreshAccounts();
 refreshPreview();
 </script>
