@@ -98,6 +98,41 @@ class OltOnuControllerCommandTest extends TestCase
         $this->assertSame('telnet', $method);
     }
 
+    public function test_hsgq_epon_name_commands_return_to_config_mode_for_save(): void
+    {
+        $commands = $this->callPrivateCommandBuilder('eponOnuDescriptionCommands', [[
+            'pon_port' => 2,
+            'onu_id' => 12,
+            'name' => 'Kpi Ele zhea',
+            'mac_address' => 'cc:52:89:05:6d:f8',
+            'onu_type' => '1ge',
+        ]]);
+
+        $this->assertContains('?bind-onu 12 mac cc:52:89:05:6d:f8 onu-type 1ge name "Kpi Ele zhea"', $commands);
+        $this->assertSame('exit', $commands[array_key_last($commands)]);
+        $this->assertNotSame(['exit', 'exit'], array_slice($commands, -2));
+    }
+
+    public function test_hsgq_epon_repeated_readback_name_matches_desired_name(): void
+    {
+        $matched = $this->callPrivateCommandBuilder('oltNamesMatch', [
+            'Kpi Ele zhea Kpi Ele zhea',
+            'Kpi Ele zhea',
+        ]);
+
+        $this->assertTrue($matched);
+    }
+
+    public function test_hsgq_epon_truncated_repeated_readback_name_matches_desired_name(): void
+    {
+        $matched = $this->callPrivateCommandBuilder('oltNamesMatch', [
+            'KPI Ele Zhea KPI Ele Zhea',
+            'KPI Ele Zhead',
+        ]);
+
+        $this->assertTrue($matched);
+    }
+
     public function test_hsgq_epon_finds_auto_assigned_onu_id_from_output(): void
     {
         $onuId = $this->callPrivateCommandBuilder('findEponOnuIdInOutput', [

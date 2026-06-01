@@ -38,10 +38,9 @@
                         @csrf
                         <button class="btn secondary" type="submit">Fast Refresh</button>
                     </form>
-                    <form method="post" action="{{ route('olt-onus.olts.refresh', $oltDevice) }}">
+                    <form method="post" action="{{ route('olt-onus.olts.refresh', $oltDevice) }}" class="actions" style="gap:8px">
                         @csrf
-                        <input type="hidden" name="refresh_mode" value="full">
-                        <select name="pon_port" aria-label="PON port for full refresh" style="width:120px">
+                        <select name="pon_port" aria-label="PON port for refresh" style="width:120px">
                             <option value="">All PONs</option>
                             @foreach (($oltPonPorts[$oltDevice->id] ?? []) as $oltPonPort)
                                 <option value="{{ $oltPonPort }}" @selected((string) request('pon_port') === (string) $oltPonPort && (string) request('olt_device_id') === (string) $oltDevice->id)>
@@ -49,22 +48,10 @@
                                 </option>
                             @endforeach
                         </select>
-                        <button class="btn light" type="submit">Full Power/VLAN Refresh</button>
+                        <button class="btn light" name="refresh_mode" value="{{ $oltDevice->protocol_profile === 'hsgq_gpon' ? 'full_mac' : 'full' }}" type="submit">
+                            Power/VLAN + MAC Refresh
+                        </button>
                     </form>
-                    @if ($oltDevice->protocol_profile === 'hsgq_gpon')
-                        <form method="post" action="{{ route('olt-onus.olts.refresh', $oltDevice) }}">
-                            @csrf
-                            <input type="hidden" name="refresh_mode" value="mac">
-                            <select name="pon_port" aria-label="PON port for MAC refresh" style="width:120px">
-                                @foreach (($oltPonPorts[$oltDevice->id] ?? []) as $oltPonPort)
-                                    <option value="{{ $oltPonPort }}" @selected((string) request('pon_port') === (string) $oltPonPort && (string) request('olt_device_id') === (string) $oltDevice->id)>
-                                        PON {{ $oltPonPort }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <button class="btn light" type="submit">MAC Refresh</button>
-                        </form>
-                    @endif
                 </div>
             @endforeach
         </div>

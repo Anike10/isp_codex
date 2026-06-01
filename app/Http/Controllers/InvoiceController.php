@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\PaymentAccount;
 use App\Models\Subscription;
 use App\Services\BillingService;
 use Illuminate\Http\Request;
@@ -280,7 +281,16 @@ class InvoiceController extends Controller
     {
         $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'items']);
 
-        return view('invoices.show', compact('invoice'));
+        $paymentAccounts = collect();
+
+        if (auth()->user()?->hasPermission('manage_payments')) {
+            $paymentAccounts = PaymentAccount::where('status', 'active')
+                ->orderBy('payment_method')
+                ->orderBy('account_name')
+                ->get();
+        }
+
+        return view('invoices.show', compact('invoice', 'paymentAccounts'));
     }
 
     public function challan(Invoice $invoice)

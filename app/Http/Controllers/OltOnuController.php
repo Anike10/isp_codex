@@ -286,6 +286,8 @@ class OltOnuController extends Controller
             'pon_port' => $oltOnu->pon_port,
             'onu_id' => $oltOnu->onu_id,
             'name' => $desired,
+            'mac_address' => $oltOnu->mac_address,
+            'onu_type' => $oltOnu->onu_type,
         ]);
 
         // simple modify commands
@@ -314,7 +316,11 @@ class OltOnuController extends Controller
                 if ($record) {
                     $liveName = trim((string) ($record['name'] ?? $record['description'] ?? ''));
 
-                    if ($liveName !== '' && mb_strtolower($liveName) === mb_strtolower($desired)) {
+                    if ($this->oltNamesMatch($liveName, $desired)) {
+                        if ($liveName !== '') {
+                            $oltOnu->update(['name' => $this->cleanOltReadbackName($liveName)]);
+                        }
+
                         $matched = true;
                         break;
                     }
@@ -341,6 +347,7 @@ class OltOnuController extends Controller
             return back()->with('error', 'OLT name save failed; application now shows the value read from the OLT.');
         }
 
+        $oltDevice->update(['last_error' => null]);
         $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nName written to OLT at ".now()->format('Y-m-d H:i:s')."\n".implode("\n", array_filter($aggregateOutput)))]);
 
         return back()->with('success', "ONU name updated to '{$desired}' for {$oltOnu->pon_port}/{$oltOnu->onu_id} and written to OLT.");
@@ -382,6 +389,8 @@ class OltOnuController extends Controller
             'pon_port' => $oltOnu->pon_port,
             'onu_id' => $oltOnu->onu_id,
             'name' => (string) ($desired ?? ''),
+            'mac_address' => $oltOnu->mac_address,
+            'onu_type' => $oltOnu->onu_type,
         ]);
 
         // Also try a simple "interface + ont/onu set desc/name" attempt
@@ -414,7 +423,8 @@ class OltOnuController extends Controller
 
                     if ($liveDesc !== '') {
                         // Compare case-insensitively
-                        if (mb_strtolower($liveDesc) === mb_strtolower((string) ($desired ?? ''))) {
+                        if ($this->oltNamesMatch($liveDesc, (string) ($desired ?? ''))) {
+                            $oltOnu->update(['description' => $this->cleanOltReadbackName($liveDesc)]);
                             $matched = true;
                             break;
                         }
@@ -447,6 +457,7 @@ class OltOnuController extends Controller
         }
 
         // Success: log outputs and return success
+        $oltDevice->update(['last_error' => null]);
         $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nDescription written to OLT at ".now()->format('Y-m-d H:i:s')."\n".implode("\n", array_filter($aggregateOutput)))]);
 
         return back()->with('success', "ONU description updated for {$oltOnu->pon_port}/{$oltOnu->onu_id} and written to OLT.");
@@ -667,7 +678,8 @@ class OltOnuController extends Controller
             ? 23
             : (int) $oltDevice->port;
         $client = $accessMethod === 'telnet' ? $telnetClient : $sshClient;
-        $fullDetailRefresh = request()->input('refresh_mode') === 'full';
+        $refreshMode = request()->input('refresh_mode');
+        $fullDetailRefresh = in_array($refreshMode, ['full', 'full_mac'], true);
         $fastInventoryRefresh = ! $fullDetailRefresh && $this->usesFastInventoryRefresh($oltDevice);
         $statusOnlyRefresh = ! $fullDetailRefresh && $this->usesStatusOnlyRefresh($oltDevice);
         $eponPowerVlanRefresh = $this->usesEponPowerVlanRefresh($oltDevice, $fullDetailRefresh);
@@ -1468,10 +1480,17 @@ class OltOnuController extends Controller
         $ponPort = (int) $data['pon_port'];
         $onuId = (int) $data['onu_id'];
         $name = $this->oltQuoted($data['name']);
+        $macAddress = strtolower(trim((string) ($data['mac_address'] ?? '')));
+        $onuType = trim((string) ($data['onu_type'] ?? '')) ?: '1ge';
+
         // Include many common vendor command variations and optional variants
-        return [
+        return array_values(array_filter([
             // enter PON context
             "interface epon {$ponPort}",
+
+            // HSGQ EPON uses this syntax when authorizing ONU; on several firmwares
+            // re-running it updates the ONU name for an existing binding.
+            $macAddress !== '' ? "?bind-onu {$onuId} mac {$macAddress} onu-type {$onuType} name {$name}" : null,
 
             // common EPON/ONT variants
             "?onu modify {$ponPort} {$onuId} desc {$name}",
@@ -1497,9 +1516,9 @@ class OltOnuController extends Controller
             "?set onu {$onuId} name {$name}",
             "?set onu {$onuId} description {$name}",
 
-            // exit context
+            // On HSGQ EPON, exiting ONU context returns to config mode.
             'exit',
-        ];
+        ]));
     }
 
     private function queryOnuRecordGeneric(OltDevice $oltDevice, OltLiveOutputParser $parser, int $ponPort, int $onuId): ?array
@@ -1537,7 +1556,40 @@ class OltOnuController extends Controller
 
     private function oltNamesMatch(?string $actual, string $expected): bool
     {
-        return mb_strtolower(trim((string) $actual)) === mb_strtolower(trim($expected));
+        $normalize = fn (?string $value): string => mb_strtolower($this->cleanOltReadbackName((string) $value));
+        $actual = $normalize($actual);
+        $expected = $normalize($expected);
+
+        if ($actual === $expected) {
+            return true;
+        }
+
+        if (mb_strlen($expected) >= 6 && str_contains($actual, $expected)) {
+            return true;
+        }
+
+        return mb_strlen($actual) >= 8 && str_starts_with($expected, $actual);
+    }
+
+    private function cleanOltReadbackName(string $value): string
+    {
+        $value = preg_replace('/\s+/', ' ', trim($value, "\"' \t\n\r\0\x0B")) ?? '';
+        $length = mb_strlen($value);
+
+        if ($length > 0 && $length % 2 === 1) {
+            $middle = intdiv($length, 2);
+
+            if (mb_substr($value, $middle, 1) === ' ') {
+                $left = mb_substr($value, 0, $middle);
+                $right = mb_substr($value, $middle + 1);
+
+                if (mb_strtolower($left) === mb_strtolower($right)) {
+                    return $left;
+                }
+            }
+        }
+
+        return $value;
     }
 
     private function parseUtilitySerial(string $line, string $matchedKey): ?string
@@ -1650,6 +1702,10 @@ class OltOnuController extends Controller
 
     private function refreshModeText(bool $fullDetailRefresh): string
     {
+        if (request()->input('refresh_mode') === 'full_mac') {
+            return 'full Power/VLAN and MAC refresh mode';
+        }
+
         if (request()->input('refresh_mode') === 'mac') {
             return 'MAC refresh mode';
         }
@@ -1663,7 +1719,7 @@ class OltOnuController extends Controller
             return false;
         }
 
-        if (request()->input('refresh_mode') === 'mac') {
+        if (in_array(request()->input('refresh_mode'), ['mac', 'full_mac'], true)) {
             return true;
         }
 

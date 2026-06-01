@@ -1,6 +1,17 @@
 @extends('layouts.app')
 
 @section('content')
+@php
+    $canRecordPayment = auth()->user()?->hasPermission('manage_payments') && (float) $invoice->due_amount > 0;
+    $accountsByMethod = ($paymentAccounts ?? collect())
+        ->groupBy('payment_method')
+        ->map(fn ($accounts) => $accounts->map(fn ($account) => [
+            'id' => $account->id,
+            'label' => $account->account_name.' - '.$account->account_number,
+        ])->values())
+        ->toArray();
+@endphp
+
 <div class="topbar">
     <div>
         <h1>{{ $invoice->invoice_no }}</h1>
@@ -58,6 +69,67 @@
     </section>
 </div>
 
+@if ($canRecordPayment)
+<section class="card" style="margin-top:16px">
+    <h2>Record Payment</h2>
+    <form method="post" action="{{ route('payments.store') }}" class="form-grid" onsubmit="return confirm('Record this payment for {{ $invoice->invoice_no }}?');">
+        @csrf
+        <input type="hidden" name="invoice_id" value="{{ $invoice->id }}">
+        <input type="hidden" name="redirect_to" value="invoice">
+
+        <div class="full">
+            <label>Invoice</label>
+            <input value="{{ $invoice->invoice_no }} - {{ $invoice->customer->name }} - Due {{ number_format($invoice->due_amount, 2) }}" readonly>
+        </div>
+        <div>
+            <label>Amount</label>
+            <input type="number" step="0.01" min="1" name="amount" value="{{ old('amount', number_format((float) $invoice->due_amount, 2, '.', '')) }}" required>
+            <span class="muted">Due is {{ number_format($invoice->due_amount, 2) }}. Extra amount will stay in customer advance balance.</span>
+        </div>
+        <div>
+            <label>Method</label>
+            <select name="payment_method" id="invoicePaymentMethod" required>
+                <option value="cash" @selected(old('payment_method', 'cash') === 'cash')>Cash</option>
+                <option value="bkash" @selected(old('payment_method') === 'bkash')>bKash</option>
+                <option value="nagad" @selected(old('payment_method') === 'nagad')>Nagad</option>
+                <option value="bank" @selected(old('payment_method') === 'bank')>Bank</option>
+            </select>
+        </div>
+        <div id="invoiceAccountSelectWrap">
+            <label>Receive To Account</label>
+            <select name="payment_account_id" id="invoicePaymentAccount">
+                <option value="">Select account</option>
+            </select>
+            <span class="muted">The payment will be posted to the selected account.</span>
+        </div>
+        <div id="invoiceCashAccountWrap">
+            <label>Receive To Account</label>
+            <input value="Cash Ledger" readonly>
+            <span class="muted">Cash payments are posted to the cash ledger.</span>
+        </div>
+        <div id="invoiceNewAccountNameWrap">
+            <label>New Account Name</label>
+            <input name="new_account_name" id="invoiceNewAccountName" value="{{ old('new_account_name') }}" placeholder="Personal, Office, Bank branch">
+        </div>
+        <div id="invoiceNewAccountNumberWrap">
+            <label>New Account Number</label>
+            <input name="new_account_number" id="invoiceNewAccountNumber" value="{{ old('new_account_number') }}" placeholder="Account or mobile number">
+        </div>
+        <div>
+            <label>Payment Date</label>
+            <input type="date" name="payment_date" value="{{ old('payment_date', now()->toDateString()) }}" required>
+        </div>
+        <div class="full">
+            <label>Note</label>
+            <textarea name="note" placeholder="Transaction ID, receiver number, bank note, or any payment detail">{{ old('note', 'Payment received for '.$invoice->invoice_no.'.') }}</textarea>
+        </div>
+        <div class="full">
+            <button class="btn" type="submit">Save Payment</button>
+        </div>
+    </form>
+</section>
+@endif
+
 @if($invoice->items->count() > 0)
 <section class="card" style="margin-top:16px">
     <h2>Items</h2>
@@ -88,7 +160,7 @@
                 <td>{{ $allocation->allocated_at->format('Y-m-d') }}</td>
                 <td>{{ number_format($allocation->amount, 2) }}</td>
                 <td>{{ $allocation->source_type === 'advance' ? 'Advance Balance' : 'Payment #'.$allocation->payment_id }}</td>
-                <td>{{ $allocation->payment?->account ? $allocation->payment->account->account_name.' - '.$allocation->payment->account->account_number : 'N/A' }}</td>
+                <td>{{ $allocation->payment?->account ? $allocation->payment->account->account_name.' - '.$allocation->payment->account->account_number : ($allocation->payment?->payment_method === 'cash' ? 'Cash Ledger' : 'N/A') }}</td>
                 <td>{{ $allocation->note }}</td>
             </tr>
         @empty
@@ -97,4 +169,62 @@
         </tbody>
     </table>
 </section>
+@if ($canRecordPayment)
+<script>
+const invoiceAccountsByMethod = @json($accountsByMethod);
+const invoiceOldAccountId = @json(old('payment_account_id'));
+const invoiceMethodSelect = document.getElementById('invoicePaymentMethod');
+const invoiceAccountWrap = document.getElementById('invoiceAccountSelectWrap');
+const invoiceCashAccountWrap = document.getElementById('invoiceCashAccountWrap');
+const invoiceAccountSelect = document.getElementById('invoicePaymentAccount');
+const invoiceNewAccountNameWrap = document.getElementById('invoiceNewAccountNameWrap');
+const invoiceNewAccountNumberWrap = document.getElementById('invoiceNewAccountNumberWrap');
+const invoiceNewAccountName = document.getElementById('invoiceNewAccountName');
+const invoiceNewAccountNumber = document.getElementById('invoiceNewAccountNumber');
+
+function refreshInvoiceAccounts() {
+    const method = invoiceMethodSelect.value;
+    const needsAccount = method !== 'cash';
+
+    invoiceAccountWrap.style.display = needsAccount ? 'block' : 'none';
+    invoiceCashAccountWrap.style.display = needsAccount ? 'none' : 'block';
+    invoiceAccountSelect.required = needsAccount;
+    invoiceAccountSelect.innerHTML = '<option value="">Select account</option>';
+
+    if (needsAccount) {
+        (invoiceAccountsByMethod[method] || []).forEach(account => {
+            const option = document.createElement('option');
+            option.value = account.id;
+            option.textContent = account.label;
+            option.selected = String(invoiceOldAccountId) === String(account.id);
+            invoiceAccountSelect.appendChild(option);
+        });
+
+        const addOption = document.createElement('option');
+        addOption.value = '__new__';
+        addOption.textContent = '+ Add new account';
+        addOption.selected = invoiceOldAccountId === '__new__';
+        invoiceAccountSelect.appendChild(addOption);
+    } else {
+        invoiceAccountSelect.required = false;
+        invoiceAccountSelect.value = '';
+    }
+
+    refreshInvoiceNewAccountFields();
+}
+
+function refreshInvoiceNewAccountFields() {
+    const addingNew = invoiceAccountSelect.value === '__new__' && invoiceMethodSelect.value !== 'cash';
+
+    invoiceNewAccountNameWrap.style.display = addingNew ? 'block' : 'none';
+    invoiceNewAccountNumberWrap.style.display = addingNew ? 'block' : 'none';
+    invoiceNewAccountName.required = addingNew;
+    invoiceNewAccountNumber.required = addingNew;
+}
+
+invoiceMethodSelect.addEventListener('change', refreshInvoiceAccounts);
+invoiceAccountSelect.addEventListener('change', refreshInvoiceNewAccountFields);
+refreshInvoiceAccounts();
+</script>
+@endif
 @endsection

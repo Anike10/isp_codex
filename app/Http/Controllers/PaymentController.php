@@ -102,10 +102,16 @@ class PaymentController extends Controller
             $data['payment_account_id'] = $account->id;
         }
 
+        $invoice = Invoice::findOrFail($data['invoice_id']);
+
         try {
-            $paymentService->recordPayment(Invoice::findOrFail($data['invoice_id']), $data);
+            $paymentService->recordPayment($invoice, $data);
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
+        }
+
+        if ($request->input('redirect_to') === 'invoice') {
+            return redirect()->route('invoices.show', $invoice)->with('success', 'Payment recorded successfully.');
         }
 
         return redirect()->route('payments.index')->with('success', 'Payment recorded successfully.');
