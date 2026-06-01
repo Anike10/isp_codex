@@ -5,7 +5,6 @@
     <div><h1>{{ $customer->name }}</h1><div class="muted">{{ $customer->connection_id }} · {{ $customer->phone }}</div></div>
     <div class="actions">
         <a class="btn" href="{{ route('customers.payments.create', $customer) }}">Record Payment</a>
-        <a class="btn secondary" href="{{ route('customers.advance-payments.create', $customer) }}">Advance Payment</a>
         <a class="btn secondary" href="{{ route('customers.edit', $customer) }}">Edit</a>
         <a class="btn light" href="{{ route('customers.index') }}">Back</a>
     </div>

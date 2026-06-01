@@ -22,6 +22,7 @@ class CustomerPaymentController extends Controller
                 ->orderBy('due_date')
                 ->orderBy('id')
                 ->get(),
+            'balanceTransactions' => $customer->balanceTransactions()->latest()->limit(20)->get(),
             'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
         ]);
     }
@@ -67,13 +68,7 @@ class CustomerPaymentController extends Controller
 
     public function createAdvance(Customer $customer)
     {
-        return view('customers.advance_payment', [
-            'customer' => $customer->load([
-                'invoices' => fn ($query) => $query->where('due_amount', '>', 0)->orderBy('due_date')->orderBy('id'),
-                'balanceTransactions' => fn ($query) => $query->latest()->limit(20),
-            ]),
-            'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
-        ]);
+        return redirect()->route('customers.payments.create', $customer);
     }
 
     public function storeAdvance(Request $request, Customer $customer, PaymentService $paymentService)
