@@ -68,8 +68,15 @@
         border-radius:8px;
         background:#fbfcfe;
     }
+    .payment-field-row {
+        display:grid;
+        grid-column:1 / -1;
+        grid-template-columns:repeat(2, minmax(0, 1fr));
+        gap:16px;
+    }
     @media (max-width: 700px) {
-        .payment-mode {
+        .payment-mode,
+        .payment-field-row {
             grid-template-columns:1fr;
         }
     }
@@ -122,29 +129,33 @@
             </label>
         </div>
     </div>
-    <div>
-        <label>Amount</label>
-        <input type="number" step="0.01" min="1" name="amount" id="amountInput" value="{{ old('amount') }}" required>
-        <div class="payment-summary muted" id="paymentPreview">Enter amount to preview due and balance update.</div>
+    <div class="payment-field-row">
+        <div>
+            <label>Amount</label>
+            <input type="number" step="0.01" min="1" name="amount" id="amountInput" value="{{ old('amount') }}" required>
+            <div class="payment-summary muted" id="paymentPreview">Enter amount to preview due and balance update.</div>
+        </div>
+        <div>
+            <label>Payment Date</label>
+            <input type="date" name="payment_date" value="{{ old('payment_date', now()->toDateString()) }}" required>
+        </div>
     </div>
-    <div>
-        <label>Method</label>
-        <select name="payment_method" id="paymentMethod" required>
-            <option value="cash" @selected(old('payment_method', 'cash') === 'cash')>Cash</option>
-            <option value="bkash" @selected(old('payment_method') === 'bkash')>bKash</option>
-            <option value="nagad" @selected(old('payment_method') === 'nagad')>Nagad</option>
-            <option value="bank" @selected(old('payment_method') === 'bank')>Bank</option>
-        </select>
-    </div>
-    <div id="accountSelectWrap">
-        <label>Account</label>
-        <select name="payment_account_id" id="paymentAccount">
-            <option value="">Select account</option>
-        </select>
-    </div>
-    <div>
-        <label>Payment Date</label>
-        <input type="date" name="payment_date" value="{{ old('payment_date', now()->toDateString()) }}" required>
+    <div class="payment-field-row">
+        <div>
+            <label>Method</label>
+            <select name="payment_method" id="paymentMethod" required>
+                <option value="cash" @selected(old('payment_method', 'cash') === 'cash')>Cash</option>
+                <option value="bkash" @selected(old('payment_method') === 'bkash')>bKash</option>
+                <option value="nagad" @selected(old('payment_method') === 'nagad')>Nagad</option>
+                <option value="bank" @selected(old('payment_method') === 'bank')>Bank</option>
+            </select>
+        </div>
+        <div id="accountSelectWrap">
+            <label>Account</label>
+            <select name="payment_account_id" id="paymentAccount">
+                <option value="">Select account</option>
+            </select>
+        </div>
     </div>
     <div class="full">
         <label>Reference</label>
