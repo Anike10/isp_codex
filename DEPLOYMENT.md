@@ -37,7 +37,8 @@ branch: main
 Normal deployment flow:
 
 1. Finish and test locally.
-2. Commit the local changes.
+2. Commit the local changes with a detailed Git message that explains what
+   changed, why it changed, and how it was verified.
 3. Push `main` to GitHub.
 4. SSH to the production server.
 5. Pull the latest `main` as the site user.

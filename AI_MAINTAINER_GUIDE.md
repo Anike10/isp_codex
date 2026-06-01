@@ -6,6 +6,9 @@ This guide is for another AI agent or developer who needs to update this Laravel
 
 - Work like a highly skilled Laravel, PHP, and OLT engineer.
 - Keep token and cost use low: inspect only the files needed, make focused changes, avoid repeated broad searches, and prefer concise verification.
+- Keep every production or code update traceable in Git: review `git status`,
+  make focused commits with detailed messages, and include what changed, why it
+  changed, and how it was verified in the commit message or project notes.
 
 ## Project Snapshot
 

@@ -212,4 +212,103 @@ class PaymentService
             return $transaction;
         });
     }
+
+    public function applyAdvanceToInvoice(Customer $customer, Invoice $invoice, array $data): PaymentAllocation
+    {
+        if ((float) $data['amount'] <= 0) {
+            throw new InvalidArgumentException('Applied amount must be greater than zero.');
+        }
+
+        $allocation = DB::transaction(function () use ($customer, $invoice, $data) {
+            $customer = Customer::whereKey($customer->id)->lockForUpdate()->firstOrFail();
+            $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+
+            if ((int) $invoice->customer_id !== (int) $customer->id) {
+                throw new InvalidArgumentException('This invoice does not belong to the selected customer.');
+            }
+
+            $amount = (float) $data['amount'];
+            $currentBalance = (float) $customer->account_balance;
+            $currentDue = (float) $invoice->due_amount;
+
+            if ($currentBalance <= 0) {
+                throw new InvalidArgumentException('This customer has no advance balance to apply.');
+            }
+
+            if ($currentDue <= 0) {
+                throw new InvalidArgumentException('This invoice is already paid.');
+            }
+
+            if ($amount > $currentBalance) {
+                throw new InvalidArgumentException('Applied amount cannot be greater than the customer advance balance.');
+            }
+
+            if ($amount > $currentDue) {
+                throw new InvalidArgumentException('Applied amount cannot be greater than the invoice due amount.');
+            }
+
+            $allocation = PaymentAllocation::create([
+                'entry_by' => $data['entry_by'] ?? null,
+                'customer_id' => $customer->id,
+                'invoice_id' => $invoice->id,
+                'payment_id' => null,
+                'source_type' => 'advance',
+                'amount' => $amount,
+                'allocated_at' => $data['payment_date'] ?? now()->toDateString(),
+                'note' => $data['note'] ?? 'Applied from customer advance balance.',
+            ]);
+
+            $invoice->paid_amount += $amount;
+            $invoice->due_amount = max(0, (float) $invoice->total - (float) $invoice->paid_amount);
+            $invoice->status = $invoice->due_amount <= 0 ? 'paid' : 'partial';
+            $invoice->save();
+
+            $balanceAfter = max(0, $currentBalance - $amount);
+
+            CustomerBalanceTransaction::create([
+                'entry_by' => $data['entry_by'] ?? null,
+                'customer_id' => $customer->id,
+                'payment_id' => null,
+                'payment_account_id' => null,
+                'payment_method' => 'advance',
+                'direction' => 'debit',
+                'amount' => $amount,
+                'balance_after' => $balanceAfter,
+                'transaction_date' => $data['payment_date'] ?? now()->toDateString(),
+                'reference' => 'INV-'.$invoice->id,
+                'note' => $data['note'] ?? 'Advance balance applied to invoice.',
+            ]);
+
+            $customer->update(['account_balance' => $balanceAfter]);
+
+            return $allocation;
+        });
+
+        $customer->refresh();
+
+        if ((float) Invoice::where('customer_id', $customer->id)->where('due_amount', '>', 0)->sum('due_amount') <= 0) {
+            $customer->update(['status' => 'active']);
+
+            $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
+
+            if ($subscription) {
+                $subscription->update([
+                    'status' => 'active',
+                    'end_date' => null,
+                ]);
+            }
+
+            try {
+                $this->mikrotikSyncService->sync($customer->refresh());
+            } catch (Throwable $exception) {
+                Log::warning('MikroTik sync failed after applying advance balance.', [
+                    'customer_id' => $customer->id,
+                    'invoice_id' => $invoice->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        return $allocation;
+    }
 }

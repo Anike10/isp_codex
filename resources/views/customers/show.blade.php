@@ -5,6 +5,7 @@
     <div><h1>{{ $customer->name }}</h1><div class="muted">{{ $customer->connection_id }} · {{ $customer->phone }}</div></div>
     <div class="actions">
         <a class="btn" href="{{ route('customers.payments.create', $customer) }}">Record Payment</a>
+        <a class="btn secondary" href="{{ route('customers.advance-payments.create', $customer) }}">Advance Payment</a>
         <a class="btn secondary" href="{{ route('customers.edit', $customer) }}">Edit</a>
         <a class="btn light" href="{{ route('customers.index') }}">Back</a>
     </div>
@@ -83,6 +84,26 @@
             </tr>
         @empty
             <tr><td colspan="5">No invoices yet.</td></tr>
+        @endforelse
+        </tbody>
+    </table>
+</section>
+<section class="card" style="margin-top:16px">
+    <h2>Advance Balance History</h2>
+    <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Balance</th><th>Reference</th><th>Note</th></tr></thead>
+        <tbody>
+        @forelse ($customer->balanceTransactions as $transaction)
+            <tr>
+                <td>{{ $transaction->transaction_date?->format('Y-m-d') }}</td>
+                <td><span class="badge {{ $transaction->direction === 'credit' ? 'active' : 'due' }}">{{ $transaction->direction }}</span></td>
+                <td>{{ number_format($transaction->amount, 2) }}</td>
+                <td>{{ number_format($transaction->balance_after, 2) }}</td>
+                <td>{{ $transaction->reference ?? 'N/A' }}</td>
+                <td>{{ $transaction->note ?? 'N/A' }}</td>
+            </tr>
+        @empty
+            <tr><td colspan="6">No advance balance history yet.</td></tr>
         @endforelse
         </tbody>
     </table>

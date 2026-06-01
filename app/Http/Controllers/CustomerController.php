@@ -153,7 +153,13 @@ class CustomerController extends Controller
 
     public function show(Customer $customer)
     {
-        $customer->load(['activeSubscription.package', 'mikrotikRouter', 'invoices' => fn ($query) => $query->latest(), 'tickets' => fn ($query) => $query->latest()]);
+        $customer->load([
+            'activeSubscription.package',
+            'mikrotikRouter',
+            'invoices' => fn ($query) => $query->latest(),
+            'balanceTransactions' => fn ($query) => $query->latest()->limit(10),
+            'tickets' => fn ($query) => $query->latest(),
+        ]);
 
         return view('customers.show', compact('customer'));
     }

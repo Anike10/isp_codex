@@ -56,6 +56,48 @@ class PaymentServiceTest extends TestCase
         ]);
     }
 
+    public function test_advance_credit_can_be_added_without_an_invoice(): void
+    {
+        $customer = $this->createCustomer();
+
+        $transaction = $this->paymentService()->addAdvanceCredit($customer, [
+            'amount' => 500,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-05-15',
+            'reference' => 'ADV-001',
+            'note' => 'Customer paid before invoice.',
+        ]);
+
+        $this->assertSame(500.0, (float) $customer->refresh()->account_balance);
+        $this->assertSame('credit', $transaction->direction);
+        $this->assertSame(500.0, (float) $transaction->balance_after);
+    }
+
+    public function test_advance_balance_can_be_applied_to_a_selected_due_invoice(): void
+    {
+        $customer = $this->createCustomer();
+        $invoice = $this->createInvoice($customer, '2026-05', 700, '2026-05-10');
+
+        $this->paymentService()->addAdvanceCredit($customer, [
+            'amount' => 700,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-05-01',
+        ]);
+
+        $allocation = $this->paymentService()->applyAdvanceToInvoice($customer->refresh(), $invoice, [
+            'amount' => 700,
+            'payment_date' => '2026-05-15',
+            'note' => 'Apply advance to selected invoice.',
+        ]);
+
+        $this->assertSame(0.0, (float) $customer->refresh()->account_balance);
+        $this->assertSame(0.0, (float) $invoice->refresh()->due_amount);
+        $this->assertSame(700.0, (float) $invoice->paid_amount);
+        $this->assertSame('paid', $invoice->status);
+        $this->assertSame('advance', $allocation->source_type);
+        $this->assertSame(700.0, (float) $allocation->amount);
+    }
+
     private function paymentService(): PaymentService
     {
         return new PaymentService($this->createMock(MikrotikCustomerSyncService::class));
