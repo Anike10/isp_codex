@@ -14,6 +14,67 @@
     $netBalance = $advanceBalance - $totalDue;
 @endphp
 
+<style>
+    .payment-mode {
+        display:grid;
+        grid-template-columns:repeat(2, minmax(0, 1fr));
+        gap:12px;
+    }
+    .payment-mode-option {
+        position:relative;
+        display:grid;
+        gap:6px;
+        min-height:92px;
+        padding:14px 14px 14px 44px;
+        border:1px solid var(--line);
+        border-radius:8px;
+        background:#f8fafc;
+        cursor:pointer;
+    }
+    .payment-mode-option input {
+        position:absolute;
+        left:14px;
+        top:18px;
+        width:18px;
+        height:18px;
+        margin:0;
+        accent-color:var(--brand);
+    }
+    .payment-mode-option strong {
+        font-size:16px;
+        line-height:1.25;
+    }
+    .payment-mode-option span {
+        color:var(--muted);
+        font-size:13px;
+        line-height:1.4;
+    }
+    .payment-mode-option.selected {
+        border-color:var(--brand);
+        background:#eef8f4;
+        box-shadow:0 0 0 2px rgba(17, 97, 73, .12);
+    }
+    .payment-mode-option.advance.selected {
+        border-color:var(--accent);
+        background:#eef6ff;
+        box-shadow:0 0 0 2px rgba(29, 118, 201, .12);
+    }
+    .payment-summary {
+        display:flex;
+        gap:10px;
+        flex-wrap:wrap;
+        padding:10px 12px;
+        border:1px solid var(--line);
+        border-radius:8px;
+        background:#fbfcfe;
+    }
+    @media (max-width: 700px) {
+        .payment-mode {
+            grid-template-columns:1fr;
+        }
+    }
+</style>
+
 <div class="topbar">
     <div>
         <h1>Record Customer Payment</h1>
@@ -47,16 +108,24 @@
         <h2>Payment Entry</h2>
     </div>
     <div class="full">
-        <label>
-            <input type="checkbox" id="payDueToggle" @checked($totalDue > 0)>
-            Pay due invoice
-        </label>
-        <span class="muted" id="modeHint">Checked payments will clear due invoices first. Unchecked payments will stay as advance balance.</span>
+        <label>Payment Type</label>
+        <div class="payment-mode">
+            <label class="payment-mode-option" id="dueModeCard">
+                <input type="radio" name="payment_mode_choice" value="due" id="paymentModeDue" @checked($totalDue > 0)>
+                <strong>Pay Invoice Due</strong>
+                <span>Use this received money to clear this customer's unpaid invoice first. Extra money will become advance balance.</span>
+            </label>
+            <label class="payment-mode-option advance" id="advanceModeCard">
+                <input type="radio" name="payment_mode_choice" value="advance" id="paymentModeAdvance" @checked($totalDue <= 0)>
+                <strong>Keep As Advance</strong>
+                <span>Use this when no invoice should be paid now. The full amount stays in the customer's advance balance.</span>
+            </label>
+        </div>
     </div>
     <div>
         <label>Amount</label>
         <input type="number" step="0.01" min="1" name="amount" id="amountInput" value="{{ old('amount') }}" required>
-        <span class="muted" id="paymentPreview">Enter amount to preview due and balance update.</span>
+        <div class="payment-summary muted" id="paymentPreview">Enter amount to preview due and balance update.</div>
     </div>
     <div>
         <label>Method</label>
@@ -155,9 +224,11 @@ const advanceBalance = Number(@json($advanceBalance));
 const paymentUrl = @json(route('customers.payments.store', $customer));
 const advanceUrl = @json(route('customers.advance-payments.store', $customer));
 const paymentForm = document.getElementById('paymentForm');
-const payDueToggle = document.getElementById('payDueToggle');
+const paymentModeDue = document.getElementById('paymentModeDue');
+const paymentModeAdvance = document.getElementById('paymentModeAdvance');
+const dueModeCard = document.getElementById('dueModeCard');
+const advanceModeCard = document.getElementById('advanceModeCard');
 const paymentSubmit = document.getElementById('paymentSubmit');
-const modeHint = document.getElementById('modeHint');
 const methodSelect = document.getElementById('paymentMethod');
 const accountWrap = document.getElementById('accountSelectWrap');
 const accountSelect = document.getElementById('paymentAccount');
@@ -171,7 +242,7 @@ function money(value) {
 
 function refreshPreview() {
     const amount = Number(amountInput.value || 0);
-    const payDue = payDueToggle.checked;
+    const payDue = paymentModeDue.checked;
     const available = payDue ? advanceBalance + amount : advanceBalance;
     const duePaid = Math.min(available, totalDue);
     const remainingDue = Math.max(0, totalDue - available);
@@ -180,9 +251,8 @@ function refreshPreview() {
 
     paymentForm.action = payDue ? paymentUrl : advanceUrl;
     paymentSubmit.textContent = payDue ? 'Save Payment' : 'Save As Advance';
-    modeHint.textContent = payDue
-        ? 'Checked payments will clear due invoices first. Extra money will stay as advance balance.'
-        : 'Unchecked payments will be recorded only as advance balance.';
+    dueModeCard.classList.toggle('selected', payDue);
+    advanceModeCard.classList.toggle('selected', ! payDue);
     afterPayment.textContent = money(netAfter);
 
     if (amount <= 0) {
@@ -218,7 +288,8 @@ function refreshAccounts() {
 }
 
 methodSelect.addEventListener('change', refreshAccounts);
-payDueToggle.addEventListener('change', refreshPreview);
+paymentModeDue.addEventListener('change', refreshPreview);
+paymentModeAdvance.addEventListener('change', refreshPreview);
 amountInput.addEventListener('input', refreshPreview);
 refreshAccounts();
 refreshPreview();
