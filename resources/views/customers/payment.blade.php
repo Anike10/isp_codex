@@ -74,6 +74,11 @@
         grid-template-columns:repeat(2, minmax(0, 1fr));
         gap:16px;
     }
+    .advance-apply-summary {
+        cursor:pointer;
+        font-size:20px;
+        font-weight:700;
+    }
     @media (max-width: 700px) {
         .payment-mode,
         .payment-field-row {
@@ -170,8 +175,10 @@
     </div>
 </form>
 
-<section class="card" style="margin-top:16px">
-    <h2>Apply Existing Advance To Invoice</h2>
+@if ($advanceBalance > 0 && $dueInvoices->isNotEmpty())
+<details class="card" style="margin-top:16px">
+    <summary class="advance-apply-summary">Use Existing Advance Balance</summary>
+    <div class="muted" style="margin:8px 0 14px">Open this only when you want to use the customer's saved advance balance to pay an unpaid invoice.</div>
         <table>
             <thead><tr><th>Invoice</th><th>Due</th><th>Apply</th></tr></thead>
             <tbody>
@@ -204,7 +211,8 @@
                 @endforelse
             </tbody>
         </table>
-</section>
+</details>
+@endif
 
 <section class="card" style="margin-top:16px">
     <h2>Advance Balance History</h2>
