@@ -27,6 +27,12 @@ class PaymentService
         $payment = DB::transaction(function () use ($invoice, $data) {
             $invoice->load('customer.activeSubscription');
             $customer = Customer::whereKey($invoice->customer_id)->lockForUpdate()->firstOrFail();
+            $targetInvoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+
+            if ((float) $targetInvoice->due_amount <= 0) {
+                throw new InvalidArgumentException('This invoice is already paid.');
+            }
+
             $oldAdvanceBalance = (float) $customer->account_balance;
             $advanceRemaining = $oldAdvanceBalance;
             $paymentRemaining = (float) $data['amount'];
@@ -43,13 +49,14 @@ class PaymentService
                 'note' => $data['note'] ?? null,
             ]);
 
-            $dueInvoices = Invoice::query()
+            $dueInvoices = collect([$targetInvoice])->merge(Invoice::query()
                 ->where('customer_id', $customer->id)
+                ->whereKeyNot($targetInvoice->id)
                 ->where('due_amount', '>', 0)
                 ->orderBy('due_date')
                 ->orderBy('id')
                 ->lockForUpdate()
-                ->get();
+                ->get());
 
             foreach ($dueInvoices as $dueInvoice) {
                 if ($advanceRemaining <= 0 && $paymentRemaining <= 0) {
