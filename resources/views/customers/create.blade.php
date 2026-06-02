@@ -11,11 +11,15 @@
     <div><label>Name</label><input name="name" value="{{ old('name') }}" required></div>
     <div><label>Phone</label><input name="phone" value="{{ old('phone') }}" required></div>
     <div><label>Email</label><input type="email" name="email" value="{{ old('email') }}"></div>
-    <div><label>Connection ID</label><input name="connection_id" value="{{ old('connection_id') }}" required></div>
+    <div>
+        <label>Connection ID</label>
+        <input name="connection_id" value="{{ old('connection_id') }}" placeholder="Only for ISP customers">
+        <span class="muted">Leave blank for product-only customers. Required when assigning an internet package.</span>
+    </div>
     <div>
         <label>MikroTik Password</label>
         <input value="4321" readonly>
-        <span class="muted">Connection ID will be used as the MikroTik user ID.</span>
+        <span class="muted">Used only when a Connection ID is provided.</span>
     </div>
     <div>
         <label>MikroTik Target</label>
@@ -27,7 +31,7 @@
                 </option>
             @endforeach
         </select>
-        <span class="muted">Choose one router, or keep all active routers selected.</span>
+        <span class="muted">Used only for ISP customers with a Connection ID.</span>
     </div>
     <div class="full"><label>Address</label><textarea name="address" required>{{ old('address') }}</textarea></div>
     <div>

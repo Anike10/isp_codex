@@ -100,6 +100,11 @@ class MikrotikCustomerSyncService
     private function syncPppSecret(RouterOsClient $client, Customer $customer, MikrotikRouter $router): string
     {
         $username = $customer->mikrotik_username ?: $customer->connection_id;
+
+        if (! $username) {
+            return 'skipped';
+        }
+
         $password = $customer->mikrotik_password ?: self::DEFAULT_PASSWORD;
         $subscription = $customer->activeSubscription;
         $package = $subscription?->package;

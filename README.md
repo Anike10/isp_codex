@@ -6,6 +6,7 @@ A Laravel 12 application for an ISP and computer service business.
 
 - Dashboard with customers, income, due, tickets, and stock summary
 - Customer and internet package management
+- Product-only customers can be saved without an ISP Connection ID
 - MikroTik router management and PPPoE user sync
 - OLT ONU live polling with status and optical power inventory
 - Monthly invoice generation

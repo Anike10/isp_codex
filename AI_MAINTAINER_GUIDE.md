@@ -643,8 +643,9 @@ Read this section before changing billing, bKash SMS, customer status, or MikroT
 
 ### Customer Identity And Balance
 
-- Customer `connection_id` is the default ISP/MikroTik user ID.
-- Customer `mikrotik_username` is displayed as User ID on `/customers`; if missing, use `connection_id`.
+- Customer `connection_id` is optional for product-only customers who are not ISP subscribers.
+- When assigning an internet package/subscription, `connection_id` is required because it becomes the ISP/MikroTik user ID.
+- Customer `mikrotik_username` is displayed as User ID on `/customers`; if missing, use `connection_id`; if both are missing, treat the customer as product-only.
 - Default customer MikroTik/PPPoE password is `4321`.
 - `customers.account_balance` stores advance/extra money only.
 - Customer net balance shown in lists is:

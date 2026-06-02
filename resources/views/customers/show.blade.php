@@ -2,7 +2,7 @@
 
 @section('content')
 <div class="topbar">
-    <div><h1>{{ $customer->name }}</h1><div class="muted">{{ $customer->connection_id }} · {{ $customer->phone }}</div></div>
+    <div><h1>{{ $customer->name }}</h1><div class="muted">{{ $customer->connection_id ?: 'Product-only customer' }} - {{ $customer->phone }}</div></div>
     <div class="actions">
         <a class="btn" href="{{ route('customers.payments.create', $customer) }}">Record Payment</a>
         <a class="btn secondary" href="{{ route('customers.edit', $customer) }}">Edit</a>
@@ -50,9 +50,9 @@
         <p><strong>Email:</strong> {{ $customer->email ?? 'Not provided' }}</p>
         <p><strong>Address:</strong> {{ $customer->address }}</p>
         <p><strong>Package:</strong> {{ $customer->activeSubscription?->package?->name ?? 'No active package' }}</p>
-        <p><strong>MikroTik User ID:</strong> {{ $customer->mikrotik_username ?? $customer->connection_id }}</p>
-        <p><strong>MikroTik Password:</strong> 4321</p>
-        <p><strong>MikroTik Target:</strong> {{ $customer->mikrotikRouter ? $customer->mikrotikRouter->name.' - '.$customer->mikrotikRouter->ip_address.':'.$customer->mikrotikRouter->api_port : 'All active MikroTik routers' }}</p>
+        <p><strong>MikroTik User ID:</strong> {{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Not assigned' }}</p>
+        <p><strong>MikroTik Password:</strong> {{ ($customer->mikrotik_username || $customer->connection_id) ? '4321' : 'Not assigned' }}</p>
+        <p><strong>MikroTik Target:</strong> {{ ($customer->mikrotik_username || $customer->connection_id) ? ($customer->mikrotikRouter ? $customer->mikrotikRouter->name.' - '.$customer->mikrotikRouter->ip_address.':'.$customer->mikrotikRouter->api_port : 'All active MikroTik routers') : 'Not assigned' }}</p>
         <p><strong>MikroTik Profile:</strong> {{ $customer->activeSubscription?->package?->mikrotik_profile ?? 'No active profile' }}</p>
     </section>
     <section class="card">

@@ -9,6 +9,7 @@ use App\Models\Subscription;
 use App\Services\MikrotikCustomerSyncService;
 use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 class CustomerController extends Controller
@@ -55,7 +56,7 @@ class CustomerController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
-            'connection_id' => ['required', 'string', 'max:100', 'unique:customers,connection_id'],
+            'connection_id' => ['required_with:internet_package_id', 'nullable', 'string', 'max:100', 'unique:customers,connection_id'],
             'address' => ['required', 'string'],
             'status' => ['required', 'in:active,inactive'],
             'never_suspend' => ['nullable', 'boolean'],
@@ -64,8 +65,7 @@ class CustomerController extends Controller
             'start_date' => ['nullable', 'date'],
         ]);
 
-        $data['mikrotik_username'] = $data['connection_id'];
-        $data['mikrotik_password'] = MikrotikCustomerSyncService::DEFAULT_PASSWORD;
+        $this->normalizeCustomerConnectionData($data);
         $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
 
         $customer = Customer::create($data);
@@ -104,7 +104,7 @@ class CustomerController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
-            'connection_id' => ['required', 'string', 'max:100', 'unique:customers,connection_id,'.$customer->id],
+            'connection_id' => ['required_with:internet_package_id', 'nullable', 'string', 'max:100', Rule::unique('customers', 'connection_id')->ignore($customer->id)],
             'address' => ['required', 'string'],
             'status' => ['required', 'in:active,inactive'],
             'never_suspend' => ['nullable', 'boolean'],
@@ -113,8 +113,7 @@ class CustomerController extends Controller
             'start_date' => ['nullable', 'date'],
         ]);
 
-        $data['mikrotik_username'] = $data['connection_id'];
-        $data['mikrotik_password'] = $customer->mikrotik_password ?: MikrotikCustomerSyncService::DEFAULT_PASSWORD;
+        $this->normalizeCustomerConnectionData($data, $customer);
         $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
 
         $customer->update(Arr::except($data, ['internet_package_id', 'start_date']));
@@ -205,6 +204,13 @@ class CustomerController extends Controller
 
     private function syncMikrotikCustomer(Customer $customer): array
     {
+        if (! $customer->mikrotik_username && ! $customer->connection_id) {
+            return [
+                'status' => 'skipped (no connection ID)',
+                'warning' => null,
+            ];
+        }
+
         try {
             $status = app(MikrotikCustomerSyncService::class)->sync($customer->refresh());
 
@@ -217,6 +223,21 @@ class CustomerController extends Controller
                 'status' => 'not synced',
                 'warning' => 'MikroTik sync failed: '.$exception->getMessage(),
             ];
+        }
+    }
+
+    private function normalizeCustomerConnectionData(array &$data, ?Customer $customer = null): void
+    {
+        $connectionId = trim((string) ($data['connection_id'] ?? '')) ?: null;
+
+        $data['connection_id'] = $connectionId;
+        $data['mikrotik_username'] = $connectionId;
+        $data['mikrotik_password'] = $connectionId
+            ? ($customer?->mikrotik_password ?: MikrotikCustomerSyncService::DEFAULT_PASSWORD)
+            : null;
+
+        if (! $connectionId) {
+            $data['mikrotik_router_id'] = null;
         }
     }
 }

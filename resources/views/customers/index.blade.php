@@ -26,7 +26,7 @@
         <tr data-href="{{ route('customers.show', $customer) }}">
             <td>{{ $customer->name }}</td>
             <td>{{ $customer->phone }}</td>
-            <td>{{ $customer->mikrotik_username ?? $customer->connection_id }}</td>
+            <td>{{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}</td>
             <td>{{ $customer->activeSubscription?->package?->name ?? 'No package' }}</td>
             <td>
                 <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span>
