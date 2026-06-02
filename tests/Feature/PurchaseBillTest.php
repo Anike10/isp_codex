@@ -29,6 +29,9 @@ class PurchaseBillTest extends TestCase
         $product = Product::create([
             'name' => 'ONU Device',
             'sku' => 'ONU-001',
+            'brand' => 'BDCOM',
+            'category' => 'Network Device',
+            'subcategory' => 'ONU',
             'purchase_price' => 900,
             'sale_price' => 1200,
             'stock_quantity' => 0,
@@ -78,6 +81,9 @@ class PurchaseBillTest extends TestCase
         $product = Product::create([
             'name' => 'Patch Cord',
             'sku' => 'PC-001',
+            'brand' => 'Generic',
+            'category' => 'Cable',
+            'subcategory' => 'Patch Cord',
             'purchase_price' => 30,
             'sale_price' => 50,
             'stock_quantity' => 5,

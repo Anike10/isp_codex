@@ -32,6 +32,9 @@ class PurchaseBillController extends Controller
         return view('purchase_bills.create', [
             'vendors' => Customer::query()->where('is_vendor', true)->orderBy('name')->get(),
             'products' => Product::query()->orderBy('name')->get(),
+            'brands' => Product::query()->whereNotNull('brand')->where('brand', '!=', '')->distinct()->orderBy('brand')->pluck('brand'),
+            'categories' => Product::query()->whereNotNull('category')->where('category', '!=', '')->distinct()->orderBy('category')->pluck('category'),
+            'subcategories' => Product::query()->whereNotNull('subcategory')->where('subcategory', '!=', '')->distinct()->orderBy('subcategory')->pluck('subcategory'),
             'defaultBillNo' => $this->nextBillNo(),
         ]);
     }

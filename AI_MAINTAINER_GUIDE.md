@@ -487,6 +487,9 @@ Permission:
 
 Stock movement behavior:
 
+- Products have optional `brand`, `category`, and `subcategory` string fields.
+- Product forms use existing brand/category/subcategory values as selectable suggestions, but new values can still be typed.
+- Product lists and purchase bill product selection can filter by brand, category, and subcategory.
 - `in` increases stock.
 - `out` decreases stock.
 - `use` decreases stock for items used inside the business.

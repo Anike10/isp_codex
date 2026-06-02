@@ -4,7 +4,7 @@
 <div class="topbar">
     <div>
         <h1>{{ $product->name }}</h1>
-        <div class="muted">{{ $product->sku }} - {{ $product->category ?? 'No category' }}</div>
+        <div class="muted">{{ $product->sku }} - {{ $product->brand ?? 'No brand' }} - {{ $product->category ?? 'No category' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}</div>
     </div>
     <a class="btn light" href="{{ route('products.index') }}">Back</a>
 </div>

@@ -20,7 +20,10 @@
         <tbody>
         @foreach ($purchaseBill->items as $item)
             <tr>
-                <td>{{ $item->product->name }} <span class="muted">{{ $item->product->sku }}</span></td>
+                <td>
+                    {{ $item->product->name }} <span class="muted">{{ $item->product->sku }}</span>
+                    <div class="muted">{{ $item->product->brand ?? 'No brand' }} - {{ $item->product->category ?? 'No category' }}{{ $item->product->subcategory ? ' / '.$item->product->subcategory : '' }}</div>
+                </td>
                 <td>{{ $item->quantity }}</td>
                 <td>{{ number_format($item->unit_price, 2) }}</td>
                 <td>{{ number_format($item->total, 2) }}</td>

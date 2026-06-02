@@ -25,6 +25,35 @@
     </div>
 
     <h2 style="margin-top:18px">Products</h2>
+    <div class="form-grid" style="margin-bottom:12px">
+        <div>
+            <label>Filter Brand</label>
+            <select id="purchaseBrandFilter">
+                <option value="">All brands</option>
+                @foreach ($brands as $brand)
+                    <option value="{{ $brand }}">{{ $brand }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div>
+            <label>Filter Category</label>
+            <select id="purchaseCategoryFilter">
+                <option value="">All categories</option>
+                @foreach ($categories as $category)
+                    <option value="{{ $category }}">{{ $category }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div>
+            <label>Filter Sub Category</label>
+            <select id="purchaseSubcategoryFilter">
+                <option value="">All sub categories</option>
+                @foreach ($subcategories as $subcategory)
+                    <option value="{{ $subcategory }}">{{ $subcategory }}</option>
+                @endforeach
+            </select>
+        </div>
+    </div>
     <table>
         <thead>
             <tr>
@@ -44,7 +73,15 @@
                         <select name="items[{{ $index }}][product_id]" required>
                             <option value="">Select product</option>
                             @foreach ($products as $product)
-                                <option value="{{ $product->id }}" @selected((int) ($item['product_id'] ?? 0) === $product->id)>{{ $product->name }} - {{ $product->sku }}</option>
+                                <option
+                                    value="{{ $product->id }}"
+                                    data-brand="{{ $product->brand }}"
+                                    data-category="{{ $product->category }}"
+                                    data-subcategory="{{ $product->subcategory }}"
+                                    @selected((int) ($item['product_id'] ?? 0) === $product->id)
+                                >
+                                    {{ $product->name }} - {{ $product->sku }}{{ $product->brand ? ' - '.$product->brand : '' }}{{ $product->category ? ' - '.$product->category : '' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}
+                                </option>
                             @endforeach
                         </select>
                     </td>
@@ -70,7 +107,14 @@
             <select data-name="product_id" required>
                 <option value="">Select product</option>
                 @foreach ($products as $product)
-                    <option value="{{ $product->id }}">{{ $product->name }} - {{ $product->sku }}</option>
+                    <option
+                        value="{{ $product->id }}"
+                        data-brand="{{ $product->brand }}"
+                        data-category="{{ $product->category }}"
+                        data-subcategory="{{ $product->subcategory }}"
+                    >
+                        {{ $product->name }} - {{ $product->sku }}{{ $product->brand ? ' - '.$product->brand : '' }}{{ $product->category ? ' - '.$product->category : '' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}
+                    </option>
                 @endforeach
             </select>
         </td>
@@ -85,22 +129,59 @@
 <script>
 const rows = document.getElementById('purchaseRows');
 const template = document.getElementById('purchaseRowTemplate');
+const brandFilter = document.getElementById('purchaseBrandFilter');
+const categoryFilter = document.getElementById('purchaseCategoryFilter');
+const subcategoryFilter = document.getElementById('purchaseSubcategoryFilter');
 const assignNames = row => {
     const index = [...rows.children].indexOf(row);
     row.querySelectorAll('[data-name]').forEach(input => {
         input.name = `items[${index}][${input.dataset.name}]`;
     });
 };
+const applyProductFilters = () => {
+    const brand = brandFilter.value;
+    const category = categoryFilter.value;
+    const subcategory = subcategoryFilter.value;
+
+    rows.querySelectorAll('select[name$="[product_id]"]').forEach(select => {
+        let selectedStillVisible = true;
+
+        select.querySelectorAll('option').forEach(option => {
+            if (!option.value) {
+                option.hidden = false;
+                return;
+            }
+
+            const visible = (!brand || option.dataset.brand === brand)
+                && (!category || option.dataset.category === category)
+                && (!subcategory || option.dataset.subcategory === subcategory);
+            option.hidden = !visible;
+
+            if (option.selected && !visible) {
+                selectedStillVisible = false;
+            }
+        });
+
+        if (!selectedStillVisible) {
+            select.value = '';
+        }
+    });
+};
 document.getElementById('addPurchaseRow').addEventListener('click', () => {
     const row = template.content.firstElementChild.cloneNode(true);
     rows.appendChild(row);
     assignNames(row);
+    applyProductFilters();
 });
+brandFilter.addEventListener('change', applyProductFilters);
+categoryFilter.addEventListener('change', applyProductFilters);
+subcategoryFilter.addEventListener('change', applyProductFilters);
 document.addEventListener('click', event => {
     if (! event.target.closest('[data-remove-row]')) return;
     if (rows.children.length <= 1) return;
     event.target.closest('tr').remove();
     rows.querySelectorAll('tr').forEach(assignNames);
 });
+applyProductFilters();
 </script>
 @endsection
