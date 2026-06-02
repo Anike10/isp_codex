@@ -6,6 +6,7 @@ use App\Models\OltDevice;
 use App\Models\OltOnu;
 use App\Models\OltProtocolProfile;
 use App\Services\OltLiveOutputParser;
+use App\Services\OltSnmpClient;
 use App\Services\OltSshClient;
 use App\Services\OltTelnetClient;
 use App\Support\Utf8Text;
@@ -110,6 +111,12 @@ class OltOnuController extends Controller
                 'access_method' => 'ssh',
                 'port' => 22,
                 'username' => 'isp_app',
+                'snmp_enabled' => false,
+                'snmp_version' => '2c',
+                'snmp_port' => 161,
+                'snmp_timeout_ms' => 800,
+                'snmp_retries' => 1,
+                'snmp_power_divisor' => 1,
                 'read_context_commands' => "enable\nconfig",
                 'pon_ports' => '1,2,3,4,5,6,7,8',
                 'onu_status_command' => 'show onu-info all',
@@ -153,6 +160,10 @@ class OltOnuController extends Controller
 
         if (($data['enable_password'] ?? null) === null) {
             unset($data['enable_password']);
+        }
+
+        if (($data['snmp_community'] ?? null) === null) {
+            unset($data['snmp_community']);
         }
 
         $oltDevice->update($data);
@@ -906,6 +917,12 @@ class OltOnuController extends Controller
         $vlanCommand = $oltDevice->onu_vlan_command ?: $profile?->default_onu_vlan_command;
         $macCommand = $oltDevice->onu_mac_command ?: $profile?->default_onu_mac_command;
         $fullDetailRefresh = in_array(request()->input('refresh_mode'), ['full', 'full_mac'], true);
+        if (! $fullDetailRefresh && $snmpRecord = app(OltSnmpClient::class)->singleOnuSnapshot($oltDevice, $oltOnu)) {
+            $this->updateLiveOnuRecord($oltDevice, $snmpRecord, now());
+
+            return OltOnu::query()->with('oltDevice')->findOrFail($oltOnu->id);
+        }
+
         $commands = $this->singleOnuPollCommands($oltDevice, $oltOnu, $statusCommand, $powerCommand, $vlanCommand, $macCommand, $profile, $fullDetailRefresh);
         $blockedCommand = $this->firstUnsafeReadOrContextCommand($commands);
 
@@ -1885,6 +1902,15 @@ class OltOnuController extends Controller
             'username' => ['required', 'string', 'max:255'],
             'password' => $passwordRules,
             'enable_password' => ['nullable', 'string', 'max:255'],
+            'snmp_enabled' => ['nullable', 'boolean'],
+            'snmp_version' => ['required', Rule::in(['1', '2c'])],
+            'snmp_port' => ['required', 'integer', 'min:1', 'max:65535'],
+            'snmp_community' => ['nullable', 'string', 'max:255'],
+            'snmp_timeout_ms' => ['required', 'integer', 'min:100', 'max:10000'],
+            'snmp_retries' => ['required', 'integer', 'min:0', 'max:5'],
+            'snmp_status_oid_template' => ['nullable', 'string', 'max:255'],
+            'snmp_power_oid_template' => ['nullable', 'string', 'max:255'],
+            'snmp_power_divisor' => ['required', 'numeric', 'min:0.01', 'max:100000'],
             'read_context_commands' => ['nullable', 'string'],
             'pon_ports' => ['required', 'string', 'max:255'],
             'onu_status_command' => ['required', 'string', 'max:255'],
@@ -1894,7 +1920,9 @@ class OltOnuController extends Controller
             'onu_mac_command' => ['nullable', 'string', 'max:255'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
             'notes' => ['nullable', 'string'],
-        ]);
+        ]) + [
+            'snmp_enabled' => false,
+        ];
     }
 
     private function validateProtocolProfile(Request $request, ?OltProtocolProfile $profile = null): array

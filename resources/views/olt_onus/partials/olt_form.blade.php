@@ -59,6 +59,54 @@
             <input id="enable_password" name="enable_password" type="password">
             <div class="muted" style="margin-top:6px">Optional. Leave empty to keep current value when editing.</div>
         </div>
+        <div class="full" style="border-top:1px solid var(--line); padding-top:14px; margin-top:4px">
+            <label style="display:flex; gap:8px; align-items:center">
+                <input name="snmp_enabled" type="hidden" value="0">
+                <input id="snmp_enabled" name="snmp_enabled" type="checkbox" value="1" @checked(old('snmp_enabled', $oltDevice->snmp_enabled)) style="width:auto">
+                Use SNMP for fast row Update Now
+            </label>
+            <div class="muted" style="margin-top:6px">SNMP is tried first for single ONU status/power. If it is not configured or fails, CLI refresh still runs.</div>
+        </div>
+        <div>
+            <label for="snmp_version">SNMP Version</label>
+            <select id="snmp_version" name="snmp_version">
+                <option value="2c" @selected(old('snmp_version', $oltDevice->snmp_version ?: '2c') === '2c')>v2c</option>
+                <option value="1" @selected(old('snmp_version', $oltDevice->snmp_version) === '1')>v1</option>
+            </select>
+        </div>
+        <div>
+            <label for="snmp_port">SNMP Port</label>
+            <input id="snmp_port" name="snmp_port" type="number" min="1" max="65535" value="{{ old('snmp_port', $oltDevice->snmp_port ?: 161) }}">
+        </div>
+        <div>
+            <label for="snmp_community">SNMP Community</label>
+            <input id="snmp_community" name="snmp_community" type="password">
+            @if ($oltDevice->exists && $oltDevice->snmp_community)
+                <div class="muted" style="margin-top:6px">Leave empty to keep the current SNMP community.</div>
+            @endif
+        </div>
+        <div>
+            <label for="snmp_timeout_ms">SNMP Timeout MS</label>
+            <input id="snmp_timeout_ms" name="snmp_timeout_ms" type="number" min="100" max="10000" value="{{ old('snmp_timeout_ms', $oltDevice->snmp_timeout_ms ?: 800) }}">
+        </div>
+        <div>
+            <label for="snmp_retries">SNMP Retries</label>
+            <input id="snmp_retries" name="snmp_retries" type="number" min="0" max="5" value="{{ old('snmp_retries', $oltDevice->snmp_retries ?? 1) }}">
+        </div>
+        <div class="full">
+            <label for="snmp_status_oid_template">SNMP Status OID Template</label>
+            <input id="snmp_status_oid_template" name="snmp_status_oid_template" value="{{ old('snmp_status_oid_template', $oltDevice->snmp_status_oid_template) }}" placeholder=".1.3.6.1.x.x.{pon_port}.{onu_id}">
+            <div class="muted" style="margin-top:6px">Supported placeholders: {pon_port}, {onu_id}, {pon_onu}, {pon_onu_dot}.</div>
+        </div>
+        <div class="full">
+            <label for="snmp_power_oid_template">SNMP Power OID Template</label>
+            <input id="snmp_power_oid_template" name="snmp_power_oid_template" value="{{ old('snmp_power_oid_template', $oltDevice->snmp_power_oid_template) }}" placeholder=".1.3.6.1.x.x.{pon_port}.{onu_id}">
+        </div>
+        <div>
+            <label for="snmp_power_divisor">SNMP Power Divisor</label>
+            <input id="snmp_power_divisor" name="snmp_power_divisor" type="number" min="0.01" step="0.01" value="{{ old('snmp_power_divisor', $oltDevice->snmp_power_divisor ?: 1) }}">
+            <div class="muted" style="margin-top:6px">Use 10 when raw -238 means -23.8 dBm.</div>
+        </div>
         <div class="full">
             <label for="read_context_commands">Read Context Commands</label>
             <textarea id="read_context_commands" name="read_context_commands" rows="3" placeholder="enable&#10;config">{{ old('read_context_commands', $oltDevice->read_context_commands) }}</textarea>

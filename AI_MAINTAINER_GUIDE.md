@@ -131,6 +131,7 @@ git status -sb
 - `app/Services/PaymentService.php`: payment recording and invoice due update
 - `app/Http/Controllers/PaymentAccountController.php`: account balances and ledger
 - `app/Http/Controllers/OltOnuController.php`: OLT device setup, live refresh, and ONU inventory
+- `app/Services/OltSnmpClient.php`: optional SNMP-first single ONU status/power polling for fast row refresh
 - `app/Services/OltTelnetClient.php`: Telnet client for live OLT polling
 - `app/Services/OltLiveOutputParser.php`: parses live OLT output into ONU records
 - `resources/views/olt_onus/*`: OLT setup, live refresh, and list pages

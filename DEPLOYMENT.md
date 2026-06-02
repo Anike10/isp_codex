@@ -157,6 +157,27 @@ Default HSGQ PON ports: 1,2,3,4,5,6,7,8
 Default HSGQ show commands: show onu-info all, show optical-info
 ```
 
+Optional fast OLT row refresh can use SNMP before falling back to CLI. To enable
+it on production:
+
+```bash
+php -m | grep -i snmp
+```
+
+If SNMP is missing, install/enable the PHP SNMP extension for the production PHP
+version, restart the web runtime, then configure each OLT in the app with:
+
+```text
+SNMP enabled: yes
+Version: 2c unless the device only supports v1
+Community: from the approved secure source, never from Git
+Status OID template: vendor-specific, can use {pon_port}, {onu_id}
+Power OID template: vendor-specific, can use {pon_port}, {onu_id}
+Power divisor: use 10 when a raw value like -238 means -23.8 dBm
+```
+
+Run `php artisan migrate --force` after deploying the SNMP polling migration.
+
 Run `composer install --no-dev --optimize-autoloader` on production after
 deploying changes that include `composer.json` or `composer.lock`.
 
