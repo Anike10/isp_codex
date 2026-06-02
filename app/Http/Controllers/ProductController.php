@@ -64,11 +64,22 @@ class ProductController extends Controller
             'sku' => ['required', 'string', 'max:100', 'unique:products,sku'],
             'brand' => ['nullable', 'string', 'max:100'],
             'product_category_id' => ['nullable', 'exists:product_categories,id'],
+            'track_inventory' => ['nullable', 'boolean'],
             'purchase_price' => ['required', 'numeric', 'min:0'],
             'sale_price' => ['required', 'numeric', 'min:0'],
-            'stock_quantity' => ['required', 'integer', 'min:0'],
-            'low_stock_alert' => ['required', 'integer', 'min:0'],
+            'stock_quantity' => ['nullable', 'integer', 'min:0'],
+            'low_stock_alert' => ['nullable', 'integer', 'min:0'],
         ]);
+
+        $data['track_inventory'] = $request->boolean('track_inventory');
+
+        if (! $data['track_inventory']) {
+            $data['stock_quantity'] = 0;
+            $data['low_stock_alert'] = 0;
+        } else {
+            $data['stock_quantity'] = (int) ($data['stock_quantity'] ?? 0);
+            $data['low_stock_alert'] = (int) ($data['low_stock_alert'] ?? 5);
+        }
 
         $data = $this->syncCategoryLabels($data);
 
@@ -79,6 +90,10 @@ class ProductController extends Controller
 
     public function moveStock(Request $request, Product $product, InventoryService $inventoryService)
     {
+        if (! $product->track_inventory) {
+            return back()->withErrors(['quantity' => 'This product does not track inventory.']);
+        }
+
         $data = $request->validate([
             'type' => ['required', 'in:in,out,use'],
             'quantity' => ['required', 'integer', 'min:1'],

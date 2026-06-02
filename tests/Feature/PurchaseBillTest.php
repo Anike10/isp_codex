@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Models\Permission;
 use App\Models\Product;
+use App\Models\ProductCategory;
 use App\Models\ProductSerial;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -13,6 +14,33 @@ use Tests\TestCase;
 class PurchaseBillTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_purchase_bill_create_page_renders_with_category_filters(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        $category = ProductCategory::create(['name' => 'Network Device']);
+        $subcategory = ProductCategory::create(['parent_id' => $category->id, 'name' => 'ONU']);
+
+        Product::create([
+            'name' => 'ONU Device',
+            'sku' => 'ONU-001',
+            'brand' => 'BDCOM',
+            'product_category_id' => $subcategory->id,
+            'category' => 'Network Device',
+            'subcategory' => 'ONU',
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 2,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('purchase-bills.create'))
+            ->assertOk()
+            ->assertSee('Add Purchase Bill')
+            ->assertSee('ONU Device');
+    }
 
     public function test_purchase_bill_adds_stock_and_tracks_serial_warranty(): void
     {
@@ -71,6 +99,44 @@ class PurchaseBillTest extends TestCase
             'serial_number' => 'ONU-A1',
             'warranty_until' => '2027-06-02 00:00:00',
             'status' => 'in_stock',
+        ]);
+    }
+
+    public function test_purchase_bill_can_include_non_stock_items_without_stock_movement(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        $product = Product::create([
+            'name' => 'Installation Charge',
+            'sku' => 'SVC-001',
+            'brand' => 'Service',
+            'track_inventory' => false,
+            'purchase_price' => 0,
+            'sale_price' => 500,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 0,
+        ]);
+
+        $this->actingAs($user)->post(route('purchase-bills.store'), [
+            'bill_no' => 'PB-SERVICE-001',
+            'purchase_date' => '2026-06-02',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 1,
+                    'unit_price' => 500,
+                ],
+            ],
+        ])->assertRedirect(route('purchase-bills.index'));
+
+        $this->assertSame(0, $product->refresh()->stock_quantity);
+        $this->assertDatabaseHas('purchase_bills', [
+            'bill_no' => 'PB-SERVICE-001',
+            'subtotal' => 500,
+        ]);
+        $this->assertDatabaseMissing('stock_movements', [
+            'product_id' => $product->id,
+            'reference_no' => 'PB-SERVICE-001',
         ]);
     }
 

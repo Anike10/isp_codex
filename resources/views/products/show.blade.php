@@ -10,22 +10,24 @@
 </div>
 
 <div class="grid stats" style="margin-bottom:16px">
-    <div class="card stat"><span class="muted">Current Stock</span><strong>{{ $product->stock_quantity }}</strong></div>
-    <div class="card stat"><span class="muted">Low Stock Alert</span><strong>{{ $product->low_stock_alert }}</strong></div>
+    <div class="card stat"><span class="muted">Inventory</span><strong>{{ $product->track_inventory ? 'Tracked' : 'Not tracked' }}</strong></div>
+    <div class="card stat"><span class="muted">Current Stock</span><strong>{{ $product->track_inventory ? $product->stock_quantity : 'N/A' }}</strong></div>
     <div class="card stat"><span class="muted">Purchase Price</span><strong>{{ number_format($product->purchase_price, 2) }}</strong></div>
     <div class="card stat"><span class="muted">Sale Price</span><strong>{{ number_format($product->sale_price, 2) }}</strong></div>
 </div>
 
-<section class="card" style="margin-bottom:16px">
-    <h2>Move Stock</h2>
-    <form method="post" action="{{ route('products.stock', $product) }}" class="actions">
-        @csrf
-        <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
-        <input type="number" name="quantity" min="1" placeholder="Qty" style="width:120px" required>
-        <input name="reason" placeholder="Reason" style="width:220px">
-        <button class="btn secondary" type="submit">Update Stock</button>
-    </form>
-</section>
+@if ($product->track_inventory)
+    <section class="card" style="margin-bottom:16px">
+        <h2>Move Stock</h2>
+        <form method="post" action="{{ route('products.stock', $product) }}" class="actions">
+            @csrf
+            <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
+            <input type="number" name="quantity" min="1" placeholder="Qty" style="width:120px" required>
+            <input name="reason" placeholder="Reason" style="width:220px">
+            <button class="btn secondary" type="submit">Update Stock</button>
+        </form>
+    </section>
+@endif
 
 <section class="card" style="margin-bottom:16px">
     <h2>Serials & Warranty</h2>

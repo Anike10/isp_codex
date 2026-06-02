@@ -40,6 +40,28 @@ class ProductControllerTest extends TestCase
         ]);
     }
 
+    public function test_non_stock_product_can_be_created_without_inventory_tracking(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+
+        $this->actingAs($user)->post(route('products.store'), [
+            'name' => 'Installation Charge',
+            'sku' => 'SVC-001',
+            'brand' => 'Service',
+            'track_inventory' => '0',
+            'purchase_price' => 0,
+            'sale_price' => 500,
+        ])->assertRedirect(route('products.index'));
+
+        $this->assertDatabaseHas('products', [
+            'sku' => 'SVC-001',
+            'track_inventory' => false,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 0,
+        ]);
+    }
+
     public function test_product_index_can_filter_by_brand_category_and_subcategory(): void
     {
         $user = User::factory()->create();

@@ -17,12 +17,17 @@ class Product extends Model
         'sku',
         'brand',
         'product_category_id',
+        'track_inventory',
         'category',
         'subcategory',
         'purchase_price',
         'sale_price',
         'stock_quantity',
         'low_stock_alert',
+    ];
+
+    protected $casts = [
+        'track_inventory' => 'boolean',
     ];
 
     public function stockMovements(): HasMany
@@ -40,8 +45,21 @@ class Product extends Model
         return $this->hasMany(ProductSerial::class);
     }
 
+    public function categoryIdPath(): array
+    {
+        $ids = [];
+        $category = $this->productCategory;
+
+        while ($category) {
+            array_unshift($ids, $category->id);
+            $category = $category->parent;
+        }
+
+        return $ids;
+    }
+
     public function isLowStock(): bool
     {
-        return $this->stock_quantity <= $this->low_stock_alert;
+        return $this->track_inventory && $this->stock_quantity <= $this->low_stock_alert;
     }
 }

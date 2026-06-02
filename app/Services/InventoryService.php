@@ -11,6 +11,10 @@ class InventoryService
 {
     public function moveStock(Product $product, string $type, int $quantity, ?string $reason = null, ?string $referenceNo = null): StockMovement
     {
+        if (! $product->track_inventory) {
+            throw new InvalidArgumentException('This product does not track inventory.');
+        }
+
         if ($quantity <= 0) {
             throw new InvalidArgumentException('Stock quantity must be greater than zero.');
         }

@@ -93,7 +93,14 @@ class PurchaseBillController extends Controller
                     ]);
 
                     $product = Product::lockForUpdate()->findOrFail($item['product_id']);
-                    $inventoryService->moveStock($product, 'in', $quantity, 'Purchase bill '.$purchaseBill->bill_no, $purchaseBill->bill_no);
+
+                    if (! $product->track_inventory && $serialNumbers !== []) {
+                        throw new InvalidArgumentException('Serial numbers can only be added for stock-tracked products.');
+                    }
+
+                    if ($product->track_inventory) {
+                        $inventoryService->moveStock($product, 'in', $quantity, 'Purchase bill '.$purchaseBill->bill_no, $purchaseBill->bill_no);
+                    }
 
                     foreach ($serialNumbers as $serialNumber) {
                         ProductSerial::create([

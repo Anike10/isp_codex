@@ -61,18 +61,10 @@
                         <select name="items[{{ $index }}][product_id]" required>
                             <option value="">Select product</option>
                             @foreach ($products as $product)
-                                @php
-                                    $categoryIds = [];
-                                    $currentCategory = $product->productCategory;
-                                    while ($currentCategory) {
-                                        array_unshift($categoryIds, $currentCategory->id);
-                                        $currentCategory = $currentCategory->parent;
-                                    }
-                                @endphp
                                 <option
                                     value="{{ $product->id }}"
                                     data-brand="{{ $product->brand }}"
-                                    data-category-ids="{{ implode(',', $categoryIds) }}"
+                                    data-category-ids="{{ implode(',', $product->categoryIdPath()) }}"
                                     @selected((int) ($item['product_id'] ?? 0) === $product->id)
                                 >
                                     {{ $product->name }} - {{ $product->sku }}{{ $product->brand ? ' - '.$product->brand : '' }}{{ $product->category ? ' - '.$product->category : '' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}
@@ -102,18 +94,10 @@
             <select data-name="product_id" required>
                 <option value="">Select product</option>
                 @foreach ($products as $product)
-                    @php
-                        $categoryIds = [];
-                        $currentCategory = $product->productCategory;
-                        while ($currentCategory) {
-                            array_unshift($categoryIds, $currentCategory->id);
-                            $currentCategory = $currentCategory->parent;
-                        }
-                    @endphp
                     <option
                         value="{{ $product->id }}"
                         data-brand="{{ $product->brand }}"
-                        data-category-ids="{{ implode(',', $categoryIds) }}"
+                        data-category-ids="{{ implode(',', $product->categoryIdPath()) }}"
                     >
                         {{ $product->name }} - {{ $product->sku }}{{ $product->brand ? ' - '.$product->brand : '' }}{{ $product->category ? ' - '.$product->category : '' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}
                     </option>

@@ -45,20 +45,28 @@
             <td>{{ $product->category ?? 'N/A' }}</td>
             <td>{{ $product->subcategory ?? 'N/A' }}</td>
             <td>
-                {{ $product->stock_quantity }}
-                @if ($product->isLowStock())
-                    <span class="badge low">low</span>
+                @if ($product->track_inventory)
+                    {{ $product->stock_quantity }}
+                    @if ($product->isLowStock())
+                        <span class="badge low">low</span>
+                    @endif
+                @else
+                    <span class="badge pending">not tracked</span>
                 @endif
             </td>
             <td>{{ number_format($product->sale_price, 2) }}</td>
             <td>
-                <form method="post" action="{{ route('products.stock', $product) }}" class="actions">
-                    @csrf
-                    <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
-                    <input type="number" name="quantity" min="1" placeholder="Qty" style="width:90px" required>
-                    <input name="reason" placeholder="Reason" style="width:150px">
-                    <button class="btn secondary" type="submit">Update</button>
-                </form>
+                @if ($product->track_inventory)
+                    <form method="post" action="{{ route('products.stock', $product) }}" class="actions">
+                        @csrf
+                        <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
+                        <input type="number" name="quantity" min="1" placeholder="Qty" style="width:90px" required>
+                        <input name="reason" placeholder="Reason" style="width:150px">
+                        <button class="btn secondary" type="submit">Update</button>
+                    </form>
+                @else
+                    <span class="muted">N/A</span>
+                @endif
             </td>
         </tr>
     @empty
