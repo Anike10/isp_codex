@@ -44,6 +44,17 @@
         </select>
     </div>
     <div>
+        <label>Party Type</label>
+        <label style="font-weight:400; display:flex; gap:8px; align-items:center;">
+            <input type="checkbox" name="is_customer" value="1" @checked(old('is_customer', $customer->is_customer)) style="width:auto;">
+            Customer
+        </label>
+        <label style="font-weight:400; display:flex; gap:8px; align-items:center; margin-top:6px">
+            <input type="checkbox" name="is_vendor" value="1" @checked(old('is_vendor', $customer->is_vendor)) style="width:auto;">
+            Vendor / Wholesale shop
+        </label>
+    </div>
+    <div>
         <label>Special Customer</label>
         <label style="font-weight:400; display:flex; gap:8px; align-items:center;">
             <input type="checkbox" name="never_suspend" value="1" @checked(old('never_suspend', $customer->never_suspend)) style="width:auto;">

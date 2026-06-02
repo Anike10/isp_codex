@@ -20,11 +20,30 @@
     <h2>Move Stock</h2>
     <form method="post" action="{{ route('products.stock', $product) }}" class="actions">
         @csrf
-        <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option></select>
+        <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
         <input type="number" name="quantity" min="1" placeholder="Qty" style="width:120px" required>
         <input name="reason" placeholder="Reason" style="width:220px">
         <button class="btn secondary" type="submit">Update Stock</button>
     </form>
+</section>
+
+<section class="card" style="margin-bottom:16px">
+    <h2>Serials & Warranty</h2>
+    <table>
+        <thead><tr><th>Serial</th><th>Status</th><th>Warranty Until</th><th>Purchase Bill</th></tr></thead>
+        <tbody>
+        @forelse ($serials as $serial)
+            <tr>
+                <td><span class="badge">{{ $serial->serial_number }}</span></td>
+                <td>{{ str_replace('_', ' ', $serial->status) }}</td>
+                <td>{{ $serial->warranty_until?->format('Y-m-d') ?? 'No warranty' }}</td>
+                <td>{{ $serial->purchaseBill?->bill_no ?? 'N/A' }}</td>
+            </tr>
+        @empty
+            <tr><td colspan="4">No serial tracked for this product.</td></tr>
+        @endforelse
+        </tbody>
+    </table>
 </section>
 
 @include('partials.per_page')
@@ -35,7 +54,7 @@
     @forelse ($stockMovements as $movement)
         <tr>
             <td>{{ $movement->created_at->format('Y-m-d H:i') }}</td>
-            <td>{{ ucfirst($movement->type) }}</td>
+            <td>{{ $movement->type === 'use' ? 'Own Use' : ucfirst($movement->type) }}</td>
             <td>{{ $movement->quantity }}</td>
             <td>{{ $movement->reason ?? 'N/A' }}</td>
             <td>{{ $movement->reference_no ?? 'N/A' }}</td>

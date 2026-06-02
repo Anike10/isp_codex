@@ -9,6 +9,7 @@ use App\Models\Subscription;
 use App\Services\MikrotikCustomerSyncService;
 use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 use Throwable;
 
@@ -59,6 +60,8 @@ class CustomerController extends Controller
             'connection_id' => ['required_with:internet_package_id', 'nullable', 'string', 'max:100', 'unique:customers,connection_id'],
             'address' => ['required', 'string'],
             'status' => ['required', 'in:active,inactive'],
+            'is_customer' => ['nullable', 'boolean'],
+            'is_vendor' => ['nullable', 'boolean'],
             'never_suspend' => ['nullable', 'boolean'],
             'mikrotik_router_id' => ['nullable', 'exists:mikrotik_routers,id'],
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
@@ -66,6 +69,9 @@ class CustomerController extends Controller
         ]);
 
         $this->normalizeCustomerConnectionData($data);
+        $data['is_customer'] = (bool) ($data['is_customer'] ?? false) || ! empty($data['internet_package_id']);
+        $data['is_vendor'] = (bool) ($data['is_vendor'] ?? false);
+        $this->ensurePartyHasRole($data);
         $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
 
         $customer = Customer::create($data);
@@ -107,6 +113,8 @@ class CustomerController extends Controller
             'connection_id' => ['required_with:internet_package_id', 'nullable', 'string', 'max:100', Rule::unique('customers', 'connection_id')->ignore($customer->id)],
             'address' => ['required', 'string'],
             'status' => ['required', 'in:active,inactive'],
+            'is_customer' => ['nullable', 'boolean'],
+            'is_vendor' => ['nullable', 'boolean'],
             'never_suspend' => ['nullable', 'boolean'],
             'mikrotik_router_id' => ['nullable', 'exists:mikrotik_routers,id'],
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
@@ -114,6 +122,9 @@ class CustomerController extends Controller
         ]);
 
         $this->normalizeCustomerConnectionData($data, $customer);
+        $data['is_customer'] = (bool) ($data['is_customer'] ?? false) || ! empty($data['internet_package_id']);
+        $data['is_vendor'] = (bool) ($data['is_vendor'] ?? false);
+        $this->ensurePartyHasRole($data);
         $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
 
         $customer->update(Arr::except($data, ['internet_package_id', 'start_date']));
@@ -238,6 +249,15 @@ class CustomerController extends Controller
 
         if (! $connectionId) {
             $data['mikrotik_router_id'] = null;
+        }
+    }
+
+    private function ensurePartyHasRole(array $data): void
+    {
+        if (! $data['is_customer'] && ! $data['is_vendor']) {
+            throw ValidationException::withMessages([
+                'is_customer' => 'Select at least Customer or Vendor for this party.',
+            ]);
         }
     }
 }

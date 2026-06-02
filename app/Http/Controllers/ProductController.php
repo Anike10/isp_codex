@@ -29,8 +29,13 @@ class ProductController extends Controller
             ->latest()
             ->paginate($this->perPage($request))
             ->appends($request->query());
+        $serials = $product->serials()
+            ->with('purchaseBill')
+            ->latest()
+            ->limit(50)
+            ->get();
 
-        return view('products.show', compact('product', 'stockMovements'));
+        return view('products.show', compact('product', 'stockMovements', 'serials'));
     }
 
     public function store(Request $request)
@@ -51,7 +56,7 @@ class ProductController extends Controller
     public function moveStock(Request $request, Product $product, InventoryService $inventoryService)
     {
         $data = $request->validate([
-            'type' => ['required', 'in:in,out'],
+            'type' => ['required', 'in:in,out,use'],
             'quantity' => ['required', 'integer', 'min:1'],
             'reason' => ['nullable', 'string', 'max:255'],
         ]);

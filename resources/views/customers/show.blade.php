@@ -18,6 +18,10 @@
             $daysRemaining = $customer->activeDaysRemaining();
         @endphp
         <p><strong>Status:</strong> <span class="badge {{ $customer->status }}">{{ $customer->status }}</span></p>
+        <p><strong>Party Type:</strong>
+            @if ($customer->is_customer)<span class="badge active">Customer</span>@endif
+            @if ($customer->is_vendor)<span class="badge pending">Vendor</span>@endif
+        </p>
         <p>
             <strong>Active Until:</strong>
             @if ($customer->status === 'active' && $activeUntil)

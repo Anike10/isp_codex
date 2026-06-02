@@ -26,6 +26,11 @@ class Product extends Model
         return $this->hasMany(StockMovement::class);
     }
 
+    public function serials(): HasMany
+    {
+        return $this->hasMany(ProductSerial::class);
+    }
+
     public function isLowStock(): bool
     {
         return $this->stock_quantity <= $this->low_stock_alert;

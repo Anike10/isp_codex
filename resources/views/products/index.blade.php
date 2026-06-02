@@ -26,7 +26,7 @@
             <td>
                 <form method="post" action="{{ route('products.stock', $product) }}" class="actions">
                     @csrf
-                    <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option></select>
+                    <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
                     <input type="number" name="quantity" min="1" placeholder="Qty" style="width:90px" required>
                     <input name="reason" placeholder="Reason" style="width:150px">
                     <button class="btn secondary" type="submit">Update</button>

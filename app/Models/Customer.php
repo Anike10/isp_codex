@@ -29,6 +29,8 @@ class Customer extends Model
         'grace_days',
         'grace_used_at',
         'account_balance',
+        'is_customer',
+        'is_vendor',
     ];
 
     protected $hidden = [
@@ -43,6 +45,8 @@ class Customer extends Model
             'grace_until' => 'date',
             'grace_used_at' => 'datetime',
             'account_balance' => 'decimal:2',
+            'is_customer' => 'boolean',
+            'is_vendor' => 'boolean',
         ];
     }
 
@@ -124,6 +128,11 @@ class Customer extends Model
     public function balanceTransactions(): HasMany
     {
         return $this->hasMany(CustomerBalanceTransaction::class);
+    }
+
+    public function purchaseBills(): HasMany
+    {
+        return $this->hasMany(PurchaseBill::class, 'party_id');
     }
 
     public function tickets(): HasMany

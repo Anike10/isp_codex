@@ -122,6 +122,7 @@ git status -sb
 - `app/Http/Controllers/RoleController.php`: role creation/editing
 - `app/Http/Controllers/DatabaseBackupController.php`: SQL backup download
 - `app/Http/Controllers/InvoiceController.php`: invoice create/edit/final/print routes
+- `app/Http/Controllers/PurchaseBillController.php`: vendor purchase bills, stock entry, serial/warranty capture
 - `resources/views/invoices/create.blade.php`: create and edit invoice form
 - `resources/views/invoices/show.blade.php`: invoice details and final button
 - `resources/views/invoices/challan.blade.php`: printable bill
@@ -129,6 +130,7 @@ git status -sb
 - `resources/views/invoices/delivery_challan.blade.php`: printable delivery challan
 - `app/Services/BillingService.php`: monthly service bill generation
 - `app/Services/PaymentService.php`: payment recording and invoice due update
+- `app/Services/InventoryService.php`: stock in/out/own-use movement and stock balance updates
 - `app/Http/Controllers/PaymentAccountController.php`: account balances and ledger
 - `app/Http/Controllers/OltOnuController.php`: OLT device setup, live refresh, and ONU inventory
 - `app/Services/OltSnmpClient.php`: optional SNMP-first single ONU status/power polling for fast row refresh
@@ -462,8 +464,12 @@ Known limitation:
 Files:
 
 - `ProductController`
+- `PurchaseBillController`
 - `InventoryService`
 - `Product`
+- `PurchaseBill`
+- `PurchaseBillItem`
+- `ProductSerial`
 - `StockMovement`
 
 Routes:
@@ -471,6 +477,9 @@ Routes:
 - `/products`
 - `/products/create`
 - `POST /products/{product}/stock`
+- `/purchase-bills`
+- `/purchase-bills/create`
+- `/purchase-bills/{purchase_bill}`
 
 Permission:
 
@@ -480,7 +489,11 @@ Stock movement behavior:
 
 - `in` increases stock.
 - `out` decreases stock.
+- `use` decreases stock for items used inside the business.
 - Out movement fails if quantity exceeds stock.
+- Purchase bills add stock and create a stock movement using the purchase bill number as the reference.
+- Purchase bill item serial numbers are stored in `product_serials`; warranty end date is calculated from purchase date plus warranty months.
+- Vendor/wholesale shops are stored in the existing `customers` table as parties with `is_vendor=true`.
 
 ## Support Tickets
 
@@ -646,6 +659,8 @@ Read this section before changing billing, bKash SMS, customer status, or MikroT
 - Customer `connection_id` is optional for product-only customers who are not ISP subscribers.
 - When assigning an internet package/subscription, `connection_id` is required because it becomes the ISP/MikroTik user ID.
 - Customer `mikrotik_username` is displayed as User ID on `/customers`; if missing, use `connection_id`; if both are missing, treat the customer as product-only.
+- The `customers` table also acts as the party ledger. Use `is_customer` and `is_vendor` to classify parties as customer, vendor, or both.
+- A party must have at least one role selected. Vendor-only parties can be used for wholesale purchase bill entry.
 - Default customer MikroTik/PPPoE password is `4321`.
 - `customers.account_balance` stores advance/extra money only.
 - Customer net balance shown in lists is:

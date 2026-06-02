@@ -25,6 +25,7 @@ class CustomerControllerTest extends TestCase
             'connection_id' => '',
             'address' => 'Kushtia',
             'status' => 'active',
+            'is_customer' => '1',
         ])->assertRedirect(route('customers.index'));
 
         $customer = Customer::where('phone', '01711111111')->firstOrFail();
@@ -55,6 +56,7 @@ class CustomerControllerTest extends TestCase
             'connection_id' => '',
             'address' => 'Kushtia',
             'status' => 'active',
+            'is_customer' => '1',
             'internet_package_id' => $package->id,
             'start_date' => '2026-06-02',
         ])->assertSessionHasErrors('connection_id');

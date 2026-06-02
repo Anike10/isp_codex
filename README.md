@@ -15,7 +15,7 @@ A Laravel 12 application for an ISP and computer service business.
 - Advance balance and payment allocation ledger
 - Payment accounts for cash, bKash, Nagad, and bank
 - Support ticket management
-- Product inventory with stock in/out
+- Product inventory with stock in/out, own-use movement, purchase bills, serials, and warranty tracking
 - Role and permission based admin access
 
 ## Local Setup
@@ -88,6 +88,7 @@ Do not commit SSH passwords, `.env` secrets, SMS tokens, or database passwords.
 - `/accounting/ledger`
 - `/tickets`
 - `/products`
+- `/purchase-bills`
 
 ## bKash SMS Auto Forwarding
 

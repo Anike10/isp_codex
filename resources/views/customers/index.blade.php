@@ -2,8 +2,8 @@
 
 @section('content')
 <div class="topbar">
-    <div><h1>Customers</h1><div class="muted">Internet connection and customer profiles</div></div>
-    <a class="btn" href="{{ route('customers.create') }}">Add Customer</a>
+    <div><h1>Parties</h1><div class="muted">Customers, vendors, and product-only buyers</div></div>
+    <a class="btn" href="{{ route('customers.create') }}">Add Party</a>
 </div>
 
 <form method="get" class="card actions" style="margin-bottom:16px">
@@ -15,7 +15,7 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Name</th><th>Phone</th><th>User ID</th><th>Package</th><th>Balance</th><th>Status</th><th>Active Until</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Phone</th><th>Role</th><th>User ID</th><th>Package</th><th>Balance</th><th>Status</th><th>Active Until</th><th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
         @php
@@ -26,6 +26,10 @@
         <tr data-href="{{ route('customers.show', $customer) }}">
             <td>{{ $customer->name }}</td>
             <td>{{ $customer->phone }}</td>
+            <td>
+                @if ($customer->is_customer)<span class="badge active">Customer</span>@endif
+                @if ($customer->is_vendor)<span class="badge pending">Vendor</span>@endif
+            </td>
             <td>{{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}</td>
             <td>{{ $customer->activeSubscription?->package?->name ?? 'No package' }}</td>
             <td>
@@ -60,7 +64,7 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="8">No customers found.</td></tr>
+        <tr><td colspan="9">No parties found.</td></tr>
     @endforelse
     </tbody>
 </table>

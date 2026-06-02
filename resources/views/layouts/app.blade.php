@@ -218,7 +218,13 @@
                 <a href="{{ route('tickets.index') }}">Tickets</a>
             @endif
             @if (auth()->user()?->hasPermission('manage_products'))
-                <a href="{{ route('products.index') }}">Inventory</a>
+                <details class="nav-group">
+                    <summary>Inventory</summary>
+                    <div class="nav-menu">
+                        <a href="{{ route('products.index') }}">Products</a>
+                        <a href="{{ route('purchase-bills.index') }}">Purchase Bills</a>
+                    </div>
+                </details>
             @endif
             @if (auth()->user()?->hasPermission('manage_expenses'))
                 <a href="{{ route('expenses.index') }}">Expenses</a>
