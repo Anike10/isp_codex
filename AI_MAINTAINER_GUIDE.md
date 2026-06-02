@@ -487,9 +487,11 @@ Permission:
 
 Stock movement behavior:
 
-- Products have optional `brand`, `category`, and `subcategory` string fields.
-- Product forms use existing brand/category/subcategory values as selectable suggestions, but new values can still be typed.
-- Product lists and purchase bill product selection can filter by brand, category, and subcategory.
+- Products have optional `brand` plus a fixed cascading `product_categories` tree.
+- `products.product_category_id` stores the selected leaf/category. The legacy `category` and `subcategory` string fields are kept in sync for display/search compatibility.
+- Product category trees can have unlimited levels through `product_categories.parent_id`.
+- Product forms and purchase bill product selection show child category lists automatically after a parent category is selected.
+- Product lists and purchase bill product selection can filter by brand and category tree.
 - `in` increases stock.
 - `out` decreases stock.
 - `use` decreases stock for items used inside the business.

@@ -16,6 +16,7 @@ use App\Http\Controllers\PackageController;
 use App\Http\Controllers\PaymentAccountController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\PurchaseBillController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\TicketController;
@@ -116,6 +117,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_products')->group(function () {
+        Route::resource('product-categories', ProductCategoryController::class)->only(['index', 'store']);
         Route::resource('purchase-bills', PurchaseBillController::class)->only(['index', 'create', 'store', 'show']);
         Route::resource('products', ProductController::class)->only(['index', 'show', 'create', 'store']);
         Route::post('products/{product}/stock', [ProductController::class, 'moveStock'])->name('products.stock');

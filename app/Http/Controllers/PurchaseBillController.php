@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\Product;
+use App\Models\ProductCategory;
 use App\Models\ProductSerial;
 use App\Models\PurchaseBill;
 use App\Services\InventoryService;
@@ -31,10 +32,9 @@ class PurchaseBillController extends Controller
     {
         return view('purchase_bills.create', [
             'vendors' => Customer::query()->where('is_vendor', true)->orderBy('name')->get(),
-            'products' => Product::query()->orderBy('name')->get(),
+            'products' => Product::query()->with('productCategory.parent.parent.parent')->orderBy('name')->get(),
             'brands' => Product::query()->whereNotNull('brand')->where('brand', '!=', '')->distinct()->orderBy('brand')->pluck('brand'),
-            'categories' => Product::query()->whereNotNull('category')->where('category', '!=', '')->distinct()->orderBy('category')->pluck('category'),
-            'subcategories' => Product::query()->whereNotNull('subcategory')->where('subcategory', '!=', '')->distinct()->orderBy('subcategory')->pluck('subcategory'),
+            'categoryTree' => ProductCategory::query()->with('children.children.children.children')->whereNull('parent_id')->orderBy('name')->get(),
             'defaultBillNo' => $this->nextBillNo(),
         ]);
     }

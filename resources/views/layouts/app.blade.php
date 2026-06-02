@@ -222,6 +222,7 @@
                     <summary>Inventory</summary>
                     <div class="nav-menu">
                         <a href="{{ route('products.index') }}">Products</a>
+                        <a href="{{ route('product-categories.index') }}">Product Categories</a>
                         <a href="{{ route('purchase-bills.index') }}">Purchase Bills</a>
                     </div>
                 </details>

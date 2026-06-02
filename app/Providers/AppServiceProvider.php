@@ -16,6 +16,7 @@ use App\Models\PaymentAccount;
 use App\Models\PaymentAllocation;
 use App\Models\Permission;
 use App\Models\Product;
+use App\Models\ProductCategory;
 use App\Models\ProductSerial;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
@@ -61,6 +62,7 @@ class AppServiceProvider extends ServiceProvider
             PaymentAllocation::class,
             Permission::class,
             Product::class,
+            ProductCategory::class,
             ProductSerial::class,
             PurchaseBill::class,
             PurchaseBillItem::class,

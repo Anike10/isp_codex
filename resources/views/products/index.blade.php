@@ -19,19 +19,10 @@
     </div>
     <div>
         <label>Category</label>
-        <select name="category">
+        <select name="product_category_id">
             <option value="">All categories</option>
-            @foreach ($categories as $category)
-                <option value="{{ $category }}" @selected(request('category') === $category)>{{ $category }}</option>
-            @endforeach
-        </select>
-    </div>
-    <div>
-        <label>Sub Category</label>
-        <select name="subcategory">
-            <option value="">All sub categories</option>
-            @foreach ($subcategories as $subcategory)
-                <option value="{{ $subcategory }}" @selected(request('subcategory') === $subcategory)>{{ $subcategory }}</option>
+            @foreach ($categoryOptions as $category)
+                <option value="{{ $category->id }}" @selected((int) request('product_category_id') === $category->id)>{{ implode(' / ', $category->pathNames()) }}</option>
             @endforeach
         </select>
     </div>

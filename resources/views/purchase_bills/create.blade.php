@@ -37,21 +37,9 @@
         </div>
         <div>
             <label>Filter Category</label>
-            <select id="purchaseCategoryFilter">
-                <option value="">All categories</option>
-                @foreach ($categories as $category)
-                    <option value="{{ $category }}">{{ $category }}</option>
-                @endforeach
-            </select>
-        </div>
-        <div>
-            <label>Filter Sub Category</label>
-            <select id="purchaseSubcategoryFilter">
-                <option value="">All sub categories</option>
-                @foreach ($subcategories as $subcategory)
-                    <option value="{{ $subcategory }}">{{ $subcategory }}</option>
-                @endforeach
-            </select>
+            <input type="hidden" id="purchaseCategoryFilter">
+            <div class="form-grid" id="purchaseCategoryCascade"></div>
+            <span class="muted">Sub category lists appear automatically.</span>
         </div>
     </div>
     <table>
@@ -73,11 +61,18 @@
                         <select name="items[{{ $index }}][product_id]" required>
                             <option value="">Select product</option>
                             @foreach ($products as $product)
+                                @php
+                                    $categoryIds = [];
+                                    $currentCategory = $product->productCategory;
+                                    while ($currentCategory) {
+                                        array_unshift($categoryIds, $currentCategory->id);
+                                        $currentCategory = $currentCategory->parent;
+                                    }
+                                @endphp
                                 <option
                                     value="{{ $product->id }}"
                                     data-brand="{{ $product->brand }}"
-                                    data-category="{{ $product->category }}"
-                                    data-subcategory="{{ $product->subcategory }}"
+                                    data-category-ids="{{ implode(',', $categoryIds) }}"
                                     @selected((int) ($item['product_id'] ?? 0) === $product->id)
                                 >
                                     {{ $product->name }} - {{ $product->sku }}{{ $product->brand ? ' - '.$product->brand : '' }}{{ $product->category ? ' - '.$product->category : '' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}
@@ -107,11 +102,18 @@
             <select data-name="product_id" required>
                 <option value="">Select product</option>
                 @foreach ($products as $product)
+                    @php
+                        $categoryIds = [];
+                        $currentCategory = $product->productCategory;
+                        while ($currentCategory) {
+                            array_unshift($categoryIds, $currentCategory->id);
+                            $currentCategory = $currentCategory->parent;
+                        }
+                    @endphp
                     <option
                         value="{{ $product->id }}"
                         data-brand="{{ $product->brand }}"
-                        data-category="{{ $product->category }}"
-                        data-subcategory="{{ $product->subcategory }}"
+                        data-category-ids="{{ implode(',', $categoryIds) }}"
                     >
                         {{ $product->name }} - {{ $product->sku }}{{ $product->brand ? ' - '.$product->brand : '' }}{{ $product->category ? ' - '.$product->category : '' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}
                     </option>
@@ -131,7 +133,8 @@ const rows = document.getElementById('purchaseRows');
 const template = document.getElementById('purchaseRowTemplate');
 const brandFilter = document.getElementById('purchaseBrandFilter');
 const categoryFilter = document.getElementById('purchaseCategoryFilter');
-const subcategoryFilter = document.getElementById('purchaseSubcategoryFilter');
+const categoryCascade = document.getElementById('purchaseCategoryCascade');
+const categoryTree = @json($categoryTree);
 const assignNames = row => {
     const index = [...rows.children].indexOf(row);
     row.querySelectorAll('[data-name]').forEach(input => {
@@ -141,7 +144,6 @@ const assignNames = row => {
 const applyProductFilters = () => {
     const brand = brandFilter.value;
     const category = categoryFilter.value;
-    const subcategory = subcategoryFilter.value;
 
     rows.querySelectorAll('select[name$="[product_id]"]').forEach(select => {
         let selectedStillVisible = true;
@@ -153,8 +155,7 @@ const applyProductFilters = () => {
             }
 
             const visible = (!brand || option.dataset.brand === brand)
-                && (!category || option.dataset.category === category)
-                && (!subcategory || option.dataset.subcategory === subcategory);
+                && (!category || (option.dataset.categoryIds || '').split(',').includes(category));
             option.hidden = !visible;
 
             if (option.selected && !visible) {
@@ -167,6 +168,36 @@ const applyProductFilters = () => {
         }
     });
 };
+const renderCategoryFilterLevel = (nodes, level = 0) => {
+    if (!nodes || nodes.length === 0) return;
+
+    const wrapper = document.createElement('div');
+    const label = document.createElement('label');
+    label.textContent = level === 0 ? 'Category' : `Sub Category ${level}`;
+
+    const select = document.createElement('select');
+    select.innerHTML = '<option value="">All</option>';
+    nodes.forEach(node => {
+        const option = document.createElement('option');
+        option.value = node.id;
+        option.textContent = node.name;
+        select.appendChild(option);
+    });
+
+    select.addEventListener('change', () => {
+        [...categoryCascade.children].slice(level + 1).forEach(child => child.remove());
+        categoryFilter.value = select.value || '';
+        const selected = nodes.find(node => String(node.id) === select.value);
+        if (selected && selected.children && selected.children.length > 0) {
+            renderCategoryFilterLevel(selected.children, level + 1);
+        }
+        applyProductFilters();
+    });
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(select);
+    categoryCascade.appendChild(wrapper);
+};
 document.getElementById('addPurchaseRow').addEventListener('click', () => {
     const row = template.content.firstElementChild.cloneNode(true);
     rows.appendChild(row);
@@ -174,8 +205,7 @@ document.getElementById('addPurchaseRow').addEventListener('click', () => {
     applyProductFilters();
 });
 brandFilter.addEventListener('change', applyProductFilters);
-categoryFilter.addEventListener('change', applyProductFilters);
-subcategoryFilter.addEventListener('change', applyProductFilters);
+renderCategoryFilterLevel(categoryTree);
 document.addEventListener('click', event => {
     if (! event.target.closest('[data-remove-row]')) return;
     if (rows.children.length <= 1) return;
