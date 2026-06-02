@@ -905,7 +905,8 @@ class OltOnuController extends Controller
         $powerCommand = $oltDevice->onu_power_command ?: $profile?->default_onu_power_command;
         $vlanCommand = $oltDevice->onu_vlan_command ?: $profile?->default_onu_vlan_command;
         $macCommand = $oltDevice->onu_mac_command ?: $profile?->default_onu_mac_command;
-        $commands = $this->singleOnuPollCommands($oltDevice, $oltOnu, $statusCommand, $powerCommand, $vlanCommand, $macCommand, $profile);
+        $fullDetailRefresh = in_array(request()->input('refresh_mode'), ['full', 'full_mac'], true);
+        $commands = $this->singleOnuPollCommands($oltDevice, $oltOnu, $statusCommand, $powerCommand, $vlanCommand, $macCommand, $profile, $fullDetailRefresh);
         $blockedCommand = $this->firstUnsafeReadOrContextCommand($commands);
 
         if ($blockedCommand) {
@@ -1024,11 +1025,14 @@ class OltOnuController extends Controller
         ?string $powerCommand = null,
         ?string $vlanCommand = null,
         ?string $macCommand = null,
-        ?OltProtocolProfile $profile = null
+        ?OltProtocolProfile $profile = null,
+        bool $fullDetailRefresh = false
     ): array
     {
+        $ponInterfaceTemplate = $profile?->pon_interface_command ?: 'interface epon {pon_port}';
+
         $commands = [
-            $this->ponInterfaceCommand($oltDevice, $oltOnu->pon_port),
+            str_replace('{pon_port}', (string) $oltOnu->pon_port, $ponInterfaceTemplate),
         ];
 
         $command = trim((string) $statusCommand);
@@ -1055,15 +1059,15 @@ class OltOnuController extends Controller
 
         $commands[] = 'exit';
 
-        if ($vlanCommand && $profile?->supports_vlan_polling && ! $this->isGlobalOnuPollingCommand($vlanCommand)) {
+        if ($fullDetailRefresh && $vlanCommand && $profile?->supports_vlan_polling && ! $this->isGlobalOnuPollingCommand($vlanCommand)) {
             $commands[] = $this->onuContextCommand($oltDevice, $oltOnu->pon_port, $oltOnu->onu_id);
             $commands[] = $this->substituteOnuPollTemplate($vlanCommand, $oltOnu);
             $commands[] = 'exit';
-        } elseif ($vlanCommand && $profile?->supports_vlan_polling && $this->isGlobalOnuPollingCommand($vlanCommand)) {
+        } elseif ($fullDetailRefresh && $vlanCommand && $profile?->supports_vlan_polling && $this->isGlobalOnuPollingCommand($vlanCommand)) {
             $commands[] = $this->substituteOnuPollTemplate($vlanCommand, $oltOnu);
         }
 
-        if ($macCommand && $profile?->supports_mac_polling) {
+        if ($fullDetailRefresh && $macCommand && $profile?->supports_mac_polling) {
             $commands[] = $this->macPollingCommand($macCommand, $oltDevice, $oltOnu->pon_port);
         }
 

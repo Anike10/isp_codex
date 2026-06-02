@@ -4,8 +4,10 @@ namespace Tests\Unit;
 
 use App\Http\Controllers\OltOnuController;
 use App\Models\OltDevice;
-use PHPUnit\Framework\TestCase;
+use App\Models\OltOnu;
+use App\Models\OltProtocolProfile;
 use ReflectionMethod;
+use Tests\TestCase;
 
 class OltOnuControllerCommandTest extends TestCase
 {
@@ -261,6 +263,56 @@ class OltOnuControllerCommandTest extends TestCase
         ]);
 
         $this->assertSame(['enable'], $commands);
+    }
+
+    public function test_single_onu_fast_poll_skips_vlan_and_mac_commands(): void
+    {
+        $commands = $this->callPrivateCommandBuilder('singleOnuPollCommands', [
+            new OltDevice(['protocol_profile' => 'generic_epon']),
+            new OltOnu(['pon_port' => 7, 'onu_id' => 14]),
+            'show onu-info all',
+            'show pon power attenuation all',
+            'show vlan all',
+            'show mac address-table interface epon 7',
+            new OltProtocolProfile([
+                'supports_vlan_polling' => true,
+                'supports_mac_polling' => true,
+            ]),
+            false,
+        ]);
+
+        $this->assertSame([
+            'interface epon 7',
+            'show onu-info 14',
+            'show pon power attenuation all',
+            'exit',
+        ], $commands);
+    }
+
+    public function test_single_onu_full_poll_includes_vlan_and_mac_commands(): void
+    {
+        $commands = $this->callPrivateCommandBuilder('singleOnuPollCommands', [
+            new OltDevice(['protocol_profile' => 'generic_epon']),
+            new OltOnu(['pon_port' => 7, 'onu_id' => 14]),
+            'show onu-info all',
+            'show pon power attenuation all',
+            'show vlan all',
+            'show mac address-table interface epon 7',
+            new OltProtocolProfile([
+                'supports_vlan_polling' => true,
+                'supports_mac_polling' => true,
+            ]),
+            true,
+        ]);
+
+        $this->assertSame([
+            'interface epon 7',
+            'show onu-info 14',
+            'show pon power attenuation all',
+            'exit',
+            'show vlan all',
+            'show mac address-table interface epon 7',
+        ], $commands);
     }
 
     private function callPrivateCommandBuilder(string $method, array $arguments): mixed
