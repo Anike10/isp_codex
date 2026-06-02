@@ -60,6 +60,9 @@ class PurchaseBillTest extends TestCase
             'brand' => 'BDCOM',
             'category' => 'Network Device',
             'subcategory' => 'ONU',
+            'barcode' => 'ONU-BAR-001',
+            'track_serial_numbers' => true,
+            'warranty_days' => 365,
             'purchase_price' => 900,
             'sale_price' => 1200,
             'stock_quantity' => 0,
@@ -75,7 +78,7 @@ class PurchaseBillTest extends TestCase
                     'product_id' => $product->id,
                     'quantity' => 2,
                     'unit_price' => 900,
-                    'warranty_months' => 12,
+                    'warranty_days' => 365,
                     'serial_numbers' => "ONU-A1\nONU-A2",
                 ],
             ],
@@ -99,6 +102,38 @@ class PurchaseBillTest extends TestCase
             'serial_number' => 'ONU-A1',
             'warranty_until' => '2027-06-02 00:00:00',
             'status' => 'in_stock',
+        ]);
+    }
+
+    public function test_serial_numbers_require_serial_tracking_enabled(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        $product = Product::create([
+            'name' => 'Patch Cord',
+            'sku' => 'PC-002',
+            'brand' => 'Generic',
+            'purchase_price' => 30,
+            'sale_price' => 50,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 1,
+        ]);
+
+        $this->actingAs($user)->post(route('purchase-bills.store'), [
+            'bill_no' => 'PB-SERIAL-OFF-001',
+            'purchase_date' => '2026-06-02',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 1,
+                    'unit_price' => 30,
+                    'serial_numbers' => 'PC-SN-001',
+                ],
+            ],
+        ])->assertSessionHasErrors('items');
+
+        $this->assertDatabaseMissing('product_serials', [
+            'serial_number' => 'PC-SN-001',
         ]);
     }
 

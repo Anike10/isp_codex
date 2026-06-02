@@ -23,8 +23,11 @@ class ProductControllerTest extends TestCase
         $this->actingAs($user)->post(route('products.store'), [
             'name' => 'CCR Router',
             'sku' => 'CCR-001',
+            'barcode' => '8991001001',
             'brand' => 'MikroTik',
             'product_category_id' => $subcategory->id,
+            'track_serial_numbers' => '1',
+            'warranty_days' => 365,
             'purchase_price' => 10000,
             'sale_price' => 12500,
             'stock_quantity' => 1,
@@ -33,8 +36,11 @@ class ProductControllerTest extends TestCase
 
         $this->assertDatabaseHas('products', [
             'sku' => 'CCR-001',
+            'barcode' => '8991001001',
             'brand' => 'MikroTik',
             'product_category_id' => $subcategory->id,
+            'track_serial_numbers' => true,
+            'warranty_days' => 365,
             'category' => 'Router',
             'subcategory' => 'Core Router',
         ]);
@@ -50,6 +56,7 @@ class ProductControllerTest extends TestCase
             'sku' => 'SVC-001',
             'brand' => 'Service',
             'track_inventory' => '0',
+            'track_serial_numbers' => '1',
             'purchase_price' => 0,
             'sale_price' => 500,
         ])->assertRedirect(route('products.index'));
@@ -57,6 +64,7 @@ class ProductControllerTest extends TestCase
         $this->assertDatabaseHas('products', [
             'sku' => 'SVC-001',
             'track_inventory' => false,
+            'track_serial_numbers' => false,
             'stock_quantity' => 0,
             'low_stock_alert' => 0,
         ]);

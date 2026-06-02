@@ -27,7 +27,15 @@
                 <td>{{ $item->quantity }}</td>
                 <td>{{ number_format($item->unit_price, 2) }}</td>
                 <td>{{ number_format($item->total, 2) }}</td>
-                <td>{{ $item->warranty_months ? $item->warranty_months.' month(s)' : 'No warranty' }}</td>
+                <td>
+                    @if ($item->warranty_days)
+                        {{ $item->warranty_days }} day(s)
+                    @elseif ($item->warranty_months)
+                        {{ $item->warranty_months }} month(s)
+                    @else
+                        No warranty
+                    @endif
+                </td>
                 <td>
                     @forelse ($item->serials as $serial)
                         <div><span class="badge">{{ $serial->serial_number }}</span> <span class="muted">{{ $serial->warranty_until ? 'Warranty until '.$serial->warranty_until->format('Y-m-d') : 'No warranty date' }}</span></div>

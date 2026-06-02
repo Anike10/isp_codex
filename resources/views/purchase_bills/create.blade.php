@@ -48,13 +48,13 @@
                 <th>Product</th>
                 <th style="width:100px">Qty</th>
                 <th style="width:130px">Unit Price</th>
-                <th style="width:130px">Warranty Months</th>
+                <th style="width:130px">Warranty Days</th>
                 <th>Serial Numbers</th>
                 <th style="width:70px"></th>
             </tr>
         </thead>
         <tbody id="purchaseRows">
-            @php($oldItems = old('items', [['product_id' => '', 'quantity' => 1, 'unit_price' => 0, 'warranty_months' => '', 'serial_numbers' => '']]))
+            @php($oldItems = old('items', [['product_id' => '', 'quantity' => 1, 'unit_price' => 0, 'warranty_days' => '', 'serial_numbers' => '']]))
             @foreach ($oldItems as $index => $item)
                 <tr>
                     <td>
@@ -65,16 +65,20 @@
                                     value="{{ $product->id }}"
                                     data-brand="{{ $product->brand }}"
                                     data-category-ids="{{ implode(',', $product->categoryIdPath()) }}"
+                                    data-unit-price="{{ $product->purchase_price }}"
+                                    data-barcode="{{ $product->barcode }}"
+                                    data-track-serials="{{ $product->track_serial_numbers ? '1' : '0' }}"
+                                    data-warranty-days="{{ $product->warranty_days }}"
                                     @selected((int) ($item['product_id'] ?? 0) === $product->id)
                                 >
-                                    {{ $product->name }} - {{ $product->sku }}{{ $product->brand ? ' - '.$product->brand : '' }}{{ $product->category ? ' - '.$product->category : '' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}
+                                    {{ $product->name }} - {{ $product->sku }}{{ $product->barcode ? ' - '.$product->barcode : '' }}{{ $product->brand ? ' - '.$product->brand : '' }}{{ $product->category ? ' - '.$product->category : '' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}
                                 </option>
                             @endforeach
                         </select>
                     </td>
                     <td><input type="number" name="items[{{ $index }}][quantity]" min="1" value="{{ $item['quantity'] ?? 1 }}" required></td>
                     <td><input type="number" name="items[{{ $index }}][unit_price]" min="0" step="0.01" value="{{ $item['unit_price'] ?? 0 }}" required></td>
-                    <td><input type="number" name="items[{{ $index }}][warranty_months]" min="0" max="120" value="{{ $item['warranty_months'] ?? '' }}"></td>
+                    <td><input type="number" name="items[{{ $index }}][warranty_days]" min="0" max="3650" value="{{ $item['warranty_days'] ?? ($item['warranty_months'] ?? '') }}"></td>
                     <td><textarea name="items[{{ $index }}][serial_numbers]" rows="2" placeholder="One serial per line">{{ $item['serial_numbers'] ?? '' }}</textarea></td>
                     <td><button class="btn light" type="button" data-remove-row>Remove</button></td>
                 </tr>
@@ -98,15 +102,19 @@
                         value="{{ $product->id }}"
                         data-brand="{{ $product->brand }}"
                         data-category-ids="{{ implode(',', $product->categoryIdPath()) }}"
+                        data-unit-price="{{ $product->purchase_price }}"
+                        data-barcode="{{ $product->barcode }}"
+                        data-track-serials="{{ $product->track_serial_numbers ? '1' : '0' }}"
+                        data-warranty-days="{{ $product->warranty_days }}"
                     >
-                        {{ $product->name }} - {{ $product->sku }}{{ $product->brand ? ' - '.$product->brand : '' }}{{ $product->category ? ' - '.$product->category : '' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}
+                        {{ $product->name }} - {{ $product->sku }}{{ $product->barcode ? ' - '.$product->barcode : '' }}{{ $product->brand ? ' - '.$product->brand : '' }}{{ $product->category ? ' - '.$product->category : '' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}
                     </option>
                 @endforeach
             </select>
         </td>
         <td><input data-name="quantity" type="number" min="1" value="1" required></td>
         <td><input data-name="unit_price" type="number" min="0" step="0.01" value="0" required></td>
-        <td><input data-name="warranty_months" type="number" min="0" max="120"></td>
+        <td><input data-name="warranty_days" type="number" min="0" max="3650"></td>
         <td><textarea data-name="serial_numbers" rows="2" placeholder="One serial per line"></textarea></td>
         <td><button class="btn light" type="button" data-remove-row>Remove</button></td>
     </tr>
@@ -124,6 +132,38 @@ const assignNames = row => {
     row.querySelectorAll('[data-name]').forEach(input => {
         input.name = `items[${index}][${input.dataset.name}]`;
     });
+};
+const syncProductDefaults = row => {
+    const productSelect = row.querySelector('select[name$="[product_id]"], select[data-name="product_id"]');
+    const selected = productSelect?.selectedOptions[0];
+    const unitPrice = row.querySelector('input[name$="[unit_price]"], input[data-name="unit_price"]');
+    const warrantyDays = row.querySelector('input[name$="[warranty_days]"], input[data-name="warranty_days"]');
+    const serialNumbers = row.querySelector('textarea[name$="[serial_numbers]"], textarea[data-name="serial_numbers"]');
+
+    if (!selected || !selected.value) {
+        if (serialNumbers) {
+            serialNumbers.disabled = false;
+            serialNumbers.placeholder = 'One serial per line';
+        }
+        return;
+    }
+
+    if (unitPrice && (!unitPrice.value || Number(unitPrice.value) === 0) && selected.dataset.unitPrice) {
+        unitPrice.value = selected.dataset.unitPrice;
+    }
+
+    if (warrantyDays && !warrantyDays.value && selected.dataset.warrantyDays) {
+        warrantyDays.value = selected.dataset.warrantyDays;
+    }
+
+    if (serialNumbers) {
+        const tracksSerials = selected.dataset.trackSerials === '1';
+        serialNumbers.disabled = !tracksSerials;
+        serialNumbers.placeholder = tracksSerials ? 'One serial per line' : 'Serial not tracked for this product';
+        if (!tracksSerials) {
+            serialNumbers.value = '';
+        }
+    }
 };
 const applyProductFilters = () => {
     const brand = brandFilter.value;
@@ -186,10 +226,16 @@ document.getElementById('addPurchaseRow').addEventListener('click', () => {
     const row = template.content.firstElementChild.cloneNode(true);
     rows.appendChild(row);
     assignNames(row);
+    syncProductDefaults(row);
     applyProductFilters();
 });
 brandFilter.addEventListener('change', applyProductFilters);
 renderCategoryFilterLevel(categoryTree);
+rows.querySelectorAll('tr').forEach(syncProductDefaults);
+rows.addEventListener('change', event => {
+    if (!event.target.matches('select[name$="[product_id]"]')) return;
+    syncProductDefaults(event.target.closest('tr'));
+});
 document.addEventListener('click', event => {
     if (! event.target.closest('[data-remove-row]')) return;
     if (rows.children.length <= 1) return;

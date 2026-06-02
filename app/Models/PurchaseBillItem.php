@@ -18,6 +18,7 @@ class PurchaseBillItem extends Model
         'unit_price',
         'total',
         'warranty_months',
+        'warranty_days',
     ];
 
     protected function casts(): array

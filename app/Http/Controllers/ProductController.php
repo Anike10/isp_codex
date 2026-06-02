@@ -23,6 +23,7 @@ class ProductController extends Controller
                 $query->where(function ($query) use ($search): void {
                     $query->where('name', 'like', "%{$search}%")
                         ->orWhere('sku', 'like', "%{$search}%")
+                        ->orWhere('barcode', 'like', "%{$search}%")
                         ->orWhere('brand', 'like', "%{$search}%")
                         ->orWhere('category', 'like', "%{$search}%")
                         ->orWhere('subcategory', 'like', "%{$search}%");
@@ -62,16 +63,23 @@ class ProductController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'sku' => ['required', 'string', 'max:100', 'unique:products,sku'],
+            'barcode' => ['nullable', 'string', 'max:100', 'unique:products,barcode'],
             'brand' => ['nullable', 'string', 'max:100'],
             'product_category_id' => ['nullable', 'exists:product_categories,id'],
             'track_inventory' => ['nullable', 'boolean'],
+            'track_serial_numbers' => ['nullable', 'boolean'],
+            'warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
             'purchase_price' => ['required', 'numeric', 'min:0'],
             'sale_price' => ['required', 'numeric', 'min:0'],
             'stock_quantity' => ['nullable', 'integer', 'min:0'],
             'low_stock_alert' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $data['track_inventory'] = $request->boolean('track_inventory');
+        $data['track_inventory'] = $request->has('track_inventory') ? $request->boolean('track_inventory') : true;
+        $data['track_serial_numbers'] = $data['track_inventory'] && $request->boolean('track_serial_numbers');
+        $data['warranty_days'] = isset($data['warranty_days']) && $data['warranty_days'] !== ''
+            ? (int) $data['warranty_days']
+            : null;
 
         if (! $data['track_inventory']) {
             $data['stock_quantity'] = 0;

@@ -15,9 +15,12 @@ class Product extends Model
         'entry_by',
         'name',
         'sku',
+        'barcode',
         'brand',
         'product_category_id',
         'track_inventory',
+        'track_serial_numbers',
+        'warranty_days',
         'category',
         'subcategory',
         'purchase_price',
@@ -28,6 +31,7 @@ class Product extends Model
 
     protected $casts = [
         'track_inventory' => 'boolean',
+        'track_serial_numbers' => 'boolean',
     ];
 
     public function stockMovements(): HasMany

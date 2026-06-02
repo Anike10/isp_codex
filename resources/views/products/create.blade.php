@@ -10,6 +10,7 @@
     @csrf
     <div><label>Name</label><input name="name" value="{{ old('name') }}" required></div>
     <div><label>SKU</label><input name="sku" value="{{ old('sku') }}" required></div>
+    <div><label>Barcode</label><input name="barcode" value="{{ old('barcode') }}" placeholder="Optional barcode"></div>
     <div>
         <label>Brand</label>
         <input name="brand" value="{{ old('brand') }}" list="brandOptions" placeholder="TP-Link, MikroTik, Intel">
@@ -27,6 +28,12 @@
         <label><input type="checkbox" name="track_inventory" value="1" @checked(old('track_inventory', '1'))> Track inventory stock</label>
         <span class="muted">Uncheck this for services or non-stock purchases that should not affect inventory.</span>
     </div>
+    <div data-inventory-field>
+        <input type="hidden" name="track_serial_numbers" value="0">
+        <label><input type="checkbox" name="track_serial_numbers" value="1" @checked(old('track_serial_numbers'))> Track serial numbers</label>
+        <span class="muted">Enable this for routers, ONUs, devices, or anything with individual serial numbers.</span>
+    </div>
+    <div data-inventory-field><label>Default Warranty Days</label><input type="number" name="warranty_days" min="0" max="3650" value="{{ old('warranty_days') }}" placeholder="Example: 365"></div>
     <div data-inventory-field><label>Opening Stock</label><input type="number" name="stock_quantity" value="{{ old('stock_quantity', 0) }}" required></div>
     <div data-inventory-field><label>Low Stock Alert</label><input type="number" name="low_stock_alert" value="{{ old('low_stock_alert', 5) }}" required></div>
     <div class="full"><button class="btn" type="submit">Save Product</button></div>
@@ -40,7 +47,7 @@
 const categoryTree = @json($categoryTree);
 const selectedCategoryInput = document.getElementById('product_category_id');
 const categoryCascade = document.getElementById('categoryCascade');
-const trackInventory = document.querySelector('input[name="track_inventory"]');
+const trackInventory = document.querySelector('input[type="checkbox"][name="track_inventory"]');
 const inventoryFields = document.querySelectorAll('[data-inventory-field]');
 
 function syncInventoryFields() {

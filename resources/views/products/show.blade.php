@@ -4,7 +4,7 @@
 <div class="topbar">
     <div>
         <h1>{{ $product->name }}</h1>
-        <div class="muted">{{ $product->sku }} - {{ $product->brand ?? 'No brand' }} - {{ $product->category ?? 'No category' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}</div>
+        <div class="muted">{{ $product->sku }}{{ $product->barcode ? ' - Barcode: '.$product->barcode : '' }} - {{ $product->brand ?? 'No brand' }} - {{ $product->category ?? 'No category' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}</div>
     </div>
     <a class="btn light" href="{{ route('products.index') }}">Back</a>
 </div>
@@ -12,6 +12,8 @@
 <div class="grid stats" style="margin-bottom:16px">
     <div class="card stat"><span class="muted">Inventory</span><strong>{{ $product->track_inventory ? 'Tracked' : 'Not tracked' }}</strong></div>
     <div class="card stat"><span class="muted">Current Stock</span><strong>{{ $product->track_inventory ? $product->stock_quantity : 'N/A' }}</strong></div>
+    <div class="card stat"><span class="muted">Serial</span><strong>{{ $product->track_serial_numbers ? 'Tracked' : 'Not tracked' }}</strong></div>
+    <div class="card stat"><span class="muted">Warranty</span><strong>{{ $product->warranty_days !== null ? $product->warranty_days.' days' : 'N/A' }}</strong></div>
     <div class="card stat"><span class="muted">Purchase Price</span><strong>{{ number_format($product->purchase_price, 2) }}</strong></div>
     <div class="card stat"><span class="muted">Sale Price</span><strong>{{ number_format($product->sale_price, 2) }}</strong></div>
 </div>

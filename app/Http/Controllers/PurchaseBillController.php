@@ -51,6 +51,7 @@ class PurchaseBillController extends Controller
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.warranty_months' => ['nullable', 'integer', 'min:0', 'max:120'],
+            'items.*.warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
             'items.*.serial_numbers' => ['nullable', 'string'],
         ]);
 
@@ -75,13 +76,19 @@ class PurchaseBillController extends Controller
                 foreach ($items as $item) {
                     $quantity = (int) $item['quantity'];
                     $unitPrice = (float) $item['unit_price'];
+                    $product = Product::lockForUpdate()->findOrFail($item['product_id']);
                     $warrantyMonths = isset($item['warranty_months']) && $item['warranty_months'] !== ''
                         ? (int) $item['warranty_months']
                         : null;
+                    $warrantyDays = $this->warrantyDays($item, $product, $warrantyMonths);
                     $serialNumbers = $this->serialNumbers($item['serial_numbers'] ?? '');
 
                     if ($serialNumbers !== [] && count($serialNumbers) > $quantity) {
                         throw new InvalidArgumentException('Serial number count cannot be greater than purchased quantity.');
+                    }
+
+                    if (! $product->track_serial_numbers && $serialNumbers !== []) {
+                        throw new InvalidArgumentException('Serial numbers can only be added for serial-tracked products.');
                     }
 
                     $billItem = $purchaseBill->items()->create([
@@ -90,13 +97,8 @@ class PurchaseBillController extends Controller
                         'unit_price' => $unitPrice,
                         'total' => $quantity * $unitPrice,
                         'warranty_months' => $warrantyMonths,
+                        'warranty_days' => $warrantyDays,
                     ]);
-
-                    $product = Product::lockForUpdate()->findOrFail($item['product_id']);
-
-                    if (! $product->track_inventory && $serialNumbers !== []) {
-                        throw new InvalidArgumentException('Serial numbers can only be added for stock-tracked products.');
-                    }
 
                     if ($product->track_inventory) {
                         $inventoryService->moveStock($product, 'in', $quantity, 'Purchase bill '.$purchaseBill->bill_no, $purchaseBill->bill_no);
@@ -108,7 +110,7 @@ class PurchaseBillController extends Controller
                             'purchase_bill_id' => $purchaseBill->id,
                             'purchase_bill_item_id' => $billItem->id,
                             'serial_number' => $serialNumber,
-                            'warranty_until' => $warrantyMonths ? Carbon::parse($data['purchase_date'])->addMonths($warrantyMonths)->toDateString() : null,
+                            'warranty_until' => $warrantyDays ? Carbon::parse($data['purchase_date'])->addDays($warrantyDays)->toDateString() : null,
                             'status' => 'in_stock',
                         ]);
                     }
@@ -136,6 +138,19 @@ class PurchaseBillController extends Controller
             ->unique()
             ->values()
             ->all();
+    }
+
+    private function warrantyDays(array $item, Product $product, ?int $warrantyMonths): ?int
+    {
+        if (isset($item['warranty_days']) && $item['warranty_days'] !== '') {
+            return (int) $item['warranty_days'];
+        }
+
+        if ($product->warranty_days !== null) {
+            return (int) $product->warranty_days;
+        }
+
+        return $warrantyMonths ? $warrantyMonths * 30 : null;
     }
 
     private function nextBillNo(): string
