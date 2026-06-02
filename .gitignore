@@ -1,4 +1,5 @@
 *.log
+database/*backup*.sql
 .DS_Store
 .env
 .env.backup
