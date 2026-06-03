@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Services\InventoryService;
+use App\Support\SerialNumberParser;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class ProductController extends Controller
@@ -52,10 +54,14 @@ class ProductController extends Controller
         $serials = $product->serials()
             ->with('purchaseBill')
             ->latest()
-            ->limit(50)
+            ->limit(200)
             ->get();
+        $serialGroups = $product->serials()
+            ->selectRaw('status, count(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
 
-        return view('products.show', compact('product', 'stockMovements', 'serials'));
+        return view('products.show', compact('product', 'stockMovements', 'serials', 'serialGroups'));
     }
 
     public function store(Request $request)
@@ -106,10 +112,52 @@ class ProductController extends Controller
             'type' => ['required', 'in:in,out,use'],
             'quantity' => ['required', 'integer', 'min:1'],
             'reason' => ['nullable', 'string', 'max:255'],
+            'serial_numbers' => ['nullable', 'string'],
         ]);
 
         try {
-            $inventoryService->moveStock($product, $data['type'], (int) $data['quantity'], $data['reason'] ?? null);
+            DB::transaction(function () use ($data, $inventoryService, $product): void {
+                $quantity = (int) $data['quantity'];
+                $serialNumbers = app(SerialNumberParser::class)->parse($data['serial_numbers'] ?? '');
+
+                if ($product->track_serial_numbers && in_array($data['type'], ['out', 'use'], true)) {
+                    if (count($serialNumbers) !== $quantity) {
+                        throw new InvalidArgumentException('Serial number count must match quantity for serial-tracked stock out/use.');
+                    }
+
+                    $foundSerials = $product->serials()
+                        ->whereIn('serial_number', $serialNumbers)
+                        ->where('status', 'in_stock')
+                        ->pluck('serial_number')
+                        ->all();
+
+                    $missingSerials = array_values(array_diff($serialNumbers, $foundSerials));
+
+                    if ($missingSerials !== []) {
+                        throw new InvalidArgumentException('These serials are not available in house: '.implode(', ', $missingSerials));
+                    }
+                }
+
+                $inventoryService->moveStock($product, $data['type'], $quantity, $data['reason'] ?? null);
+
+                if ($product->track_serial_numbers && $serialNumbers !== []) {
+                    if ($data['type'] === 'in') {
+                        foreach ($serialNumbers as $serialNumber) {
+                            $product->serials()->firstOrCreate(
+                                ['serial_number' => $serialNumber],
+                                ['status' => 'in_stock', 'note' => $data['reason'] ?? null],
+                            );
+                        }
+                    } elseif (in_array($data['type'], ['out', 'use'], true)) {
+                        $product->serials()
+                            ->whereIn('serial_number', $serialNumbers)
+                            ->update([
+                                'status' => $data['type'] === 'use' ? 'used' : 'out',
+                                'note' => $data['reason'] ?? null,
+                            ]);
+                    }
+                }
+            });
         } catch (InvalidArgumentException $exception) {
             return back()->withErrors(['quantity' => $exception->getMessage()]);
         }

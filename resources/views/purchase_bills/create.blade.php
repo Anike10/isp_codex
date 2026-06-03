@@ -79,7 +79,7 @@
                     <td><input type="number" name="items[{{ $index }}][quantity]" min="1" value="{{ $item['quantity'] ?? 1 }}" required></td>
                     <td><input type="number" name="items[{{ $index }}][unit_price]" min="0" step="0.01" value="{{ $item['unit_price'] ?? 0 }}" required></td>
                     <td><input type="number" name="items[{{ $index }}][warranty_days]" min="0" max="3650" value="{{ $item['warranty_days'] ?? ($item['warranty_months'] ?? '') }}"></td>
-                    <td><textarea name="items[{{ $index }}][serial_numbers]" rows="2" placeholder="One serial per line">{{ $item['serial_numbers'] ?? '' }}</textarea></td>
+                    <td><textarea name="items[{{ $index }}][serial_numbers]" rows="2" placeholder="1001-1010, 1020-1030">{{ $item['serial_numbers'] ?? '' }}</textarea></td>
                     <td><button class="btn light" type="button" data-remove-row>Remove</button></td>
                 </tr>
             @endforeach
@@ -115,7 +115,7 @@
         <td><input data-name="quantity" type="number" min="1" value="1" required></td>
         <td><input data-name="unit_price" type="number" min="0" step="0.01" value="0" required></td>
         <td><input data-name="warranty_days" type="number" min="0" max="3650"></td>
-        <td><textarea data-name="serial_numbers" rows="2" placeholder="One serial per line"></textarea></td>
+        <td><textarea data-name="serial_numbers" rows="2" placeholder="1001-1010, 1020-1030"></textarea></td>
         <td><button class="btn light" type="button" data-remove-row>Remove</button></td>
     </tr>
 </template>
@@ -159,7 +159,7 @@ const syncProductDefaults = row => {
     if (serialNumbers) {
         const tracksSerials = selected.dataset.trackSerials === '1';
         serialNumbers.disabled = !tracksSerials;
-        serialNumbers.placeholder = tracksSerials ? 'One serial per line' : 'Serial not tracked for this product';
+        serialNumbers.placeholder = tracksSerials ? '1001-1010, 1020-1030' : 'Serial not tracked for this product';
         if (!tracksSerials) {
             serialNumbers.value = '';
         }

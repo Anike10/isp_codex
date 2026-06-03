@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Permission;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\ProductSerial;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -110,5 +111,55 @@ class ProductControllerTest extends TestCase
             ->assertOk()
             ->assertSee('CCR Router')
             ->assertDontSee('CAT6 Cable');
+    }
+
+    public function test_serial_tracked_product_marks_own_use_serials(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        $product = Product::create([
+            'name' => 'ONU Device',
+            'sku' => 'ONU-USE-001',
+            'brand' => 'BDCOM',
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 3,
+            'low_stock_alert' => 1,
+        ]);
+
+        foreach (['ONU001', 'ONU002', 'ONU003'] as $serialNumber) {
+            ProductSerial::create([
+                'product_id' => $product->id,
+                'serial_number' => $serialNumber,
+                'status' => 'in_stock',
+            ]);
+        }
+
+        $this->actingAs($user)->post(route('products.stock', $product), [
+            'type' => 'use',
+            'quantity' => 2,
+            'serial_numbers' => 'ONU001-ONU002',
+            'reason' => 'Customer installation',
+        ])->assertRedirect(route('products.index'));
+
+        $this->assertSame(1, $product->refresh()->stock_quantity);
+        $this->assertDatabaseHas('product_serials', [
+            'product_id' => $product->id,
+            'serial_number' => 'ONU001',
+            'status' => 'used',
+            'note' => 'Customer installation',
+        ]);
+        $this->assertDatabaseHas('product_serials', [
+            'product_id' => $product->id,
+            'serial_number' => 'ONU003',
+            'status' => 'in_stock',
+        ]);
+
+        $this->actingAs($user)->get(route('products.show', $product))
+            ->assertOk()
+            ->assertSee('In House: 1')
+            ->assertSee('Own Use: 2')
+            ->assertSee('Customer installation');
     }
 }

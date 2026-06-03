@@ -8,6 +8,7 @@ use App\Models\ProductCategory;
 use App\Models\ProductSerial;
 use App\Models\PurchaseBill;
 use App\Services\InventoryService;
+use App\Support\SerialNumberParser;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -81,7 +82,7 @@ class PurchaseBillController extends Controller
                         ? (int) $item['warranty_months']
                         : null;
                     $warrantyDays = $this->warrantyDays($item, $product, $warrantyMonths);
-                    $serialNumbers = $this->serialNumbers($item['serial_numbers'] ?? '');
+                    $serialNumbers = app(SerialNumberParser::class)->parse($item['serial_numbers'] ?? '');
 
                     if ($serialNumbers !== [] && count($serialNumbers) > $quantity) {
                         throw new InvalidArgumentException('Serial number count cannot be greater than purchased quantity.');
@@ -128,16 +129,6 @@ class PurchaseBillController extends Controller
         $purchaseBill->load(['party', 'items.product', 'items.serials']);
 
         return view('purchase_bills.show', compact('purchaseBill'));
-    }
-
-    private function serialNumbers(string $serialNumbers): array
-    {
-        return collect(preg_split('/\R/', $serialNumbers) ?: [])
-            ->map(fn (string $serial): string => trim($serial))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
     }
 
     private function warrantyDays(array $item, Product $product, ?int $warrantyMonths): ?int

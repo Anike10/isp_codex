@@ -105,6 +105,43 @@ class PurchaseBillTest extends TestCase
         ]);
     }
 
+    public function test_purchase_bill_accepts_serial_ranges_and_comma_groups(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        $product = Product::create([
+            'name' => 'ONU Device',
+            'sku' => 'ONU-RANGE-001',
+            'brand' => 'BDCOM',
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 2,
+        ]);
+
+        $this->actingAs($user)->post(route('purchase-bills.store'), [
+            'bill_no' => 'PB-RANGE-001',
+            'purchase_date' => '2026-06-03',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 5,
+                    'unit_price' => 900,
+                    'serial_numbers' => 'ONU001-ONU003, ONU010 থেকে ONU011',
+                ],
+            ],
+        ])->assertRedirect(route('purchase-bills.index'));
+
+        foreach (['ONU001', 'ONU002', 'ONU003', 'ONU010', 'ONU011'] as $serialNumber) {
+            $this->assertDatabaseHas('product_serials', [
+                'product_id' => $product->id,
+                'serial_number' => $serialNumber,
+                'status' => 'in_stock',
+            ]);
+        }
+    }
+
     public function test_serial_numbers_require_serial_tracking_enabled(): void
     {
         $user = User::factory()->create();

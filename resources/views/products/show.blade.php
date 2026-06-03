@@ -26,25 +26,39 @@
             <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
             <input type="number" name="quantity" min="1" placeholder="Qty" style="width:120px" required>
             <input name="reason" placeholder="Reason" style="width:220px">
+            @if ($product->track_serial_numbers)
+                <textarea name="serial_numbers" rows="2" placeholder="Serials: 1001-1010, 1020-1030" style="min-width:280px"></textarea>
+            @endif
             <button class="btn secondary" type="submit">Update Stock</button>
         </form>
+        @if ($product->track_serial_numbers)
+            <div class="muted" style="margin-top:8px">For Own Use/Out, serial count must match quantity. You can use comma, new line, or range.</div>
+        @endif
     </section>
 @endif
 
 <section class="card" style="margin-bottom:16px">
     <h2>Serials & Warranty</h2>
+    @if ($product->track_serial_numbers)
+        <div class="actions" style="margin-bottom:14px">
+            <span class="badge">In House: {{ $serialGroups['in_stock'] ?? 0 }}</span>
+            <span class="badge">Own Use: {{ $serialGroups['used'] ?? 0 }}</span>
+            <span class="badge">Out: {{ $serialGroups['out'] ?? 0 }}</span>
+        </div>
+    @endif
     <table>
-        <thead><tr><th>Serial</th><th>Status</th><th>Warranty Until</th><th>Purchase Bill</th></tr></thead>
+        <thead><tr><th>Serial</th><th>Status</th><th>Warranty Until</th><th>Purchase Bill</th><th>Used/Out Reason</th></tr></thead>
         <tbody>
         @forelse ($serials as $serial)
             <tr>
                 <td><span class="badge">{{ $serial->serial_number }}</span></td>
-                <td>{{ str_replace('_', ' ', $serial->status) }}</td>
+                <td>{{ $serial->status === 'in_stock' ? 'In house' : str_replace('_', ' ', ucfirst($serial->status)) }}</td>
                 <td>{{ $serial->warranty_until?->format('Y-m-d') ?? 'No warranty' }}</td>
                 <td>{{ $serial->purchaseBill?->bill_no ?? 'N/A' }}</td>
+                <td>{{ $serial->note ?? 'N/A' }}</td>
             </tr>
         @empty
-            <tr><td colspan="4">No serial tracked for this product.</td></tr>
+            <tr><td colspan="5">No serial tracked for this product.</td></tr>
         @endforelse
         </tbody>
     </table>
