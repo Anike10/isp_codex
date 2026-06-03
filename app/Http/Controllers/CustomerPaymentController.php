@@ -52,7 +52,7 @@ class CustomerPaymentController extends Controller
                 return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
             }
 
-            return redirect()->route('customers.show', $customer)->with('success', 'No due invoice found. Payment was added to customer advance balance.');
+            return redirect()->route('customers.show', $customer)->with('success', 'No due invoice found. Payment was added to party advance balance.');
         }
 
         try {
@@ -61,7 +61,7 @@ class CustomerPaymentController extends Controller
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
         }
 
-        return redirect()->route('customers.show', $customer)->with('success', 'Customer payment recorded successfully.');
+        return redirect()->route('customers.show', $customer)->with('success', 'Party payment recorded successfully.');
     }
 
     public function createAdvance(Customer $customer)

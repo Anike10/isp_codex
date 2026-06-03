@@ -562,7 +562,7 @@
         </div>
 
         <section class="signatures">
-            <div class="signature-line">Customer Signature</div>
+            <div class="signature-line">Party Signature</div>
             <div class="signature-line">Authorized Signature</div>
         </section>
 

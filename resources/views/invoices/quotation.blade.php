@@ -196,7 +196,7 @@
         <div class="amount-words"><span class="strong">Amount in Words:</span> {{ $amountInWords((float) $invoice->total) }}</div>
 
         <section class="signatures">
-            <div class="signature-line">Customer Signature</div>
+            <div class="signature-line">Party Signature</div>
             <div class="signature-line">Authorized Signature</div>
         </section>
         <div class="no-sign-note">Computer-generated quotation<br>No signature required</div>

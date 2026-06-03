@@ -7,7 +7,7 @@
 </div>
 
 <div class="grid stats" style="margin-bottom:16px">
-    <div class="card stat"><span class="muted">Vendor</span><strong style="font-size:18px">{{ $purchaseBill->party?->name ?? 'N/A' }}</strong></div>
+    <div class="card stat"><span class="muted">Vendor Party</span><strong style="font-size:18px">{{ $purchaseBill->party?->name ?? 'N/A' }}</strong></div>
     <div class="card stat"><span class="muted">Items</span><strong>{{ $purchaseBill->items->count() }}</strong></div>
     <div class="card stat"><span class="muted">Total</span><strong>{{ number_format($purchaseBill->subtotal, 2) }}</strong></div>
     <div class="card stat"><span class="muted">Date</span><strong style="font-size:18px">{{ $purchaseBill->purchase_date->format('Y-m-d') }}</strong></div>

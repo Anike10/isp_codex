@@ -86,7 +86,7 @@
 
 <div class="topbar">
     <div>
-        <h1>Record Customer Payment</h1>
+        <h1>Record Party Payment</h1>
         <div class="muted">{{ $customer->name }} - {{ $customer->connection_id }}</div>
     </div>
     <a class="btn light" href="{{ route('customers.show', $customer) }}">Back</a>

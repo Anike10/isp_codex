@@ -174,7 +174,7 @@
                     <summary>Network</summary>
                     <div class="nav-menu">
                         @if (auth()->user()?->hasPermission('manage_customers'))
-                            <a href="{{ route('customers.index') }}">Customers</a>
+                            <a href="{{ route('customers.index') }}">Parties</a>
                         @endif
                         @if (auth()->user()?->hasPermission('manage_packages'))
                             <a href="{{ route('packages.index') }}">Packages</a>

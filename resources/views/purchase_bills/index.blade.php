@@ -9,7 +9,7 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Bill</th><th>Vendor</th><th>Date</th><th>Total</th><th>Note</th></tr></thead>
+    <thead><tr><th>Bill</th><th>Vendor Party</th><th>Date</th><th>Total</th><th>Note</th></tr></thead>
     <tbody>
     @forelse ($purchaseBills as $purchaseBill)
         <tr data-href="{{ route('purchase-bills.show', $purchaseBill) }}">

@@ -2,18 +2,23 @@
 
 @section('content')
 <div class="topbar">
-    <div><h1>Add Ticket</h1><div class="muted">Create support request or customer complaint</div></div>
+    <div><h1>Add Ticket</h1><div class="muted">Create support request or party complaint</div></div>
     <a class="btn light" href="{{ route('tickets.index') }}">Back</a>
 </div>
 
 <form method="post" action="{{ route('tickets.store') }}" class="card form-grid">
     @csrf
     <div>
-        <label>Customer</label>
+        <label>Party</label>
         <select name="customer_id" required>
-            <option value="">Select customer</option>
+            <option value="">Select party</option>
             @foreach ($customers as $customer)
-                <option value="{{ $customer->id }}">{{ $customer->name }} - {{ $customer->connection_id }}</option>
+                <option value="{{ $customer->id }}">
+                    {{ $customer->name }} - {{ $customer->connection_id ?? 'No connection' }}
+                    @if ($customer->is_customer || $customer->is_vendor)
+                        - {{ collect([$customer->is_customer ? 'Customer' : null, $customer->is_vendor ? 'Vendor' : null])->filter()->implode(' + ') }}
+                    @endif
+                </option>
             @endforeach
         </select>
     </div>

@@ -46,7 +46,7 @@
         <tr>
             <th>Date</th>
             <th>Invoice</th>
-            <th>Customer</th>
+            <th>Party</th>
             <th>Note</th>
             <th>Credit</th>
             <th>Running Balance</th>

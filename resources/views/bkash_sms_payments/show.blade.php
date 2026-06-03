@@ -16,12 +16,15 @@
     <form method="post" action="{{ route('bkash-sms-payments.approve', $bkashSmsPayment) }}" class="card form-grid" style="margin-bottom:16px">
         @csrf
         <div class="full">
-            <label>Manual Match Customer</label>
+            <label>Manual Match Party</label>
             <select name="customer_id" required>
-                <option value="">Select customer</option>
+                <option value="">Select party</option>
                 @foreach ($customers as $customer)
                     <option value="{{ $customer->id }}">
                         {{ $customer->name }} - {{ $customer->phone }} - {{ $customer->mikrotik_username ?? $customer->connection_id }}
+                        @if ($customer->is_customer || $customer->is_vendor)
+                            - {{ collect([$customer->is_customer ? 'Customer' : null, $customer->is_vendor ? 'Vendor' : null])->filter()->implode(' + ') }}
+                        @endif
                     </option>
                 @endforeach
             </select>
@@ -46,7 +49,7 @@
 
     <section class="card">
         <h2>Updates</h2>
-        <p><strong>Customer:</strong>
+        <p><strong>Party:</strong>
             @if ($bkashSmsPayment->customer)
                 <a href="{{ route('customers.show', $bkashSmsPayment->customer) }}">{{ $bkashSmsPayment->customer->name }} - {{ $bkashSmsPayment->customer->connection_id }}</a>
             @else
@@ -65,7 +68,7 @@
             @if ($bkashSmsPayment->payment)
                 Payment ledger updated.
             @elseif ($bkashSmsPayment->status === 'balance')
-                Customer account balance updated.
+                Party account balance updated.
             @elseif ($bkashSmsPayment->status === 'duplicate')
                 Duplicate TrxID. Ledger was not updated.
             @else

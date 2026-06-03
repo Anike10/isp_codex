@@ -21,7 +21,7 @@
 </div>
 
 <div class="grid stats">
-    <div class="card stat"><span class="muted">Customers</span><strong>{{ $totalCustomers }}</strong></div>
+    <div class="card stat"><span class="muted">Parties</span><strong>{{ $totalCustomers }}</strong></div>
     <div class="card stat"><span class="muted">Active</span><strong>{{ $activeCustomers }}</strong></div>
     <div class="card stat"><span class="muted">Income</span><strong>{{ number_format($monthlyIncome) }}</strong></div>
     <div class="card stat"><span class="muted">Due</span><strong>{{ number_format($totalDue) }}</strong></div>
@@ -33,7 +33,7 @@
     <section class="card">
         <h2>Recent Invoices</h2>
         <table>
-            <thead><tr><th>Invoice</th><th>Customer</th><th>Due</th><th>Status</th></tr></thead>
+            <thead><tr><th>Invoice</th><th>Party</th><th>Due</th><th>Status</th></tr></thead>
             <tbody>
             @forelse ($recentInvoices as $invoice)
                 <tr data-href="{{ route('invoices.show', $invoice) }}">
@@ -51,7 +51,7 @@
     <section class="card">
         <h2>Recent Tickets</h2>
         <table>
-            <thead><tr><th>Subject</th><th>Customer</th><th>Priority</th><th>Status</th></tr></thead>
+            <thead><tr><th>Subject</th><th>Party</th><th>Priority</th><th>Status</th></tr></thead>
             <tbody>
             @forelse ($recentTickets as $ticket)
                 <tr data-href="{{ route('tickets.show', $ticket) }}">

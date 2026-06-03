@@ -60,7 +60,7 @@
         <p><strong>Finalized:</strong> {{ $invoice->finalized_at?->format('Y-m-d H:i') ?? 'Not finalized' }}</p>
     </section>
     <section class="card">
-        <h2>Customer</h2>
+        <h2>Party</h2>
         <p><strong>Name:</strong> {{ $invoice->customer->name }}</p>
         <p><strong>Phone:</strong> {{ $invoice->customer->phone }}</p>
         <p><strong>Connection:</strong> {{ $invoice->customer->connection_id }}</p>
@@ -84,7 +84,7 @@
         <div>
             <label>Amount</label>
             <input type="number" step="0.01" min="1" name="amount" value="{{ old('amount', number_format((float) $invoice->due_amount, 2, '.', '')) }}" required>
-            <span class="muted">Due is {{ number_format($invoice->due_amount, 2) }}. Extra amount will stay in customer advance balance.</span>
+            <span class="muted">Due is {{ number_format($invoice->due_amount, 2) }}. Extra amount will stay in party advance balance.</span>
         </div>
         <div>
             <label>Method</label>
@@ -134,12 +134,13 @@
 <section class="card" style="margin-top:16px">
     <h2>Items</h2>
     <table>
-        <thead><tr><th style="width:56px;">SL</th><th>Product</th><th>Quantity</th><th>Unit Price</th><th>Total</th></tr></thead>
+        <thead><tr><th style="width:56px;">SL</th><th>Product</th><th>Serials</th><th>Quantity</th><th>Unit Price</th><th>Total</th></tr></thead>
         <tbody>
         @foreach ($invoice->items as $index => $item)
             <tr>
                 <td>{{ $index + 1 }}</td>
                 <td>{{ $item->product_name }}</td>
+                <td style="white-space:pre-line">{{ $item->serial_numbers ?: 'N/A' }}</td>
                 <td>{{ $item->quantity }}</td>
                 <td>{{ number_format($item->unit_price, 2) }}</td>
                 <td>{{ number_format($item->total, 2) }}</td>

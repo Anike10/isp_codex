@@ -89,7 +89,7 @@ class CustomerController extends Controller
 
         return redirect()
             ->route('customers.index')
-            ->with('success', 'Customer created successfully. MikroTik user '.$syncResult['status'].'.')
+            ->with('success', 'Party created successfully. MikroTik user '.$syncResult['status'].'.')
             ->with('warning', $syncResult['warning']);
     }
 
@@ -157,7 +157,7 @@ class CustomerController extends Controller
 
         return redirect()
             ->route('customers.show', $customer)
-            ->with('success', 'Customer updated successfully. MikroTik user '.$syncResult['status'].'.')
+            ->with('success', 'Party updated successfully. MikroTik user '.$syncResult['status'].'.')
             ->with('warning', $syncResult['warning']);
     }
 

@@ -4,7 +4,7 @@
 <div class="topbar">
     <div>
         <h1>Invoices</h1>
-        <div class="muted">Monthly bills and customer dues</div>
+        <div class="muted">Monthly bills and party dues</div>
         <div class="muted" style="margin-top:8px; font-size:0.95rem;">নতুন ইনভয়েস তৈরি করতে একটি মাস নির্বাচন করুন এবং Generate Bills চাপুন।</div>
         <div class="muted" style="margin-top:4px; font-size:0.95rem;">রাউটার বা অন্য পণ্যের জন্য একাধিক বিল হলে Create Invoice ব্যবহার করুন।</div>
     </div>
@@ -20,7 +20,7 @@
 <form method="get" class="card form-grid" style="margin-bottom:16px">
     <div class="full">
         <label>Search</label>
-        <input name="search" value="{{ request('search') }}" placeholder="Customer name, mobile, connection ID, invoice no, or month">
+        <input name="search" value="{{ request('search') }}" placeholder="Party name, mobile, connection ID, invoice no, or month">
     </div>
     <div>
         <label>Billing Month</label>
@@ -61,7 +61,7 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Invoice</th><th>Customer</th><th>Mobile</th><th>Month</th><th>Type</th><th>Total</th><th>Paid</th><th>Due</th><th>Status</th><th>State</th><th></th></tr></thead>
+    <thead><tr><th>Invoice</th><th>Party</th><th>Mobile</th><th>Month</th><th>Type</th><th>Total</th><th>Paid</th><th>Due</th><th>Status</th><th>State</th><th></th></tr></thead>
     <tbody>
     @forelse ($invoices as $invoice)
         <tr data-href="{{ route('invoices.show', $invoice) }}">

@@ -32,7 +32,7 @@
             <th>Ref</th>
             <th>Amount</th>
             <th>Number</th>
-            <th>Customer</th>
+            <th>Party</th>
             <th>Invoice</th>
             <th>Updated</th>
             <th>Message</th>
@@ -60,7 +60,7 @@
                     @if ($smsPayment->payment)
                         Payment #{{ $smsPayment->payment->id }}
                     @elseif ($smsPayment->status === 'balance')
-                        Customer balance
+                        Party balance
                     @elseif ($smsPayment->status === 'duplicate')
                         No update
                     @else

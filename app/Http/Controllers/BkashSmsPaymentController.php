@@ -55,7 +55,7 @@ class BkashSmsPaymentController extends Controller
 
         return view('bkash_sms_payments.show', [
             'bkashSmsPayment' => $bkashSmsPayment,
-            'customers' => Customer::orderBy('name')->get(['id', 'name', 'phone', 'connection_id', 'mikrotik_username']),
+            'customers' => Customer::orderBy('name')->get(['id', 'name', 'phone', 'connection_id', 'mikrotik_username', 'is_customer', 'is_vendor']),
         ]);
     }
 
@@ -125,10 +125,10 @@ class BkashSmsPaymentController extends Controller
                 $smsPayment->update([
                     'status' => 'balance',
                     'customer_id' => $customer->id,
-                    'message' => 'Manually approved. No due invoice found. Amount added to customer balance ledger.',
+                    'message' => 'Manually approved. No due invoice found. Amount added to party balance ledger.',
                 ]);
 
-                return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)->with('success', 'SMS approved and amount added to customer balance.');
+                return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)->with('success', 'SMS approved and amount added to party balance.');
             }
 
             $payment = $paymentService->recordPayment($invoice, [

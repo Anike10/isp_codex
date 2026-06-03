@@ -161,7 +161,7 @@
 
         <div class="notes">
             <p class="strong">Delivery Note</p>
-            <p>The above goods/services have been delivered to the customer in good condition.</p>
+            <p>The above goods/services have been delivered to the party in good condition.</p>
         </div>
 
         <section class="signatures">

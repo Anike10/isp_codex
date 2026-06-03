@@ -5,20 +5,25 @@
     $isEdit = isset($invoice);
     $invoiceItems = old('items', $isEdit
         ? $invoice->items->map(fn ($item) => [
+            'product_id' => $item->product_id,
             'product_name' => $item->product_name,
             'quantity' => $item->quantity,
             'unit_price' => $item->unit_price,
+            'serial_numbers' => $item->serial_numbers,
         ])->toArray()
         : [
         [
+            'product_id' => '',
             'product_name' => '',
             'quantity' => 1,
             'unit_price' => '',
+            'serial_numbers' => '',
         ],
     ]);
     $selectedCustomer = old('customer_id')
         ? $customers->firstWhere('id', (int) old('customer_id'))
         : ($isEdit ? $invoice->customer : null);
+    $selectedCustomerId = old('customer_id', $selectedCustomer?->id);
 @endphp
 
 <style>
@@ -128,6 +133,38 @@
         border: 1px solid #e1e7ef;
         border-radius: 8px;
         background: #ffffff;
+    }
+
+    .product-picker {
+        position: relative;
+    }
+
+    .item-serials {
+        grid-column: 1 / -2;
+    }
+
+    .serial-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+    }
+
+    .serial-option {
+        border: 1px solid #c8d2df;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #172033;
+        padding: 5px 8px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+    }
+
+    .serial-option.is-selected {
+        border-color: #116149;
+        background: #edf8f4;
+        color: #0f513e;
     }
 
     .item-row:hover {
@@ -254,6 +291,12 @@
         background: #edf8f4;
     }
 
+    .customer-suggestion.is-active {
+        background: #dff2ea;
+        outline: 2px solid #116149;
+        outline-offset: -2px;
+    }
+
     .customer-suggestion strong {
         display: block;
         color: #172033;
@@ -373,23 +416,24 @@
                     <div class="section-head">
                         <div>
                             <h2>Invoice Details</h2>
-                            <p>Select who this invoice is for and define the billing period.</p>
+                            <p>Select the party this invoice is for and define the billing period.</p>
                         </div>
                     </div>
                     <div class="section-body">
                         <div class="invoice-form-grid">
                             <div class="customer-picker">
-                                <label for="customer_name">Customer Name <span class="required-mark">*</span></label>
-                                <input type="hidden" id="customer_id" name="customer_id" value="{{ old('customer_id') }}">
-                                <input id="customer_name" name="customer_name" value="{{ old('customer_name', $selectedCustomer?->name) }}" autocomplete="off" placeholder="Type customer name or mobile number" required>
+                                <label for="customer_name">Party Name <span class="required-mark">*</span></label>
+                                <input type="hidden" id="customer_id" name="customer_id" value="{{ $selectedCustomerId }}">
+                                <input id="customer_name" name="customer_name" value="{{ old('customer_name', $selectedCustomer?->name) }}" autocomplete="off" placeholder="Type party name or mobile number" required>
                                 <div id="customerSuggestions" class="customer-suggestions"></div>
-                                <span class="field-note">Start typing a name or mobile number. Select an existing customer, or continue with a new customer.</span>
+                                <span class="field-note">Start typing a name or mobile number. Select an existing party, or continue with a new party.</span>
                             </div>
 
-                            <div>
+                            <div class="customer-picker">
                                 <label for="customer_phone">Mobile Number <span class="required-mark">*</span></label>
-                                <input id="customer_phone" name="customer_phone" value="{{ old('customer_phone', $selectedCustomer?->phone) }}" autocomplete="off" placeholder="Customer mobile number" required>
-                                <span class="field-note">Existing customer suggestions also show mobile numbers.</span>
+                                <input id="customer_phone" name="customer_phone" value="{{ old('customer_phone', $selectedCustomer?->phone) }}" autocomplete="off" placeholder="Party mobile number" required>
+                                <div id="customerPhoneSuggestions" class="customer-suggestions"></div>
+                                <span class="field-note">Existing party suggestions also show mobile numbers.</span>
                             </div>
 
                             <div>
@@ -442,7 +486,11 @@
                                 <div class="item-row">
                                     <div>
                                         <label for="items_{{ $index }}_product_name">Product Name <span class="required-mark">*</span></label>
-                                        <input id="items_{{ $index }}_product_name" type="text" name="items[{{ $index }}][product_name]" value="{{ $item['product_name'] ?? '' }}" placeholder="Router, cable, setup fee" required>
+                                        <div class="product-picker">
+                                            <input type="hidden" name="items[{{ $index }}][product_id]" value="{{ $item['product_id'] ?? '' }}" data-product-id>
+                                            <input id="items_{{ $index }}_product_name" type="text" name="items[{{ $index }}][product_name]" value="{{ $item['product_name'] ?? '' }}" placeholder="Router, cable, setup fee" autocomplete="off" data-product-search required>
+                                            <div class="customer-suggestions product-suggestions"></div>
+                                        </div>
                                     </div>
                                     <div>
                                         <label for="items_{{ $index }}_quantity">Qty <span class="required-mark">*</span></label>
@@ -458,6 +506,12 @@
                                     </div>
                                     <div>
                                         <button type="button" class="btn light remove-item" @if (count($invoiceItems) === 1) style="display:none;" @endif aria-label="Remove item">X</button>
+                                    </div>
+                                    <div class="item-serials">
+                                        <label for="items_{{ $index }}_serial_numbers">Serial Numbers</label>
+                                        <textarea id="items_{{ $index }}_serial_numbers" name="items[{{ $index }}][serial_numbers]" rows="2" placeholder="Select a serial-tracked product first">{{ $item['serial_numbers'] ?? '' }}</textarea>
+                                        <div class="serial-options"></div>
+                                        <span class="field-note">Click available serials to add/remove them, or type one per line.</span>
                                     </div>
                                 </div>
                             @endforeach
@@ -513,51 +567,86 @@ const customerSearchUrl = @json(route('invoice-customers.search'));
 const customerIdInput = document.getElementById('customer_id');
 const customerNameInput = document.getElementById('customer_name');
 const customerPhoneInput = document.getElementById('customer_phone');
-const customerSuggestions = document.getElementById('customerSuggestions');
+const customerNameSuggestions = document.getElementById('customerSuggestions');
+const customerPhoneSuggestions = document.getElementById('customerPhoneSuggestions');
+const products = @json($productSuggestionData ?? []);
 let customerSearchTimer;
+let activeCustomerSuggestions = customerNameSuggestions;
+let currentCustomerSuggestions = [];
+let highlightedCustomerIndex = -1;
+let activeProductRow = null;
+let currentProductSuggestions = [];
+let highlightedProductIndex = -1;
 
 function clearSelectedCustomer() {
     customerIdInput.value = '';
 }
 
 function hideCustomerSuggestions() {
-    customerSuggestions.style.display = 'none';
-    customerSuggestions.innerHTML = '';
+    [customerNameSuggestions, customerPhoneSuggestions].forEach(suggestions => {
+        suggestions.style.display = 'none';
+        suggestions.innerHTML = '';
+    });
+    currentCustomerSuggestions = [];
+    highlightedCustomerIndex = -1;
+}
+
+function selectCustomerSuggestion(customer) {
+    customerIdInput.value = customer.id;
+    customerNameInput.value = customer.name;
+    customerPhoneInput.value = customer.phone || '';
+    hideCustomerSuggestions();
+}
+
+function refreshHighlightedCustomer() {
+    activeCustomerSuggestions.querySelectorAll('.customer-suggestion').forEach((button, index) => {
+        const active = index === highlightedCustomerIndex;
+        button.classList.toggle('is-active', active);
+        if (active) {
+            button.scrollIntoView({ block: 'nearest' });
+        }
+    });
 }
 
 function renderCustomerSuggestions(customers) {
-    customerSuggestions.innerHTML = '';
+    const suggestions = activeCustomerSuggestions;
+    suggestions.innerHTML = '';
+    currentCustomerSuggestions = customers;
+    highlightedCustomerIndex = customers.length > 0 ? 0 : -1;
 
     if (customers.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'customer-suggestion';
-        empty.innerHTML = '<strong>No existing customer found</strong><span>This will be added as a new customer when the invoice is saved.</span>';
-        customerSuggestions.appendChild(empty);
-        customerSuggestions.style.display = 'block';
+        empty.innerHTML = '<strong>No existing party found</strong><span>This will be added as a new party when the invoice is saved.</span>';
+        suggestions.appendChild(empty);
+        suggestions.style.display = 'block';
         return;
     }
 
-    customers.forEach(customer => {
+    customers.forEach((customer, index) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'customer-suggestion';
         button.innerHTML = `
             <strong>${customer.name}</strong>
-            <span>${customer.phone || 'No mobile'} · ${customer.connection_id}</span>
+            <span>${customer.phone || 'No mobile'} - ${customer.connection_id || 'No connection'} - ${customer.party_type}</span>
         `;
-        button.addEventListener('click', () => {
-            customerIdInput.value = customer.id;
-            customerNameInput.value = customer.name;
-            customerPhoneInput.value = customer.phone || '';
-            hideCustomerSuggestions();
+        button.addEventListener('mouseenter', () => {
+            highlightedCustomerIndex = index;
+            refreshHighlightedCustomer();
         });
-        customerSuggestions.appendChild(button);
+        button.addEventListener('click', () => selectCustomerSuggestion(customer));
+        suggestions.appendChild(button);
     });
 
-    customerSuggestions.style.display = 'block';
+    suggestions.style.display = 'block';
+    refreshHighlightedCustomer();
 }
 
-function searchCustomers() {
+function searchCustomers(sourceInput) {
+    activeCustomerSuggestions = sourceInput === customerPhoneInput ? customerPhoneSuggestions : customerNameSuggestions;
+    (activeCustomerSuggestions === customerNameSuggestions ? customerPhoneSuggestions : customerNameSuggestions).style.display = 'none';
+
     const query = `${customerNameInput.value} ${customerPhoneInput.value}`.trim();
 
     clearTimeout(customerSearchTimer);
@@ -579,19 +668,232 @@ function searchCustomers() {
 
 customerNameInput.addEventListener('input', () => {
     clearSelectedCustomer();
-    searchCustomers();
+    searchCustomers(customerNameInput);
 });
 
 customerPhoneInput.addEventListener('input', () => {
     clearSelectedCustomer();
-    searchCustomers();
+    searchCustomers(customerPhoneInput);
+});
+
+[customerNameInput, customerPhoneInput].forEach(input => {
+    input.addEventListener('focus', () => {
+        activeCustomerSuggestions = input === customerPhoneInput ? customerPhoneSuggestions : customerNameSuggestions;
+    });
+
+    input.addEventListener('keydown', event => {
+        const suggestionsVisible = activeCustomerSuggestions.style.display === 'block';
+
+        if (!suggestionsVisible || currentCustomerSuggestions.length === 0) {
+            return;
+        }
+
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            highlightedCustomerIndex = (highlightedCustomerIndex + 1) % currentCustomerSuggestions.length;
+            refreshHighlightedCustomer();
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            highlightedCustomerIndex = (highlightedCustomerIndex - 1 + currentCustomerSuggestions.length) % currentCustomerSuggestions.length;
+            refreshHighlightedCustomer();
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            selectCustomerSuggestion(currentCustomerSuggestions[highlightedCustomerIndex]);
+        } else if (event.key === 'Escape') {
+            hideCustomerSuggestions();
+        }
+    });
 });
 
 document.addEventListener('click', function(e) {
-    if (!e.target.closest('.customer-picker') && e.target !== customerPhoneInput) {
+    if (!e.target.closest('.customer-picker')) {
         hideCustomerSuggestions();
     }
+
+    if (!e.target.closest('.product-picker')) {
+        hideProductSuggestions();
+    }
 });
+
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+    }[char]));
+}
+
+function productSearchText(product) {
+    return [
+        product.name,
+        product.sku,
+        product.barcode,
+        product.brand,
+    ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function productLabel(product) {
+    const stockLabel = product.track_inventory ? `Stock ${product.stock_quantity}` : 'No stock tracking';
+
+    return [
+        product.sku,
+        product.barcode,
+        product.brand,
+        stockLabel,
+        product.track_serials ? `${product.serials.length} serials` : null,
+    ].filter(Boolean).join(' - ');
+}
+
+function selectedSerials(row) {
+    const textarea = row.querySelector('[name$="[serial_numbers]"]');
+
+    return (textarea?.value || '')
+        .split(/[\r\n,]+/)
+        .map(value => value.trim())
+        .filter(Boolean);
+}
+
+function setSelectedSerials(row, serials) {
+    row.querySelector('[name$="[serial_numbers]"]').value = [...new Set(serials)].join('\n');
+}
+
+function selectedProduct(row) {
+    const productId = row.querySelector('[data-product-id]')?.value;
+
+    return products.find(product => String(product.id) === String(productId));
+}
+
+function refreshSerialOptions(row) {
+    const product = selectedProduct(row);
+    const serialTextarea = row.querySelector('[name$="[serial_numbers]"]');
+    const serialOptions = row.querySelector('.serial-options');
+
+    if (!serialTextarea || !serialOptions) return;
+
+    serialOptions.innerHTML = '';
+
+    if (!product || !product.track_serials) {
+        serialTextarea.disabled = false;
+        serialTextarea.placeholder = product ? 'Serial not tracked for this product' : 'Select a serial-tracked product first';
+        return;
+    }
+
+    serialTextarea.disabled = false;
+    serialTextarea.placeholder = 'Click serials below, or type one per line';
+    const chosen = selectedSerials(row);
+
+    product.serials.forEach(serial => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'serial-option';
+        button.textContent = serial.warranty_until ? `${serial.serial_number} (${serial.warranty_until})` : serial.serial_number;
+        button.classList.toggle('is-selected', chosen.includes(serial.serial_number));
+        button.addEventListener('click', () => {
+            const serials = selectedSerials(row);
+            const nextSerials = serials.includes(serial.serial_number)
+                ? serials.filter(value => value !== serial.serial_number)
+                : [...serials, serial.serial_number];
+
+            setSelectedSerials(row, nextSerials);
+            refreshSerialOptions(row);
+        });
+        serialOptions.appendChild(button);
+    });
+}
+
+function hideProductSuggestions() {
+    document.querySelectorAll('.product-suggestions').forEach(suggestions => {
+        suggestions.style.display = 'none';
+        suggestions.innerHTML = '';
+    });
+    activeProductRow = null;
+    currentProductSuggestions = [];
+    highlightedProductIndex = -1;
+}
+
+function selectProductSuggestion(row, product) {
+    const previousProductId = row.querySelector('[data-product-id]').value;
+    row.querySelector('[data-product-id]').value = product.id;
+    row.querySelector('[data-product-search]').value = product.name;
+
+    if (previousProductId && String(previousProductId) !== String(product.id)) {
+        row.querySelector('[name$="[serial_numbers]"]').value = '';
+    }
+
+    const unitPrice = row.querySelector('.unit-price');
+    if (unitPrice && (!unitPrice.value || Number(unitPrice.value) === 0)) {
+        unitPrice.value = product.sale_price || '';
+    }
+
+    hideProductSuggestions();
+    refreshSerialOptions(row);
+    updateRowTotal(row);
+    updateTotals();
+}
+
+function clearSelectedProduct(row) {
+    row.querySelector('[data-product-id]').value = '';
+    row.querySelector('[name$="[serial_numbers]"]').value = '';
+    refreshSerialOptions(row);
+}
+
+function refreshHighlightedProduct() {
+    if (!activeProductRow) return;
+
+    activeProductRow.querySelectorAll('.product-suggestions .customer-suggestion').forEach((button, index) => {
+        const active = index === highlightedProductIndex;
+        button.classList.toggle('is-active', active);
+        if (active) {
+            button.scrollIntoView({ block: 'nearest' });
+        }
+    });
+}
+
+function renderProductSuggestions(row) {
+    const input = row.querySelector('[data-product-search]');
+    const suggestions = row.querySelector('.product-suggestions');
+    const query = input.value.trim().toLowerCase();
+
+    suggestions.innerHTML = '';
+    activeProductRow = row;
+
+    if (query.length < 1) {
+        hideProductSuggestions();
+        return;
+    }
+
+    currentProductSuggestions = products
+        .filter(product => productSearchText(product).includes(query))
+        .slice(0, 10);
+    highlightedProductIndex = currentProductSuggestions.length > 0 ? 0 : -1;
+
+    if (currentProductSuggestions.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'customer-suggestion';
+        empty.innerHTML = '<strong>No inventory product found</strong><span>This line will be saved as text only.</span>';
+        suggestions.appendChild(empty);
+        suggestions.style.display = 'block';
+        return;
+    }
+
+    currentProductSuggestions.forEach((product, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'customer-suggestion';
+        button.innerHTML = `<strong>${escapeHtml(product.name)}</strong><span>${escapeHtml(productLabel(product))}</span>`;
+        button.addEventListener('mouseenter', () => {
+            highlightedProductIndex = index;
+            refreshHighlightedProduct();
+        });
+        button.addEventListener('click', () => selectProductSuggestion(row, product));
+        suggestions.appendChild(button);
+    });
+
+    suggestions.style.display = 'block';
+    refreshHighlightedProduct();
+}
 
 let itemIndex = {{ count($invoiceItems) }};
 
@@ -602,7 +904,11 @@ document.getElementById('addItem').addEventListener('click', function() {
     newRow.innerHTML = `
         <div>
             <label for="items_${itemIndex}_product_name">Product Name <span class="required-mark">*</span></label>
-            <input id="items_${itemIndex}_product_name" type="text" name="items[${itemIndex}][product_name]" placeholder="Router, cable, setup fee" required>
+            <div class="product-picker">
+                <input type="hidden" name="items[${itemIndex}][product_id]" data-product-id>
+                <input id="items_${itemIndex}_product_name" type="text" name="items[${itemIndex}][product_name]" placeholder="Router, cable, setup fee" autocomplete="off" data-product-search required>
+                <div class="customer-suggestions product-suggestions"></div>
+            </div>
         </div>
         <div>
             <label for="items_${itemIndex}_quantity">Qty <span class="required-mark">*</span></label>
@@ -619,8 +925,15 @@ document.getElementById('addItem').addEventListener('click', function() {
         <div>
             <button type="button" class="btn light remove-item" aria-label="Remove item">X</button>
         </div>
+        <div class="item-serials">
+            <label for="items_${itemIndex}_serial_numbers">Serial Numbers</label>
+            <textarea id="items_${itemIndex}_serial_numbers" name="items[${itemIndex}][serial_numbers]" rows="2" placeholder="Select a serial-tracked product first"></textarea>
+            <div class="serial-options"></div>
+            <span class="field-note">Click available serials to add/remove them, or type one per line.</span>
+        </div>
     `;
     container.appendChild(newRow);
+    refreshSerialOptions(newRow);
     itemIndex++;
     refreshRemoveButtons();
     updateTotals();
@@ -635,12 +948,52 @@ document.addEventListener('click', function(e) {
 });
 
 document.addEventListener('input', function(e) {
+    if (e.target.matches('[data-product-search]')) {
+        const row = e.target.closest('.item-row');
+        clearSelectedProduct(row);
+        renderProductSuggestions(row);
+        return;
+    }
+
+    if (e.target.matches('[name$="[serial_numbers]"]')) {
+        refreshSerialOptions(e.target.closest('.item-row'));
+        return;
+    }
+
     if (e.target.classList.contains('quantity') || e.target.classList.contains('unit-price') || ['discount', 'vat', 'discountType', 'vatType'].includes(e.target.id)) {
         const row = e.target.closest('.item-row');
         if (row) {
             updateRowTotal(row);
         }
         updateTotals();
+    }
+});
+
+document.addEventListener('focusin', function(e) {
+    if (e.target.matches('[data-product-search]') && e.target.value.trim()) {
+        renderProductSuggestions(e.target.closest('.item-row'));
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (!e.target.matches('[data-product-search]') || !activeProductRow) return;
+
+    const suggestionsVisible = activeProductRow.querySelector('.product-suggestions').style.display === 'block';
+    if (!suggestionsVisible || currentProductSuggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        highlightedProductIndex = (highlightedProductIndex + 1) % currentProductSuggestions.length;
+        refreshHighlightedProduct();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        highlightedProductIndex = (highlightedProductIndex - 1 + currentProductSuggestions.length) % currentProductSuggestions.length;
+        refreshHighlightedProduct();
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        selectProductSuggestion(activeProductRow, currentProductSuggestions[highlightedProductIndex]);
+    } else if (e.key === 'Escape') {
+        hideProductSuggestions();
     }
 });
 
@@ -693,6 +1046,7 @@ function refreshRemoveButtons() {
 }
 
 refreshRemoveButtons();
+document.querySelectorAll('.item-row').forEach(refreshSerialOptions);
 updateTotals();
 </script>
 @endsection

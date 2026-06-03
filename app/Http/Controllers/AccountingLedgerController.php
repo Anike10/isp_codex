@@ -75,7 +75,7 @@ class AccountingLedgerController extends Controller
                     'credit' => $isCredit ? (float) $transaction->amount : 0,
                     'note' => ($transaction->payment_method ?: 'advance')
                         .($transaction->account ? ' - '.$transaction->account->account_name : '')
-                        .' | '.($isCredit ? 'Added to customer balance' : 'Used from customer balance: '.number_format((float) $transaction->amount, 2)),
+                        .' | '.($isCredit ? 'Added to party balance' : 'Used from party balance: '.number_format((float) $transaction->amount, 2)),
                     'url' => route('customers.show', $transaction->customer),
                 ];
             });

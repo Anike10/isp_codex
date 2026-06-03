@@ -105,6 +105,74 @@ class PurchaseBillTest extends TestCase
         ]);
     }
 
+    public function test_purchase_bill_can_create_new_product_from_typed_name(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+
+        $this->actingAs($user)->post(route('purchase-bills.store'), [
+            'bill_no' => 'PB-NEW-PRODUCT-001',
+            'purchase_date' => '2026-06-03',
+            'items' => [
+                [
+                    'product_name' => 'Fiber Cutter',
+                    'quantity' => 3,
+                    'unit_price' => 250,
+                    'warranty_days' => 30,
+                ],
+            ],
+        ])->assertRedirect(route('purchase-bills.index'));
+
+        $product = Product::where('name', 'Fiber Cutter')->firstOrFail();
+
+        $this->assertSame(3, $product->stock_quantity);
+        $this->assertSame(250.0, (float) $product->purchase_price);
+        $this->assertSame(250.0, (float) $product->sale_price);
+        $this->assertDatabaseHas('purchase_bill_items', [
+            'product_id' => $product->id,
+            'quantity' => 3,
+            'unit_price' => 250,
+            'total' => 750,
+        ]);
+    }
+
+    public function test_purchase_bill_can_create_new_vendor_from_typed_name(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        $product = Product::create([
+            'name' => 'Patch Cord',
+            'sku' => 'PC-VENDOR-001',
+            'brand' => 'Generic',
+            'purchase_price' => 30,
+            'sale_price' => 50,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 1,
+        ]);
+
+        $this->actingAs($user)->post(route('purchase-bills.store'), [
+            'party_name' => 'New Vendor Shop',
+            'bill_no' => 'PB-NEW-VENDOR-001',
+            'purchase_date' => '2026-06-03',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 2,
+                    'unit_price' => 30,
+                ],
+            ],
+        ])->assertRedirect(route('purchase-bills.index'));
+
+        $vendor = Customer::where('name', 'New Vendor Shop')->firstOrFail();
+
+        $this->assertFalse($vendor->is_customer);
+        $this->assertTrue($vendor->is_vendor);
+        $this->assertDatabaseHas('purchase_bills', [
+            'bill_no' => 'PB-NEW-VENDOR-001',
+            'party_id' => $vendor->id,
+        ]);
+    }
+
     public function test_purchase_bill_accepts_serial_ranges_and_comma_groups(): void
     {
         $user = User::factory()->create();

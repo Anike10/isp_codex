@@ -2,14 +2,14 @@
 
 @section('content')
 <div class="topbar">
-    <div><h1>Payments</h1><div class="muted">Customer collection history</div></div>
+    <div><h1>Payments</h1><div class="muted">Party collection history</div></div>
     <a class="btn" href="{{ route('payments.create') }}">Record Payment</a>
 </div>
 
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Date</th><th>Customer</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Account</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Party</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Account</th><th></th></tr></thead>
     <tbody>
     @forelse ($payments as $payment)
         <tr data-href="{{ route('invoices.show', $payment->invoice) }}">

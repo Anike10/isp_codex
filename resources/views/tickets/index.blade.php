@@ -2,14 +2,14 @@
 
 @section('content')
 <div class="topbar">
-    <div><h1>Support Tickets</h1><div class="muted">Customer complaints and technician work</div></div>
+    <div><h1>Support Tickets</h1><div class="muted">Party complaints and technician work</div></div>
     <a class="btn" href="{{ route('tickets.create') }}">Add Ticket</a>
 </div>
 
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Subject</th><th>Customer</th><th>Technician</th><th>Priority</th><th>Status</th></tr></thead>
+    <thead><tr><th>Subject</th><th>Party</th><th>Technician</th><th>Priority</th><th>Status</th></tr></thead>
     <tbody>
     @forelse ($tickets as $ticket)
         <tr data-href="{{ route('tickets.show', $ticket) }}">

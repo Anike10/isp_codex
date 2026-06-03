@@ -18,7 +18,7 @@
         <p><strong>Technician:</strong> {{ $ticket->technician?->name ?? 'Unassigned' }}</p>
     </section>
     <section class="card">
-        <h2>Customer</h2>
+        <h2>Party</h2>
         <p><strong>Name:</strong> {{ $ticket->customer->name }}</p>
         <p><strong>Phone:</strong> {{ $ticket->customer->phone }}</p>
         <p><strong>Connection:</strong> {{ $ticket->customer->connection_id }}</p>

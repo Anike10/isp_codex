@@ -38,7 +38,7 @@ class PaymentController extends Controller
                 'title' => 'Money Receipt',
                 'voucher_no' => 'PAY-'.$payment->id,
                 'date' => $payment->payment_date,
-                'type' => 'Customer Payment',
+                'type' => 'Party Payment',
                 'amount' => (float) $payment->amount,
                 'paid_to_label' => 'Received From',
                 'paid_to' => $payment->customer->name,
@@ -47,7 +47,7 @@ class PaymentController extends Controller
                 'method' => ucfirst($payment->payment_method),
                 'account' => $payment->account ? $payment->account->account_name.' - '.$payment->account->account_number : 'Cash',
                 'reference' => 'Payment #'.$payment->id,
-                'note' => $payment->note ?: 'Customer payment received.',
+                'note' => $payment->note ?: 'Party payment received.',
                 'back_url' => route('payments.index'),
             ],
         ]);

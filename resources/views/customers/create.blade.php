@@ -2,7 +2,7 @@
 
 @section('content')
 <div class="topbar">
-    <div><h1>Add Customer</h1><div class="muted">Create a customer and optionally assign an internet package</div></div>
+    <div><h1>Add Party</h1><div class="muted">Create a party and optionally assign customer/vendor roles or an internet package</div></div>
     <a class="btn light" href="{{ route('customers.index') }}">Back</a>
 </div>
 
@@ -13,8 +13,8 @@
     <div><label>Email</label><input type="email" name="email" value="{{ old('email') }}"></div>
     <div>
         <label>Connection ID</label>
-        <input name="connection_id" value="{{ old('connection_id') }}" placeholder="Only for ISP customers">
-        <span class="muted">Leave blank for product-only customers. Required when assigning an internet package.</span>
+        <input name="connection_id" value="{{ old('connection_id') }}" placeholder="Only for ISP parties">
+        <span class="muted">Leave blank for product-only parties. Required when assigning an internet package.</span>
     </div>
     <div>
         <label>MikroTik Password</label>
@@ -31,7 +31,7 @@
                 </option>
             @endforeach
         </select>
-        <span class="muted">Used only for ISP customers with a Connection ID.</span>
+        <span class="muted">Used only for ISP parties with a Connection ID.</span>
     </div>
     <div class="full"><label>Address</label><textarea name="address" required>{{ old('address') }}</textarea></div>
     <div>
@@ -53,7 +53,7 @@
         </label>
     </div>
     <div>
-        <label>Special Customer</label>
+        <label>Special ISP Customer</label>
         <label style="font-weight:400; display:flex; gap:8px; align-items:center;">
             <input type="checkbox" name="never_suspend" value="1" @checked(old('never_suspend')) style="width:auto;">
             Never close line and auto-generate monthly bill
@@ -69,6 +69,6 @@
         </select>
     </div>
     <div><label>Connection Start Date</label><input type="date" name="start_date" value="{{ old('start_date', now()->toDateString()) }}"></div>
-    <div class="full"><button class="btn" type="submit">Save Customer</button></div>
+    <div class="full"><button class="btn" type="submit">Save Party</button></div>
 </form>
 @endsection

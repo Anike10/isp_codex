@@ -23,7 +23,7 @@
 </div>
 
 <table>
-    <thead><tr><th>Date</th><th>Type</th><th>Customer</th><th>Reference</th><th>Note</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
+    <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Reference</th><th>Note</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
     <tbody>
         @php $running = 0; @endphp
         @forelse ($entries as $entry)

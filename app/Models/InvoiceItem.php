@@ -13,14 +13,21 @@ class InvoiceItem extends Model
     protected $fillable = [
         'entry_by',
         'invoice_id',
+        'product_id',
         'product_name',
         'quantity',
         'unit_price',
         'total',
+        'serial_numbers',
     ];
 
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
     }
 }

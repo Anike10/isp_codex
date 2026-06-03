@@ -2,7 +2,7 @@
 
 @section('content')
 <div class="topbar">
-    <div><h1>{{ $customer->name }}</h1><div class="muted">{{ $customer->connection_id ?: 'Product-only customer' }} - {{ $customer->phone }}</div></div>
+    <div><h1>{{ $customer->name }}</h1><div class="muted">{{ $customer->connection_id ?: 'Product-only party' }} - {{ $customer->phone }}</div></div>
     <div class="actions">
         <a class="btn" href="{{ route('customers.payments.create', $customer) }}">Record Payment</a>
         <a class="btn secondary" href="{{ route('customers.edit', $customer) }}">Edit</a>
@@ -50,7 +50,7 @@
                 <button class="btn secondary" type="submit">Give Grace Period</button>
             </form>
         @endif
-        <p><strong>Special Customer:</strong> {{ $customer->never_suspend ? 'Yes - never close line and auto-generate bill' : 'No' }}</p>
+        <p><strong>Special ISP Customer:</strong> {{ $customer->never_suspend ? 'Yes - never close line and auto-generate bill' : 'No' }}</p>
         <p><strong>Email:</strong> {{ $customer->email ?? 'Not provided' }}</p>
         <p><strong>Address:</strong> {{ $customer->address }}</p>
         <p><strong>Package:</strong> {{ $customer->activeSubscription?->package?->name ?? 'No active package' }}</p>

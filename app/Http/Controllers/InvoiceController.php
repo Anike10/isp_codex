@@ -6,11 +6,16 @@ use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PaymentAccount;
+use App\Models\Product;
+use App\Models\ProductSerial;
 use App\Models\Subscription;
 use App\Services\BillingService;
+use App\Services\InventoryService;
+use App\Support\SerialNumberParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
+use InvalidArgumentException;
 
 class InvoiceController extends Controller
 {
@@ -45,7 +50,10 @@ class InvoiceController extends Controller
     {
         $customers = Customer::where('status', 'active')->orderBy('name')->get();
 
-        return view('invoices.create', compact('customers'));
+        return view('invoices.create', [
+            'customers' => $customers,
+            'productSuggestionData' => $this->productSuggestionData(),
+        ]);
     }
 
     public function searchCustomers(Request $request)
@@ -63,32 +71,51 @@ class InvoiceController extends Controller
             })
             ->orderBy('name')
             ->limit(10)
-            ->get(['id', 'name', 'phone', 'connection_id']);
+            ->get(['id', 'name', 'phone', 'connection_id', 'is_customer', 'is_vendor'])
+            ->map(fn (Customer $customer): array => [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'phone' => $customer->phone,
+                'connection_id' => $customer->connection_id,
+                'party_type' => collect([
+                    $customer->is_customer ? 'Customer' : null,
+                    $customer->is_vendor ? 'Vendor' : null,
+                ])->filter()->implode(' + ') ?: 'Party',
+            ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, InventoryService $inventoryService)
     {
         $data = $this->validateInvoiceData($request);
 
         [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
 
-        $invoice = Invoice::create([
-            'customer_id' => $customerId,
-            'invoice_no' => Invoice::generateInvoiceNo($customerId, $data['billing_month']),
-            'billing_month' => $data['billing_month'],
-            'invoice_type' => 'product',
-            'subtotal' => $subtotal,
-            'discount' => $data['discount_amount'],
-            'vat' => $data['vat_amount'],
-            'total' => $total,
-            'paid_amount' => 0,
-            'due_amount' => max(0, $total),
-            'status' => $total <= 0 ? 'paid' : 'unpaid',
-            'due_date' => $data['due_date'] ?? null,
-        ]);
+        try {
+            $invoice = DB::transaction(function () use ($data, $customerId, $itemsData, $subtotal, $total, $inventoryService): Invoice {
+                $invoice = Invoice::create([
+                    'customer_id' => $customerId,
+                    'invoice_no' => Invoice::generateInvoiceNo($customerId, $data['billing_month']),
+                    'billing_month' => $data['billing_month'],
+                    'invoice_type' => 'product',
+                    'subtotal' => $subtotal,
+                    'discount' => $data['discount_amount'],
+                    'vat' => $data['vat_amount'],
+                    'total' => $total,
+                    'paid_amount' => 0,
+                    'due_amount' => max(0, $total),
+                    'status' => $total <= 0 ? 'paid' : 'unpaid',
+                    'due_date' => $data['due_date'] ?? null,
+                ]);
 
-        foreach ($itemsData as $itemData) {
-            $invoice->items()->create($itemData);
+                foreach ($itemsData as $itemData) {
+                    $invoice->items()->create($itemData);
+                    $this->applyInvoiceItemInventory($invoice, $itemData, $inventoryService);
+                }
+
+                return $invoice;
+            });
+        } catch (InvalidArgumentException $exception) {
+            return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
         }
 
         return redirect()->route('invoices.show', $invoice)->with('success', 'Invoice created as draft. You can edit it until finalizing.');
@@ -105,10 +132,14 @@ class InvoiceController extends Controller
         $invoice->load(['customer', 'items']);
         $customers = Customer::where('status', 'active')->orderBy('name')->get();
 
-        return view('invoices.create', compact('customers', 'invoice'));
+        return view('invoices.create', [
+            'customers' => $customers,
+            'invoice' => $invoice,
+            'productSuggestionData' => $this->productSuggestionData($invoice),
+        ]);
     }
 
-    public function update(Request $request, Invoice $invoice)
+    public function update(Request $request, Invoice $invoice, InventoryService $inventoryService)
     {
         if ($invoice->isFinalized()) {
             return redirect()->route('invoices.show', $invoice)->withErrors([
@@ -119,27 +150,34 @@ class InvoiceController extends Controller
         $data = $this->validateInvoiceData($request);
         [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
 
-        DB::transaction(function () use ($invoice, $data, $customerId, $itemsData, $subtotal, $total) {
-            $paidAmount = (float) $invoice->paid_amount;
-            $dueAmount = max(0, $total - $paidAmount);
+        try {
+            DB::transaction(function () use ($invoice, $data, $customerId, $itemsData, $subtotal, $total, $inventoryService) {
+                $this->restoreInvoiceInventory($invoice, $inventoryService);
 
-            $invoice->update([
-                'customer_id' => $customerId,
-                'billing_month' => $data['billing_month'],
-                'subtotal' => $subtotal,
-                'discount' => $data['discount_amount'],
-                'vat' => $data['vat_amount'],
-                'total' => $total,
-                'due_amount' => $dueAmount,
-                'status' => $dueAmount <= 0 ? 'paid' : ($paidAmount > 0 ? 'partial' : 'unpaid'),
-                'due_date' => $data['due_date'] ?? null,
-            ]);
+                $paidAmount = (float) $invoice->paid_amount;
+                $dueAmount = max(0, $total - $paidAmount);
 
-            $invoice->items()->delete();
-            foreach ($itemsData as $itemData) {
-                $invoice->items()->create($itemData);
-            }
-        });
+                $invoice->update([
+                    'customer_id' => $customerId,
+                    'billing_month' => $data['billing_month'],
+                    'subtotal' => $subtotal,
+                    'discount' => $data['discount_amount'],
+                    'vat' => $data['vat_amount'],
+                    'total' => $total,
+                    'due_amount' => $dueAmount,
+                    'status' => $dueAmount <= 0 ? 'paid' : ($paidAmount > 0 ? 'partial' : 'unpaid'),
+                    'due_date' => $data['due_date'] ?? null,
+                ]);
+
+                $invoice->items()->delete();
+                foreach ($itemsData as $itemData) {
+                    $invoice->items()->create($itemData);
+                    $this->applyInvoiceItemInventory($invoice, $itemData, $inventoryService);
+                }
+            });
+        } catch (InvalidArgumentException $exception) {
+            return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
+        }
 
         return redirect()->route('invoices.show', $invoice)->with('success', 'Draft invoice updated successfully.');
     }
@@ -201,9 +239,11 @@ class InvoiceController extends Controller
             'customer_phone' => ['required_without:customer_id', 'nullable', 'string', 'max:30'],
             'billing_month' => ['required', 'date_format:Y-m'],
             'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['nullable', 'exists:products,id'],
             'items.*.product_name' => ['required', 'string', 'max:255'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'items.*.serial_numbers' => ['nullable', 'string'],
             'discount_type' => ['required', 'in:amount,percent'],
             'discount' => ['required', 'numeric', 'min:0'],
             'vat_type' => ['required', 'in:amount,percent'],
@@ -226,6 +266,8 @@ class InvoiceController extends Controller
                     'connection_id' => $this->generateCustomerConnectionId(),
                     'address' => '',
                     'status' => 'active',
+                    'is_customer' => true,
+                    'is_vendor' => false,
                 ]);
             }
 
@@ -239,10 +281,12 @@ class InvoiceController extends Controller
             $total = $item['quantity'] * $item['unit_price'];
             $subtotal += $total;
             $itemsData[] = [
+                'product_id' => $item['product_id'] ?? null,
                 'product_name' => $item['product_name'],
                 'quantity' => $item['quantity'],
                 'unit_price' => $item['unit_price'],
                 'total' => $total,
+                'serial_numbers' => trim((string) ($item['serial_numbers'] ?? '')) ?: null,
             ];
         }
 
@@ -275,6 +319,132 @@ class InvoiceController extends Controller
         } while (Customer::where('connection_id', $connectionId)->exists());
 
         return $connectionId;
+    }
+
+    private function productSuggestionData(?Invoice $invoice = null)
+    {
+        $invoiceSerials = $invoice
+            ? $invoice->items->pluck('serial_numbers')->filter()->flatMap(fn (string $serials): array => app(SerialNumberParser::class)->parse($serials))->values()
+            : collect();
+
+        return Product::query()
+            ->with(['serials' => function ($query) use ($invoiceSerials) {
+                $query->where(function ($query) use ($invoiceSerials) {
+                    $query->where('status', 'in_stock');
+
+                    if ($invoiceSerials->isNotEmpty()) {
+                        $query->orWhereIn('serial_number', $invoiceSerials);
+                    }
+                })->orderBy('serial_number');
+            }])
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Product $product): array => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'sku' => $product->sku,
+                'barcode' => $product->barcode,
+                'brand' => $product->brand,
+                'sale_price' => (float) $product->sale_price,
+                'stock_quantity' => (int) $product->stock_quantity,
+                'track_inventory' => (bool) $product->track_inventory,
+                'track_serials' => (bool) $product->track_serial_numbers,
+                'serials' => $product->serials->map(fn (ProductSerial $serial): array => [
+                    'serial_number' => $serial->serial_number,
+                    'warranty_until' => $serial->warranty_until?->format('Y-m-d'),
+                    'status' => $serial->status,
+                ])->values(),
+            ])
+            ->values();
+    }
+
+    private function applyInvoiceItemInventory(Invoice $invoice, array $itemData, InventoryService $inventoryService): void
+    {
+        if (empty($itemData['product_id'])) {
+            if (! empty($itemData['serial_numbers'])) {
+                throw new InvalidArgumentException('Select a product before using serial numbers.');
+            }
+
+            return;
+        }
+
+        $product = Product::lockForUpdate()->findOrFail($itemData['product_id']);
+        $quantity = (int) $itemData['quantity'];
+        $serialNumbers = app(SerialNumberParser::class)->parse($itemData['serial_numbers'] ?? '');
+
+        if ($serialNumbers !== [] && ! $product->track_serial_numbers) {
+            throw new InvalidArgumentException('Serial numbers can only be used for serial-tracked products.');
+        }
+
+        if (count($serialNumbers) > $quantity) {
+            throw new InvalidArgumentException('Serial number count cannot be greater than invoice quantity.');
+        }
+
+        if ($product->track_inventory) {
+            $inventoryService->moveStock($product, 'out', $quantity, 'Invoice '.$invoice->invoice_no, $invoice->invoice_no);
+        }
+
+        if ($serialNumbers === []) {
+            return;
+        }
+
+        $serialRows = ProductSerial::query()
+            ->where('product_id', $product->id)
+            ->whereIn('serial_number', $serialNumbers)
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('serial_number');
+
+        foreach ($serialNumbers as $serialNumber) {
+            $serial = $serialRows->get($serialNumber);
+
+            if (! $serial || $serial->status !== 'in_stock') {
+                throw new InvalidArgumentException('Serial '.$serialNumber.' is not available for sale.');
+            }
+
+            $serial->update([
+                'status' => 'sold',
+                'note' => 'Sold via invoice '.$invoice->invoice_no,
+            ]);
+        }
+    }
+
+    private function restoreInvoiceInventory(Invoice $invoice, InventoryService $inventoryService): void
+    {
+        $invoice->loadMissing('items');
+
+        foreach ($invoice->items as $item) {
+            if (! $item->product_id) {
+                continue;
+            }
+
+            $product = Product::lockForUpdate()->find($item->product_id);
+
+            if (! $product) {
+                continue;
+            }
+
+            if ($product->track_inventory) {
+                $inventoryService->moveStock($product, 'in', (int) $item->quantity, 'Invoice edit restore '.$invoice->invoice_no, $invoice->invoice_no);
+            }
+
+            $serialNumbers = app(SerialNumberParser::class)->parse($item->serial_numbers ?? '');
+
+            if ($serialNumbers === []) {
+                continue;
+            }
+
+            ProductSerial::query()
+                ->where('product_id', $product->id)
+                ->whereIn('serial_number', $serialNumbers)
+                ->where('status', 'sold')
+                ->lockForUpdate()
+                ->get()
+                ->each(fn (ProductSerial $serial) => $serial->update([
+                    'status' => 'in_stock',
+                    'note' => 'Restored from draft invoice edit '.$invoice->invoice_no,
+                ]));
+        }
     }
 
     public function show(Invoice $invoice)
