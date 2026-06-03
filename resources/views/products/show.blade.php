@@ -10,10 +10,11 @@
 </div>
 
 <div class="grid stats" style="margin-bottom:16px">
+    <div class="card stat"><span class="muted">Type</span><strong>{{ str_replace('_', ' ', ucfirst($product->product_type ?? ($product->track_inventory ? 'stock' : 'service'))) }}</strong></div>
     <div class="card stat"><span class="muted">Inventory</span><strong>{{ $product->track_inventory ? 'Tracked' : 'Not tracked' }}</strong></div>
     <div class="card stat"><span class="muted">Current Stock</span><strong>{{ $product->track_inventory ? $product->stock_quantity : 'N/A' }}</strong></div>
     <div class="card stat"><span class="muted">Serial</span><strong>{{ $product->track_serial_numbers ? 'Tracked' : 'Not tracked' }}</strong></div>
-    <div class="card stat"><span class="muted">Warranty</span><strong>{{ $product->warranty_days !== null ? $product->warranty_days.' days' : 'N/A' }}</strong></div>
+    <div class="card stat"><span class="muted">Warranty</span><strong>{{ $product->warranty_days !== null ? $product->warranty_days.' days' : ($product->service_guarantee_days ? $product->service_guarantee_days.' service days' : 'N/A') }}</strong></div>
     <div class="card stat"><span class="muted">Purchase Price</span><strong>{{ number_format($product->purchase_price, 2) }}</strong></div>
     <div class="card stat"><span class="muted">Sale Price</span><strong>{{ number_format($product->sale_price, 2) }}</strong></div>
 </div>
@@ -47,18 +48,25 @@
         </div>
     @endif
     <table>
-        <thead><tr><th>Serial</th><th>Status</th><th>Warranty Until</th><th>Purchase Bill</th><th>Used/Out Reason</th></tr></thead>
+        <thead><tr><th>Serial</th><th>Status</th><th>Customer</th><th>Warranty Until</th><th>Purchase Bill</th><th>Action</th></tr></thead>
         <tbody>
         @forelse ($serials as $serial)
             <tr>
                 <td><span class="badge">{{ $serial->serial_number }}</span></td>
                 <td>{{ $serial->status === 'in_stock' ? 'In house' : str_replace('_', ' ', ucfirst($serial->status)) }}</td>
+                <td>{{ $serial->customer?->name ?? 'N/A' }}</td>
                 <td>{{ $serial->warranty_until?->format('Y-m-d') ?? 'No warranty' }}</td>
                 <td>{{ $serial->purchaseBill?->bill_no ?? 'N/A' }}</td>
-                <td>{{ $serial->note ?? 'N/A' }}</td>
+                <td>
+                    @if ($serial->customer_id && auth()->user()?->hasPermission('manage_warranty_claims'))
+                        <a class="btn light" href="{{ route('warranty-claims.create', ['product_serial_id' => $serial->id]) }}">Claim</a>
+                    @else
+                        {{ $serial->note ?? 'N/A' }}
+                    @endif
+                </td>
             </tr>
         @empty
-            <tr><td colspan="5">No serial tracked for this product.</td></tr>
+            <tr><td colspan="6">No serial tracked for this product.</td></tr>
         @endforelse
         </tbody>
     </table>

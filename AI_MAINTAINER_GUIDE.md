@@ -10,6 +10,123 @@ This guide is for another AI agent or developer who needs to update this Laravel
   make focused commits with detailed messages, and include what changed, why it
   changed, and how it was verified in the commit message or project notes.
 
+## Expert Operating Roles
+
+When changing this project, act as a small senior team rather than a single
+generic coder. Before touching code, identify which roles below are relevant and
+let those responsibilities shape the implementation, validation, and notes.
+
+### 1. Laravel Application Architect
+
+- Preserve the existing Laravel patterns: controllers, Eloquent models, Blade
+  views, services, migrations, policies/permissions, and PHPUnit tests.
+- Keep business logic out of Blade where possible. Use services or controller
+  helpers when the same rule must protect both browser forms and direct POSTs.
+- Prefer small, reversible migrations and data-safe defaults. Do not assume the
+  database is empty.
+- Keep routes, validation, model fillable fields, casts, relationships, and
+  tests in sync.
+
+### 2. ISP Operations Specialist
+
+- Understand that this app runs a real ISP/computer-service business. Customer
+  status, subscriptions, MikroTik sync, OLT ONU registration, bills, payments,
+  support tickets, stock, and warranty records are operationally connected.
+- Protect live network workflows. OLT/MikroTik changes must be conservative,
+  observable, and documented with command assumptions.
+- Keep customer-facing identifiers clear: connection ID, MikroTik username,
+  phone number, ONU serial, product serial, invoice number, and ticket number
+  must not be confused.
+
+### 3. Inventory And Serial Lifecycle Expert
+
+- Treat inventory as a lifecycle, not only a quantity counter: purchase,
+  in-stock, own-use, sold, returned, repaired, replaced, scrapped, and vendor
+  warranty states may all matter.
+- Serial-tracked products must have strict availability checks and audit trails.
+  Ranges such as `1001-1004` and Bengali digit ranges such as `১০০১-১০০৪`
+  should be parsed consistently wherever serials are accepted.
+- Quantity should follow serial count when serials are provided, and the backend
+  must enforce the same rule as the UI.
+- Never show or require serial input for products that do not track serials.
+
+### 4. Service Product And Warranty Architect
+
+- Model service products separately from stock products. A service item can be
+  invoiced but should not create stock movements or require serial numbers.
+- Warranty behavior should be attached to sold products/serials and optionally
+  to service products as a service guarantee period.
+- Design warranty flows around real shop operations: customer claim, receive
+  item, diagnose, repair, replace, return to vendor, reject, charge paid
+  service, deliver, and close.
+- Replacement must update both old and new serial states and preserve a clear
+  history of what happened.
+- Vendor warranty/return tracking should connect faulty serials back to the
+  purchase vendor whenever possible.
+
+### 5. Billing, Ledger, And Accounting Guardian
+
+- Every money movement must be traceable: invoice, payment account, allocation,
+  customer balance transaction, cash ledger, expense, or salary payment.
+- Do not update customer balances directly for payment flows. Use the existing
+  payment/allocation services and maintain ledger integrity.
+- Invoice totals, discounts, VAT, due amount, paid amount, stock movement, and
+  serial movement must stay consistent inside transactions.
+- Product/service invoices and monthly ISP service bills have different
+  business meanings; keep their rules separate.
+
+### 6. UX Designer For Office Operators
+
+- Design forms for fast counter/service-desk entry: keyboard-friendly,
+  searchable, minimal unnecessary fields, and immediate feedback.
+- Show fields only when they are useful. For example, hide serial controls for
+  non-serial products and hide stock warnings for pure service products.
+- Keep printable invoices, challans, quotations, and reports clean and
+  standalone.
+- When adding complex workflows such as warranty claims, provide list filters,
+  status badges, clear action buttons, and customer/product history links.
+
+### 7. QA And Regression Engineer
+
+- Add focused tests whenever business rules change, especially for inventory,
+  serials, invoice totals, payments, customer status, OLT parsers, and
+  warranty/service workflows.
+- Run targeted tests first, then broader tests when shared services or parser
+  behavior changes.
+- For controller/view changes, run `php -l` on touched PHP files and compile
+  Blade views with `php artisan view:cache`; clear compiled views afterwards
+  with `php artisan view:clear`.
+
+### 8. Security And Production Reliability Engineer
+
+- Keep authentication, permissions, CSRF protection, and production secrets
+  safe. Never store real credentials in the repository.
+- Avoid destructive production operations. Never use `migrate:fresh` or data
+  loss commands unless the operator explicitly approves.
+- Production changes should be deployable with backup, rollback, and
+  verification steps.
+- Treat backup download, SMS webhooks, router/OLT credentials, and payment data
+  as sensitive surfaces.
+
+### 9. Documentation Maintainer
+
+- Update this guide whenever business rules, operational assumptions, parser
+  behavior, stock/warranty flows, OLT command behavior, payment rules, or
+  deployment steps change.
+- Record not only what the code does, but why the business needs that behavior.
+- Keep the documentation practical for the next maintainer: file names, routes,
+  permissions, commands, and test names are more useful than vague summaries.
+
+### Default Decision Order
+
+When roles disagree, use this priority:
+
+1. Protect data integrity and customer/network operations.
+2. Preserve accounting and inventory correctness.
+3. Keep the operator workflow fast and understandable.
+4. Match existing Laravel patterns.
+5. Add tests and documentation for every important business rule.
+
 ## Project Snapshot
 
 This is a Laravel 12 app for an ISP/computer-service business named **Ultimate Solution**.
@@ -492,6 +609,9 @@ Stock movement behavior:
 - Product category trees can have unlimited levels through `product_categories.parent_id`.
 - Product forms and purchase bill product selection show child category lists automatically after a parent category is selected.
 - Product lists and purchase bill product selection can filter by brand and category tree.
+- Products may behave as stock goods, serial-tracked goods, consumables, service
+  items, or warranty/service items. Keep the behavior explicit in both backend
+  rules and form UI.
 - `in` increases stock.
 - `out` decreases stock.
 - `use` decreases stock for items used inside the business.
@@ -499,6 +619,289 @@ Stock movement behavior:
 - Purchase bills add stock and create a stock movement using the purchase bill number as the reference.
 - Purchase bill item serial numbers are stored in `product_serials`; warranty end date is calculated from purchase date plus warranty months.
 - Vendor/wholesale shops are stored in the existing `customers` table as parties with `is_vendor=true`.
+
+### Service Products And Warranty Blueprint
+
+This project must support two related but different ideas:
+
+- **Service products**: invoiceable work with no physical stock, such as
+  installation, fiber splicing, router configuration, line shifting,
+  reconnection, emergency support, or maintenance visits.
+- **Warranty/service lifecycle**: post-sale support for hardware or services,
+  including claim, diagnosis, repair, replacement, vendor return, paid service,
+  delivery, and closure.
+
+Service product behavior:
+
+- Service products are invoiceable but should not reduce stock.
+- Service products should not show serial inputs unless they explicitly track
+  serials, which should be rare.
+- Service products may have a default sale price, VAT behavior, and optional
+  service guarantee days.
+- Service guarantee is not the same as hardware warranty. Hardware warranty is
+  usually attached to a sold product serial; service guarantee is attached to an
+  invoice service line.
+- Service products should appear in invoice product search alongside stock
+  products, but their UI should be simpler: product name, quantity, unit price,
+  note, optional technician/schedule fields, and no serial/stock controls.
+- Examples:
+  - `Installation Charge`
+  - `Fiber Splicing`
+  - `Router Configuration`
+  - `Line Shifting Charge`
+  - `Maintenance Visit`
+  - `Emergency Support`
+  - `Reconnection Fee`
+  - `Paid Warranty Service`
+
+Recommended product type model:
+
+```text
+stock        Physical stock item, stock movement applies.
+serial_stock Physical stock item with serial-level tracking.
+consumable   Physical stock item, no serial, may be used internally.
+service      Invoiceable service, no stock movement.
+warranty     Service line used for warranty/repair charge or adjustment.
+```
+
+If adding a `product_type` field later, keep compatibility with the existing
+`track_inventory` and `track_serial_numbers` booleans:
+
+```text
+stock/serial_stock/consumable -> track_inventory=true
+service/warranty              -> track_inventory=false
+serial_stock                  -> track_serial_numbers=true
+service/warranty              -> track_serial_numbers=false by default
+```
+
+Invoice behavior for service products:
+
+- Selecting a service product should hide serial controls and stock warnings.
+- Service products should not call `InventoryService::moveStock`.
+- Service lines should still affect invoice subtotal, discount, VAT, total,
+  due, paid, and ledger flows normally.
+- A service line can optionally create or link a support ticket when the service
+  needs field work.
+- A service line can optionally record:
+  - `service_date`
+  - `scheduled_at`
+  - `assigned_to`
+  - `service_location`
+  - `service_note`
+  - `service_guarantee_days`
+  - `service_guarantee_until`
+
+Serial and warranty behavior:
+
+- Serial input supports one per line, comma groups, and ranges such as
+  `1001-1004`, `ONU001-ONU003`, and Bengali digit ranges such as `১০০১-১০০৪`.
+- When serials are provided, quantity should follow the expanded serial count.
+  This must be enforced server-side, not only by JavaScript.
+- Serial-tracked sales should mark matching `product_serials` as sold and link
+  the action to the invoice number in the note/history.
+- Serial-tracked stock entry should create `product_serials` with warranty end
+  dates derived from purchase date plus warranty days/months.
+- A sold serial should be treated as a customer asset. It should be visible from
+  customer details, product details, invoice details, and future warranty claim
+  screens.
+
+Recommended customer asset display:
+
+```text
+Product | Serial | Invoice | Sold Date | Warranty Until | Status | Actions
+ONU     | 1001   | INV-... | 2026-06-04 | 2027-06-04    | In warranty | Claim
+```
+
+Customer asset rules:
+
+- If `warranty_until` is today or later, show `In warranty`.
+- If `warranty_until` is before today, show `Expired`.
+- If the product has no warranty date, show `No warranty`.
+- If a claim is open, show the current claim status instead of only warranty
+  status.
+- Customer asset action buttons should include `Warranty Claim`, `Repair
+  Entry`, `Replace`, and `View History` when those modules exist.
+
+Warranty claim status lifecycle:
+
+```text
+pending          Claim recorded, item not yet received or diagnosis pending.
+received         Customer item received by shop.
+diagnosing       Technician is checking the issue.
+repairing        Repair work is in progress.
+sent_to_vendor   Faulty item sent to supplier/vendor.
+vendor_returned  Vendor repaired/replaced/rejected and returned item.
+ready            Item is ready for customer delivery.
+delivered        Item delivered back to customer.
+replaced         Replacement serial/product given to customer.
+rejected         Claim rejected, with reason.
+paid_service     Treated as paid repair/service outside warranty.
+closed           Claim completed and locked for normal editing.
+```
+
+Warranty claim action types:
+
+```text
+repair          Repair same item.
+replace         Give another serial/product as replacement.
+vendor_return   Send faulty product to vendor/supplier.
+reject          Reject claim, usually due to expired warranty or damage.
+paid_service    Convert to chargeable repair/service.
+return_only      Return same item without repair/replacement.
+```
+
+Recommended `warranty_claims` fields:
+
+- `claim_no`
+- `customer_id`
+- `invoice_id`
+- `invoice_item_id`
+- `product_id`
+- `product_serial_id`
+- `claim_date`
+- `received_at`
+- `closed_at`
+- `warranty_status`: `in_warranty`, `expired`, `no_warranty`, `unknown`
+- `problem_description`
+- `diagnosis_note`
+- `action_type`
+- `status`
+- `assigned_to`
+- `vendor_id`
+- `replacement_product_id`
+- `replacement_product_serial_id`
+- `service_invoice_id`
+- `service_charge`
+- `resolution_note`
+- `delivery_note`
+- `entry_by`
+- `entry_by_type`
+
+Recommended `warranty_claim_logs` fields:
+
+- `warranty_claim_id`
+- `old_status`
+- `new_status`
+- `note`
+- `entry_by`
+- `entry_by_type`
+- `created_at`
+
+Claim creation rules:
+
+- Prefer creating a claim from a sold serial/customer asset, not from free text.
+- If no serial exists, allow manual product/service claim only with clear notes.
+- Auto-detect warranty status from `product_serials.warranty_until`.
+- Expired warranty should not block claim creation; it should change available
+  actions toward `paid_service`, `reject`, or manual approval.
+- Do not allow claim creation for serials still `in_stock` unless the claim is a
+  vendor/internal stock warranty case.
+- If there is already an open claim for the same serial, show it and prevent
+  duplicate open claims unless explicitly allowed.
+
+Replacement rules:
+
+- Replacement must update both the old and new serial states inside one
+  transaction.
+- Old serial recommended statuses: `replaced`, `returned_to_vendor`,
+  `repairing`, or `scrapped`, depending on the action.
+- New replacement serial must be available before assignment.
+- New replacement serial should become assigned/sold to the same customer.
+- Warranty policy must be explicit:
+  - Default recommendation: replacement keeps original warranty end date.
+  - Optional policy: replacement gets new warranty from replacement date.
+  - Optional policy: replacement gets vendor-provided remaining warranty.
+- The claim log must record old serial, new serial, operator, date, and policy.
+
+Vendor warranty/return rules:
+
+- Vendors are stored in `customers` with `is_vendor=true`.
+- A vendor return should connect the faulty serial to the original purchase
+  vendor when possible.
+- Track sent date, courier/reference, vendor receive date, vendor decision,
+  returned/replacement serial, and vendor notes.
+- Vendor statuses should be reportable separately from customer claim statuses,
+  because a customer may receive a replacement before the vendor case is fully
+  closed.
+
+Paid repair/service conversion:
+
+- Out-of-warranty repair can create a normal product/service invoice.
+- The invoice should link back to the warranty claim through `service_invoice_id`
+  or a similar field.
+- Paid repair should never silently change customer balance; it must follow the
+  normal invoice/payment flow.
+- If parts are used for repair, those parts should create stock `out` or `use`
+  movements with a reference to the warranty claim.
+
+Support ticket integration:
+
+- Warranty claim may create or link a support ticket when field visit or
+  technician work is required.
+- Ticket assignment and claim assignment can be the same employee, but they
+  should remain separate concepts.
+- Closing a ticket should not automatically close a warranty claim unless the
+  user explicitly chooses that action.
+
+Recommended screens:
+
+- `/warranty-claims`: searchable list by claim no, customer, phone, product,
+  serial, vendor, status, and date.
+- `/warranty-claims/create`: create from customer asset or manual entry.
+- `/warranty-claims/{claim}`: claim timeline, customer, product, serial,
+  warranty status, actions, notes, files/photos later if needed.
+- Customer details: `Assets & Warranty` section.
+- Product details: serial list with status and claim links.
+- Vendor details: pending vendor warranty items.
+- Dashboard widgets: open claims, ready for delivery, vendor pending,
+  expired/in-warranty claim counts.
+
+Recommended permissions:
+
+```text
+manage_warranty_claims
+view_warranty_claims
+close_warranty_claims
+manage_service_products
+```
+
+Reports to add later:
+
+- Active warranty claims by status.
+- Ready for delivery list.
+- Vendor pending warranty items.
+- Expired warranty claims.
+- Product/brand fault rate.
+- Replacement count by product/brand/vendor.
+- Technician repair workload.
+- Paid repair revenue.
+- Parts used in repair.
+
+Testing requirements for service and warranty work:
+
+- Service product invoice does not create stock movement.
+- Service product invoice still affects invoice totals and payment flow.
+- Non-serial products hide/ignore serial input in UI and reject serials
+  server-side when submitted manually.
+- Serial range quantity expansion works in purchase bills, invoices, and stock
+  movements.
+- Warranty claim detects in-warranty, expired, and no-warranty correctly.
+- Duplicate open claim for same serial is blocked or clearly controlled.
+- Replacement updates old serial, new serial, customer asset display, and claim
+  log inside one transaction.
+- Paid repair creates/links invoice without bypassing payment allocation rules.
+
+Recommended implementation order:
+
+1. Add explicit product type/service behavior while preserving existing booleans.
+2. Harden invoice UI and backend for service products.
+3. Add customer asset display from sold serials.
+4. Add warranty claim tables, model, routes, permissions, and list/detail pages.
+5. Add claim create/receive/diagnose/close actions with logs.
+6. Add replacement flow.
+7. Add vendor warranty return tracking.
+8. Add paid repair invoice linking.
+9. Add reports and dashboard widgets.
 
 ## Support Tickets
 

@@ -162,6 +162,8 @@
                     || auth()->user()?->hasPermission('manage_payments')
                     || auth()->user()?->hasPermission('manage_payment_accounts')
                     || auth()->user()?->hasPermission('manage_expenses');
+                $canManageWarranty = auth()->user()?->hasPermission('view_warranty_claims')
+                    || auth()->user()?->hasPermission('manage_warranty_claims');
                 $canManageAdmin = auth()->user()?->hasPermission('manage_users')
                     || auth()->user()?->hasPermission('download_backup');
             @endphp
@@ -224,6 +226,20 @@
                         <a href="{{ route('products.index') }}">Products</a>
                         <a href="{{ route('product-categories.index') }}">Product Categories</a>
                         <a href="{{ route('purchase-bills.index') }}">Purchase Bills</a>
+                    </div>
+                </details>
+            @endif
+
+            @if ($canManageWarranty)
+                <details class="nav-group">
+                    <summary>Warranty</summary>
+                    <div class="nav-menu">
+                        @if (auth()->user()?->hasPermission('view_warranty_claims'))
+                            <a href="{{ route('warranty-claims.index') }}">Warranty Claims</a>
+                        @endif
+                        @if (auth()->user()?->hasPermission('manage_warranty_claims'))
+                            <a href="{{ route('warranty-claims.create') }}">New Claim</a>
+                        @endif
                     </div>
                 </details>
             @endif

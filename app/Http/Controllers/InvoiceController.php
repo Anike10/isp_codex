@@ -108,8 +108,8 @@ class InvoiceController extends Controller
                 ]);
 
                 foreach ($itemsData as $itemData) {
-                    $invoice->items()->create($itemData);
-                    $this->applyInvoiceItemInventory($invoice, $itemData, $inventoryService);
+                    $invoiceItem = $invoice->items()->create($itemData);
+                    $this->applyInvoiceItemInventory($invoice, $invoiceItem, $inventoryService);
                 }
 
                 return $invoice;
@@ -171,8 +171,8 @@ class InvoiceController extends Controller
 
                 $invoice->items()->delete();
                 foreach ($itemsData as $itemData) {
-                    $invoice->items()->create($itemData);
-                    $this->applyInvoiceItemInventory($invoice, $itemData, $inventoryService);
+                    $invoiceItem = $invoice->items()->create($itemData);
+                    $this->applyInvoiceItemInventory($invoice, $invoiceItem, $inventoryService);
                 }
             });
         } catch (InvalidArgumentException $exception) {
@@ -278,15 +278,24 @@ class InvoiceController extends Controller
         $itemsData = [];
 
         foreach ($data['items'] as $item) {
-            $total = $item['quantity'] * $item['unit_price'];
+            $serialNumbers = app(SerialNumberParser::class)->parse($item['serial_numbers'] ?? '');
+            $quantity = max((int) $item['quantity'], count($serialNumbers));
+            $product = ! empty($item['product_id']) ? Product::find($item['product_id']) : null;
+            $productType = $product?->product_type ?? null;
+            $serviceGuaranteeDays = $product?->service_guarantee_days;
+            $total = $quantity * $item['unit_price'];
             $subtotal += $total;
             $itemsData[] = [
                 'product_id' => $item['product_id'] ?? null,
                 'product_name' => $item['product_name'],
-                'quantity' => $item['quantity'],
+                'product_type' => $productType,
+                'quantity' => $quantity,
                 'unit_price' => $item['unit_price'],
                 'total' => $total,
                 'serial_numbers' => trim((string) ($item['serial_numbers'] ?? '')) ?: null,
+                'warranty_days' => $product?->warranty_days,
+                'service_guarantee_days' => $serviceGuaranteeDays,
+                'service_guarantee_until' => $serviceGuaranteeDays ? now()->addDays($serviceGuaranteeDays)->toDateString() : null,
             ];
         }
 
@@ -347,6 +356,8 @@ class InvoiceController extends Controller
                 'brand' => $product->brand,
                 'sale_price' => (float) $product->sale_price,
                 'stock_quantity' => (int) $product->stock_quantity,
+                'product_type' => $product->product_type,
+                'service_guarantee_days' => $product->service_guarantee_days,
                 'track_inventory' => (bool) $product->track_inventory,
                 'track_serials' => (bool) $product->track_serial_numbers,
                 'serials' => $product->serials->map(fn (ProductSerial $serial): array => [
@@ -358,26 +369,22 @@ class InvoiceController extends Controller
             ->values();
     }
 
-    private function applyInvoiceItemInventory(Invoice $invoice, array $itemData, InventoryService $inventoryService): void
+    private function applyInvoiceItemInventory(Invoice $invoice, InvoiceItem $invoiceItem, InventoryService $inventoryService): void
     {
-        if (empty($itemData['product_id'])) {
-            if (! empty($itemData['serial_numbers'])) {
+        if (empty($invoiceItem->product_id)) {
+            if (! empty($invoiceItem->serial_numbers)) {
                 throw new InvalidArgumentException('Select a product before using serial numbers.');
             }
 
             return;
         }
 
-        $product = Product::lockForUpdate()->findOrFail($itemData['product_id']);
-        $quantity = (int) $itemData['quantity'];
-        $serialNumbers = app(SerialNumberParser::class)->parse($itemData['serial_numbers'] ?? '');
+        $product = Product::lockForUpdate()->findOrFail($invoiceItem->product_id);
+        $quantity = (int) $invoiceItem->quantity;
+        $serialNumbers = app(SerialNumberParser::class)->parse($invoiceItem->serial_numbers ?? '');
 
         if ($serialNumbers !== [] && ! $product->track_serial_numbers) {
             throw new InvalidArgumentException('Serial numbers can only be used for serial-tracked products.');
-        }
-
-        if (count($serialNumbers) > $quantity) {
-            throw new InvalidArgumentException('Serial number count cannot be greater than invoice quantity.');
         }
 
         if ($product->track_inventory) {
@@ -404,6 +411,10 @@ class InvoiceController extends Controller
 
             $serial->update([
                 'status' => 'sold',
+                'customer_id' => $invoice->customer_id,
+                'invoice_id' => $invoice->id,
+                'invoice_item_id' => $invoiceItem->id,
+                'sold_at' => now(),
                 'note' => 'Sold via invoice '.$invoice->invoice_no,
             ]);
         }
@@ -442,6 +453,10 @@ class InvoiceController extends Controller
                 ->get()
                 ->each(fn (ProductSerial $serial) => $serial->update([
                     'status' => 'in_stock',
+                    'customer_id' => null,
+                    'invoice_id' => null,
+                    'invoice_item_id' => null,
+                    'sold_at' => null,
                     'note' => 'Restored from draft invoice edit '.$invoice->invoice_no,
                 ]));
         }

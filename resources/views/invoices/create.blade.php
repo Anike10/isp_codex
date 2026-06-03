@@ -167,6 +167,15 @@
         color: #0f513e;
     }
 
+    .serial-option:focus {
+        outline: 2px solid #116149;
+        outline-offset: 2px;
+    }
+
+    .item-serials.is-hidden {
+        display: none;
+    }
+
     .item-row:hover {
         border-color: #b7c7d9;
         box-shadow: 0 8px 18px rgba(23, 32, 51, .06);
@@ -502,7 +511,7 @@
                                     </div>
                                     <div>
                                         <label for="items_{{ $index }}_total">Total</label>
-                                        <input id="items_{{ $index }}_total" type="number" name="items[{{ $index }}][total]" step="0.01" min="0" class="total" readonly>
+                                        <input id="items_{{ $index }}_total" type="number" name="items[{{ $index }}][total]" step="0.01" min="0" class="total" readonly tabindex="-1">
                                     </div>
                                     <div>
                                         <button type="button" class="btn light remove-item" @if (count($invoiceItems) === 1) style="display:none;" @endif aria-label="Remove item">X</button>
@@ -746,6 +755,63 @@ function productLabel(product) {
     ].filter(Boolean).join(' - ');
 }
 
+const bengaliDigits = {
+    '\u09E6': '0',
+    '\u09E7': '1',
+    '\u09E8': '2',
+    '\u09E9': '3',
+    '\u09EA': '4',
+    '\u09EB': '5',
+    '\u09EC': '6',
+    '\u09ED': '7',
+    '\u09EE': '8',
+    '\u09EF': '9',
+};
+const asciiDigits = Object.fromEntries(Object.entries(bengaliDigits).map(([key, value]) => [value, key]));
+
+function normalizeSerialDigits(value) {
+    return String(value).replace(/[\u09E6-\u09EF]/g, digit => bengaliDigits[digit] || digit);
+}
+
+function toBengaliSerialDigits(value) {
+    return String(value).replace(/[0-9]/g, digit => asciiDigits[digit] || digit);
+}
+
+function expandSerialPart(part) {
+    const match = String(part).trim().match(/^([\p{L}_-]*)([0-9\u09E6-\u09EF]+)\s*(?:-|to|থেকে)\s*([\p{L}_-]*)([0-9\u09E6-\u09EF]+)$/iu);
+
+    if (!match) {
+        return [part];
+    }
+
+    const startPrefix = match[1];
+    const endPrefix = match[3] || startPrefix;
+
+    if (startPrefix !== endPrefix) {
+        return [part];
+    }
+
+    const startText = normalizeSerialDigits(match[2]);
+    const endText = normalizeSerialDigits(match[4]);
+    const start = Number(startText);
+    const end = Number(endText);
+
+    if (!Number.isInteger(start) || !Number.isInteger(end) || end < start || end - start >= 1000) {
+        return [part];
+    }
+
+    const width = Math.max(startText.length, endText.length);
+    const useBengaliDigits = /[\u09E6-\u09EF]/u.test(match[2]);
+    const serials = [];
+
+    for (let number = start; number <= end; number++) {
+        const serial = String(number).padStart(width, '0');
+        serials.push(startPrefix + (useBengaliDigits ? toBengaliSerialDigits(serial) : serial));
+    }
+
+    return serials;
+}
+
 function selectedSerials(row) {
     const textarea = row.querySelector('[name$="[serial_numbers]"]');
 
@@ -755,8 +821,25 @@ function selectedSerials(row) {
         .filter(Boolean);
 }
 
+function expandedSelectedSerials(row) {
+    return [...new Set(selectedSerials(row).flatMap(expandSerialPart))];
+}
+
 function setSelectedSerials(row, serials) {
     row.querySelector('[name$="[serial_numbers]"]').value = [...new Set(serials)].join('\n');
+    syncQuantityToSerials(row);
+}
+
+function syncQuantityToSerials(row) {
+    const serialCount = expandedSelectedSerials(row).length;
+    const quantity = row.querySelector('.quantity');
+
+    if (serialCount > 0 && quantity) {
+        quantity.value = serialCount;
+    }
+
+    updateRowTotal(row);
+    updateTotals();
 }
 
 function selectedProduct(row) {
@@ -765,42 +848,53 @@ function selectedProduct(row) {
     return products.find(product => String(product.id) === String(productId));
 }
 
-function refreshSerialOptions(row) {
+function refreshSerialOptions(row, focusSerialNumber = null) {
     const product = selectedProduct(row);
     const serialTextarea = row.querySelector('[name$="[serial_numbers]"]');
     const serialOptions = row.querySelector('.serial-options');
+    const serialBlock = row.querySelector('.item-serials');
+    let focusButton = null;
 
     if (!serialTextarea || !serialOptions) return;
 
     serialOptions.innerHTML = '';
 
     if (!product || !product.track_serials) {
-        serialTextarea.disabled = false;
-        serialTextarea.placeholder = product ? 'Serial not tracked for this product' : 'Select a serial-tracked product first';
+        serialBlock?.classList.add('is-hidden');
+        serialTextarea.disabled = true;
+        serialTextarea.value = '';
         return;
     }
 
+    serialBlock?.classList.remove('is-hidden');
     serialTextarea.disabled = false;
     serialTextarea.placeholder = 'Click serials below, or type one per line';
-    const chosen = selectedSerials(row);
+    const chosen = expandedSelectedSerials(row);
 
     product.serials.forEach(serial => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'serial-option';
+        button.setAttribute('aria-pressed', chosen.includes(serial.serial_number) ? 'true' : 'false');
         button.textContent = serial.warranty_until ? `${serial.serial_number} (${serial.warranty_until})` : serial.serial_number;
         button.classList.toggle('is-selected', chosen.includes(serial.serial_number));
         button.addEventListener('click', () => {
-            const serials = selectedSerials(row);
+            const serials = expandedSelectedSerials(row);
             const nextSerials = serials.includes(serial.serial_number)
                 ? serials.filter(value => value !== serial.serial_number)
                 : [...serials, serial.serial_number];
 
             setSelectedSerials(row, nextSerials);
-            refreshSerialOptions(row);
+            refreshSerialOptions(row, serial.serial_number);
         });
         serialOptions.appendChild(button);
+
+        if (focusSerialNumber === serial.serial_number) {
+            focusButton = button;
+        }
     });
+
+    focusButton?.focus();
 }
 
 function hideProductSuggestions() {
@@ -920,7 +1014,7 @@ document.getElementById('addItem').addEventListener('click', function() {
         </div>
         <div>
             <label for="items_${itemIndex}_total">Total</label>
-            <input id="items_${itemIndex}_total" type="number" name="items[${itemIndex}][total]" step="0.01" min="0" class="total" readonly>
+            <input id="items_${itemIndex}_total" type="number" name="items[${itemIndex}][total]" step="0.01" min="0" class="total" readonly tabindex="-1">
         </div>
         <div>
             <button type="button" class="btn light remove-item" aria-label="Remove item">X</button>
@@ -956,7 +1050,9 @@ document.addEventListener('input', function(e) {
     }
 
     if (e.target.matches('[name$="[serial_numbers]"]')) {
-        refreshSerialOptions(e.target.closest('.item-row'));
+        const row = e.target.closest('.item-row');
+        syncQuantityToSerials(row);
+        refreshSerialOptions(row);
         return;
     }
 

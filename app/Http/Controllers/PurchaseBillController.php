@@ -100,9 +100,11 @@ class PurchaseBillController extends Controller
                     'party_id' => $partyId,
                     'bill_no' => $data['bill_no'],
                     'purchase_date' => $data['purchase_date'],
-                    'subtotal' => $items->sum(fn (array $item): float => (float) $item['quantity'] * (float) $item['unit_price']),
+                    'subtotal' => 0,
                     'note' => $data['note'] ?? null,
                 ]);
+
+                $subtotal = 0;
 
                 foreach ($items as $item) {
                     $quantity = (int) $item['quantity'];
@@ -114,19 +116,22 @@ class PurchaseBillController extends Controller
                         : null;
                     $warrantyDays = $this->warrantyDays($item, $product, $warrantyMonths);
 
-                    if ($serialNumbers !== [] && count($serialNumbers) > $quantity) {
-                        throw new InvalidArgumentException('Serial number count cannot be greater than purchased quantity.');
+                    if (count($serialNumbers) > $quantity) {
+                        $quantity = count($serialNumbers);
                     }
 
                     if (! $product->track_serial_numbers && $serialNumbers !== []) {
                         throw new InvalidArgumentException('Serial numbers can only be added for serial-tracked products.');
                     }
 
+                    $lineTotal = $quantity * $unitPrice;
+                    $subtotal += $lineTotal;
+
                     $billItem = $purchaseBill->items()->create([
                         'product_id' => $product->id,
                         'quantity' => $quantity,
                         'unit_price' => $unitPrice,
-                        'total' => $quantity * $unitPrice,
+                        'total' => $lineTotal,
                         'warranty_months' => $warrantyMonths,
                         'warranty_days' => $warrantyDays,
                     ]);
@@ -146,6 +151,8 @@ class PurchaseBillController extends Controller
                         ]);
                     }
                 }
+
+                $purchaseBill->update(['subtotal' => $subtotal]);
             });
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
@@ -200,6 +207,7 @@ class PurchaseBillController extends Controller
         return Product::create([
             'name' => $name,
             'sku' => $this->nextProductSku($name),
+            'product_type' => $serialNumbers !== [] ? 'serial_stock' : 'stock',
             'track_inventory' => true,
             'track_serial_numbers' => $serialNumbers !== [],
             'warranty_days' => isset($item['warranty_days']) && $item['warranty_days'] !== '' ? (int) $item['warranty_days'] : null,

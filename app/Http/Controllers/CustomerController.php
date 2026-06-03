@@ -169,6 +169,8 @@ class CustomerController extends Controller
             'invoices' => fn ($query) => $query->latest(),
             'balanceTransactions' => fn ($query) => $query->latest()->limit(10),
             'tickets' => fn ($query) => $query->latest(),
+            'productSerials' => fn ($query) => $query->with(['product', 'invoice', 'warrantyClaims'])->latest('sold_at')->limit(50),
+            'warrantyClaims' => fn ($query) => $query->with(['product', 'productSerial'])->latest()->limit(10),
         ]);
 
         return view('customers.show', compact('customer'));

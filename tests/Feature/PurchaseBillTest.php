@@ -173,7 +173,7 @@ class PurchaseBillTest extends TestCase
         ]);
     }
 
-    public function test_purchase_bill_accepts_serial_ranges_and_comma_groups(): void
+    public function test_purchase_bill_accepts_serial_ranges_and_updates_quantity_from_serial_count(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
@@ -194,12 +194,23 @@ class PurchaseBillTest extends TestCase
             'items' => [
                 [
                     'product_id' => $product->id,
-                    'quantity' => 5,
+                    'quantity' => 1,
                     'unit_price' => 900,
                     'serial_numbers' => 'ONU001-ONU003, ONU010 থেকে ONU011',
                 ],
             ],
         ])->assertRedirect(route('purchase-bills.index'));
+
+        $this->assertSame(5, $product->refresh()->stock_quantity);
+        $this->assertDatabaseHas('purchase_bills', [
+            'bill_no' => 'PB-RANGE-001',
+            'subtotal' => 4500,
+        ]);
+        $this->assertDatabaseHas('purchase_bill_items', [
+            'product_id' => $product->id,
+            'quantity' => 5,
+            'total' => 4500,
+        ]);
 
         foreach (['ONU001', 'ONU002', 'ONU003', 'ONU010', 'ONU011'] as $serialNumber) {
             $this->assertDatabaseHas('product_serials', [

@@ -18,9 +18,11 @@ class Product extends Model
         'barcode',
         'brand',
         'product_category_id',
+        'product_type',
         'track_inventory',
         'track_serial_numbers',
         'warranty_days',
+        'service_guarantee_days',
         'category',
         'subcategory',
         'purchase_price',
@@ -47,6 +49,16 @@ class Product extends Model
     public function serials(): HasMany
     {
         return $this->hasMany(ProductSerial::class);
+    }
+
+    public function warrantyClaims(): HasMany
+    {
+        return $this->hasMany(WarrantyClaim::class);
+    }
+
+    public function isService(): bool
+    {
+        return in_array($this->product_type, ['service', 'warranty'], true) || ! $this->track_inventory;
     }
 
     public function categoryIdPath(): array

@@ -21,6 +21,7 @@ use App\Http\Controllers\PurchaseBillController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\WarrantyClaimController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -122,6 +123,22 @@ Route::middleware('auth')->group(function () {
         Route::resource('products', ProductController::class)->only(['index', 'show', 'create', 'store']);
         Route::post('products/{product}/stock', [ProductController::class, 'moveStock'])->name('products.stock');
     });
+
+    Route::middleware('permission:view_warranty_claims')->group(function () {
+        Route::get('warranty-claims', [WarrantyClaimController::class, 'index'])->name('warranty-claims.index');
+    });
+
+    Route::middleware('permission:manage_warranty_claims')->group(function () {
+        Route::get('warranty-claims/create', [WarrantyClaimController::class, 'create'])->name('warranty-claims.create');
+        Route::post('warranty-claims', [WarrantyClaimController::class, 'store'])->name('warranty-claims.store');
+        Route::post('warranty-claims/{warrantyClaim}/status', [WarrantyClaimController::class, 'updateStatus'])->name('warranty-claims.status');
+        Route::post('warranty-claims/{warrantyClaim}/replace', [WarrantyClaimController::class, 'replace'])->name('warranty-claims.replace');
+        Route::post('warranty-claims/{warrantyClaim}/service-invoice', [WarrantyClaimController::class, 'createServiceInvoice'])->name('warranty-claims.service-invoice');
+    });
+
+    Route::get('warranty-claims/{warrantyClaim}', [WarrantyClaimController::class, 'show'])
+        ->middleware('permission:view_warranty_claims')
+        ->name('warranty-claims.show');
 
     Route::middleware('permission:manage_users')->group(function () {
         Route::resource('users', UserController::class)->only(['index', 'create', 'store', 'edit', 'update']);

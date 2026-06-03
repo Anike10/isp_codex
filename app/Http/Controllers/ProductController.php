@@ -52,7 +52,7 @@ class ProductController extends Controller
             ->paginate($this->perPage($request))
             ->appends($request->query());
         $serials = $product->serials()
-            ->with('purchaseBill')
+            ->with(['purchaseBill', 'customer'])
             ->latest()
             ->limit(200)
             ->get();
@@ -72,24 +72,36 @@ class ProductController extends Controller
             'barcode' => ['nullable', 'string', 'max:100', 'unique:products,barcode'],
             'brand' => ['nullable', 'string', 'max:100'],
             'product_category_id' => ['nullable', 'exists:product_categories,id'],
+            'product_type' => ['nullable', 'in:stock,serial_stock,consumable,service,warranty'],
             'track_inventory' => ['nullable', 'boolean'],
             'track_serial_numbers' => ['nullable', 'boolean'],
             'warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'service_guarantee_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
             'purchase_price' => ['required', 'numeric', 'min:0'],
             'sale_price' => ['required', 'numeric', 'min:0'],
             'stock_quantity' => ['nullable', 'integer', 'min:0'],
             'low_stock_alert' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $data['track_inventory'] = $request->has('track_inventory') ? $request->boolean('track_inventory') : true;
-        $data['track_serial_numbers'] = $data['track_inventory'] && $request->boolean('track_serial_numbers');
+        $data['product_type'] = $data['product_type'] ?? 'stock';
+        $data['track_inventory'] = in_array($data['product_type'], ['stock', 'serial_stock', 'consumable'], true)
+            && ($request->has('track_inventory') ? $request->boolean('track_inventory') : true);
+        $data['track_serial_numbers'] = $data['product_type'] === 'serial_stock'
+            || ($data['track_inventory'] && $request->boolean('track_serial_numbers'));
+        if ($data['track_serial_numbers']) {
+            $data['product_type'] = 'serial_stock';
+        }
         $data['warranty_days'] = isset($data['warranty_days']) && $data['warranty_days'] !== ''
             ? (int) $data['warranty_days']
+            : null;
+        $data['service_guarantee_days'] = isset($data['service_guarantee_days']) && $data['service_guarantee_days'] !== ''
+            ? (int) $data['service_guarantee_days']
             : null;
 
         if (! $data['track_inventory']) {
             $data['stock_quantity'] = 0;
             $data['low_stock_alert'] = 0;
+            $data['track_serial_numbers'] = false;
         } else {
             $data['stock_quantity'] = (int) ($data['stock_quantity'] ?? 0);
             $data['low_stock_alert'] = (int) ($data['low_stock_alert'] ?? 5);

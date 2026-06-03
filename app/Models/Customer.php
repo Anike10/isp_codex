@@ -139,4 +139,14 @@ class Customer extends Model
     {
         return $this->hasMany(SupportTicket::class);
     }
+
+    public function productSerials(): HasMany
+    {
+        return $this->hasMany(ProductSerial::class);
+    }
+
+    public function warrantyClaims(): HasMany
+    {
+        return $this->hasMany(WarrantyClaim::class);
+    }
 }

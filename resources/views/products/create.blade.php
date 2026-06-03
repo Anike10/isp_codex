@@ -12,6 +12,16 @@
     <div><label>SKU</label><input name="sku" value="{{ old('sku') }}" required></div>
     <div><label>Barcode</label><input name="barcode" value="{{ old('barcode') }}" placeholder="Optional barcode"></div>
     <div>
+        <label>Product Type</label>
+        <select name="product_type" id="product_type" required>
+            <option value="stock" @selected(old('product_type', 'stock') === 'stock')>Stock Product</option>
+            <option value="serial_stock" @selected(old('product_type') === 'serial_stock')>Serial Stock Product</option>
+            <option value="consumable" @selected(old('product_type') === 'consumable')>Consumable / Own Use</option>
+            <option value="service" @selected(old('product_type') === 'service')>Service Product</option>
+            <option value="warranty" @selected(old('product_type') === 'warranty')>Warranty / Repair Service</option>
+        </select>
+    </div>
+    <div>
         <label>Brand</label>
         <input name="brand" value="{{ old('brand') }}" list="brandOptions" placeholder="TP-Link, MikroTik, Intel">
     </div>
@@ -34,6 +44,7 @@
         <span class="muted">Enable this for routers, ONUs, devices, or anything with individual serial numbers.</span>
     </div>
     <div data-inventory-field><label>Default Warranty Days</label><input type="number" name="warranty_days" min="0" max="3650" value="{{ old('warranty_days') }}" placeholder="Example: 365"></div>
+    <div data-service-field><label>Service Guarantee Days</label><input type="number" name="service_guarantee_days" min="0" max="3650" value="{{ old('service_guarantee_days') }}" placeholder="Example: 30"></div>
     <div data-inventory-field><label>Opening Stock</label><input type="number" name="stock_quantity" value="{{ old('stock_quantity', 0) }}" required></div>
     <div data-inventory-field><label>Low Stock Alert</label><input type="number" name="low_stock_alert" value="{{ old('low_stock_alert', 5) }}" required></div>
     <div class="full"><button class="btn" type="submit">Save Product</button></div>
@@ -48,13 +59,31 @@ const categoryTree = @json($categoryTree);
 const selectedCategoryInput = document.getElementById('product_category_id');
 const categoryCascade = document.getElementById('categoryCascade');
 const trackInventory = document.querySelector('input[type="checkbox"][name="track_inventory"]');
+const trackSerials = document.querySelector('input[type="checkbox"][name="track_serial_numbers"]');
+const productType = document.getElementById('product_type');
 const inventoryFields = document.querySelectorAll('[data-inventory-field]');
+const serviceFields = document.querySelectorAll('[data-service-field]');
 
 function syncInventoryFields() {
+    const serviceType = ['service', 'warranty'].includes(productType.value);
+    if (serviceType) {
+        trackInventory.checked = false;
+        trackSerials.checked = false;
+    } else if (productType.value === 'serial_stock') {
+        trackInventory.checked = true;
+        trackSerials.checked = true;
+    }
+
     inventoryFields.forEach(field => {
         field.style.display = trackInventory.checked ? '' : 'none';
         field.querySelectorAll('input').forEach(input => {
             input.disabled = !trackInventory.checked;
+        });
+    });
+    serviceFields.forEach(field => {
+        field.style.display = serviceType ? '' : 'none';
+        field.querySelectorAll('input').forEach(input => {
+            input.disabled = !serviceType;
         });
     });
 }
@@ -112,6 +141,7 @@ if (selectedPath) {
     if (nodes.length > 0) renderCategoryLevel(nodes, selectedPath.length);
 }
 trackInventory.addEventListener('change', syncInventoryFields);
+productType.addEventListener('change', syncInventoryFields);
 syncInventoryFields();
 </script>
 @endsection

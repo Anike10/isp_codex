@@ -73,6 +73,68 @@
 </div>
 
 <section class="card" style="margin-top:16px">
+    <h2>Assets & Warranty</h2>
+    <table>
+        <thead><tr><th>Product</th><th>Serial</th><th>Invoice</th><th>Sold Date</th><th>Warranty</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>
+        @forelse ($customer->productSerials as $serial)
+            @php
+                $openClaim = $serial->warrantyClaims->first(fn ($claim) => in_array($claim->status, \App\Models\WarrantyClaim::OPEN_STATUSES, true));
+                $warrantyLabel = $serial->warranty_until
+                    ? ($serial->warranty_until->copy()->endOfDay()->gte(now()) ? 'In warranty until '.$serial->warranty_until->format('Y-m-d') : 'Expired '.$serial->warranty_until->format('Y-m-d'))
+                    : 'No warranty';
+            @endphp
+            <tr>
+                <td>{{ $serial->product?->name ?? 'N/A' }}</td>
+                <td><span class="badge">{{ $serial->serial_number }}</span></td>
+                <td>@if ($serial->invoice)<a href="{{ route('invoices.show', $serial->invoice) }}">{{ $serial->invoice->invoice_no }}</a>@else N/A @endif</td>
+                <td>{{ $serial->sold_at?->format('Y-m-d') ?? 'N/A' }}</td>
+                <td>{{ $warrantyLabel }}</td>
+                <td>
+                    @if ($openClaim)
+                        <a class="badge pending" href="{{ route('warranty-claims.show', $openClaim) }}">{{ str_replace('_', ' ', $openClaim->status) }}</a>
+                    @else
+                        {{ str_replace('_', ' ', $serial->status) }}
+                    @endif
+                </td>
+                <td>
+                    @if (auth()->user()?->hasPermission('manage_warranty_claims') && ! $openClaim)
+                        <a class="btn light" href="{{ route('warranty-claims.create', ['product_serial_id' => $serial->id]) }}">Warranty Claim</a>
+                    @elseif ($openClaim)
+                        <a class="btn light" href="{{ route('warranty-claims.show', $openClaim) }}">View Claim</a>
+                    @else
+                        N/A
+                    @endif
+                </td>
+            </tr>
+        @empty
+            <tr><td colspan="7">No sold serial assets found.</td></tr>
+        @endforelse
+        </tbody>
+    </table>
+</section>
+
+<section class="card" style="margin-top:16px">
+    <h2>Warranty Claims</h2>
+    <table>
+        <thead><tr><th>Claim</th><th>Product</th><th>Serial</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody>
+        @forelse ($customer->warrantyClaims as $claim)
+            <tr>
+                <td><a href="{{ route('warranty-claims.show', $claim) }}">{{ $claim->claim_no }}</a></td>
+                <td>{{ $claim->product?->name ?? 'Manual claim' }}</td>
+                <td>{{ $claim->productSerial?->serial_number ?? 'N/A' }}</td>
+                <td><span class="badge pending">{{ str_replace('_', ' ', $claim->status) }}</span></td>
+                <td>{{ $claim->claim_date?->format('Y-m-d') }}</td>
+            </tr>
+        @empty
+            <tr><td colspan="5">No warranty claims yet.</td></tr>
+        @endforelse
+        </tbody>
+    </table>
+</section>
+
+<section class="card" style="margin-top:16px">
     <h2>Invoices</h2>
     <table>
         <thead><tr><th>Invoice</th><th>Month</th><th>Total</th><th>Due</th><th>Status</th></tr></thead>

@@ -91,4 +91,75 @@ class InvoiceSerialSaleTest extends TestCase
             'status' => 'in_stock',
         ]);
     }
+
+    public function test_invoice_sale_updates_quantity_from_serial_range_count(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Retail Customer',
+            'phone' => '01711111111',
+            'connection_id' => 'RC-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => false,
+        ]);
+        $product = Product::create([
+            'name' => 'HP 3200',
+            'sku' => 'HP-3200',
+            'brand' => 'HP',
+            'track_inventory' => true,
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 3,
+            'low_stock_alert' => 1,
+        ]);
+
+        foreach (['1002', '1003', '1004'] as $serialNumber) {
+            ProductSerial::create([
+                'product_id' => $product->id,
+                'serial_number' => $serialNumber,
+                'status' => 'in_stock',
+            ]);
+        }
+
+        $this->actingAs($user)->post(route('invoices.store'), [
+            'customer_id' => $customer->id,
+            'billing_month' => '2026-06',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'quantity' => 1,
+                    'unit_price' => 1200,
+                    'serial_numbers' => '1002-1004',
+                ],
+            ],
+            'discount_type' => 'amount',
+            'discount' => 0,
+            'vat_type' => 'amount',
+            'vat' => 0,
+        ])->assertRedirect();
+
+        $invoice = Invoice::where('customer_id', $customer->id)->firstOrFail();
+
+        $this->assertSame(0, $product->refresh()->stock_quantity);
+        $this->assertDatabaseHas('invoice_items', [
+            'invoice_id' => $invoice->id,
+            'product_id' => $product->id,
+            'quantity' => 3,
+            'total' => 3600,
+            'serial_numbers' => '1002-1004',
+        ]);
+
+        foreach (['1002', '1003', '1004'] as $serialNumber) {
+            $this->assertDatabaseHas('product_serials', [
+                'product_id' => $product->id,
+                'serial_number' => $serialNumber,
+                'status' => 'sold',
+            ]);
+        }
+    }
 }
