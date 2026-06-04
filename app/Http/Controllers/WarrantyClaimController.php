@@ -66,10 +66,51 @@ class WarrantyClaimController extends Controller
                 ->findOrFail($request->integer('product_serial_id'));
         }
 
+        $customers = Customer::query()->where('is_customer', true)->orderBy('name')->get();
+        $products = Product::query()->orderBy('name')->get();
+
+        $serials = ProductSerial::query()
+            ->with(['product', 'customer', 'invoice'])
+            ->where('status', '!=', 'in_stock')
+            ->orderBy('serial_number')
+            ->limit(1000)
+            ->get();
+
         return view('warranty_claims.create', [
             'selectedSerial' => $selectedSerial,
-            'customers' => Customer::query()->where('is_customer', true)->orderBy('name')->get(),
-            'products' => Product::query()->orderBy('name')->get(),
+            'customers' => $customers,
+            'products' => $products,
+            'customerOptions' => $customers->map(fn (Customer $customer): array => [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'phone' => $customer->phone,
+                'address' => $customer->address,
+            ])->values(),
+            'productOptions' => $products->map(fn (Product $product): array => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'sku' => $product->sku,
+                'brand' => $product->brand,
+            ])->values(),
+            'serialOptions' => $serials->map(fn (ProductSerial $serial): array => [
+                'id' => $serial->id,
+                'serial_number' => $serial->serial_number,
+                'status' => $serial->status,
+                'warranty_until' => $serial->warranty_until?->format('Y-m-d'),
+                'invoice_no' => $serial->invoice?->invoice_no,
+                'product' => $serial->product ? [
+                    'id' => $serial->product->id,
+                    'name' => $serial->product->name,
+                    'sku' => $serial->product->sku,
+                    'brand' => $serial->product->brand,
+                ] : null,
+                'customer' => $serial->customer ? [
+                    'id' => $serial->customer->id,
+                    'name' => $serial->customer->name,
+                    'phone' => $serial->customer->phone,
+                    'address' => $serial->customer->address,
+                ] : null,
+            ])->values(),
             'users' => User::query()->orderBy('name')->get(),
             'vendors' => Customer::query()->where('is_vendor', true)->orderBy('name')->get(),
             'actionTypes' => self::ACTION_TYPES,

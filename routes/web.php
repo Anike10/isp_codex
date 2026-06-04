@@ -124,11 +124,11 @@ Route::middleware('auth')->group(function () {
         Route::post('products/{product}/stock', [ProductController::class, 'moveStock'])->name('products.stock');
     });
 
-    Route::middleware('permission:view_warranty_claims')->group(function () {
+    Route::middleware('permission:view_warranty_claims,manage_products')->group(function () {
         Route::get('warranty-claims', [WarrantyClaimController::class, 'index'])->name('warranty-claims.index');
     });
 
-    Route::middleware('permission:manage_warranty_claims')->group(function () {
+    Route::middleware('permission:manage_warranty_claims,manage_products')->group(function () {
         Route::get('warranty-claims/create', [WarrantyClaimController::class, 'create'])->name('warranty-claims.create');
         Route::post('warranty-claims', [WarrantyClaimController::class, 'store'])->name('warranty-claims.store');
         Route::post('warranty-claims/{warrantyClaim}/status', [WarrantyClaimController::class, 'updateStatus'])->name('warranty-claims.status');
@@ -137,7 +137,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('warranty-claims/{warrantyClaim}', [WarrantyClaimController::class, 'show'])
-        ->middleware('permission:view_warranty_claims')
+        ->middleware('permission:view_warranty_claims,manage_products')
         ->name('warranty-claims.show');
 
     Route::middleware('permission:manage_users')->group(function () {

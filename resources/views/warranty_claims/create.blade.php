@@ -16,27 +16,69 @@
     </section>
 @endif
 
+<style>
+    .lookup-field { position:relative; }
+    .lookup-suggestions {
+        display:none;
+        position:absolute;
+        top:calc(100% + 6px);
+        left:0;
+        right:0;
+        z-index:30;
+        max-height:240px;
+        overflow:auto;
+        padding:6px;
+        background:white;
+        border:1px solid var(--line);
+        border-radius:8px;
+        box-shadow:0 14px 28px rgba(15, 23, 42, .16);
+    }
+    .lookup-suggestions.is-open { display:grid; gap:4px; }
+    .lookup-option {
+        border:0;
+        width:100%;
+        padding:9px 10px;
+        border-radius:6px;
+        background:white;
+        color:var(--ink);
+        text-align:left;
+        cursor:pointer;
+    }
+    .lookup-option:hover, .lookup-option.is-active { background:#eef4fb; }
+    .lookup-option strong, .lookup-option span { display:block; }
+    .lookup-option span { margin-top:3px; color:var(--muted); font-size:12px; }
+    .asset-summary {
+        display:none;
+        padding:10px 12px;
+        border:1px solid var(--line);
+        border-radius:6px;
+        background:#f8fafc;
+    }
+    .asset-summary.is-visible { display:block; }
+</style>
+
 <form method="post" action="{{ route('warranty-claims.store') }}" class="card form-grid">
     @csrf
-    <input type="hidden" name="product_serial_id" value="{{ old('product_serial_id', $selectedSerial?->id) }}">
+    <input type="hidden" name="product_serial_id" id="product_serial_id" value="{{ old('product_serial_id', $selectedSerial?->id) }}">
+    <input type="hidden" name="customer_id" id="customer_id" value="{{ old('customer_id', $selectedSerial?->customer_id) }}">
+    <input type="hidden" name="product_id" id="product_id" value="{{ old('product_id', $selectedSerial?->product_id) }}">
 
-    <div>
-        <label>Customer</label>
-        <select name="customer_id" required>
-            <option value="">Select customer</option>
-            @foreach ($customers as $customer)
-                <option value="{{ $customer->id }}" @selected((int) old('customer_id', $selectedSerial?->customer_id) === $customer->id)>{{ $customer->name }} - {{ $customer->phone }}</option>
-            @endforeach
-        </select>
+    <div class="lookup-field full">
+        <label>Serial Number</label>
+        <input id="serial_search" value="{{ old('product_serial_query', $selectedSerial?->serial_number) }}" autocomplete="off" placeholder="Type product serial number">
+        <div class="lookup-suggestions" id="serial_suggestions"></div>
     </div>
-    <div>
-        <label>Manual Product</label>
-        <select name="product_id">
-            <option value="">Use selected serial product / manual only</option>
-            @foreach ($products as $product)
-                <option value="{{ $product->id }}" @selected((int) old('product_id', $selectedSerial?->product_id) === $product->id)>{{ $product->name }} - {{ $product->sku }}</option>
-            @endforeach
-        </select>
+    <div class="asset-summary full" id="asset_summary"></div>
+
+    <div class="lookup-field">
+        <label>Customer</label>
+        <input id="customer_search" required autocomplete="off" placeholder="Type customer name or phone">
+        <div class="lookup-suggestions" id="customer_suggestions"></div>
+    </div>
+    <div class="lookup-field">
+        <label>Product</label>
+        <input id="product_search" autocomplete="off" placeholder="Auto-filled from serial or type product">
+        <div class="lookup-suggestions" id="product_suggestions"></div>
     </div>
     <div><label>Claim Date</label><input type="date" name="claim_date" value="{{ old('claim_date', now()->toDateString()) }}" required></div>
     <div>
@@ -71,4 +113,149 @@
     </div>
     <div class="full"><button class="btn" type="submit">Create Claim</button></div>
 </form>
+
+<script>
+const customers = @json($customerOptions);
+const products = @json($productOptions);
+const serials = @json($serialOptions);
+
+const serialId = document.getElementById('product_serial_id');
+const customerId = document.getElementById('customer_id');
+const productId = document.getElementById('product_id');
+const serialSearch = document.getElementById('serial_search');
+const customerSearch = document.getElementById('customer_search');
+const productSearch = document.getElementById('product_search');
+const assetSummary = document.getElementById('asset_summary');
+
+const normalize = value => (value || '').toString().trim().toLowerCase();
+const escapeHtml = value => (value || '').toString().replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+}[char]));
+const customerLabel = customer => customer ? [customer.name, customer.phone].filter(Boolean).join(' - ') : '';
+const productLabel = product => product ? [product.name, product.sku, product.brand].filter(Boolean).join(' - ') : '';
+const serialLabel = serial => [
+    serial.serial_number,
+    serial.product?.name,
+    serial.customer?.name,
+    serial.customer?.phone,
+].filter(Boolean).join(' - ');
+
+function setCustomer(customer) {
+    customerId.value = customer?.id || '';
+    customerSearch.value = customerLabel(customer);
+}
+
+function setProduct(product) {
+    productId.value = product?.id || '';
+    productSearch.value = productLabel(product);
+}
+
+function renderAssetSummary(serial) {
+    if (! serial) {
+        assetSummary.classList.remove('is-visible');
+        assetSummary.innerHTML = '';
+        return;
+    }
+
+    assetSummary.innerHTML = `
+        <strong>Selected Asset</strong><br>
+        Product: ${escapeHtml(serial.product?.name || 'N/A')}<br>
+        Serial: ${escapeHtml(serial.serial_number)}<br>
+        Customer: ${escapeHtml(customerLabel(serial.customer) || 'N/A')}<br>
+        Warranty: ${escapeHtml(serial.warranty_until || 'No warranty')}<br>
+        Invoice: ${escapeHtml(serial.invoice_no || 'N/A')}
+    `;
+    assetSummary.classList.add('is-visible');
+}
+
+function chooseSerial(serial) {
+    serialId.value = serial.id;
+    serialSearch.value = serial.serial_number;
+    setCustomer(serial.customer);
+    setProduct(serial.product);
+    renderAssetSummary(serial);
+    closeSuggestions();
+}
+
+function setupLookup(input, suggestions, source, config) {
+    const render = () => {
+        const query = normalize(input.value);
+        const matches = source
+            .filter(item => ! query || normalize(config.searchText(item)).includes(query))
+            .slice(0, 12);
+
+        suggestions.innerHTML = '';
+        if (! matches.length) {
+            suggestions.classList.remove('is-open');
+            return;
+        }
+
+        matches.forEach(item => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'lookup-option';
+            button.innerHTML = `<strong>${escapeHtml(config.title(item))}</strong><span>${escapeHtml(config.subtitle(item))}</span>`;
+            button.addEventListener('click', () => config.select(item));
+            suggestions.appendChild(button);
+        });
+        suggestions.classList.add('is-open');
+    };
+
+    input.addEventListener('input', () => {
+        config.clear?.();
+        render();
+    });
+    input.addEventListener('focus', render);
+}
+
+function closeSuggestions() {
+    document.querySelectorAll('.lookup-suggestions').forEach(element => element.classList.remove('is-open'));
+}
+
+setupLookup(serialSearch, document.getElementById('serial_suggestions'), serials, {
+    searchText: serialLabel,
+    title: serial => serial.serial_number,
+    subtitle: serial => [serial.product?.name, customerLabel(serial.customer), serial.warranty_until ? `Warranty ${serial.warranty_until}` : 'No warranty'].filter(Boolean).join(' | '),
+    select: chooseSerial,
+    clear: () => {
+        serialId.value = '';
+        renderAssetSummary(null);
+    },
+});
+
+setupLookup(customerSearch, document.getElementById('customer_suggestions'), customers, {
+    searchText: customer => [customer.name, customer.phone, customer.address].filter(Boolean).join(' '),
+    title: customer => customer.name,
+    subtitle: customer => [customer.phone, customer.address].filter(Boolean).join(' | '),
+    select: customer => {
+        setCustomer(customer);
+        closeSuggestions();
+    },
+    clear: () => customerId.value = '',
+});
+
+setupLookup(productSearch, document.getElementById('product_suggestions'), products, {
+    searchText: product => [product.name, product.sku, product.brand].filter(Boolean).join(' '),
+    title: product => product.name,
+    subtitle: product => [product.sku, product.brand].filter(Boolean).join(' | '),
+    select: product => {
+        setProduct(product);
+        closeSuggestions();
+    },
+    clear: () => productId.value = '',
+});
+
+document.addEventListener('click', event => {
+    if (! event.target.closest('.lookup-field')) {
+        closeSuggestions();
+    }
+});
+
+const initialCustomer = customers.find(customer => String(customer.id) === String(customerId.value));
+const initialProduct = products.find(product => String(product.id) === String(productId.value));
+const initialSerial = serials.find(serial => String(serial.id) === String(serialId.value));
+setCustomer(initialCustomer);
+setProduct(initialProduct || initialSerial?.product);
+renderAssetSummary(initialSerial);
+</script>
 @endsection

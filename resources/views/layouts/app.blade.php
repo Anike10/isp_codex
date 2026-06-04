@@ -163,7 +163,8 @@
                     || auth()->user()?->hasPermission('manage_payment_accounts')
                     || auth()->user()?->hasPermission('manage_expenses');
                 $canManageWarranty = auth()->user()?->hasPermission('view_warranty_claims')
-                    || auth()->user()?->hasPermission('manage_warranty_claims');
+                    || auth()->user()?->hasPermission('manage_warranty_claims')
+                    || auth()->user()?->hasPermission('manage_products');
                 $canManageAdmin = auth()->user()?->hasPermission('manage_users')
                     || auth()->user()?->hasPermission('download_backup');
             @endphp
@@ -234,10 +235,10 @@
                 <details class="nav-group">
                     <summary>Warranty</summary>
                     <div class="nav-menu">
-                        @if (auth()->user()?->hasPermission('view_warranty_claims'))
+                        @if (auth()->user()?->hasPermission('view_warranty_claims') || auth()->user()?->hasPermission('manage_products'))
                             <a href="{{ route('warranty-claims.index') }}">Warranty Claims</a>
                         @endif
-                        @if (auth()->user()?->hasPermission('manage_warranty_claims'))
+                        @if (auth()->user()?->hasPermission('manage_warranty_claims') || auth()->user()?->hasPermission('manage_products'))
                             <a href="{{ route('warranty-claims.create') }}">New Claim</a>
                         @endif
                     </div>

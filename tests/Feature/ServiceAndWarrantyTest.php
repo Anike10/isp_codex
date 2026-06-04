@@ -143,4 +143,46 @@ class ServiceAndWarrantyTest extends TestCase
         ]);
         $this->assertSame(0, $product->refresh()->stock_quantity);
     }
+
+    public function test_warranty_claim_create_page_supports_serial_lookup(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_warranty_claims')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Lookup Customer',
+            'phone' => '01730000000',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => false,
+        ]);
+        $product = Product::create([
+            'name' => 'Lookup Router',
+            'sku' => 'LOOKUP-ROUTER',
+            'product_type' => 'serial_stock',
+            'track_inventory' => true,
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 1,
+        ]);
+
+        ProductSerial::create([
+            'product_id' => $product->id,
+            'customer_id' => $customer->id,
+            'serial_number' => 'SN-LOOKUP-001',
+            'warranty_until' => now()->addYear()->toDateString(),
+            'sold_at' => now(),
+            'status' => 'sold',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('warranty-claims.create'))
+            ->assertOk()
+            ->assertSee('Serial Number')
+            ->assertSee('SN-LOOKUP-001')
+            ->assertSee('Lookup Customer')
+            ->assertSee('Lookup Router');
+    }
 }
