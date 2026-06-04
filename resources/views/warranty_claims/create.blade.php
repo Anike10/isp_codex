@@ -115,9 +115,9 @@
 </form>
 
 <script>
-const customers = @json($customerOptions);
-const products = @json($productOptions);
-const serials = @json($serialOptions);
+const customers = {{ Illuminate\Support\Js::from($customerOptions) }};
+const products = {{ Illuminate\Support\Js::from($productOptions) }};
+const serials = {{ Illuminate\Support\Js::from($serialOptions) }};
 
 const serialId = document.getElementById('product_serial_id');
 const customerId = document.getElementById('customer_id');
