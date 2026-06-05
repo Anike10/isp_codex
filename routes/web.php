@@ -11,6 +11,7 @@ use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MikrotikRouterController;
+use App\Http\Controllers\NetworkMapController;
 use App\Http\Controllers\OltOnuController;
 use App\Http\Controllers\PackageController;
 use App\Http\Controllers\PaymentAccountController;
@@ -87,6 +88,10 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_mikrotik_routers')->group(function () {
+        Route::get('network-map', [NetworkMapController::class, 'show'])->name('network-map.index');
+        Route::get('network-map/features', [NetworkMapController::class, 'index'])->name('network-map.features.index');
+        Route::post('network-map/features', [NetworkMapController::class, 'store'])->name('network-map.features.store');
+        Route::post('network-map/photos', [NetworkMapController::class, 'uploadPhotos'])->name('network-map.photos.store');
         Route::get('olt-onus/olts/create', [OltOnuController::class, 'createOlt'])->name('olt-onus.olts.create');
         Route::post('olt-onus/olts', [OltOnuController::class, 'storeOlt'])->name('olt-onus.olts.store');
         Route::get('olt-onus/olts/{oltDevice}/edit', [OltOnuController::class, 'editOlt'])->name('olt-onus.olts.edit');
