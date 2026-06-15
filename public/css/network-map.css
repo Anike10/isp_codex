@@ -435,41 +435,99 @@
     white-space: nowrap;
 }
 
+.path-marker {
+    position: absolute;
+    box-sizing: border-box;
+    width: 40px;
+    height: 40px;
+    z-index: 5;
+}
+
 .path-handle {
-    position: relative;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #ffffff;
+    cursor: grab;
+    font-size: 11px;
+    font-weight: 900;
+    line-height: 1;
+    transform: translate(-50%, -50%);
+}
+
+.marker-dot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
     width: 18px;
     height: 18px;
-    padding: 0;
     border: 2px solid #ffffff;
     border-radius: 50%;
     background: #f79009;
     box-shadow: 0 4px 12px rgba(15, 23, 42, .3);
-    cursor: grab;
+    transform: translate(-50%, -50%);
 }
 
-.path-handle.endpoint,
-.path-handle.bend {
-    background: #f79009;
+.marker-label {
+    line-height: 1;
 }
 
-.path-handle.bend {
+.path-marker.endpoint .marker-dot {
+    width: 26px;
+    height: 26px;
+    border-width: 3px;
+    box-shadow: 0 0 0 7px rgba(23, 92, 211, .18), 0 7px 18px rgba(15, 23, 42, .35);
+}
+
+.path-marker.endpoint.a-end .marker-dot {
+    background: #175cd3;
+}
+
+.path-marker.endpoint.z-end .marker-dot {
+    background: #027a48;
+}
+
+.path-marker.bend .path-handle {
     cursor: pointer;
 }
 
-.path-handle.bend:hover,
-.path-handle.bend:focus-visible {
-    width: 22px;
-    height: 22px;
-    background: #dc6803;
-    box-shadow: 0 0 0 8px rgba(247, 144, 9, .24), 0 6px 18px rgba(15, 23, 42, .35);
+.path-marker.bend .marker-dot {
+    background: #f79009;
+    box-shadow: 0 0 0 5px rgba(247, 144, 9, .2), 0 5px 14px rgba(15, 23, 42, .32);
+}
+
+.path-marker.bend .path-handle:hover,
+.path-marker.bend .path-handle:focus-visible {
     outline: none;
 }
 
-.path-handle.bend:hover::after,
-.path-handle.bend:focus-visible::after {
+.path-marker.bend .path-handle:hover .marker-dot,
+.path-marker.bend .path-handle:focus-visible .marker-dot {
+    background: #dc6803;
+    box-shadow: 0 0 0 8px rgba(247, 144, 9, .24), 0 6px 18px rgba(15, 23, 42, .35);
+}
+
+.marker-tooltip {
+    display: none;
+}
+
+.path-marker.bend .path-handle:hover .marker-tooltip,
+.path-marker.bend .path-handle:focus-visible .marker-tooltip {
     position: absolute;
     left: 50%;
     bottom: calc(100% + 10px);
+    display: block;
     z-index: 5;
     width: max-content;
     max-width: 180px;
@@ -477,7 +535,6 @@
     border-radius: 6px;
     background: #111827;
     color: #ffffff;
-    content: attr(data-hover-label);
     font-size: 12px;
     font-weight: 700;
     line-height: 1.25;
@@ -486,11 +543,11 @@
     white-space: normal;
 }
 
-.path-handle.bend:hover::before,
-.path-handle.bend:focus-visible::before {
+.path-marker.bend .path-handle:hover .marker-tooltip::after,
+.path-marker.bend .path-handle:focus-visible .marker-tooltip::after {
     position: absolute;
     left: 50%;
-    bottom: calc(100% + 4px);
+    top: calc(100% - 5px);
     z-index: 5;
     width: 10px;
     height: 10px;
@@ -500,26 +557,29 @@
     transform: translateX(-50%) rotate(45deg);
 }
 
-.path-handle.linking {
-    width: 24px;
-    height: 24px;
+.path-marker.linking .marker-dot {
     border-color: #ffffff;
     background: #12b76a;
     box-shadow: 0 0 0 7px rgba(18, 183, 106, .22), 0 5px 16px rgba(15, 23, 42, .34);
 }
 
-.path-handle.selected {
-    width: 22px;
-    height: 22px;
+.path-marker.selected .marker-dot {
     background: #d92d20;
     box-shadow: 0 0 0 7px rgba(217, 45, 32, .2), 0 5px 16px rgba(15, 23, 42, .34);
 }
 
-.path-handle.midpoint {
-    width: 14px;
-    height: 14px;
+.path-marker.midpoint .marker-dot {
+    width: 16px;
+    height: 16px;
     background: #ffffff;
     border-color: #f79009;
+    color: #b54708;
+    font-size: 13px;
+}
+
+.path-marker.midpoint .path-handle {
+    cursor: grab;
+    opacity: .96;
 }
 
 .path-handle:active {
@@ -537,7 +597,21 @@
     box-shadow: 0 18px 44px rgba(15, 23, 42, .26);
 }
 
-.core-panel-head {
+.olt-port-panel {
+    position: absolute;
+    z-index: 20;
+    width: min(380px, calc(100% - 24px));
+    max-height: min(460px, calc(100% - 24px));
+    overflow: auto;
+    padding: 12px;
+    border: 1px solid #d8dee9;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 18px 44px rgba(15, 23, 42, .26);
+}
+
+.core-panel-head,
+.olt-panel-head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -546,23 +620,103 @@
 }
 
 .core-panel-head strong,
-.core-panel-head span {
+.core-panel-head span,
+.olt-panel-head strong,
+.olt-panel-head span {
     display: block;
 }
 
 .core-panel-head span,
+.olt-panel-head span,
 .core-panel-select {
     color: #667085;
     font-size: 12px;
 }
 
-.core-panel-close {
+.core-panel-close,
+.olt-panel-close {
     width: 28px;
     height: 28px;
     border: 1px solid #d8dee9;
     border-radius: 6px;
     background: #f8fafc;
     cursor: pointer;
+}
+
+.olt-port-list {
+    display: grid;
+    gap: 6px;
+}
+
+.olt-port-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    border: 1px solid #eef2f6;
+    border-radius: 6px;
+    background: #f8fafc;
+}
+
+.olt-port-row span {
+    overflow: hidden;
+    color: #475467;
+    font-size: 12px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.olt-port-row button {
+    min-height: 28px;
+    border: 1px solid #ccd6e3;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #172033;
+    cursor: grab;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.olt-port-row button[data-port-tree],
+.olt-port-row button[data-port-unlink] {
+    cursor: pointer;
+}
+
+.olt-port-row button:disabled {
+    cursor: not-allowed;
+    opacity: .45;
+}
+
+.olt-tree-view {
+    display: grid;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eef2f6;
+}
+
+.olt-tree-branch {
+    display: grid;
+    gap: 6px;
+    margin-left: 14px;
+    padding-left: 12px;
+    border-left: 2px solid #d8dee9;
+}
+
+.olt-tree-node,
+.olt-tree-empty {
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.olt-tree-empty {
+    color: #98a2b3;
 }
 
 .core-panel-select {

@@ -3,6 +3,10 @@
 @section('content')
 @php
     $isEdit = isset($invoice);
+    $discountType = old('discount_type', $isEdit ? ($invoice->discount_type ?? 'amount') : 'amount');
+    $discountValue = old('discount', $isEdit ? ($invoice->discount_value ?? $invoice->discount) : '0.00');
+    $vatType = old('vat_type', $isEdit ? ($invoice->vat_type ?? 'amount') : 'amount');
+    $vatValue = old('vat', $isEdit ? ($invoice->vat_value ?? $invoice->vat ?? '0.00') : '0.00');
     $invoiceItems = old('items', $isEdit
         ? $invoice->items->map(fn ($item) => [
             'product_id' => $item->product_id,
@@ -453,10 +457,10 @@
                             <div>
                                 <label for="discount">Discount <span class="required-mark">*</span></label>
                                 <div class="amount-mode">
-                                    <input id="discount" type="number" name="discount" step="0.01" min="0" value="{{ old('discount', $isEdit ? $invoice->discount : '0.00') }}" required>
+                                    <input id="discount" type="number" name="discount" step="0.01" min="0" value="{{ $discountValue }}" required>
                                     <select id="discountType" name="discount_type" required>
-                                        <option value="amount" @selected(old('discount_type', 'amount') === 'amount')>BDT</option>
-                                        <option value="percent" @selected(old('discount_type') === 'percent')>%</option>
+                                        <option value="amount" @selected($discountType === 'amount')>BDT</option>
+                                        <option value="percent" @selected($discountType === 'percent')>%</option>
                                     </select>
                                 </div>
                                 <span class="field-note">Use fixed taka amount or percentage of subtotal.</span>
@@ -465,10 +469,10 @@
                             <div>
                                 <label for="vat">VAT <span class="required-mark">*</span></label>
                                 <div class="amount-mode">
-                                    <input id="vat" type="number" name="vat" step="0.01" min="0" value="{{ old('vat', $isEdit ? ($invoice->vat ?? '0.00') : '0.00') }}" required>
+                                    <input id="vat" type="number" name="vat" step="0.01" min="0" value="{{ $vatValue }}" required>
                                     <select id="vatType" name="vat_type" required>
-                                        <option value="amount" @selected(old('vat_type', 'amount') === 'amount')>BDT</option>
-                                        <option value="percent" @selected(old('vat_type') === 'percent')>%</option>
+                                        <option value="amount" @selected($vatType === 'amount')>BDT</option>
+                                        <option value="percent" @selected($vatType === 'percent')>%</option>
                                     </select>
                                 </div>
                                 <span class="field-note">Use fixed taka amount or percentage after discount.</span>

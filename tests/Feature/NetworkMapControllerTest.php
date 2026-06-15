@@ -50,6 +50,15 @@ class NetworkMapControllerTest extends TestCase
                                 'port' => '4',
                             ],
                         ],
+                        'port_links' => [
+                            'Port 1' => [
+                                'fiber_id' => 'fiber-1',
+                                'fiber_code' => 'F-OLT-SPL-001',
+                                'core' => 1,
+                                'color_name' => 'Blue',
+                                'color_hex' => '#1d4ed8',
+                            ],
+                        ],
                         'photos' => [
                             [
                                 'url' => 'http://127.0.0.1/network-map-photos/router.jpg',
@@ -131,6 +140,7 @@ class NetworkMapControllerTest extends TestCase
             ->assertJsonFragment(['out_point' => 'SP-01 IN'])
             ->assertJsonFragment(['node_name' => 'TJ-BOX-01'])
             ->assertJsonFragment(['fiber_id' => 'fiber-2'])
+            ->assertJsonFragment(['color_hex' => '#1d4ed8'])
             ->assertJsonFragment(['name' => 'router.jpg'])
             ->assertJsonCount(2, 'features');
     }

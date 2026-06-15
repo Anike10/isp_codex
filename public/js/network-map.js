@@ -25,6 +25,8 @@
         selectedBendPoint: null,
         linkTargetFeatureId: null,
         corePanel: null,
+        oltPanel: null,
+        pendingPortLink: null,
         visibleTypes: new Set(['router', 'switch', 'olt', 'splitter', 'tj_box', 'onu', 'fiber_cable']),
         hiddenFeatureIds: new Set(),
         features: new Map(),
@@ -289,12 +291,20 @@
         state.map.on('mousemove', handleMapMouseMove);
         state.map.on('mouseleave', clearPlacementPreview);
         state.map.on('mouseup', finishNodeDrag);
+        state.map.getContainer().addEventListener('dragover', (event) => {
+            if (state.pendingPortLink) {
+                event.preventDefault();
+            }
+        });
+        state.map.getContainer().addEventListener('drop', handlePortDrop);
     }
 
     function addNetworkLayers() {
         state.map.addSource('network-nodes', { type: 'geojson', data: emptyCollection() });
         state.map.addSource('network-links', { type: 'geojson', data: emptyCollection() });
+        state.map.addSource('endpoint-core-links', { type: 'geojson', data: emptyCollection() });
         state.map.addSource('draft-line', { type: 'geojson', data: emptyCollection() });
+        state.map.addSource('draft-points', { type: 'geojson', data: emptyCollection() });
         state.map.addSource('selection-highlight', { type: 'geojson', data: emptyCollection() });
         state.map.addSource('link-target-highlight', { type: 'geojson', data: emptyCollection() });
 
@@ -317,6 +327,18 @@
         });
 
         state.map.addLayer({
+            id: 'endpoint-core-links-line',
+            type: 'line',
+            source: 'endpoint-core-links',
+            paint: {
+                'line-color': ['coalesce', ['get', 'color_hex'], '#f79009'],
+                'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2, 16, 4],
+                'line-opacity': 0.95,
+                'line-dasharray': [1.2, 1],
+            },
+        });
+
+        state.map.addLayer({
             id: 'selection-link-highlight',
             type: 'line',
             source: 'selection-highlight',
@@ -336,6 +358,19 @@
                 'line-color': '#f79009',
                 'line-width': 4,
                 'line-dasharray': [1.5, 1],
+            },
+        });
+
+        state.map.addLayer({
+            id: 'draft-points-layer',
+            type: 'circle',
+            source: 'draft-points',
+            paint: {
+                'circle-radius': ['case', ['==', ['get', 'point_index'], 1], 8, 6],
+                'circle-color': ['case', ['==', ['get', 'point_index'], 1], '#12b76a', '#f79009'],
+                'circle-stroke-color': '#ffffff',
+                'circle-stroke-width': 3,
+                'circle-opacity': 0.95,
             },
         });
 
@@ -449,6 +484,7 @@
 
             if (event.key === 'Escape') {
                 closeFiberCorePanel();
+                closeOltPortPanel();
                 closeFeatureForm();
                 cancelDrawing();
             }
@@ -956,14 +992,7 @@
                 return;
             }
 
-            if (feature?.geometry.type === 'LineString') {
-                selectFeature(featureId);
-                showPathMarkers(featureId);
-            } else {
-                selectFeature(featureId);
-                clearPathMarkers();
-                setStatus('Drag to move. Double-click for details.');
-            }
+            selectMapFeature(featureId);
             return;
         }
 
@@ -1027,14 +1056,34 @@
 
     function openExistingFeature(id) {
         if (!id || !state.features.has(id)) return;
-        selectFeature(id);
-        showPathMarkers(id);
+        selectMapFeature(id);
         openFeatureForm(id, false);
         const feature = state.features.get(id);
         new maplibregl.Popup({ closeButton: false, offset: 12 })
             .setLngLat(popupCoordinate(feature))
             .setHTML(popupHtml(feature))
             .addTo(state.map);
+    }
+
+    function selectMapFeature(featureId) {
+        const feature = state.features.get(featureId);
+        if (!feature) return;
+
+        selectFeature(featureId);
+        if (feature.geometry.type === 'LineString') {
+            showPathMarkers(featureId);
+            closeOltPortPanel();
+            setStatus(`${featureDisplayName(feature)} selected. Double-click for details.`);
+            return;
+        }
+
+        clearPathMarkers();
+        if (isPortLinkDevice(feature)) {
+            openOltPortPanel(featureId);
+        } else {
+            closeOltPortPanel();
+        }
+        setStatus(`${featureDisplayName(feature)} selected. Drag to move, double-click for details.`);
     }
 
     function handleFeatureDetails(event) {
@@ -1192,6 +1241,7 @@
         clearSelection();
         clearPlacementPreview();
         closeFiberCorePanel();
+        closeOltPortPanel();
         document.querySelectorAll('.map-tool').forEach((item) => item.classList.remove('active'));
         updateDraftLine();
         updatePlacementCursor();
@@ -1212,7 +1262,8 @@
     function deleteFeatureById(featureId) {
         if (!featureId || !state.features.has(featureId)) return false;
 
-        const blockedReason = deleteBlockedReason(state.features.get(featureId));
+        const feature = state.features.get(featureId);
+        const blockedReason = deleteBlockedReason(feature);
         if (blockedReason) {
             setStatus(blockedReason);
             return false;
@@ -1220,6 +1271,7 @@
 
         state.features.delete(featureId);
         state.hiddenFeatureIds.delete(String(featureId));
+        removeLooseReferencesToFeature(feature);
         persistHiddenFeatureIds();
         clearPathMarkers();
         clearLinkTarget();
@@ -1255,9 +1307,16 @@
     function ownLinkCount(feature) {
         const props = feature.properties || {};
         let count = Object.keys(props.endpoint_links || {}).length;
-        count += (props.core_mappings || []).filter((row) => row.in_point || row.out_point).length;
-        count += (props.splitter_ports || []).filter((row) => row.connected_fiber || row.connected_core).length;
         count += (props.connected_ports || []).length;
+        const portLinks = {
+            ...(props.olt_port_links || {}),
+            ...(props.port_links || {}),
+        };
+        const portLinkKeys = Object.keys(portLinks);
+        count += portLinkKeys.length;
+        count += (props.splitter_ports || []).filter((row) => {
+            return (row.connected_fiber || row.connected_core) && !portLinkKeys.includes(row.port);
+        }).length;
 
         return count;
     }
@@ -1273,7 +1332,52 @@
             return true;
         }
 
+        const portLinks = {
+            ...(props.olt_port_links || {}),
+            ...(props.port_links || {}),
+        };
+        if (Object.values(portLinks).some((link) => String(link.fiber_id) === targetFeatureId)) {
+            return true;
+        }
+
         return (props.connected_ports || []).some((port) => String(port.fiber_id) === targetFeatureId);
+    }
+
+    function removeLooseReferencesToFeature(targetFeature) {
+        const targetNames = featureReferenceNames(targetFeature);
+        if (!targetNames.length) return;
+
+        state.features.forEach((feature) => {
+            const ports = feature.properties?.splitter_ports;
+            if (!Array.isArray(ports)) return;
+
+            feature.properties.splitter_ports = ports.map((port) => {
+                if (!targetNames.includes(String(port.connected_fiber || '').trim())) {
+                    return port;
+                }
+
+                return {
+                    ...port,
+                    connected_fiber: '',
+                    connected_core: '',
+                    note: '',
+                };
+            });
+        });
+    }
+
+    function featureReferenceNames(feature) {
+        const props = feature.properties || {};
+        return [
+            props.id,
+            feature.id,
+            props.fiber_code,
+            props.name,
+            props.box_name,
+            props.client_name,
+        ]
+            .map((value) => String(value || '').trim())
+            .filter(Boolean);
     }
 
     function deleteSelectedBendPoint() {
@@ -1287,13 +1391,13 @@
         if (coordinateIndex <= 0 || coordinateIndex >= feature.geometry.coordinates.length - 1 || feature.geometry.coordinates.length <= 2) {
             setStatus('Fiber endpoint cannot be deleted. Use Unlink or move the endpoint.');
             clearSelectedBendPoint();
+            showPathMarkers(featureId);
             return;
         }
 
         feature.geometry.coordinates.splice(coordinateIndex, 1);
         feature.properties.length_meters = Number(lineLengthMeters(feature.geometry.coordinates).toFixed(2));
         state.dirty = true;
-        clearSelectedBendPoint();
         refreshSources();
         showPathMarkers(featureId);
         persistTopology();
@@ -1310,17 +1414,90 @@
 
         setSourceData('network-nodes', { type: 'FeatureCollection', features: nodes });
         setSourceData('network-links', { type: 'FeatureCollection', features: links });
+        updateEndpointCoreLinks(features);
         updateSelectionSource();
         updateLinkTargetSource();
         renderStats(features);
     }
 
     function updateDraftLine() {
-        const features = state.draftLine.length >= 2
+        const lineFeatures = state.draftLine.length >= 2
             ? [{ type: 'Feature', geometry: { type: 'LineString', coordinates: state.draftLine }, properties: {} }]
             : [];
+        const pointFeatures = state.draftLine.map((coordinate, index) => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: coordinate },
+            properties: { point_index: index + 1 },
+        }));
 
-        setSourceData('draft-line', { type: 'FeatureCollection', features });
+        setSourceData('draft-line', { type: 'FeatureCollection', features: lineFeatures });
+        setSourceData('draft-points', { type: 'FeatureCollection', features: pointFeatures });
+    }
+
+    function updateEndpointCoreLinks(features) {
+        const overlays = [];
+        const visibleFiberIds = new Set(features
+            .filter((feature) => feature.geometry.type === 'LineString' && isFeatureVisible(feature))
+            .map((feature) => String(feature.properties.id || feature.id)));
+
+        features.forEach((device) => {
+            if (!isPortLinkDevice(device) || !isFeatureVisible(device)) return;
+
+            Object.entries(devicePortLinks(device)).forEach(([port, link]) => {
+                const fiber = state.features.get(link.fiber_id);
+                if (!fiber || !visibleFiberIds.has(String(fiber.properties.id || fiber.id))) return;
+
+                const coreRow = buildFiberCoreRowsForFeature(fiber).find((row) => Number(row.core) === Number(link.core));
+                const target = closestCoordinateOnLine(device.geometry.coordinates, fiber.geometry.coordinates);
+                overlays.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: [device.geometry.coordinates, target],
+                    },
+                    properties: {
+                        id: `${device.properties.id || device.id}-${port}-${link.fiber_id}-${link.core}`,
+                        port,
+                        color_hex: link.color_hex || coreRow?.color_hex || '#f79009',
+                    },
+                });
+            });
+        });
+
+        setSourceData('endpoint-core-links', { type: 'FeatureCollection', features: overlays });
+    }
+
+    function closestCoordinateOnLine(point, coordinates) {
+        if (!Array.isArray(coordinates) || coordinates.length === 0) return point;
+
+        let closest = coordinates[0];
+        let closestDistance = Number.POSITIVE_INFINITY;
+        for (let index = 0; index < coordinates.length - 1; index++) {
+            const projected = closestPointOnSegment(point, coordinates[index], coordinates[index + 1]);
+            const distance = squaredDistance(point, projected);
+            if (distance < closestDistance) {
+                closest = projected;
+                closestDistance = distance;
+            }
+        }
+
+        return closest;
+    }
+
+    function closestPointOnSegment(point, start, end) {
+        const dx = end[0] - start[0];
+        const dy = end[1] - start[1];
+        const lengthSquared = dx * dx + dy * dy;
+        if (lengthSquared === 0) return start;
+
+        const t = Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared));
+        return [start[0] + t * dx, start[1] + t * dy];
+    }
+
+    function squaredDistance(a, b) {
+        const dx = a[0] - b[0];
+        const dy = a[1] - b[1];
+        return dx * dx + dy * dy;
     }
 
     function showPathMarkers(featureId) {
@@ -1337,22 +1514,28 @@
             const marker = createPathMarker(isEndpoint ? 'endpoint' : 'bend')
                 .setLngLat(coordinate)
                 .addTo(state.map);
-            marker.getElement().addEventListener('click', (event) => {
+            const markerElement = marker.getElement();
+            setPathMarkerLabel(markerElement, isEndpoint ? (index === 0 ? 'A' : 'Z') : '');
+            markerElement.classList.toggle('a-end', index === 0);
+            markerElement.classList.toggle('z-end', index === coordinates.length - 1);
+            markerElement.addEventListener('click', (event) => {
                 event.stopPropagation();
                 if (isEndpoint) {
                     state.pendingEndpointLink = { featureId, coordinateIndex: index };
-                    marker.getElement().classList.add('linking');
+                    markerElement.classList.add('linking');
                     setStatus('Now click a TJ Box to bind this fiber endpoint.');
                 } else {
-                    selectBendPoint(featureId, index, marker.getElement());
+                    selectBendPoint(featureId, index, markerElement);
                 }
             });
-            marker.getElement().addEventListener('mouseenter', () => {
+            markerElement.addEventListener('mouseenter', () => {
                 if (!isEndpoint) {
                     setStatus('Hovering a bend point: click to select it, then press Backspace/Delete to remove.');
+                } else {
+                    setStatus(`${index === 0 ? 'A' : 'Z'} endpoint: drag to move or click to link with a TJ Box.`);
                 }
             });
-            marker.getElement().addEventListener('dblclick', (event) => {
+            markerElement.addEventListener('dblclick', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 if (isEndpoint) {
@@ -1364,7 +1547,7 @@
                 const lngLat = marker.getLngLat();
                 moveFiberVertex(feature, index, [lngLat.lng, lngLat.lat]);
                 if (isEndpoint) {
-                    marker.getElement().classList.add('linking');
+                    markerElement.classList.add('linking');
                     const tjFeature = nearestTjBox(lngLat);
                     state.linkTargetFeatureId = tjFeature?.properties.id || null;
                     updateLinkTargetSource();
@@ -1373,7 +1556,7 @@
             });
 
             marker.on('dragend', () => {
-                marker.getElement().classList.remove('linking');
+                markerElement.classList.remove('linking');
                 if (isEndpoint) {
                     const linked = tryLinkEndpointNearTjBox(featureId, index, marker.getLngLat());
                     if (linked) {
@@ -1395,6 +1578,7 @@
             const marker = createPathMarker('midpoint')
                 .setLngLat(midpoint)
                 .addTo(state.map);
+            setPathMarkerLabel(marker.getElement(), '+');
 
             marker.on('dragend', () => {
                 const lngLat = marker.getLngLat();
@@ -1424,18 +1608,25 @@
     }
 
     function createPathMarker(kind) {
-        const element = document.createElement('button');
-        element.type = 'button';
-        element.className = `path-handle ${kind}`;
+        const element = document.createElement('div');
+        element.className = `path-marker ${kind}`;
+        element.innerHTML = '<button type="button" class="path-handle"><span class="marker-dot"><span class="marker-label"></span></span><span class="marker-tooltip"></span></button>';
         const labels = {
             bend: 'Click to select bend point. Drag to move.',
             endpoint: 'Click to link endpoint. Double-click for core link.',
             midpoint: 'Drag to add a fiber path point',
         };
-        element.title = labels[kind] || labels.bend;
-        element.dataset.hoverLabel = labels[kind] || labels.bend;
+        element.querySelector('.path-handle').title = labels[kind] || labels.bend;
+        element.querySelector('.marker-tooltip').textContent = labels[kind] || labels.bend;
 
-        return new maplibregl.Marker({ element, draggable: true });
+        return new maplibregl.Marker({ element, draggable: true, anchor: 'center', offset: [0, 0] });
+    }
+
+    function setPathMarkerLabel(element, label) {
+        const labelElement = element.querySelector('.marker-label');
+        if (labelElement) {
+            labelElement.textContent = label;
+        }
     }
 
     function openFiberCorePanel(featureId, coordinateIndex, lngLat) {
@@ -1469,6 +1660,298 @@
             state.corePanel.remove();
             state.corePanel = null;
         }
+    }
+
+    function openOltPortPanel(featureId) {
+        const device = state.features.get(featureId);
+        if (!isPortLinkDevice(device)) return;
+
+        closeOltPortPanel();
+
+        const point = state.map.project(device.geometry.coordinates);
+        const panel = document.createElement('section');
+        panel.className = 'olt-port-panel';
+        panel.style.left = `${Math.min(Math.max(point.x + 16, 12), state.map.getContainer().clientWidth - 400)}px`;
+        panel.style.top = `${Math.min(Math.max(point.y + 16, 12), state.map.getContainer().clientHeight - 460)}px`;
+        panel.innerHTML = oltPortPanelHtml(device);
+        state.map.getContainer().appendChild(panel);
+        state.oltPanel = panel;
+
+        panel.querySelector('.olt-panel-close').addEventListener('click', closeOltPortPanel);
+        panel.querySelectorAll('[data-port-link]').forEach((button) => {
+            button.addEventListener('dragstart', (event) => {
+                state.pendingPortLink = { deviceId: featureId, port: button.dataset.portLink };
+                event.dataTransfer.effectAllowed = 'link';
+                event.dataTransfer.setData('text/plain', JSON.stringify(state.pendingPortLink));
+                setStatus(`Drag ${button.dataset.portLink} onto a fiber cable to link a core.`);
+            });
+            button.addEventListener('dragend', () => {
+                state.pendingPortLink = null;
+            });
+        });
+        panel.querySelectorAll('[data-port-tree]').forEach((button) => {
+            button.addEventListener('click', () => {
+                renderOltPortTree(featureId, button.dataset.portTree);
+            });
+        });
+        panel.querySelectorAll('[data-port-unlink]').forEach((button) => {
+            button.addEventListener('click', () => {
+                unlinkDevicePortFromFiberCore(featureId, button.dataset.portUnlink);
+            });
+        });
+    }
+
+    function closeOltPortPanel() {
+        if (state.oltPanel) {
+            state.oltPanel.remove();
+            state.oltPanel = null;
+        }
+        state.pendingPortLink = null;
+    }
+
+    function oltPortPanelHtml(device) {
+        const links = devicePortLinks(device);
+        const rows = devicePorts(device).map((port) => {
+            const link = links[port];
+            return `
+                <div class="olt-port-row">
+                    <button type="button" draggable="true" data-port-link="${escapeHtml(port)}">${escapeHtml(link ? port : `Make Link: ${port}`)}</button>
+                    <span>${link ? escapeHtml(`${link.fiber_code || 'Fiber'} / ${link.color_name || `Core ${link.core}`}`) : 'No fiber core linked'}</span>
+                    ${link ? `<button type="button" data-port-unlink="${escapeHtml(port)}">Unlink</button>` : ''}
+                    <button type="button" data-port-tree="${escapeHtml(port)}" ${link ? '' : 'disabled'}>Tree</button>
+                </div>
+            `;
+        }).join('');
+        const label = componentLabels[device.properties.component_type] || 'Device';
+
+        return `
+            <div class="olt-panel-head">
+                <div>
+                    <strong>${escapeHtml(featureDisplayName(device))}</strong>
+                    <span>Drag ${escapeHtml(label)} port onto a fiber cable core</span>
+                </div>
+                <button type="button" class="olt-panel-close">x</button>
+            </div>
+            <div class="olt-port-list">${rows}</div>
+            <div class="olt-tree-view" data-olt-tree-view></div>
+        `;
+    }
+
+    function handlePortDrop(event) {
+        if (!state.pendingPortLink) return;
+
+        event.preventDefault();
+        const rect = state.map.getContainer().getBoundingClientRect();
+        const point = [event.clientX - rect.left, event.clientY - rect.top];
+        const features = state.map.queryRenderedFeatures(point, { layers: ['network-links-line-hit'] });
+        const fiberId = features[0]?.properties?.id;
+        const fiber = fiberId ? state.features.get(fiberId) : null;
+
+        if (!fiber || fiber.geometry.type !== 'LineString') {
+            setStatus('Drop the port onto a fiber cable.');
+            state.pendingPortLink = null;
+            return;
+        }
+
+        linkDevicePortToFiberCore(state.pendingPortLink.deviceId, state.pendingPortLink.port, fiber);
+        state.pendingPortLink = null;
+    }
+
+    function linkDevicePortToFiberCore(deviceId, port, fiber) {
+        const device = state.features.get(deviceId);
+        if (!isPortLinkDevice(device)) return;
+
+        const input = window.prompt('Fiber core number or color to link with this port:', '1');
+        if (!input) {
+            setStatus('Port link cancelled.');
+            return;
+        }
+
+        const endpointLabel = devicePortLabel(device, port);
+        let rows = buildFiberCoreRowsForFeature(fiber);
+        let row = findFiberCoreRow(rows, input);
+        if (!row) {
+            setStatus('No matching fiber core found.');
+            return;
+        }
+
+        clearExistingPortCoreReference(device, port, endpointLabel);
+        rows = buildFiberCoreRowsForFeature(fiber);
+        row = findFiberCoreRow(rows, input);
+
+        const deviceName = featureDisplayName(device);
+        row.in_point = endpointLabel;
+        row.note = compactJoin([row.note, 'Port linked']);
+        fiber.properties.core_mappings = rows;
+        const link = {
+            fiber_id: fiber.properties.id || fiber.id,
+            fiber_code: fiber.properties.fiber_code || 'Fiber',
+            core: row.core,
+            color_name: row.color_name,
+            color_hex: row.color_hex,
+        };
+        device.properties.port_links = {
+            ...(device.properties.port_links || {}),
+            [port]: link,
+        };
+        if (device.properties.component_type === 'olt') {
+            device.properties.olt_port_links = {
+                ...(device.properties.olt_port_links || {}),
+                [port]: link,
+            };
+        }
+        if (device.properties.component_type === 'splitter') {
+            updateSplitterPortLink(device, port, fiber, row);
+        }
+
+        state.dirty = true;
+        refreshSources();
+        persistTopology();
+        openOltPortPanel(deviceId);
+        setStatus(`${deviceName} ${port} linked to ${fiber.properties.fiber_code || 'fiber'} ${row.color_name} core.`);
+    }
+
+    function unlinkDevicePortFromFiberCore(deviceId, port) {
+        const device = state.features.get(deviceId);
+        if (!isPortLinkDevice(device)) return;
+
+        const link = devicePortLinks(device)[port];
+        if (!link) return;
+
+        const fiber = state.features.get(link.fiber_id);
+        const endpointLabel = devicePortLabel(device, port);
+        if (fiber) {
+            fiber.properties.core_mappings = buildFiberCoreRowsForFeature(fiber).map((row) => {
+                if (Number(row.core) === Number(link.core) && row.in_point === endpointLabel) {
+                    return { ...row, in_point: '' };
+                }
+                return row;
+            });
+        }
+
+        const remainingLinks = { ...(device.properties.port_links || {}) };
+        delete remainingLinks[port];
+        device.properties.port_links = remainingLinks;
+
+        if (device.properties.component_type === 'olt') {
+            const remainingOltLinks = { ...(device.properties.olt_port_links || {}) };
+            delete remainingOltLinks[port];
+            device.properties.olt_port_links = remainingOltLinks;
+        }
+        if (device.properties.component_type === 'splitter') {
+            clearSplitterPortLink(device, port);
+        }
+
+        state.dirty = true;
+        refreshSources();
+        persistTopology();
+        openOltPortPanel(deviceId);
+        setStatus(`${endpointLabel} unlinked from fiber core.`);
+    }
+
+    function clearExistingPortCoreReference(device, port, endpointLabel) {
+        const existingLink = devicePortLinks(device)[port];
+        if (!existingLink) return;
+
+        const existingFiber = state.features.get(existingLink.fiber_id);
+        if (!existingFiber) return;
+
+        existingFiber.properties.core_mappings = buildFiberCoreRowsForFeature(existingFiber).map((row) => {
+            if (Number(row.core) === Number(existingLink.core) && row.in_point === endpointLabel) {
+                return { ...row, in_point: '' };
+            }
+            return row;
+        });
+    }
+
+    function isPortLinkDevice(feature) {
+        return feature
+            && feature.geometry.type === 'Point'
+            && ['router', 'switch', 'olt', 'splitter'].includes(feature.properties.component_type);
+    }
+
+    function devicePorts(feature) {
+        if (feature.properties.component_type === 'splitter') {
+            const count = Number(String(feature.properties.splitter_type || '1:8').split(':')[1] || 8);
+            return ['IN', ...Array.from({ length: count }, (_, index) => `OUT-${String(index + 1).padStart(2, '0')}`)];
+        }
+
+        const totalPorts = Math.max(1, Number(feature.properties.total_ports || (feature.properties.component_type === 'olt' ? 8 : 24)));
+        const prefix = feature.properties.component_type === 'olt' ? 'PON' : 'Port';
+        return Array.from({ length: totalPorts }, (_, index) => `${prefix} ${index + 1}`);
+    }
+
+    function devicePortLinks(feature) {
+        return {
+            ...(feature.properties.olt_port_links || {}),
+            ...(feature.properties.port_links || {}),
+        };
+    }
+
+    function devicePortLabel(feature, port) {
+        return `${featureDisplayName(feature)} ${port}`;
+    }
+
+    function updateSplitterPortLink(splitter, port, fiber, coreRow) {
+        const rows = buildSplitterRowsForFeature(splitter);
+        const row = rows.find((item) => item.port === port);
+        if (!row) return;
+
+        row.connected_fiber = fiber.properties.fiber_code || fiber.properties.id || 'Fiber';
+        row.connected_core = `${coreRow.color_name} C${coreRow.core}`;
+        row.note = `Linked to ${fiber.properties.fiber_code || 'fiber'}`;
+        splitter.properties.splitter_ports = rows;
+    }
+
+    function clearSplitterPortLink(splitter, port) {
+        const rows = buildSplitterRowsForFeature(splitter);
+        const row = rows.find((item) => item.port === port);
+        if (!row) return;
+
+        row.connected_fiber = '';
+        row.connected_core = '';
+        row.note = '';
+        splitter.properties.splitter_ports = rows;
+    }
+
+    function linkOltPortToFiberCore(oltId, port, fiber) {
+        linkDevicePortToFiberCore(oltId, port, fiber);
+    }
+
+    function findFiberCoreRow(rows, input) {
+        const normalized = String(input).trim().toLowerCase();
+        return rows.find((row) => String(row.core) === normalized || row.color_name.toLowerCase() === normalized);
+    }
+
+    function renderOltPortTree(oltId, port) {
+        const olt = state.features.get(oltId);
+        const link = olt ? devicePortLinks(olt)[port] : null;
+        const container = state.oltPanel?.querySelector('[data-olt-tree-view]');
+        if (!container || !link) return;
+
+        const fiber = state.features.get(link.fiber_id);
+        const rows = fiber ? buildFiberCoreRowsForFeature(fiber) : [];
+        const core = rows.find((row) => Number(row.core) === Number(link.core));
+        container.innerHTML = `
+            <div class="olt-tree-node"><strong>${escapeHtml(featureDisplayName(olt))} ${escapeHtml(port)}</strong></div>
+            <div class="olt-tree-branch">
+                <div class="olt-tree-node">${escapeHtml(link.fiber_code || 'Fiber')} / ${escapeHtml(link.color_name || `Core ${link.core}`)}</div>
+                ${core ? downstreamCoreTreeHtml(fiber, core) : '<div class="olt-tree-empty">Fiber core not found.</div>'}
+            </div>
+        `;
+    }
+
+    function downstreamCoreTreeHtml(fiber, core) {
+        const items = [
+            core.out_point ? `OUT: ${core.out_point}` : '',
+            core.note ? `Note: ${core.note}` : '',
+            fiber.properties.endpoint_links?.a ? `A-End: ${formatEndpointLink(fiber.properties.endpoint_links.a)}` : '',
+            fiber.properties.endpoint_links?.z ? `Z-End: ${formatEndpointLink(fiber.properties.endpoint_links.z)}` : '',
+        ].filter(Boolean);
+
+        return items.length
+            ? `<div class="olt-tree-branch">${items.map((item) => `<div class="olt-tree-node">${escapeHtml(item)}</div>`).join('')}</div>`
+            : '<div class="olt-tree-empty">No downstream link yet.</div>';
     }
 
     function fiberCorePanelHtml(feature, coordinateIndex) {
@@ -1706,6 +2189,7 @@
     function clearSelection() {
         state.selectedFeatureId = null;
         clearSelectedBendPoint();
+        closeOltPortPanel();
         updateSelectionSource();
     }
 
@@ -2086,7 +2570,31 @@
             ].filter((row) => row[1]);
         }
 
+        if (props.component_type === 'olt') {
+            return [
+                ['IP', props.ip_address],
+                ['Ports', `${props.available_ports || 0}/${props.total_ports || 0} available`],
+                ['Linked PONs', formatOltPortLinks({ ...(props.olt_port_links || {}), ...(props.port_links || {}) })],
+                ['Note', props.note],
+            ].filter((row) => row[1]);
+        }
+
+        if (['router', 'switch'].includes(props.component_type)) {
+            return [
+                ['IP', props.ip_address],
+                ['Ports', `${props.available_ports || 0}/${props.total_ports || 0} available`],
+                ['Linked Ports', formatOltPortLinks(props.port_links)],
+                ['Note', props.note],
+            ].filter((row) => row[1]);
+        }
+
         return [];
+    }
+
+    function formatOltPortLinks(links) {
+        return Object.entries(links || {})
+            .map(([port, link]) => `${port}: ${compactJoin([link.fiber_code, link.color_name || `Core ${link.core}`])}`)
+            .join('\n');
     }
 
     function compactJoin(values) {

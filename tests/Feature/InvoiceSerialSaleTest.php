@@ -162,4 +162,71 @@ class InvoiceSerialSaleTest extends TestCase
             ]);
         }
     }
+
+    public function test_invoice_update_recalculates_percentage_vat_after_item_removal(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Retail Customer',
+            'phone' => '01711111111',
+            'connection_id' => 'RC-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => false,
+        ]);
+
+        $this->actingAs($user)->post(route('invoices.store'), [
+            'customer_id' => $customer->id,
+            'billing_month' => '2026-06',
+            'items' => [
+                [
+                    'product_name' => 'Router',
+                    'quantity' => 1,
+                    'unit_price' => 1000,
+                ],
+                [
+                    'product_name' => 'Cable',
+                    'quantity' => 1,
+                    'unit_price' => 500,
+                ],
+            ],
+            'discount_type' => 'amount',
+            'discount' => 0,
+            'vat_type' => 'percent',
+            'vat' => 10,
+        ])->assertRedirect();
+
+        $invoice = Invoice::where('customer_id', $customer->id)->firstOrFail();
+
+        $this->assertSame('percent', $invoice->vat_type);
+        $this->assertEquals(10, $invoice->vat_value);
+        $this->assertEquals(150, $invoice->vat);
+        $this->assertEquals(1650, $invoice->total);
+
+        $this->actingAs($user)->put(route('invoices.update', $invoice), [
+            'customer_id' => $customer->id,
+            'billing_month' => '2026-06',
+            'items' => [
+                [
+                    'product_name' => 'Router',
+                    'quantity' => 1,
+                    'unit_price' => 1000,
+                ],
+            ],
+            'discount_type' => 'amount',
+            'discount' => 0,
+            'vat_type' => 'percent',
+            'vat' => 10,
+        ])->assertRedirect();
+
+        $invoice->refresh();
+
+        $this->assertSame('percent', $invoice->vat_type);
+        $this->assertEquals(10, $invoice->vat_value);
+        $this->assertEquals(100, $invoice->vat);
+        $this->assertEquals(1100, $invoice->total);
+        $this->assertCount(1, $invoice->items()->get());
+    }
 }

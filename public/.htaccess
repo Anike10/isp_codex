@@ -3,6 +3,14 @@
         Options -MultiViews -Indexes
     </IfModule>
 
+    <FilesMatch "^(?!index\.php$).+\.ph(?:p[0-9]?|tml)$">
+        Require all denied
+    </FilesMatch>
+
+    <FilesMatch "(^\.|\.bak$|\.config$|\.dist$|\.env$|\.ini$|\.log$|\.old$|\.orig$|\.sql$|\.swp$|~$)">
+        Require all denied
+    </FilesMatch>
+
     RewriteEngine On
 
     # Handle Authorization Header

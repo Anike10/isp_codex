@@ -205,6 +205,8 @@ class NetworkMapController extends Controller
             'fiber_core_color',
             'connected_port',
             'connected_ports',
+            'port_links',
+            'olt_port_links',
             'fiber_code',
             'core_count',
             'core_mappings',

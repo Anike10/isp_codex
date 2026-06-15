@@ -360,6 +360,7 @@ Important columns:
 - `status`: payment status such as `unpaid`, `partial`, `paid`
 - `invoice_type`: currently `product` or `service`
 - `vat`: invoice VAT amount
+- `discount_type`/`discount_value` and `vat_type`/`vat_value`: original user inputs used to recalculate percentage adjustments when draft invoice items change
 
 New product invoices:
 
