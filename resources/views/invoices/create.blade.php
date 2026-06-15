@@ -123,6 +123,38 @@
         gap: 8px;
     }
 
+    .invoice-note-field {
+        grid-column: 1 / -1;
+    }
+
+    .invoice-note-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .invoice-note-header label {
+        margin: 0;
+    }
+
+    .checkbox-line {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #475467;
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .checkbox-line input {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+    }
+
     .items-list {
         display: grid;
         gap: 12px;
@@ -481,6 +513,24 @@
                             <div>
                                 <label for="due_date">Due Date</label>
                                 <input id="due_date" type="date" name="due_date" value="{{ old('due_date', $isEdit ? $invoice->due_date?->format('Y-m-d') : null) }}">
+                            </div>
+
+                            <div class="invoice-note-field">
+                                <div class="invoice-note-header">
+                                    <label for="public_note">Invoice Note</label>
+                                    <label class="checkbox-line" for="show_public_note">
+                                        <input id="show_public_note" type="checkbox" name="show_public_note" value="1" @checked(old('show_public_note', $isEdit ? $invoice->show_public_note : false))>
+                                        Show on invoice
+                                    </label>
+                                </div>
+                                <textarea id="public_note" name="public_note" rows="3" placeholder="Write a note for the customer-facing invoice">{{ old('public_note', $isEdit ? $invoice->public_note : null) }}</textarea>
+                                <span class="field-note">This note appears on printed bill, quotation, and challan only when the checkbox is selected.</span>
+                            </div>
+
+                            <div class="invoice-note-field">
+                                <label for="private_note">Private Note</label>
+                                <textarea id="private_note" name="private_note" rows="3" placeholder="Internal note for office use only">{{ old('private_note', $isEdit ? $invoice->private_note : null) }}</textarea>
+                                <span class="field-note">This note is never shown on printed customer documents.</span>
                             </div>
                         </div>
                     </div>

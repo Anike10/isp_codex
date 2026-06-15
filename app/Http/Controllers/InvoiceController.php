@@ -109,6 +109,9 @@ class InvoiceController extends Controller
                     'due_amount' => max(0, $total),
                     'status' => $total <= 0 ? 'paid' : 'unpaid',
                     'due_date' => $data['due_date'] ?? null,
+                    'public_note' => $data['public_note'] ?? null,
+                    'show_public_note' => (bool) ($data['show_public_note'] ?? false),
+                    'private_note' => $data['private_note'] ?? null,
                 ]);
 
                 foreach ($itemsData as $itemData) {
@@ -175,6 +178,9 @@ class InvoiceController extends Controller
                     'due_amount' => $dueAmount,
                     'status' => $dueAmount <= 0 ? 'paid' : ($paidAmount > 0 ? 'partial' : 'unpaid'),
                     'due_date' => $data['due_date'] ?? null,
+                    'public_note' => $data['public_note'] ?? null,
+                    'show_public_note' => (bool) ($data['show_public_note'] ?? false),
+                    'private_note' => $data['private_note'] ?? null,
                 ]);
 
                 $invoice->items()->delete();
@@ -224,6 +230,9 @@ class InvoiceController extends Controller
                 'due_amount' => $invoice->total,
                 'status' => ((float) $invoice->total) <= 0 ? 'paid' : 'unpaid',
                 'due_date' => $invoice->due_date?->copy()->addMonthNoOverflow(),
+                'public_note' => $invoice->public_note,
+                'show_public_note' => $invoice->show_public_note,
+                'private_note' => $invoice->private_note,
             ]);
 
             foreach ($invoice->items as $item) {
@@ -261,6 +270,9 @@ class InvoiceController extends Controller
             'vat_type' => ['required', 'in:amount,percent'],
             'vat' => ['required', 'numeric', 'min:0'],
             'due_date' => ['nullable', 'date'],
+            'public_note' => ['nullable', 'string', 'max:5000'],
+            'show_public_note' => ['nullable', 'boolean'],
+            'private_note' => ['nullable', 'string', 'max:5000'],
         ]);
     }
 

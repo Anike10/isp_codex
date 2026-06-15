@@ -31,6 +31,9 @@ class Invoice extends Model
         'status',
         'finalized_at',
         'due_date',
+        'public_note',
+        'show_public_note',
+        'private_note',
     ];
 
     public static function generateInvoiceNo(int $customerId, string $billingMonth): string
@@ -54,6 +57,7 @@ class Invoice extends Model
         return [
             'due_date' => 'date',
             'finalized_at' => 'datetime',
+            'show_public_note' => 'boolean',
         ];
     }
 

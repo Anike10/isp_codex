@@ -180,6 +180,10 @@
             <div class="notes">
                 <p class="strong">Terms & Conditions</p>
                 <p>This quotation is valid for 15 days. Delivery, installation and payment terms may vary based on final confirmation.</p>
+                @if ($invoice->show_public_note && filled($invoice->public_note))
+                    <p class="strong" style="margin-top:8px;">Invoice Note</p>
+                    <p style="white-space:pre-line">{{ $invoice->public_note }}</p>
+                @endif
             </div>
             <div class="totals">
                 <div class="total-row"><span>Subtotal</span><span>{{ number_format($invoice->subtotal, 2) }}</span></div>

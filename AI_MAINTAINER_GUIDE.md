@@ -361,6 +361,8 @@ Important columns:
 - `invoice_type`: currently `product` or `service`
 - `vat`: invoice VAT amount
 - `discount_type`/`discount_value` and `vat_type`/`vat_value`: original user inputs used to recalculate percentage adjustments when draft invoice items change
+- `public_note`/`show_public_note`: optional customer-facing note and the flag that allows it to appear on printed documents
+- `private_note`: internal office note; never render it on customer-facing printed documents
 
 New product invoices:
 
@@ -452,6 +454,7 @@ Print behavior:
   - Bill: `Computer-generated bill / No signature required`
   - Quotation: `Computer-generated quotation / No signature required`
   - Delivery challan: `Computer-generated delivery challan / No signature required`
+- Invoice public notes appear only when `show_public_note` is true. Private notes stay on the admin invoice page only and must not be rendered in bill, quotation, or delivery challan views.
 
 Amounts:
 

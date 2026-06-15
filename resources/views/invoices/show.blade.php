@@ -69,6 +69,19 @@
     </section>
 </div>
 
+@if ($invoice->public_note || $invoice->private_note)
+<section class="card" style="margin-top:16px">
+    <h2>Notes</h2>
+    @if ($invoice->public_note)
+        <p><strong>Invoice Note:</strong> <span style="white-space:pre-line">{{ $invoice->public_note }}</span></p>
+        <p><strong>Show on invoice:</strong> {{ $invoice->show_public_note ? 'Yes' : 'No' }}</p>
+    @endif
+    @if ($invoice->private_note)
+        <p><strong>Private Note:</strong> <span style="white-space:pre-line">{{ $invoice->private_note }}</span></p>
+    @endif
+</section>
+@endif
+
 @if ($canRecordPayment)
 <section class="card" style="margin-top:16px">
     <h2>Record Payment</h2>

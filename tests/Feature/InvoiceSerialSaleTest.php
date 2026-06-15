@@ -229,4 +229,83 @@ class InvoiceSerialSaleTest extends TestCase
         $this->assertEquals(1100, $invoice->total);
         $this->assertCount(1, $invoice->items()->get());
     }
+
+    public function test_invoice_notes_are_saved_and_customer_documents_only_show_public_note_when_enabled(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Retail Customer',
+            'phone' => '01711111111',
+            'connection_id' => 'RC-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => false,
+        ]);
+
+        $this->actingAs($user)->post(route('invoices.store'), [
+            'customer_id' => $customer->id,
+            'billing_month' => '2026-06',
+            'items' => [
+                [
+                    'product_name' => 'Router',
+                    'quantity' => 1,
+                    'unit_price' => 1000,
+                ],
+            ],
+            'discount_type' => 'amount',
+            'discount' => 0,
+            'vat_type' => 'amount',
+            'vat' => 0,
+            'public_note' => 'Customer-visible setup note.',
+            'private_note' => 'Office-only margin note.',
+        ])->assertRedirect();
+
+        $invoice = Invoice::where('customer_id', $customer->id)->firstOrFail();
+
+        $this->assertSame('Customer-visible setup note.', $invoice->public_note);
+        $this->assertFalse($invoice->show_public_note);
+        $this->assertSame('Office-only margin note.', $invoice->private_note);
+
+        $this->actingAs($user)->get(route('invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('Customer-visible setup note.')
+            ->assertSee('Office-only margin note.');
+
+        $this->actingAs($user)->get(route('invoices.challan', $invoice))
+            ->assertOk()
+            ->assertDontSee('Customer-visible setup note.')
+            ->assertDontSee('Office-only margin note.');
+
+        $this->actingAs($user)->put(route('invoices.update', $invoice), [
+            'customer_id' => $customer->id,
+            'billing_month' => '2026-06',
+            'items' => [
+                [
+                    'product_name' => 'Router',
+                    'quantity' => 1,
+                    'unit_price' => 1000,
+                ],
+            ],
+            'discount_type' => 'amount',
+            'discount' => 0,
+            'vat_type' => 'amount',
+            'vat' => 0,
+            'public_note' => 'Customer-visible setup note.',
+            'show_public_note' => '1',
+            'private_note' => 'Office-only margin note.',
+        ])->assertRedirect();
+
+        $invoice->refresh();
+
+        $this->assertTrue($invoice->show_public_note);
+
+        foreach (['invoices.challan', 'invoices.quotation', 'invoices.delivery-challan'] as $routeName) {
+            $this->actingAs($user)->get(route($routeName, $invoice))
+                ->assertOk()
+                ->assertSee('Customer-visible setup note.')
+                ->assertDontSee('Office-only margin note.');
+        }
+    }
 }

@@ -540,6 +540,10 @@
             <div class="notes">
                 <p class="strong">Payment Note</p>
                 <p>Please pay the due amount by the due date. Keep this bill for your records.</p>
+                @if ($invoice->show_public_note && filled($invoice->public_note))
+                    <p class="strong" style="margin-top:8px;">Invoice Note</p>
+                    <p style="white-space:pre-line">{{ $invoice->public_note }}</p>
+                @endif
             </div>
 
             <div class="totals">

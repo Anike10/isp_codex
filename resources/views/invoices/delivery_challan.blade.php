@@ -162,6 +162,10 @@
         <div class="notes">
             <p class="strong">Delivery Note</p>
             <p>The above goods/services have been delivered to the party in good condition.</p>
+            @if ($invoice->show_public_note && filled($invoice->public_note))
+                <p class="strong" style="margin-top:8px;">Invoice Note</p>
+                <p style="white-space:pre-line">{{ $invoice->public_note }}</p>
+            @endif
         </div>
 
         <section class="signatures">
