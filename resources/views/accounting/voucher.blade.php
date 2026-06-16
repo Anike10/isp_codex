@@ -98,6 +98,9 @@
             <div class="box-body">
                 <div class="kv"><span class="muted">{{ $voucher['paid_to_label'] }}</span><span class="strong">{{ $voucher['paid_to'] }}</span></div>
                 <div class="kv"><span class="muted">{{ $voucher['secondary_label'] }}</span><span class="strong">{{ $voucher['secondary_value'] }}</span></div>
+                @if (! empty($voucher['bill_month']))
+                    <div class="kv"><span class="muted">Bill Month</span><span class="strong">{{ $voucher['bill_month'] }}</span></div>
+                @endif
             </div>
         </section>
 
