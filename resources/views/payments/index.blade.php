@@ -19,7 +19,12 @@
             <td>{{ number_format($payment->amount, 2) }}</td>
             <td>{{ $payment->payment_method }}</td>
             <td>{{ $payment->account ? $payment->account->account_name.' - '.$payment->account->account_number : 'N/A' }}</td>
-            <td><a class="btn light" href="{{ route('payments.voucher', $payment) }}">Voucher</a></td>
+            <td>
+                <div class="action-group">
+                    <a class="btn light" href="{{ route('payments.voucher', $payment) }}">Voucher</a>
+                    <a class="btn light" href="{{ route('payments.thermal-voucher', $payment) }}">Thermal</a>
+                </div>
+            </td>
         </tr>
     @empty
         <tr><td colspan="7">No payments recorded.</td></tr>

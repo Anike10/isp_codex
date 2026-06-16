@@ -48,6 +48,7 @@
         .stat strong { display:block; font-size:26px; margin-top:8px; }
         .muted { color:var(--muted); }
         .actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+        .action-group { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
         .btn { border:0; border-radius:6px; background:var(--brand); color:white; padding:10px 14px; cursor:pointer; font-weight:700; display:inline-flex; align-items:center; min-height:38px; }
         .btn.secondary { background:var(--accent); }
         .btn.light { background:#e8eef7; color:var(--ink); }

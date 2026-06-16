@@ -67,6 +67,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('permission:manage_payments')->group(function () {
         Route::get('payments/{payment}/voucher', [PaymentController::class, 'voucher'])->name('payments.voucher');
+        Route::get('payments/{payment}/thermal-voucher', [PaymentController::class, 'thermalVoucher'])->name('payments.thermal-voucher');
         Route::resource('payments', PaymentController::class)->only(['index', 'create', 'store']);
         Route::get('bkash-sms-payments', [BkashSmsPaymentController::class, 'index'])->name('bkash-sms-payments.index');
         Route::get('bkash-sms-payments/create', [BkashSmsPaymentController::class, 'create'])->name('bkash-sms-payments.create');

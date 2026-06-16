@@ -31,25 +31,15 @@ class PaymentController extends Controller
 
     public function voucher(Payment $payment)
     {
-        $payment->load(['customer', 'invoice', 'account']);
-
         return view('accounting.voucher', [
-            'voucher' => [
-                'title' => 'Money Receipt',
-                'voucher_no' => 'PAY-'.$payment->id,
-                'date' => $payment->payment_date,
-                'type' => 'Party Payment',
-                'amount' => (float) $payment->amount,
-                'paid_to_label' => 'Received From',
-                'paid_to' => $payment->customer->name,
-                'secondary_label' => 'Invoice',
-                'secondary_value' => $payment->invoice->invoice_no,
-                'method' => ucfirst($payment->payment_method),
-                'account' => $payment->account ? $payment->account->account_name.' - '.$payment->account->account_number : 'Cash',
-                'reference' => 'Payment #'.$payment->id,
-                'note' => $payment->note ?: 'Party payment received.',
-                'back_url' => route('payments.index'),
-            ],
+            'voucher' => $this->paymentVoucherData($payment),
+        ]);
+    }
+
+    public function thermalVoucher(Payment $payment)
+    {
+        return view('accounting.thermal_voucher', [
+            'voucher' => $this->paymentVoucherData($payment),
         ]);
     }
 
@@ -115,5 +105,27 @@ class PaymentController extends Controller
         }
 
         return redirect()->route('payments.index')->with('success', 'Payment recorded successfully.');
+    }
+
+    private function paymentVoucherData(Payment $payment): array
+    {
+        $payment->loadMissing(['customer', 'invoice', 'account']);
+
+        return [
+            'title' => 'Money Receipt',
+            'voucher_no' => 'PAY-'.$payment->id,
+            'date' => $payment->payment_date,
+            'type' => 'Party Payment',
+            'amount' => (float) $payment->amount,
+            'paid_to_label' => 'Received From',
+            'paid_to' => $payment->customer->name,
+            'secondary_label' => 'Invoice',
+            'secondary_value' => $payment->invoice->invoice_no,
+            'method' => ucfirst($payment->payment_method),
+            'account' => $payment->account ? $payment->account->account_name.' - '.$payment->account->account_number : 'Cash',
+            'reference' => 'Payment #'.$payment->id,
+            'note' => $payment->note ?: 'Party payment received.',
+            'back_url' => route('payments.index'),
+        ];
     }
 }
