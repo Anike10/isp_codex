@@ -50,6 +50,8 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_invoices')->group(function () {
+        Route::get('invoices/payment-note-default', [InvoiceController::class, 'editPaymentNoteDefault'])->name('invoices.payment-note-default.edit');
+        Route::put('invoices/payment-note-default', [InvoiceController::class, 'updatePaymentNoteDefault'])->name('invoices.payment-note-default.update');
         Route::resource('invoices', InvoiceController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
         Route::get('invoice-customers/search', [InvoiceController::class, 'searchCustomers'])->name('invoice-customers.search');
         Route::post('invoices/generate', [InvoiceController::class, 'generate'])->name('invoices.generate');

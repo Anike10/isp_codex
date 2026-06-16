@@ -31,6 +31,7 @@ class Invoice extends Model
         'status',
         'finalized_at',
         'due_date',
+        'payment_note',
         'public_note',
         'show_public_note',
         'private_note',

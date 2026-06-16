@@ -3,6 +3,8 @@
 @section('content')
 @php
     $isEdit = isset($invoice);
+    $selectedInvoiceType = old('invoice_type', $isEdit ? ($invoice->invoice_type ?? 'product') : request('type', 'product'));
+    $defaultProductName = $selectedInvoiceType === 'service' ? 'Service charge' : '';
     $discountType = old('discount_type', $isEdit ? ($invoice->discount_type ?? 'amount') : 'amount');
     $discountValue = old('discount', $isEdit ? ($invoice->discount_value ?? $invoice->discount) : '0.00');
     $vatType = old('vat_type', $isEdit ? ($invoice->vat_type ?? 'amount') : 'amount');
@@ -18,7 +20,7 @@
         : [
         [
             'product_id' => '',
-            'product_name' => '',
+            'product_name' => $defaultProductName,
             'quantity' => 1,
             'unit_price' => '',
             'serial_numbers' => '',
@@ -233,6 +235,19 @@
         margin-top: 14px;
         padding-top: 16px;
         border-top: 1px dashed #c8d2df;
+    }
+
+    .invoice-templates {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+
+    .invoice-templates .btn {
+        min-height: 34px;
+        padding: 8px 10px;
+        font-size: 13px;
     }
 
     .invoice-summary {
@@ -487,6 +502,15 @@
                             </div>
 
                             <div>
+                                <label for="invoice_type">Invoice Type <span class="required-mark">*</span></label>
+                                <select id="invoice_type" name="invoice_type" required>
+                                    <option value="product" @selected($selectedInvoiceType === 'product')>Product or one-time bill</option>
+                                    <option value="service" @selected($selectedInvoiceType === 'service')>Service charge</option>
+                                </select>
+                                <span class="field-note">Use product for devices and stock items. Use service for labor, support, and monthly service adjustments.</span>
+                            </div>
+
+                            <div>
                                 <label for="discount">Discount <span class="required-mark">*</span></label>
                                 <div class="amount-mode">
                                     <input id="discount" type="number" name="discount" step="0.01" min="0" value="{{ $discountValue }}" required>
@@ -513,6 +537,12 @@
                             <div>
                                 <label for="due_date">Due Date</label>
                                 <input id="due_date" type="date" name="due_date" value="{{ old('due_date', $isEdit ? $invoice->due_date?->format('Y-m-d') : null) }}">
+                            </div>
+
+                            <div class="invoice-note-field">
+                                <label for="payment_note">Payment Note Override</label>
+                                <textarea id="payment_note" name="payment_note" rows="3" placeholder="{{ $defaultPaymentNote ?? 'Default payment note' }}">{{ old('payment_note', $isEdit ? $invoice->payment_note : null) }}</textarea>
+                                <span class="field-note">Leave blank to use the default payment note: {{ $defaultPaymentNote ?? 'Please pay the due amount by the due date. Keep this bill for your records.' }}</span>
                             </div>
 
                             <div class="invoice-note-field">
@@ -544,6 +574,12 @@
                         </div>
                     </div>
                     <div class="section-body">
+                        <div class="invoice-templates">
+                            <button type="button" class="btn light" data-template-name="Router" data-template-price="">Router</button>
+                            <button type="button" class="btn light" data-template-name="Installation charge" data-template-price="">Installation</button>
+                            <button type="button" class="btn light" data-template-name="Service charge" data-template-price="">Service Charge</button>
+                            <button type="button" class="btn light" data-template-name="Cable" data-template-price="">Cable</button>
+                        </div>
                         <div id="itemsContainer" class="items-list">
                             @foreach ($invoiceItems as $index => $item)
                                 <div class="item-row">
@@ -1085,6 +1121,40 @@ document.getElementById('addItem').addEventListener('click', function() {
     itemIndex++;
     refreshRemoveButtons();
     updateTotals();
+});
+
+document.querySelectorAll('[data-template-name]').forEach(button => {
+    button.addEventListener('click', () => {
+        const rows = Array.from(document.querySelectorAll('.item-row'));
+        let row = rows.find(itemRow => !itemRow.querySelector('[data-product-search]').value.trim());
+
+        if (!row) {
+            document.getElementById('addItem').click();
+            row = Array.from(document.querySelectorAll('.item-row')).at(-1);
+        }
+
+        if (!row) {
+            return;
+        }
+
+        row.querySelector('[data-product-id]').value = '';
+        row.querySelector('[data-product-search]').value = button.dataset.templateName || '';
+        const quantity = row.querySelector('.quantity');
+        const unitPrice = row.querySelector('.unit-price');
+
+        if (quantity && (!quantity.value || Number(quantity.value) < 1)) {
+            quantity.value = 1;
+        }
+
+        if (unitPrice && button.dataset.templatePrice) {
+            unitPrice.value = button.dataset.templatePrice;
+        }
+
+        refreshSerialOptions(row);
+        updateRowTotal(row);
+        updateTotals();
+        row.querySelector('[data-product-search]')?.focus();
+    });
 });
 
 document.addEventListener('click', function(e) {

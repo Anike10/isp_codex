@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\Permission;
+use App\Models\AppSetting;
 use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\User;
@@ -307,5 +308,70 @@ class InvoiceSerialSaleTest extends TestCase
                 ->assertSee('Customer-visible setup note.')
                 ->assertDontSee('Office-only margin note.');
         }
+    }
+
+    public function test_bill_uses_default_payment_note_and_invoice_override(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Retail Customer',
+            'phone' => '01711111111',
+            'connection_id' => 'RC-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => false,
+        ]);
+
+        $this->actingAs($user)->put(route('invoices.payment-note-default.update'), [
+            'payment_note' => 'Default office payment instruction.',
+        ])->assertRedirect(route('invoices.payment-note-default.edit'));
+
+        $this->assertSame('Default office payment instruction.', AppSetting::value('invoice_payment_note'));
+
+        $this->actingAs($user)->post(route('invoices.store'), [
+            'customer_id' => $customer->id,
+            'billing_month' => '2026-06',
+            'items' => [
+                [
+                    'product_name' => 'Router',
+                    'quantity' => 1,
+                    'unit_price' => 1000,
+                ],
+            ],
+            'discount_type' => 'amount',
+            'discount' => 0,
+            'vat_type' => 'amount',
+            'vat' => 0,
+        ])->assertRedirect();
+
+        $invoice = Invoice::where('customer_id', $customer->id)->firstOrFail();
+
+        $this->actingAs($user)->get(route('invoices.challan', $invoice))
+            ->assertOk()
+            ->assertSee('Default office payment instruction.');
+
+        $this->actingAs($user)->put(route('invoices.update', $invoice), [
+            'customer_id' => $customer->id,
+            'billing_month' => '2026-06',
+            'items' => [
+                [
+                    'product_name' => 'Router',
+                    'quantity' => 1,
+                    'unit_price' => 1000,
+                ],
+            ],
+            'discount_type' => 'amount',
+            'discount' => 0,
+            'vat_type' => 'amount',
+            'vat' => 0,
+            'payment_note' => 'Special note for this invoice only.',
+        ])->assertRedirect();
+
+        $this->actingAs($user)->get(route('invoices.challan', $invoice->refresh()))
+            ->assertOk()
+            ->assertSee('Special note for this invoice only.')
+            ->assertDontSee('Default office payment instruction.');
     }
 }

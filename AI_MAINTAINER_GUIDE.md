@@ -361,6 +361,7 @@ Important columns:
 - `invoice_type`: currently `product` or `service`
 - `vat`: invoice VAT amount
 - `discount_type`/`discount_value` and `vat_type`/`vat_value`: original user inputs used to recalculate percentage adjustments when draft invoice items change
+- `payment_note`: optional invoice-specific bill payment note override; blank means use the global default from `app_settings.invoice_payment_note`
 - `public_note`/`show_public_note`: optional customer-facing note and the flag that allows it to appear on printed documents
 - `private_note`: internal office note; never render it on customer-facing printed documents
 
@@ -372,6 +373,16 @@ New product invoices:
 - Can create/select customers from the invoice form
 - Can add multiple line items
 - Supports discount and VAT
+- The create form accepts `?type=product` or `?type=service`; service type pre-fills a simple service-charge line while still allowing editable line items.
+- Quick item chips in `resources/views/invoices/create.blade.php` help counter operators add common rows such as Router, Installation charge, Service charge, and Cable without using a rigid dropdown.
+
+Invoice list operator tools:
+
+- `/invoices` shows summary cards for filtered invoice count, total due, total billed, draft/final counts, paid/unpaid/partial counts, total customer advance balance, and the current month's service-bill generation preview count.
+- Filters include search, billing month, payment status, invoice type, final state, minimum due, due date range, and a due-only checkbox.
+- Row actions include View, Edit Draft, Payment shortcut, Print Bill, Quotation, Delivery Challan, and Copy Next Month.
+- Row colors intentionally distinguish paid, due, and overdue invoices so operators can scan the list quickly.
+- Customer account balance is visible on the invoice list to help decide whether advance balance can be applied.
 
 Final behavior:
 
@@ -454,6 +465,7 @@ Print behavior:
   - Bill: `Computer-generated bill / No signature required`
   - Quotation: `Computer-generated quotation / No signature required`
   - Delivery challan: `Computer-generated delivery challan / No signature required`
+- Bill payment note uses `invoices.payment_note` when present; otherwise it uses the global `invoice_payment_note` setting. The default can be edited from Billing -> Payment Note Default.
 - Invoice public notes appear only when `show_public_note` is true. Private notes stay on the admin invoice page only and must not be rendered in bill, quotation, or delivery challan views.
 
 Amounts:

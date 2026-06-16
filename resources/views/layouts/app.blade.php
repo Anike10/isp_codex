@@ -41,10 +41,22 @@
         .btn { border:0; border-radius:6px; background:var(--brand); color:white; padding:10px 14px; cursor:pointer; font-weight:700; display:inline-flex; align-items:center; min-height:38px; }
         .btn.secondary { background:var(--accent); }
         .btn.light { background:#e8eef7; color:var(--ink); }
+        .action-menu { position:relative; display:inline-block; }
+        .action-menu summary { list-style:none; user-select:none; }
+        .action-menu summary::-webkit-details-marker { display:none; }
+        .action-menu-panel { position:absolute; right:0; top:calc(100% + 6px); z-index:35; min-width:190px; display:grid; gap:4px; padding:6px; background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 16px 34px rgba(15, 23, 42, .18); }
+        .action-menu-panel .btn, .action-menu-panel form, .action-menu-panel button { width:100%; justify-content:flex-start; }
+        .action-menu-panel form { margin:0; }
         table { width:100%; border-collapse:collapse; background:white; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
         tr[data-href] { cursor:pointer; }
         tbody tr:nth-child(even) td { background:var(--zebra); }
         tr[data-href]:hover td { background:#f6faf8; }
+        tr.invoice-row-due td { background:#fffaf0; }
+        tr.invoice-row-overdue td { background:#fff4f4; }
+        tr.invoice-row-paid td { background:#f3fbf6; }
+        tbody tr.invoice-row-due:nth-child(even) td { background:#fff7e8; }
+        tbody tr.invoice-row-overdue:nth-child(even) td { background:#ffecec; }
+        tbody tr.invoice-row-paid:nth-child(even) td { background:#edf8f2; }
         th, td { padding:12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
         th { background:#edf2f7; font-size:13px; text-transform:uppercase; color:#475467; }
         tr:last-child td { border-bottom:0; }
@@ -60,6 +72,10 @@
         .alert.error { background:#fff0f0; color:var(--danger); }
         .badge { display:inline-block; padding:4px 8px; border-radius:999px; background:#eef2ff; font-size:12px; font-weight:700; }
         .badge.due { background:#fff7ed; color:var(--warn); }
+        .badge.unpaid, .badge.draft { background:#fff7ed; color:var(--warn); }
+        .badge.partial { background:#eff6ff; color:#175cd3; }
+        .badge.final { background:#ecfdf3; color:#027a48; }
+        .badge.overdue { background:#fff0f0; color:var(--danger); }
         .badge.paid, .badge.active { background:#ecfdf3; color:#027a48; }
         .badge.processed, .badge.balance { background:#ecfdf3; color:#027a48; }
         .badge.pending { background:#fff7ed; color:var(--warn); }
@@ -201,6 +217,7 @@
                         @if (auth()->user()?->hasPermission('manage_invoices'))
                             <a href="{{ route('invoices.index') }}">Invoices</a>
                             <a href="{{ route('invoices.create') }}">Create Invoice</a>
+                            <a href="{{ route('invoices.payment-note-default.edit') }}">Payment Note Default</a>
                         @endif
                         @if (auth()->user()?->hasPermission('manage_payments'))
                             <a href="{{ route('payments.index') }}">Payments</a>

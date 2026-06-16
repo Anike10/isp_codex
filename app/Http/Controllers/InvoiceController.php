@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\AppSetting;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PaymentAccount;
@@ -19,9 +20,24 @@ use InvalidArgumentException;
 
 class InvoiceController extends Controller
 {
+    private const PAYMENT_NOTE_SETTING_KEY = 'invoice_payment_note';
+    private const DEFAULT_PAYMENT_NOTE = 'Please pay the due amount by the due date. Keep this bill for your records.';
+
     public function index(Request $request)
     {
-        $invoices = Invoice::query()
+        $generationPreviewMonth = $request->filled('billing_month')
+            ? $request->input('billing_month')
+            : now()->format('Y-m');
+        $generatePreviewCount = Subscription::query()
+            ->where('status', 'active')
+            ->whereHas('customer', fn ($query) => $query->where('status', 'active')->where('never_suspend', true))
+            ->whereDoesntHave('customer.invoices', function ($query) use ($generationPreviewMonth) {
+                $query->where('billing_month', $generationPreviewMonth)
+                    ->where('invoice_type', 'service');
+            })
+            ->count();
+
+        $invoiceQuery = Invoice::query()
             ->with('customer')
             ->when($request->search, function ($query, string $search) {
                 $query->where(function ($query) use ($search) {
@@ -39,11 +55,29 @@ class InvoiceController extends Controller
             ->when($request->invoice_type, fn ($query, string $type) => $query->where('invoice_type', $type))
             ->when($request->final_state === 'draft', fn ($query) => $query->whereNull('finalized_at'))
             ->when($request->final_state === 'final', fn ($query) => $query->whereNotNull('finalized_at'))
+            ->when($request->boolean('due_only'), fn ($query) => $query->where('due_amount', '>', 0))
+            ->when($request->filled('min_due'), fn ($query) => $query->where('due_amount', '>=', (float) $request->input('min_due')))
+            ->when($request->due_from, fn ($query, string $date) => $query->whereDate('due_date', '>=', $date))
+            ->when($request->due_to, fn ($query, string $date) => $query->whereDate('due_date', '<=', $date));
+
+        $invoiceSummary = [
+            'total_count' => (clone $invoiceQuery)->count(),
+            'unpaid_count' => (clone $invoiceQuery)->where('status', 'unpaid')->count(),
+            'partial_count' => (clone $invoiceQuery)->where('status', 'partial')->count(),
+            'paid_count' => (clone $invoiceQuery)->where('status', 'paid')->count(),
+            'draft_count' => (clone $invoiceQuery)->whereNull('finalized_at')->count(),
+            'final_count' => (clone $invoiceQuery)->whereNotNull('finalized_at')->count(),
+            'total_amount' => (float) (clone $invoiceQuery)->sum('total'),
+            'due_amount' => (float) (clone $invoiceQuery)->sum('due_amount'),
+            'advance_balance' => (float) Customer::where('account_balance', '>', 0)->sum('account_balance'),
+        ];
+
+        $invoices = $invoiceQuery
             ->latest()
             ->paginate($this->perPage($request))
             ->appends($request->query());
 
-        return view('invoices.index', compact('invoices'));
+        return view('invoices.index', compact('invoices', 'invoiceSummary', 'generatePreviewCount', 'generationPreviewMonth'));
     }
 
     public function create()
@@ -53,6 +87,7 @@ class InvoiceController extends Controller
         return view('invoices.create', [
             'customers' => $customers,
             'productSuggestionData' => $this->productSuggestionData(),
+            'defaultPaymentNote' => $this->defaultPaymentNote(),
         ]);
     }
 
@@ -96,7 +131,7 @@ class InvoiceController extends Controller
                     'customer_id' => $customerId,
                     'invoice_no' => Invoice::generateInvoiceNo($customerId, $data['billing_month']),
                     'billing_month' => $data['billing_month'],
-                    'invoice_type' => 'product',
+                    'invoice_type' => $data['invoice_type'] ?? 'product',
                     'subtotal' => $subtotal,
                     'discount' => $data['discount_amount'],
                     'discount_type' => $data['discount_type'],
@@ -109,6 +144,7 @@ class InvoiceController extends Controller
                     'due_amount' => max(0, $total),
                     'status' => $total <= 0 ? 'paid' : 'unpaid',
                     'due_date' => $data['due_date'] ?? null,
+                    'payment_note' => $data['payment_note'] ?? null,
                     'public_note' => $data['public_note'] ?? null,
                     'show_public_note' => (bool) ($data['show_public_note'] ?? false),
                     'private_note' => $data['private_note'] ?? null,
@@ -143,6 +179,7 @@ class InvoiceController extends Controller
             'customers' => $customers,
             'invoice' => $invoice,
             'productSuggestionData' => $this->productSuggestionData($invoice),
+            'defaultPaymentNote' => $this->defaultPaymentNote(),
         ]);
     }
 
@@ -167,6 +204,7 @@ class InvoiceController extends Controller
                 $invoice->update([
                     'customer_id' => $customerId,
                     'billing_month' => $data['billing_month'],
+                    'invoice_type' => $data['invoice_type'] ?? $invoice->invoice_type ?? 'product',
                     'subtotal' => $subtotal,
                     'discount' => $data['discount_amount'],
                     'discount_type' => $data['discount_type'],
@@ -178,6 +216,7 @@ class InvoiceController extends Controller
                     'due_amount' => $dueAmount,
                     'status' => $dueAmount <= 0 ? 'paid' : ($paidAmount > 0 ? 'partial' : 'unpaid'),
                     'due_date' => $data['due_date'] ?? null,
+                    'payment_note' => $data['payment_note'] ?? null,
                     'public_note' => $data['public_note'] ?? null,
                     'show_public_note' => (bool) ($data['show_public_note'] ?? false),
                     'private_note' => $data['private_note'] ?? null,
@@ -230,6 +269,7 @@ class InvoiceController extends Controller
                 'due_amount' => $invoice->total,
                 'status' => ((float) $invoice->total) <= 0 ? 'paid' : 'unpaid',
                 'due_date' => $invoice->due_date?->copy()->addMonthNoOverflow(),
+                'payment_note' => $invoice->payment_note,
                 'public_note' => $invoice->public_note,
                 'show_public_note' => $invoice->show_public_note,
                 'private_note' => $invoice->private_note,
@@ -259,6 +299,7 @@ class InvoiceController extends Controller
             'customer_name' => ['required_without:customer_id', 'nullable', 'string', 'max:255'],
             'customer_phone' => ['required_without:customer_id', 'nullable', 'string', 'max:30'],
             'billing_month' => ['required', 'date_format:Y-m'],
+            'invoice_type' => ['nullable', 'in:service,product'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['nullable', 'exists:products,id'],
             'items.*.product_name' => ['required', 'string', 'max:255'],
@@ -270,6 +311,7 @@ class InvoiceController extends Controller
             'vat_type' => ['required', 'in:amount,percent'],
             'vat' => ['required', 'numeric', 'min:0'],
             'due_date' => ['nullable', 'date'],
+            'payment_note' => ['nullable', 'string', 'max:5000'],
             'public_note' => ['nullable', 'string', 'max:5000'],
             'show_public_note' => ['nullable', 'boolean'],
             'private_note' => ['nullable', 'string', 'max:5000'],
@@ -505,8 +547,9 @@ class InvoiceController extends Controller
     public function challan(Invoice $invoice)
     {
         $invoice->load(['customer', 'items']);
+        $paymentNote = $this->paymentNoteForInvoice($invoice);
 
-        return view('invoices.challan', compact('invoice'));
+        return view('invoices.challan', compact('invoice', 'paymentNote'));
     }
 
     public function quotation(Invoice $invoice)
@@ -553,5 +596,37 @@ class InvoiceController extends Controller
         return redirect()
             ->route('invoices.index', ['billing_month' => $data['billing_month']])
             ->with('success', $created->count().' invoice(s) generated.');
+    }
+
+    public function editPaymentNoteDefault()
+    {
+        return view('invoices.payment_note_default', [
+            'paymentNote' => $this->defaultPaymentNote(),
+        ]);
+    }
+
+    public function updatePaymentNoteDefault(Request $request)
+    {
+        $data = $request->validate([
+            'payment_note' => ['required', 'string', 'max:5000'],
+        ]);
+
+        AppSetting::setValue(self::PAYMENT_NOTE_SETTING_KEY, $data['payment_note']);
+
+        return redirect()
+            ->route('invoices.payment-note-default.edit')
+            ->with('success', 'Default payment note updated successfully.');
+    }
+
+    private function defaultPaymentNote(): string
+    {
+        return AppSetting::value(self::PAYMENT_NOTE_SETTING_KEY, self::DEFAULT_PAYMENT_NOTE) ?: self::DEFAULT_PAYMENT_NOTE;
+    }
+
+    private function paymentNoteForInvoice(Invoice $invoice): string
+    {
+        $invoiceNote = trim((string) $invoice->payment_note);
+
+        return $invoiceNote !== '' ? $invoiceNote : $this->defaultPaymentNote();
     }
 }

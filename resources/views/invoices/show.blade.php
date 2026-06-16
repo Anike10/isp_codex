@@ -34,9 +34,14 @@
                 </form>
             @endif
         @endif
-        <a class="btn light" href="{{ route('invoices.challan', $invoice) }}" target="_blank">Print Bill</a>
-        <a class="btn light" href="{{ route('invoices.quotation', $invoice) }}" target="_blank">Print Quotation</a>
-        <a class="btn light" href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank">Print Challan</a>
+        <details class="action-menu">
+            <summary class="btn light">Print</summary>
+            <div class="action-menu-panel">
+                <a class="btn light" href="{{ route('invoices.challan', $invoice) }}" target="_blank">Bill</a>
+                <a class="btn light" href="{{ route('invoices.quotation', $invoice) }}" target="_blank">Quotation</a>
+                <a class="btn light" href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank">Challan</a>
+            </div>
+        </details>
         <form method="post" action="{{ route('invoices.copy-next-month', $invoice) }}" onsubmit="return confirm('Copy this invoice for next month with same items and prices?');">
             @csrf
             <button class="btn light" type="submit">Copy for Next Month</button>
@@ -69,9 +74,12 @@
     </section>
 </div>
 
-@if ($invoice->public_note || $invoice->private_note)
+@if ($invoice->payment_note || $invoice->public_note || $invoice->private_note)
 <section class="card" style="margin-top:16px">
     <h2>Notes</h2>
+    @if ($invoice->payment_note)
+        <p><strong>Payment Note Override:</strong> <span style="white-space:pre-line">{{ $invoice->payment_note }}</span></p>
+    @endif
     @if ($invoice->public_note)
         <p><strong>Invoice Note:</strong> <span style="white-space:pre-line">{{ $invoice->public_note }}</span></p>
         <p><strong>Show on invoice:</strong> {{ $invoice->show_public_note ? 'Yes' : 'No' }}</p>
@@ -83,7 +91,7 @@
 @endif
 
 @if ($canRecordPayment)
-<section class="card" style="margin-top:16px">
+<section class="card" id="record-payment" style="margin-top:16px">
     <h2>Record Payment</h2>
     <form method="post" action="{{ route('payments.store') }}" class="form-grid" onsubmit="return confirm('Record this payment for {{ $invoice->invoice_no }}?');">
         @csrf
