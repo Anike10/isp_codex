@@ -32,8 +32,6 @@
         .section { padding:6px 0; border-bottom:1px dashed var(--line); }
         .note { padding-top:6px; line-height:1.4; }
         .note-title { font-weight:800; margin-bottom:2px; }
-        .sign { margin-top:14mm; padding-top:4px; border-top:1px solid var(--ink); text-align:center; font-weight:700; }
-        .footer { margin-top:8px; padding-top:6px; border-top:1px dashed var(--ink); text-align:center; color:var(--muted); font-size:10px; line-height:1.35; }
         body.paper-58 .receipt { padding-left:2.4mm; padding-right:2.4mm; font-size:11px; }
         body.paper-58 .brand h1 { font-size:15px; }
         body.paper-58 .row { grid-template-columns:20mm minmax(0, 1fr); gap:3px; }
@@ -70,7 +68,7 @@
     <section class="receipt">
         <header class="brand">
             <h1>Ultimate Solution</h1>
-            <p>ISP Manager<br>{{ now()->format('Y-m-d H:i') }}</p>
+            <p>{{ now()->format('Y-m-d H:i') }}</p>
         </header>
 
         <div class="title">{{ $voucher['title'] }}</div>
@@ -78,7 +76,6 @@
         <div class="section">
             <div class="row"><span class="label">Voucher</span><span class="value">{{ $voucher['voucher_no'] }}</span></div>
             <div class="row"><span class="label">Date</span><span class="value">{{ $voucher['date']?->format('Y-m-d') }}</span></div>
-            <div class="row"><span class="label">Ref</span><span class="value">{{ $voucher['reference'] }}</span></div>
         </div>
 
         <div class="amount">
@@ -88,13 +85,7 @@
 
         <div class="section">
             <div class="row"><span class="label">{{ $voucher['paid_to_label'] }}</span><span class="value">{{ $voucher['paid_to'] }}</span></div>
-            <div class="row"><span class="label">{{ $voucher['secondary_label'] }}</span><span class="value">{{ $voucher['secondary_value'] }}</span></div>
-            <div class="row"><span class="label">Type</span><span class="value">{{ $voucher['type'] }}</span></div>
-        </div>
-
-        <div class="section">
-            <div class="row"><span class="label">Method</span><span class="value">{{ $voucher['method'] }}</span></div>
-            <div class="row"><span class="label">Account</span><span class="value">{{ $voucher['account'] }}</span></div>
+            <div class="row"><span class="label">Bill Month</span><span class="value">{{ $voucher['bill_month'] }}</span></div>
         </div>
 
         <div class="note">
@@ -102,8 +93,6 @@
             <div>{{ $voucher['note'] }}</div>
         </div>
 
-        <div class="sign">Received By</div>
-        <div class="footer">Thank you<br>This is a computer generated receipt.</div>
     </section>
 </main>
 

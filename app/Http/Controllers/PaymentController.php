@@ -121,6 +121,7 @@ class PaymentController extends Controller
             'paid_to' => $payment->customer->name,
             'secondary_label' => 'Invoice',
             'secondary_value' => $payment->invoice->invoice_no,
+            'bill_month' => $payment->invoice->formatted_billing_month,
             'method' => ucfirst($payment->payment_method),
             'account' => $payment->account ? $payment->account->account_name.' - '.$payment->account->account_number : 'Cash',
             'reference' => 'Payment #'.$payment->id,
