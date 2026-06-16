@@ -12,14 +12,24 @@
         a { color:inherit; text-decoration:none; }
         .shell { min-height:100vh; }
         .app-header { position:sticky; top:0; z-index:50; background:#14213d; color:white; border-bottom:1px solid rgba(255,255,255,.12); box-shadow:0 8px 24px rgba(15, 23, 42, .16); }
-        .header-inner { max-width:1440px; margin:0 auto; padding:12px 20px; display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:14px; }
-        .brand { font-size:20px; font-weight:700; white-space:nowrap; }
+        .header-inner { max-width:1440px; margin:0 auto; padding:12px 20px; display:grid; grid-template-columns:auto auto minmax(0, 1fr) auto; align-items:center; gap:14px; }
+        .brand { font-size:20px; font-weight:700; white-space:nowrap; letter-spacing:0; }
+        .nav-toggle { display:none; width:38px; height:38px; border:1px solid rgba(255,255,255,.18); border-radius:6px; background:rgba(255,255,255,.08); color:white; cursor:pointer; align-items:center; justify-content:center; }
+        .nav-toggle-lines, .nav-toggle-lines::before, .nav-toggle-lines::after { display:block; width:18px; height:2px; border-radius:999px; background:currentColor; content:""; transition:transform .18s ease, opacity .18s ease; }
+        .nav-toggle-lines { position:relative; }
+        .nav-toggle-lines::before, .nav-toggle-lines::after { position:absolute; left:0; }
+        .nav-toggle-lines::before { top:-6px; }
+        .nav-toggle-lines::after { top:6px; }
+        .nav-toggle[aria-expanded="true"] .nav-toggle-lines { transform:rotate(45deg); }
+        .nav-toggle[aria-expanded="true"] .nav-toggle-lines::before { transform:translateY(6px) rotate(90deg); }
+        .nav-toggle[aria-expanded="true"] .nav-toggle-lines::after { opacity:0; }
         .nav { display:flex; gap:6px; align-items:center; flex-wrap:wrap; flex:1; padding:2px 0; }
         .nav a, .nav summary { color:#dbe7ff; padding:9px 11px; border-radius:6px; white-space:nowrap; font-size:14px; cursor:pointer; }
         .nav a:hover, .nav summary:hover, .nav details[open] summary { background:rgba(255,255,255,.1); color:white; }
         .nav summary { list-style:none; user-select:none; }
         .nav summary::-webkit-details-marker { display:none; }
-        .nav summary::after { content:"▾"; margin-left:6px; font-size:11px; }
+        .nav summary::after { content:""; display:inline-block; width:7px; height:7px; margin-left:8px; border-right:2px solid currentColor; border-bottom:2px solid currentColor; transform:translateY(-2px) rotate(45deg); }
+        .nav details[open] summary::after { transform:translateY(2px) rotate(225deg); }
         .nav-group { position:relative; }
         .nav-menu { display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:80; min-width:190px; padding:6px; background:white; color:var(--ink); border:1px solid var(--line); border-radius:8px; box-shadow:0 16px 34px rgba(15, 23, 42, .18); }
         .nav details[open] .nav-menu { display:grid; gap:2px; }
@@ -103,16 +113,22 @@
         .page-link.disabled, .page-link.dots { color:#98a2b3; background:#f8fafc; cursor:not-allowed; }
         @media (max-width: 980px) {
             .stats, .two, .form-grid { grid-template-columns:1fr; }
-            .header-inner { grid-template-columns:1fr auto; gap:8px 10px; padding:10px 12px 8px; }
+            .header-inner { grid-template-columns:minmax(0, 1fr) auto auto; gap:8px; padding:10px 12px; }
             .brand { font-size:18px; min-width:0; overflow:hidden; text-overflow:ellipsis; }
-            .nav { grid-column:1 / -1; width:100%; padding:2px 0 4px; gap:7px; }
-            .nav a, .nav summary { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.08); }
+            .nav-toggle { display:inline-flex; grid-column:3; grid-row:1; }
+            .logout-form { grid-column:2; grid-row:1; }
+            .nav { display:none; grid-column:1 / -1; grid-row:2; width:100%; padding:8px; gap:6px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); border-radius:8px; box-shadow:inset 0 1px 0 rgba(255,255,255,.08); }
+            .nav.is-open { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); align-items:stretch; }
+            .nav a, .nav summary { display:flex; align-items:center; justify-content:space-between; min-height:42px; white-space:normal; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.08); line-height:1.2; }
+            .nav details { min-width:0; }
+            .nav details[open] { grid-column:1 / -1; }
             .nav-menu { position:static; min-width:100%; margin-top:6px; background:#fff; }
+            .nav details[open] .nav-menu { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:6px; }
             .main { padding:16px 12px 28px; }
             .topbar { align-items:flex-start; flex-direction:column; }
             .actions { width:100%; }
             .actions .btn, .actions form, .actions input, .actions select { max-width:100%; }
-            table { display:block; overflow-x:auto; }
+            table { display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:7px; box-shadow:0 1px 0 rgba(15,23,42,.04); }
             th, td { padding:10px; }
             h1 { font-size:24px; }
             .stat strong { font-size:22px; }
@@ -126,11 +142,14 @@
         }
         @media (max-width: 560px) {
             .app-header { position:static; }
-            .header-inner { padding:9px 10px 7px; }
+            .header-inner { padding:9px 10px; }
             .brand { font-size:17px; }
-            .nav { margin:0 -10px; padding:4px 10px 6px; }
-            .nav a, .nav summary { font-size:12px; padding:7px 9px; border-radius:999px; }
-            .nav-menu a { border-radius:6px; font-size:12px; }
+            .nav-toggle { width:36px; height:36px; }
+            .nav { margin-top:2px; padding:7px; border-radius:7px; }
+            .nav.is-open { grid-template-columns:1fr; }
+            .nav a, .nav summary { font-size:13px; padding:9px 10px; border-radius:6px; }
+            .nav details[open] .nav-menu { grid-template-columns:1fr; }
+            .nav-menu a { border-radius:6px; font-size:13px; min-height:38px; color:var(--ink); }
             .btn { width:100%; justify-content:center; }
             .logout-form { margin-left:auto; }
             .logout-form .btn { width:auto; min-height:32px; padding:7px 10px; font-size:12px; }
@@ -146,6 +165,7 @@
             .stats { grid-template-columns:repeat(2, minmax(0, 1fr)); }
             .stat strong { font-size:20px; margin-top:4px; }
             .actions { gap:8px; }
+            .actions > *, .actions .btn, .actions form { width:100%; }
             .btn { min-height:36px; padding:9px 11px; font-size:13px; }
             th, td { padding:9px 8px; font-size:13px; }
             th { font-size:11px; }
@@ -169,7 +189,10 @@
     <header class="app-header">
     <div class="header-inner">
         <div class="brand">Ultimate Solution</div>
-        <nav class="nav">
+        <button class="nav-toggle" type="button" aria-label="Open menu" aria-controls="app-nav" aria-expanded="false">
+            <span class="nav-toggle-lines"></span>
+        </button>
+        <nav class="nav" id="app-nav">
             @php
                 $canManageNetwork = auth()->user()?->hasPermission('manage_customers')
                     || auth()->user()?->hasPermission('manage_packages')
@@ -329,6 +352,24 @@ window.addEventListener('load', function () {
         timing.textContent += ' | Browser: ' + browserMs.toLocaleString() + ' ms';
     }
 });
+
+const navToggle = document.querySelector('.nav-toggle');
+const appNav = document.querySelector('#app-nav');
+if (navToggle && appNav) {
+    navToggle.addEventListener('click', function () {
+        const isOpen = appNav.classList.toggle('is-open');
+        navToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        navToggle.setAttribute('aria-label', isOpen ? 'Close menu' : 'Open menu');
+    });
+
+    appNav.addEventListener('click', function (event) {
+        if (event.target.closest('a') && window.matchMedia('(max-width: 980px)').matches) {
+            appNav.classList.remove('is-open');
+            navToggle.setAttribute('aria-expanded', 'false');
+            navToggle.setAttribute('aria-label', 'Open menu');
+        }
+    });
+}
 
 document.addEventListener('click', function (event) {
     if (event.target.closest('a, button, input, select, textarea, label, form')) {
