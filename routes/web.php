@@ -56,7 +56,8 @@ Route::middleware('auth')->group(function () {
         Route::get('invoice-customers/search', [InvoiceController::class, 'searchCustomers'])->name('invoice-customers.search');
         Route::post('invoices/generate', [InvoiceController::class, 'generate'])->name('invoices.generate');
         Route::post('invoices/{invoice}/copy-next-month', [InvoiceController::class, 'copyForNextMonth'])->name('invoices.copy-next-month');
-        Route::get('invoices/{invoice}/challan', [InvoiceController::class, 'challan'])->name('invoices.challan');
+        Route::get('invoices/{invoice}/invoice', [InvoiceController::class, 'challan'])->name('invoices.invoice');
+        Route::get('invoices/{invoice}/challan', fn ($invoice) => redirect()->route('invoices.invoice', $invoice))->name('invoices.challan');
         Route::get('invoices/{invoice}/quotation', [InvoiceController::class, 'quotation'])->name('invoices.quotation');
         Route::get('invoices/{invoice}/delivery-challan', [InvoiceController::class, 'deliveryChallan'])->name('invoices.delivery-challan');
     });

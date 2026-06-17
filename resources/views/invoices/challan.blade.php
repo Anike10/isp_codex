@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Bill - {{ $invoice->invoice_no }}</title>
+    <title>Invoice - {{ $invoice->invoice_no }}</title>
     <style>
         :root {
             --ink: #172033;
@@ -539,6 +539,7 @@
             Print without signature
         </label>
         <button onclick="window.print()" class="btn">Print Bill</button>
+        <a href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank" class="btn secondary">Challan</a>
         <a href="{{ route('invoices.show', $invoice) }}" class="btn light">Back to Invoice</a>
     </div>
 
@@ -556,14 +557,14 @@
                 </div>
             </div>
             <div class="bill-title">
-                <h2>BILL</h2>
+                <h2>INVOICE</h2>
                 <div class="status {{ $invoice->status }}">{{ $invoice->status }}</div>
             </div>
         </section>
 
         <section class="meta-grid">
             <div class="box">
-                <h3>Bill To</h3>
+                <h3>Invoice To</h3>
                 <div class="box-body">
                     <p class="strong">{{ $invoice->customer->name }}</p>
                     <p>{{ $invoice->customer->address }}</p>
@@ -573,11 +574,11 @@
             </div>
 
             <div class="box">
-                <h3>Bill Details</h3>
+                <h3>Invoice Details</h3>
                 <div class="box-body">
-                    <div class="kv"><span class="muted">Bill No</span><span>{{ $invoice->invoice_no }}</span></div>
+                    <div class="kv"><span class="muted">Invoice No</span><span>{{ $invoice->invoice_no }}</span></div>
                     <div class="kv"><span class="muted">Bill Month</span><span>{{ $invoice->formatted_billing_month }}</span></div>
-                    <div class="kv"><span class="muted">Bill Type</span><span>{{ ucfirst($invoice->invoice_type ?? 'service') }}</span></div>
+                    <div class="kv"><span class="muted">Invoice Type</span><span>{{ ucfirst($invoice->invoice_type ?? 'service') }}</span></div>
                     <div class="kv"><span class="muted">Issue Date</span><span>{{ $invoice->created_at?->format('d M Y') }}</span></div>
                     <div class="kv"><span class="muted">Due Date</span><span>{{ $invoice->due_date?->format('d M Y') ?? 'N/A' }}</span></div>
                 </div>
