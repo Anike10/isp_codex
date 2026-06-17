@@ -49,6 +49,32 @@
             height: 16px;
         }
 
+        .print-mode {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 4px;
+            font-weight: 700;
+        }
+
+        .print-mode label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 4px;
+            padding: 6px 9px;
+            cursor: pointer;
+        }
+
+        .print-mode input { accent-color: var(--brand); }
+        .print-mode label:has(input:checked) {
+            background: var(--brand);
+            color: #fff;
+        }
+
         .btn {
             border: 0;
             border-radius: 6px;
@@ -259,6 +285,29 @@
         body.no-signature .signatures { display: none; }
         body.no-signature .no-sign-note { display: block; }
 
+        body.bw-print {
+            --ink: #111;
+            --muted: #414141;
+            --line: #555;
+            --brand: #111;
+            --brand-dark: #111;
+            --soft: #f3f3f3;
+            --danger: #111;
+        }
+
+        body.bw-print .brand-bar { border-bottom: 2px solid #111; }
+        body.bw-print .company h1,
+        body.bw-print .bill-title h2,
+        body.bw-print .box h3,
+        body.bw-print .status,
+        body.bw-print .no-sign-note { color: #111; }
+        body.bw-print .box h3,
+        body.bw-print tbody tr:nth-child(even) td,
+        body.bw-print .no-sign-note { background: #f3f3f3; }
+        body.bw-print th,
+        body.bw-print .grand { background: #222; color: #fff; }
+        body.bw-print .status { border-color: #111; background: #fff; }
+
         @page { size: A4; margin: 0; }
 
         @media print {
@@ -268,6 +317,32 @@
                 print-color-adjust: exact;
             }
             .toolbar { display: none; }
+            body.bw-print * {
+                text-shadow: none !important;
+                box-shadow: none !important;
+            }
+            body.bw-print th,
+            body.bw-print .grand {
+                background: #222 !important;
+                color: #fff !important;
+            }
+            body.bw-print .box h3,
+            body.bw-print tbody tr:nth-child(even) td,
+            body.bw-print .notes,
+            body.bw-print .amount-words,
+            body.bw-print .no-sign-note {
+                background: #f4f4f4 !important;
+                color: #111 !important;
+            }
+            body.bw-print .brand-bar,
+            body.bw-print .box,
+            body.bw-print .notes,
+            body.bw-print .totals,
+            body.bw-print .amount-words,
+            body.bw-print th,
+            body.bw-print td {
+                border-color: #555 !important;
+            }
             .page {
                 width: 210mm;
                 min-height: 287mm;
@@ -402,7 +477,7 @@
         }
     </style>
 </head>
-<body class="{{ $invoice->items->count() >= 30 ? 'compact-print dense-print' : ($invoice->items->count() >= 25 ? 'compact-print' : '') }}">
+<body class="bw-print {{ $invoice->items->count() >= 30 ? 'compact-print dense-print' : ($invoice->items->count() >= 25 ? 'compact-print' : '') }}">
     @php
         $numberToWords = function (int $number) use (&$numberToWords): string {
             $ones = [
@@ -455,9 +530,13 @@
     @endphp
 
     <div class="toolbar">
+        <div class="print-mode" aria-label="Print design">
+            <label><input type="radio" name="print_mode" value="bw" checked> Black & white</label>
+            <label><input type="radio" name="print_mode" value="color"> Color</label>
+        </div>
         <label class="print-option">
             <input type="checkbox" id="noSignatureOption">
-            Signature ছাড়াই print
+            Print without signature
         </label>
         <button onclick="window.print()" class="btn">Print Bill</button>
         <a href="{{ route('invoices.show', $invoice) }}" class="btn light">Back to Invoice</a>
@@ -585,6 +664,12 @@
 
         noSignatureOption.addEventListener('change', function () {
             document.body.classList.toggle('no-signature', this.checked);
+        });
+
+        document.querySelectorAll('input[name="print_mode"]').forEach((input) => {
+            input.addEventListener('change', function () {
+                document.body.classList.toggle('bw-print', this.value === 'bw');
+            });
         });
     </script>
 </body>
