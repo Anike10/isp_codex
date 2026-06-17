@@ -373,7 +373,7 @@ if (navToggle && appNav) {
 }
 
 document.addEventListener('click', function (event) {
-    if (event.target.closest('a, button, input, select, textarea, label, form')) {
+    if (event.target.closest('a, button, input, select, textarea, label, form, details, summary, .actions, .action-menu')) {
         return;
     }
 

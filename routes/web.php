@@ -76,8 +76,11 @@ Route::middleware('auth')->group(function () {
         Route::get('bkash-sms-payments/{bkashSmsPayment}', [BkashSmsPaymentController::class, 'show'])->name('bkash-sms-payments.show');
     });
 
+    Route::get('accounting/ledger', [AccountingLedgerController::class, 'index'])
+        ->middleware('permission:manage_payment_accounts,manage_customers')
+        ->name('accounting.ledger');
+
     Route::middleware('permission:manage_payment_accounts')->group(function () {
-        Route::get('accounting/ledger', [AccountingLedgerController::class, 'index'])->name('accounting.ledger');
         Route::get('payment-accounts/cash/ledger', [PaymentAccountController::class, 'cashLedger'])->name('payment-accounts.cash-ledger');
         Route::resource('payment-accounts', PaymentAccountController::class)->only(['index', 'show', 'create', 'store']);
     });

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CustomerBalanceTransaction;
+use App\Models\Customer;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -14,8 +15,19 @@ class AccountingLedgerController extends Controller
     {
         $from = $request->date('from');
         $to = $request->date('to');
+        $customerId = $request->integer('customer_id') ?: null;
+        $selectedCustomer = $customerId ? Customer::find($customerId) : null;
+
+        if ($customerId && ! $selectedCustomer) {
+            abort(404);
+        }
+
+        if (! $request->user()?->hasPermission('manage_payment_accounts') && ! $selectedCustomer) {
+            abort(403, 'You do not have permission to access the full accounting ledger.');
+        }
 
         $invoices = Invoice::with('customer')
+            ->when($customerId, fn ($query) => $query->where('customer_id', $customerId))
             ->when($from, fn ($query) => $query->whereDate('created_at', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('created_at', '<=', $to))
             ->get()
@@ -31,6 +43,7 @@ class AccountingLedgerController extends Controller
             ]);
 
         $payments = Payment::with(['customer', 'invoice', 'account', 'allocations.invoice'])
+            ->when($customerId, fn ($query) => $query->where('customer_id', $customerId))
             ->when($from, fn ($query) => $query->whereDate('payment_date', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('payment_date', '<=', $to))
             ->get()
@@ -54,6 +67,7 @@ class AccountingLedgerController extends Controller
             });
 
         $balanceEntries = CustomerBalanceTransaction::with(['customer', 'account'])
+            ->when($customerId, fn ($query) => $query->where('customer_id', $customerId))
             ->where(function ($query) {
                 $query->where('direction', 'debit')
                     ->orWhere(function ($query) {
@@ -81,6 +95,7 @@ class AccountingLedgerController extends Controller
             });
 
         $expenses = Expense::with('account')
+            ->when($customerId, fn ($query) => $query->whereRaw('1 = 0'))
             ->when($from, fn ($query) => $query->whereDate('expense_date', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('expense_date', '<=', $to))
             ->get()
@@ -101,6 +116,6 @@ class AccountingLedgerController extends Controller
         $totalDebit = $entries->sum('debit');
         $totalCredit = $entries->sum('credit');
 
-        return view('accounting.ledger', compact('entries', 'totalDebit', 'totalCredit'));
+        return view('accounting.ledger', compact('entries', 'totalDebit', 'totalCredit', 'selectedCustomer'));
     }
 }

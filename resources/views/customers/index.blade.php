@@ -59,6 +59,7 @@
             </td>
             <td class="actions">
                 <a class="btn secondary" href="{{ route('customers.payments.create', $customer) }}">Pay</a>
+                <a class="btn light" href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}">Ledger</a>
                 <a class="btn light" href="{{ route('customers.show', $customer) }}">View</a>
                 <a class="btn light" href="{{ route('customers.edit', $customer) }}">Edit</a>
             </td>

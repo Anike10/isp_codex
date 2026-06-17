@@ -3,17 +3,30 @@
 @section('content')
 <div class="topbar">
     <div>
-        <h1>Accounting Ledger</h1>
-        <div class="muted">Invoices, payments, salaries, expenses, and running totals</div>
+        <h1>{{ $selectedCustomer ? 'Party Ledger' : 'Accounting Ledger' }}</h1>
+        <div class="muted">
+            @if ($selectedCustomer)
+                {{ $selectedCustomer->name }} - invoices, payments, advance balance, and running totals
+            @else
+                Invoices, payments, salaries, expenses, and running totals
+            @endif
+        </div>
     </div>
     <a class="btn light" href="{{ route('payment-accounts.index') }}">Back</a>
 </div>
 
 <form method="get" class="card actions" style="margin-bottom:16px">
+    @if ($selectedCustomer)
+        <input type="hidden" name="customer_id" value="{{ $selectedCustomer->id }}">
+    @endif
     <input type="date" name="from" value="{{ request('from') }}">
     <input type="date" name="to" value="{{ request('to') }}">
     <button class="btn secondary" type="submit">Filter</button>
-    <a class="btn light" href="{{ route('accounting.ledger') }}">Reset</a>
+    <a class="btn light" href="{{ $selectedCustomer ? route('accounting.ledger', ['customer_id' => $selectedCustomer->id]) : route('accounting.ledger') }}">Reset</a>
+    @if ($selectedCustomer)
+        <a class="btn light" href="{{ route('accounting.ledger') }}">All Ledger</a>
+        <a class="btn light" href="{{ route('customers.show', $selectedCustomer) }}">Party Details</a>
+    @endif
 </form>
 
 <div class="grid stats" style="margin-bottom:16px">
