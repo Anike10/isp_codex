@@ -65,6 +65,9 @@ Route::middleware('auth')->group(function () {
     Route::post('invoices/{invoice}/finalize', [InvoiceController::class, 'finalize'])
         ->middleware('permission:finalize_invoices')
         ->name('invoices.finalize');
+    Route::post('invoices/finalize-selected', [InvoiceController::class, 'finalizeSelected'])
+        ->middleware('permission:finalize_invoices')
+        ->name('invoices.finalize-selected');
 
     Route::middleware('permission:manage_payments')->group(function () {
         Route::get('payments/{payment}/voucher', [PaymentController::class, 'voucher'])->name('payments.voucher');

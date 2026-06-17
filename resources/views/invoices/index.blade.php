@@ -3,6 +3,7 @@
 @section('content')
 @php
     $canManageInvoices = auth()->user()?->hasPermission('manage_invoices');
+    $canFinalizeInvoices = auth()->user()?->hasPermission('finalize_invoices');
     $canRecordPayments = auth()->user()?->hasPermission('manage_payments');
 @endphp
 
@@ -73,9 +74,38 @@
         margin: 0;
     }
 
+    .invoice-bulk-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+        padding: 12px;
+    }
+
+    .invoice-bulk-actions .actions {
+        justify-content: flex-end;
+    }
+
+    .invoice-select-cell {
+        width: 42px;
+        text-align: center;
+    }
+
+    .invoice-select-cell input {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+    }
+
     @media (max-width: 780px) {
         .invoice-row-actions {
             min-width: 210px;
+        }
+
+        .invoice-bulk-actions {
+            align-items: stretch;
+            flex-direction: column;
         }
     }
 </style>
@@ -186,9 +216,29 @@
 
 @include('partials.per_page')
 
+@if ($canFinalizeInvoices)
+    <form method="post" action="{{ route('invoices.finalize-selected') }}" id="bulkFinalizeForm" onsubmit="return confirm('Finalize all selected draft invoices? You will not be able to edit them after finalizing.');">
+        @csrf
+    </form>
+    <div class="card invoice-bulk-actions">
+        <div>
+            <strong>Bulk Final</strong>
+            <div class="muted">Select draft invoices from this list, then finalize all selected together.</div>
+        </div>
+        <div class="actions">
+            <button class="btn light" type="button" id="selectAllInvoices">Select all</button>
+            <button class="btn light" type="button" id="deselectAllInvoices">Deselect all</button>
+            <button class="btn" type="submit" form="bulkFinalizeForm" id="finalizeSelectedInvoices">Final all selected</button>
+        </div>
+    </div>
+@endif
+
 <table class="invoice-table">
     <thead>
         <tr>
+            @if ($canFinalizeInvoices)
+                <th class="invoice-select-cell">Select</th>
+            @endif
             <th>Invoice</th>
             <th>Party</th>
             <th>Mobile</th>
@@ -212,6 +262,22 @@
                 : ($isOverdue ? 'invoice-row-overdue' : ((float) $invoice->due_amount > 0 ? 'invoice-row-due' : ''));
         @endphp
         <tr class="{{ $rowClass }}" data-href="{{ route('invoices.show', $invoice) }}">
+            @if ($canFinalizeInvoices)
+                <td class="invoice-select-cell">
+                    @if (! $invoice->isFinalized())
+                        <input
+                            type="checkbox"
+                            name="invoice_ids[]"
+                            value="{{ $invoice->id }}"
+                            form="bulkFinalizeForm"
+                            class="invoice-select"
+                            @checked(request('final_state') === 'draft')
+                        >
+                    @else
+                        <span class="muted">-</span>
+                    @endif
+                </td>
+            @endif
             <td>
                 <a href="{{ route('invoices.show', $invoice) }}"><strong>{{ $invoice->invoice_no }}</strong></a>
                 @if ($isOverdue)
@@ -239,6 +305,12 @@
                     <a class="btn light" href="{{ route('invoices.show', $invoice) }}">View</a>
                     @if (! $invoice->isFinalized())
                         <a class="btn secondary" href="{{ route('invoices.edit', $invoice) }}">Edit</a>
+                        @if ($canFinalizeInvoices)
+                            <form method="post" action="{{ route('invoices.finalize', $invoice) }}" onsubmit="return confirm('Finalize {{ $invoice->invoice_no }}? You will not be able to edit it after finalizing.');">
+                                @csrf
+                                <button class="btn" type="submit">Final</button>
+                            </form>
+                        @endif
                     @endif
                     @if ($canRecordPayments && (float) $invoice->due_amount > 0)
                         <a class="btn" href="{{ route('invoices.show', $invoice) }}#record-payment">Payment</a>
@@ -261,9 +333,38 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="12">No invoices found.</td></tr>
+        <tr><td colspan="{{ $canFinalizeInvoices ? 13 : 12 }}">No invoices found.</td></tr>
     @endforelse
     </tbody>
 </table>
 <div style="margin-top:16px">{{ $invoices->links() }}</div>
+@if ($canFinalizeInvoices)
+    <script>
+        const invoiceSelects = Array.from(document.querySelectorAll('.invoice-select'));
+        const selectAllInvoices = document.getElementById('selectAllInvoices');
+        const deselectAllInvoices = document.getElementById('deselectAllInvoices');
+        const finalizeSelectedInvoices = document.getElementById('finalizeSelectedInvoices');
+
+        function refreshFinalizeSelectedButton() {
+            const selectedCount = invoiceSelects.filter((input) => input.checked).length;
+            finalizeSelectedInvoices.disabled = selectedCount === 0;
+            finalizeSelectedInvoices.textContent = selectedCount > 0
+                ? 'Final all selected (' + selectedCount + ')'
+                : 'Final all selected';
+        }
+
+        selectAllInvoices?.addEventListener('click', function () {
+            invoiceSelects.forEach((input) => input.checked = true);
+            refreshFinalizeSelectedButton();
+        });
+
+        deselectAllInvoices?.addEventListener('click', function () {
+            invoiceSelects.forEach((input) => input.checked = false);
+            refreshFinalizeSelectedButton();
+        });
+
+        invoiceSelects.forEach((input) => input.addEventListener('change', refreshFinalizeSelectedButton));
+        refreshFinalizeSelectedButton();
+    </script>
+@endif
 @endsection

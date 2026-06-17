@@ -244,6 +244,20 @@ class InvoiceController extends Controller
         return redirect()->route('invoices.show', $invoice)->with('success', 'Invoice finalized. Editing is now locked.');
     }
 
+    public function finalizeSelected(Request $request)
+    {
+        $data = $request->validate([
+            'invoice_ids' => ['required', 'array', 'min:1'],
+            'invoice_ids.*' => ['integer', 'exists:invoices,id'],
+        ]);
+
+        $finalizedCount = Invoice::whereIn('id', $data['invoice_ids'])
+            ->whereNull('finalized_at')
+            ->update(['finalized_at' => now()]);
+
+        return back()->with('success', $finalizedCount.' selected invoice(s) finalized. Editing is now locked.');
+    }
+
     public function copyForNextMonth(Invoice $invoice)
     {
         $invoice->loadMissing('items');
