@@ -159,18 +159,59 @@
 
     .items-list {
         display: grid;
+        gap: 8px;
+    }
+
+    .items-header {
+        display: grid;
+        grid-template-columns: 52px minmax(180px, 1fr) 96px 130px 130px 44px;
         gap: 12px;
+        padding: 0 14px;
+        color: #667085;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
     }
 
     .item-row {
         display: grid;
-        grid-template-columns: minmax(180px, 1fr) 96px 130px 130px 44px;
+        grid-template-columns: 52px minmax(180px, 1fr) 96px 130px 130px 44px;
         gap: 12px;
-        align-items: end;
+        align-items: start;
         padding: 14px;
         border: 1px solid #e1e7ef;
         border-radius: 8px;
         background: #ffffff;
+    }
+
+    .item-row.is-dragging {
+        opacity: .55;
+        border-color: #116149;
+        box-shadow: 0 10px 24px rgba(17, 97, 73, .14);
+    }
+
+    .item-row label {
+        display: none;
+    }
+
+    .item-order {
+        width: 44px;
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #c8d2df;
+        border-radius: 8px;
+        background: #f8fafc;
+        color: #172033;
+        cursor: grab;
+        font: inherit;
+        font-weight: 800;
+        user-select: none;
+    }
+
+    .item-order:active {
+        cursor: grabbing;
     }
 
     .product-picker {
@@ -178,7 +219,11 @@
     }
 
     .item-serials {
-        grid-column: 1 / -2;
+        grid-column: 2 / -2;
+    }
+
+    .item-serials label {
+        display: block;
     }
 
     .serial-options {
@@ -235,6 +280,28 @@
         margin-top: 14px;
         padding-top: 16px;
         border-top: 1px dashed #c8d2df;
+    }
+
+    .add-item-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .add-item-count {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #475467;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .add-item-count input {
+        width: 78px;
+        min-height: 40px;
     }
 
     .invoice-templates {
@@ -386,6 +453,14 @@
             grid-template-columns: 1fr;
         }
 
+        .items-header {
+            display: none;
+        }
+
+        .item-row label {
+            display: block;
+        }
+
         .invoice-hero {
             align-items: start;
         }
@@ -393,6 +468,16 @@
         .add-item-bar {
             align-items: stretch;
             flex-direction: column;
+        }
+
+        .add-item-actions {
+            align-items: stretch;
+            justify-content: stretch;
+        }
+
+        .add-item-count,
+        .add-item-count input {
+            width: 100%;
         }
 
         .remove-item {
@@ -436,6 +521,10 @@
         .item-row {
             padding: 12px;
             gap: 10px;
+        }
+
+        .item-serials {
+            grid-column: 1 / -1;
         }
 
         .add-item-bar {
@@ -581,8 +670,19 @@
                             <button type="button" class="btn light" data-template-name="Cable" data-template-price="">Cable</button>
                         </div>
                         <div id="itemsContainer" class="items-list">
+                            <div class="items-header" aria-hidden="true">
+                                <span>SL</span>
+                                <span>Product Name <span class="required-mark">*</span></span>
+                                <span>Qty <span class="required-mark">*</span></span>
+                                <span>Unit Price <span class="required-mark">*</span></span>
+                                <span>Total</span>
+                                <span></span>
+                            </div>
                             @foreach ($invoiceItems as $index => $item)
                                 <div class="item-row">
+                                    <div>
+                                        <button type="button" class="item-order" draggable="true" aria-label="Drag item {{ $index + 1 }} to reorder">{{ $index + 1 }}</button>
+                                    </div>
                                     <div>
                                         <label for="items_{{ $index }}_product_name">Product Name <span class="required-mark">*</span></label>
                                         <div class="product-picker">
@@ -618,7 +718,13 @@
 
                         <div class="add-item-bar">
                             <div class="muted">Each item total is calculated automatically from quantity and unit price.</div>
-                            <button type="button" class="btn secondary" id="addItem">Add Item</button>
+                            <div class="add-item-actions">
+                                <label class="add-item-count" for="addItemCount">
+                                    Rows
+                                    <input id="addItemCount" type="number" min="1" max="50" value="1" inputmode="numeric">
+                                </label>
+                                <button type="button" class="btn secondary" id="addItem">Add Item</button>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -1081,11 +1187,14 @@ function renderProductSuggestions(row) {
 
 let itemIndex = {{ count($invoiceItems) }};
 
-document.getElementById('addItem').addEventListener('click', function() {
+function addItemRow() {
     const container = document.getElementById('itemsContainer');
     const newRow = document.createElement('div');
     newRow.className = 'item-row';
     newRow.innerHTML = `
+        <div>
+            <button type="button" class="item-order" draggable="true" aria-label="Drag item to reorder"></button>
+        </div>
         <div>
             <label for="items_${itemIndex}_product_name">Product Name <span class="required-mark">*</span></label>
             <div class="product-picker">
@@ -1119,8 +1228,21 @@ document.getElementById('addItem').addEventListener('click', function() {
     container.appendChild(newRow);
     refreshSerialOptions(newRow);
     itemIndex++;
-    refreshRemoveButtons();
-    updateTotals();
+    refreshItemRows();
+    return newRow;
+}
+
+document.getElementById('addItem').addEventListener('click', function() {
+    const countInput = document.getElementById('addItemCount');
+    const rowsToAdd = Math.min(Math.max(parseInt(countInput?.value || '1', 10) || 1, 1), 50);
+
+    for (let i = 0; i < rowsToAdd; i++) {
+        addItemRow();
+    }
+
+    if (countInput) {
+        countInput.value = rowsToAdd;
+    }
 });
 
 document.querySelectorAll('[data-template-name]').forEach(button => {
@@ -1129,8 +1251,7 @@ document.querySelectorAll('[data-template-name]').forEach(button => {
         let row = rows.find(itemRow => !itemRow.querySelector('[data-product-search]').value.trim());
 
         if (!row) {
-            document.getElementById('addItem').click();
-            row = Array.from(document.querySelectorAll('.item-row')).at(-1);
+            row = addItemRow();
         }
 
         if (!row) {
@@ -1160,10 +1281,62 @@ document.querySelectorAll('[data-template-name]').forEach(button => {
 document.addEventListener('click', function(e) {
     if (e.target.classList.contains('remove-item')) {
         e.target.closest('.item-row').remove();
-        refreshRemoveButtons();
-        updateTotals();
+        refreshItemRows();
     }
 });
+
+const itemsContainer = document.getElementById('itemsContainer');
+
+itemsContainer.addEventListener('dragstart', function(e) {
+    const handle = e.target.closest('.item-order');
+    const row = handle?.closest('.item-row');
+
+    if (!row) {
+        return;
+    }
+
+    row.classList.add('is-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', '');
+});
+
+itemsContainer.addEventListener('dragover', function(e) {
+    const draggingRow = itemsContainer.querySelector('.item-row.is-dragging');
+
+    if (!draggingRow) {
+        return;
+    }
+
+    e.preventDefault();
+    const afterElement = getDragAfterElement(itemsContainer, e.clientY);
+
+    if (afterElement) {
+        itemsContainer.insertBefore(draggingRow, afterElement);
+    } else {
+        itemsContainer.appendChild(draggingRow);
+    }
+});
+
+itemsContainer.addEventListener('dragend', function(e) {
+    const row = e.target.closest('.item-row');
+    row?.classList.remove('is-dragging');
+    refreshItemRows();
+});
+
+function getDragAfterElement(container, y) {
+    const draggableRows = [...container.querySelectorAll('.item-row:not(.is-dragging)')];
+
+    return draggableRows.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+
+        if (offset < 0 && offset > closest.offset) {
+            return { offset, element: child };
+        }
+
+        return closest;
+    }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+}
 
 document.addEventListener('input', function(e) {
     if (e.target.matches('[data-product-search]')) {
@@ -1265,7 +1438,68 @@ function refreshRemoveButtons() {
     });
 }
 
-refreshRemoveButtons();
+function reindexItemRows() {
+    const rows = document.querySelectorAll('.item-row');
+
+    rows.forEach((row, index) => {
+        const productId = row.querySelector('[data-product-id]');
+        const productName = row.querySelector('[data-product-search]');
+        const quantity = row.querySelector('.quantity');
+        const unitPrice = row.querySelector('.unit-price');
+        const total = row.querySelector('.total');
+        const serialNumbers = row.querySelector('[name$="[serial_numbers]"]');
+        const orderButton = row.querySelector('.item-order');
+
+        if (orderButton) {
+            orderButton.textContent = index + 1;
+            orderButton.setAttribute('aria-label', `Drag item ${index + 1} to reorder`);
+        }
+
+        if (productId) {
+            productId.name = `items[${index}][product_id]`;
+        }
+
+        if (productName) {
+            productName.id = `items_${index}_product_name`;
+            productName.name = `items[${index}][product_name]`;
+            row.querySelector('label[for$="_product_name"]')?.setAttribute('for', productName.id);
+        }
+
+        if (quantity) {
+            quantity.id = `items_${index}_quantity`;
+            quantity.name = `items[${index}][quantity]`;
+            row.querySelector('label[for$="_quantity"]')?.setAttribute('for', quantity.id);
+        }
+
+        if (unitPrice) {
+            unitPrice.id = `items_${index}_unit_price`;
+            unitPrice.name = `items[${index}][unit_price]`;
+            row.querySelector('label[for$="_unit_price"]')?.setAttribute('for', unitPrice.id);
+        }
+
+        if (total) {
+            total.id = `items_${index}_total`;
+            total.name = `items[${index}][total]`;
+            row.querySelector('label[for$="_total"]')?.setAttribute('for', total.id);
+        }
+
+        if (serialNumbers) {
+            serialNumbers.id = `items_${index}_serial_numbers`;
+            serialNumbers.name = `items[${index}][serial_numbers]`;
+            row.querySelector('label[for$="_serial_numbers"]')?.setAttribute('for', serialNumbers.id);
+        }
+    });
+
+    itemIndex = rows.length;
+}
+
+function refreshItemRows() {
+    reindexItemRows();
+    refreshRemoveButtons();
+    updateTotals();
+}
+
+refreshItemRows();
 document.querySelectorAll('.item-row').forEach(refreshSerialOptions);
 updateTotals();
 </script>

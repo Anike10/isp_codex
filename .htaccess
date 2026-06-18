@@ -1,6 +1,15 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    RewriteRule ^$ public/index.php [L]
-    RewriteRule ^((?!public/).*)$ public/$1 [L]
+    <FilesMatch "(^\.|^artisan$|^composer\.(json|lock)$|^package\.json$|^phpunit\.xml$|^vite\.config\.js$|\.bak$|\.config$|\.dist$|\.env$|\.ini$|\.log$|\.old$|\.orig$|\.sql$|\.swp$|~$)">
+        Require all denied
+    </FilesMatch>
+
+    RewriteRule ^$ index.php [L]
+    RewriteRule ^(css|js|storage)/(.*)$ public/$1/$2 [L]
+    RewriteRule ^(favicon\.ico|favicon\.svg|robots\.txt)$ public/$1 [L]
+
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [L]
 </IfModule>
