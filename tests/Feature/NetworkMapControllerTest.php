@@ -22,12 +22,12 @@ class NetworkMapControllerTest extends TestCase
         $this->actingAs($user)
             ->get(route('network-map.index'))
             ->assertOk()
-            ->assertSee(asset('vendor/maplibre-gl/maplibre-gl.css'), false)
-            ->assertSee(asset('vendor/maplibre-gl/maplibre-gl.js'), false)
+            ->assertSee(asset('css/maplibre-gl.css'), false)
+            ->assertSee(asset('js/maplibre-gl.js'), false)
             ->assertDontSee('unpkg.com/maplibre-gl', false);
 
-        $this->assertFileExists(public_path('vendor/maplibre-gl/maplibre-gl.css'));
-        $this->assertFileExists(public_path('vendor/maplibre-gl/maplibre-gl.js'));
+        $this->assertFileExists(public_path('css/maplibre-gl.css'));
+        $this->assertFileExists(public_path('js/maplibre-gl.js'));
 
         $script = File::get(public_path('js/network-map.js'));
         $this->assertStringContainsString('setupSearchableDropdown', $script);

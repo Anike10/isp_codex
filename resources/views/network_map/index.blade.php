@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-    <link rel="stylesheet" href="{{ asset('vendor/maplibre-gl/maplibre-gl.css') }}?v=4.7.1">
+    <link rel="stylesheet" href="{{ asset('css/maplibre-gl.css') }}?v=4.7.1">
     <link rel="stylesheet" href="{{ asset('css/network-map.css') }}?v=20260619-6">
 
     <section class="network-map-page">
@@ -120,6 +120,6 @@
             csrfToken: @json(csrf_token()),
         };
     </script>
-    <script src="{{ asset('vendor/maplibre-gl/maplibre-gl.js') }}?v=4.7.1"></script>
+    <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
     <script src="{{ asset('js/network-map.js') }}?v=20260620-2"></script>
 @endsection
