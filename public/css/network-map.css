@@ -978,6 +978,26 @@
     width: 100%;
 }
 
+.splitter-link-style {
+    display: grid;
+    grid-template-columns: minmax(76px, 1fr) 36px;
+    gap: 5px;
+    align-items: center;
+}
+
+.splitter-link-style select[data-map-field="medium"] {
+    grid-column: 1 / -1;
+}
+
+.splitter-link-style input[type="color"] {
+    width: 36px;
+    min-height: 34px;
+    padding: 3px;
+    border: 1px solid #d8dee9;
+    border-radius: 6px;
+    background: #fff;
+}
+
 .core-map-row select {
     min-height: 34px;
     padding: 7px 8px;

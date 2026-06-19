@@ -9,6 +9,7 @@ A Laravel 12 application for an ISP and computer service business.
 - Product-only customers can be saved without an ISP Connection ID
 - MikroTik router management and PPPoE user sync
 - OLT ONU live polling with status and optical power inventory
+- FTTX network map with reciprocal equipment links, drag/list linking, Fiber/Copper media, custom colors, and parallel link rendering
 - Monthly invoice generation
 - Separate quotation workflow with invoice-style entry, no accounting impact, and one-click conversion to a draft invoice
 - Customer direct payment and due tracking

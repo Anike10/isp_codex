@@ -34,8 +34,9 @@ class NetworkMapControllerTest extends TestCase
         $this->assertStringContainsString('appendSplitterPortLinks', $script);
         $this->assertStringContainsString('network-map-endpoint-options-', $script);
         $this->assertStringContainsString('withParallelLineOffsets', $script);
-        $this->assertStringContainsString('saveDirectRouterLink', $script);
-        $this->assertStringContainsString("link_type: 'direct_router'", $script);
+        $this->assertStringContainsString('saveDirectDeviceLink', $script);
+        $this->assertStringContainsString("link_type: 'direct_device'", $script);
+        $this->assertStringContainsString("['direct_router', 'direct_device']", $script);
         $this->assertStringContainsString("medium === 'Copper'", $script);
         $this->assertStringContainsString("'line-offset': ['coalesce', ['get', '_map_line_offset'], 0]", $script);
         $this->assertStringContainsString('return completedCore.color_hex', $script);
@@ -193,19 +194,19 @@ class NetworkMapControllerTest extends TestCase
         File::deleteDirectory(public_path('network-map-photos'));
     }
 
-    public function test_direct_router_link_metadata_is_preserved(): void
+    public function test_direct_device_link_metadata_is_preserved(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
         $firstLink = [
-            'link_type' => 'direct_router',
+            'link_type' => 'direct_device',
             'target_device_id' => 'router-2',
             'target_port' => 'Port 2',
             'medium' => 'Copper',
             'color_hex' => '#b54708',
         ];
         $secondLink = [
-            'link_type' => 'direct_router',
+            'link_type' => 'direct_device',
             'target_device_id' => 'router-1',
             'target_port' => 'Port 1',
             'medium' => 'Copper',

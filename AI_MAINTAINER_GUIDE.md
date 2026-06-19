@@ -93,6 +93,20 @@ let those responsibilities shape the implementation, validation, and notes.
 - When adding complex workflows such as warranty claims, provide list filters,
   status badges, clear action buttons, and customer/product history links.
 
+Network-map linking rules:
+
+- Treat Router, Switch, OLT, Splitter, TJ Box, and ONU as linkable equipment
+  with explicit endpoints/ports.
+- Every direct equipment link must be reciprocal: both endpoint properties must
+  contain the peer feature, peer port, medium, and color. Unlinking or editing
+  either side must update both sides.
+- Every equipment port must support both drag-to-target linking and a searchable,
+  naturally sorted target list. Keep fiber-core drag/drop as an additional path.
+- Direct link media are `Fiber` or `Copper`; operators may override the display
+  color. Multiple links on the same geometry must use stable parallel offsets.
+- Keep compatibility with legacy `direct_router` and one-sided splitter rows;
+  normalize them to reciprocal `direct_device` links when topology loads.
+
 ### 7. QA And Regression Engineer
 
 - Add focused tests whenever business rules change, especially for inventory,
