@@ -28,6 +28,12 @@
             'serialless_quantity' => '',
         ],
     ]);
+    $invoiceItems = collect($invoiceItems)->map(function (array $item): array {
+        $item['serial_numbers'] = app(\App\Support\SerialNumberParser::class)
+            ->formatCompact($item['serial_numbers'] ?? '');
+
+        return $item;
+    })->all();
     $selectedCustomer = old('customer_id')
         ? $customers->firstWhere('id', (int) old('customer_id'))
         : ($isEdit ? $invoice->customer : null);
@@ -1026,7 +1032,7 @@ function expandedSelectedSerials(row) {
 }
 
 function setSelectedSerials(row, serials) {
-    row.querySelector('[name$="[serial_numbers]"]').value = [...new Set(serials)].join('\n');
+    row.querySelector('[name$="[serial_numbers]"]').value = [...new Set(serials)].join(', ');
     syncQuantityToSerials(row);
 }
 
@@ -1078,7 +1084,7 @@ function refreshSerialOptions(row, focusSerialNumber = null) {
     if (seriallessInput) {
         seriallessInput.disabled = false;
     }
-    serialTextarea.placeholder = 'Click serials below, or type one per line';
+    serialTextarea.placeholder = 'Click serials below, or type comma-separated serials';
     const chosen = expandedSelectedSerials(row);
 
     product.serials.forEach(serial => {

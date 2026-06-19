@@ -91,6 +91,14 @@ class InvoiceSerialSaleTest extends TestCase
             'serial_number' => 'ONU-SN-002',
             'status' => 'in_stock',
         ]);
+
+        $invoice->items()->firstOrFail()->update([
+            'serial_numbers' => "ONU-SN-001\nONU-SN-002",
+        ]);
+
+        $this->actingAs($user)->get(route('invoices.edit', $invoice))
+            ->assertOk()
+            ->assertSee('ONU-SN-001 to ONU-SN-002');
     }
 
     public function test_invoice_sale_updates_quantity_from_serial_range_count(): void
