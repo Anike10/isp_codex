@@ -3,6 +3,7 @@
 @section('content')
 @php
     $canRecordPayment = auth()->user()?->hasPermission('manage_payments') && (float) $invoice->due_amount > 0;
+    $serialFormatter = app(\App\Support\SerialNumberParser::class);
     $accountsByMethod = ($paymentAccounts ?? collect())
         ->groupBy('payment_method')
         ->map(fn ($accounts) => $accounts->map(fn ($account) => [
@@ -155,13 +156,14 @@
 <section class="card" style="margin-top:16px">
     <h2>Items</h2>
     <table>
-        <thead><tr><th style="width:56px;">SL</th><th>Product</th><th>Serials</th><th>Quantity</th><th>Unit Price</th><th>Total</th></tr></thead>
+        <thead><tr><th style="width:56px;">SL</th><th>Product</th><th>Serials</th><th>Serial-less Qty</th><th>Quantity</th><th>Unit Price</th><th>Total</th></tr></thead>
         <tbody>
         @foreach ($invoice->items as $index => $item)
             <tr>
                 <td>{{ $index + 1 }}</td>
                 <td>{{ $item->product_name }}</td>
-                <td style="white-space:pre-line">{{ $item->serial_numbers ?: 'N/A' }}</td>
+                <td>{{ filled($item->serial_numbers) ? $serialFormatter->formatCompact($item->serial_numbers) : 'N/A' }}</td>
+                <td>{{ $item->serialless_quantity ?: 'N/A' }}</td>
                 <td>{{ $item->quantity }}</td>
                 <td>{{ number_format($item->unit_price, 2) }}</td>
                 <td>{{ number_format($item->total, 2) }}</td>

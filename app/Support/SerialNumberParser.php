@@ -45,6 +45,55 @@ class SerialNumberParser
         return $serials;
     }
 
+    public function formatCompact(?string $value): string
+    {
+        $serials = $this->parse((string) $value);
+
+        if ($serials === []) {
+            return '';
+        }
+
+        $groups = [];
+        $current = null;
+
+        foreach ($serials as $serial) {
+            $parts = $this->splitSerial($serial);
+
+            if (
+                $current
+                && $parts
+                && $current['parts']
+                && $parts['prefix'] === $current['parts']['prefix']
+                && $parts['number'] === $current['parts']['number'] + 1
+            ) {
+                $current['end'] = $serial;
+                $current['parts'] = $parts;
+                continue;
+            }
+
+            if ($current) {
+                $groups[] = $current;
+            }
+
+            $current = [
+                'start' => $serial,
+                'end' => $serial,
+                'parts' => $parts,
+            ];
+        }
+
+        if ($current) {
+            $groups[] = $current;
+        }
+
+        return implode(', ', array_map(
+            fn (array $group): string => $group['start'] === $group['end']
+                ? $group['start']
+                : $group['start'].' to '.$group['end'],
+            $groups,
+        ));
+    }
+
     private function parsePart(string $part): array
     {
         $digits = '0-9\x{09E6}-\x{09EF}';
@@ -85,6 +134,20 @@ class SerialNumberParser
         }
 
         return $serials;
+    }
+
+    private function splitSerial(string $serial): ?array
+    {
+        $digits = '0-9\x{09E6}-\x{09EF}';
+
+        if (! preg_match('/^(.*?)(['.$digits.']+)$/u', $serial, $match)) {
+            return null;
+        }
+
+        return [
+            'prefix' => $match[1],
+            'number' => (int) $this->normalizeDigits($match[2]),
+        ];
     }
 
     private function normalizeDigits(string $value): string

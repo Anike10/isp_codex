@@ -15,9 +15,17 @@ class StockMovement extends Model
         'product_id',
         'type',
         'quantity',
+        'serialless_quantity',
         'reason',
         'reference_no',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'serialless_quantity' => 'integer',
+        ];
+    }
 
     public function product(): BelongsTo
     {

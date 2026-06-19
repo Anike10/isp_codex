@@ -164,6 +164,137 @@ class InvoiceSerialSaleTest extends TestCase
         }
     }
 
+    public function test_invoice_sale_records_serialless_quantity_on_details_but_not_print(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Retail Customer',
+            'phone' => '01711111111',
+            'connection_id' => 'RC-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => false,
+        ]);
+        $product = Product::create([
+            'name' => 'ONU Device',
+            'sku' => 'ONU-MIXED-SALE',
+            'brand' => 'BDCOM',
+            'track_inventory' => true,
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 3,
+            'low_stock_alert' => 1,
+        ]);
+
+        ProductSerial::create([
+            'product_id' => $product->id,
+            'serial_number' => 'ONU-MIXED-001',
+            'status' => 'in_stock',
+        ]);
+
+        $this->actingAs($user)->post(route('invoices.store'), [
+            'customer_id' => $customer->id,
+            'billing_month' => '2026-06',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'quantity' => 3,
+                    'unit_price' => 1200,
+                    'serial_numbers' => 'ONU-MIXED-001',
+                    'serialless_quantity' => 2,
+                ],
+            ],
+            'discount_type' => 'amount',
+            'discount' => 0,
+            'vat_type' => 'amount',
+            'vat' => 0,
+        ])->assertRedirect();
+
+        $invoice = Invoice::where('customer_id', $customer->id)->firstOrFail();
+
+        $this->assertSame(0, $product->refresh()->stock_quantity);
+        $this->assertDatabaseHas('invoice_items', [
+            'invoice_id' => $invoice->id,
+            'product_id' => $product->id,
+            'quantity' => 3,
+            'serialless_quantity' => 2,
+            'serial_numbers' => 'ONU-MIXED-001',
+        ]);
+        $this->assertDatabaseHas('stock_movements', [
+            'product_id' => $product->id,
+            'type' => 'out',
+            'quantity' => 3,
+            'serialless_quantity' => 2,
+            'reference_no' => $invoice->invoice_no,
+        ]);
+
+        $this->actingAs($user)->get(route('invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('Serial-less Qty')
+            ->assertSee('ONU-MIXED-001');
+
+        $this->actingAs($user)->get(route('invoices.invoice', $invoice))
+            ->assertOk()
+            ->assertDontSee('Serial-less Qty');
+    }
+
+    public function test_invoice_sale_requires_serial_or_serialless_count_for_every_piece(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Retail Customer',
+            'phone' => '01711111111',
+            'connection_id' => 'RC-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => false,
+        ]);
+        $product = Product::create([
+            'name' => 'ONU Device',
+            'sku' => 'ONU-MISSING-SALE',
+            'brand' => 'BDCOM',
+            'track_inventory' => true,
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 3,
+            'low_stock_alert' => 1,
+        ]);
+
+        ProductSerial::create([
+            'product_id' => $product->id,
+            'serial_number' => 'ONU-MISSING-001',
+            'status' => 'in_stock',
+        ]);
+
+        $this->actingAs($user)->post(route('invoices.store'), [
+            'customer_id' => $customer->id,
+            'billing_month' => '2026-06',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'quantity' => 3,
+                    'unit_price' => 1200,
+                    'serial_numbers' => 'ONU-MISSING-001',
+                    'serialless_quantity' => 1,
+                ],
+            ],
+            'discount_type' => 'amount',
+            'discount' => 0,
+            'vat_type' => 'amount',
+            'vat' => 0,
+        ])->assertSessionHasErrors('items');
+
+        $this->assertSame(3, $product->refresh()->stock_quantity);
+    }
+
     public function test_invoice_update_recalculates_percentage_vat_after_item_removal(): void
     {
         $user = User::factory()->create();
@@ -274,7 +405,7 @@ class InvoiceSerialSaleTest extends TestCase
             ->assertSee('Customer-visible setup note.')
             ->assertSee('Office-only margin note.');
 
-        $this->actingAs($user)->get(route('invoices.challan', $invoice))
+        $this->actingAs($user)->get(route('invoices.invoice', $invoice))
             ->assertOk()
             ->assertDontSee('Customer-visible setup note.')
             ->assertDontSee('Office-only margin note.');
@@ -302,7 +433,7 @@ class InvoiceSerialSaleTest extends TestCase
 
         $this->assertTrue($invoice->show_public_note);
 
-        foreach (['invoices.challan', 'invoices.quotation', 'invoices.delivery-challan'] as $routeName) {
+        foreach (['invoices.invoice', 'invoices.quotation', 'invoices.delivery-challan'] as $routeName) {
             $this->actingAs($user)->get(route($routeName, $invoice))
                 ->assertOk()
                 ->assertSee('Customer-visible setup note.')
@@ -348,7 +479,7 @@ class InvoiceSerialSaleTest extends TestCase
 
         $invoice = Invoice::where('customer_id', $customer->id)->firstOrFail();
 
-        $this->actingAs($user)->get(route('invoices.challan', $invoice))
+        $this->actingAs($user)->get(route('invoices.invoice', $invoice))
             ->assertOk()
             ->assertSee('Default office payment instruction.');
 
@@ -369,7 +500,7 @@ class InvoiceSerialSaleTest extends TestCase
             'payment_note' => 'Special note for this invoice only.',
         ])->assertRedirect();
 
-        $this->actingAs($user)->get(route('invoices.challan', $invoice->refresh()))
+        $this->actingAs($user)->get(route('invoices.invoice', $invoice->refresh()))
             ->assertOk()
             ->assertSee('Special note for this invoice only.')
             ->assertDontSee('Default office payment instruction.');

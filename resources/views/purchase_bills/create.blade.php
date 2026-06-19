@@ -57,11 +57,12 @@
                 <th style="width:130px">Unit Price</th>
                 <th style="width:130px">Warranty Days</th>
                 <th>Serial Numbers</th>
+                <th style="width:130px">Serial-less Qty</th>
                 <th style="width:70px"></th>
             </tr>
         </thead>
         <tbody id="purchaseRows">
-            @php($oldItems = old('items', [['product_id' => '', 'quantity' => 1, 'unit_price' => 0, 'warranty_days' => '', 'serial_numbers' => '']]))
+            @php($oldItems = old('items', [['product_id' => '', 'quantity' => 1, 'unit_price' => 0, 'warranty_days' => '', 'serial_numbers' => '', 'serialless_quantity' => '']]))
             @foreach ($oldItems as $index => $item)
                 <tr>
                     <td>
@@ -85,6 +86,7 @@
                     <td><input type="number" name="items[{{ $index }}][unit_price]" min="0" step="0.01" value="{{ $item['unit_price'] ?? 0 }}" required></td>
                     <td><input type="number" name="items[{{ $index }}][warranty_days]" min="0" max="3650" value="{{ $item['warranty_days'] ?? ($item['warranty_months'] ?? '') }}"></td>
                     <td><textarea name="items[{{ $index }}][serial_numbers]" rows="2" placeholder="1001-1010, 1020-1030">{{ $item['serial_numbers'] ?? '' }}</textarea></td>
+                    <td><input type="number" name="items[{{ $index }}][serialless_quantity]" min="0" value="{{ $item['serialless_quantity'] ?? '' }}" placeholder="0"></td>
                     <td><button class="btn light" type="button" data-remove-row>Remove</button></td>
                 </tr>
             @endforeach
@@ -160,6 +162,7 @@
         <td><input data-name="unit_price" type="number" min="0" step="0.01" value="0" required></td>
         <td><input data-name="warranty_days" type="number" min="0" max="3650"></td>
         <td><textarea data-name="serial_numbers" rows="2" placeholder="1001-1010, 1020-1030"></textarea></td>
+        <td><input data-name="serialless_quantity" type="number" min="0" placeholder="0"></td>
         <td><button class="btn light" type="button" data-remove-row>Remove</button></td>
     </tr>
 </template>
@@ -193,11 +196,16 @@ const syncProductDefaults = row => {
     const unitPrice = row.querySelector('input[name$="[unit_price]"], input[data-name="unit_price"]');
     const warrantyDays = row.querySelector('input[name$="[warranty_days]"], input[data-name="warranty_days"]');
     const serialNumbers = row.querySelector('textarea[name$="[serial_numbers]"], textarea[data-name="serial_numbers"]');
+    const seriallessQuantity = row.querySelector('input[name$="[serialless_quantity]"], input[data-name="serialless_quantity"]');
 
     if (!selected) {
         if (serialNumbers) {
             serialNumbers.disabled = false;
             serialNumbers.placeholder = 'Serials allowed for new products';
+        }
+        if (seriallessQuantity) {
+            seriallessQuantity.disabled = false;
+            seriallessQuantity.placeholder = 'Qty without serial';
         }
         return;
     }
@@ -215,6 +223,14 @@ const syncProductDefaults = row => {
         serialNumbers.placeholder = selected.track_serials ? '1001-1010, 1020-1030' : 'Serial not tracked for this product';
         if (!selected.track_serials) {
             serialNumbers.value = '';
+        }
+    }
+
+    if (seriallessQuantity) {
+        seriallessQuantity.disabled = !selected.track_serials;
+        seriallessQuantity.placeholder = selected.track_serials ? 'Qty without serial' : 'N/A';
+        if (!selected.track_serials) {
+            seriallessQuantity.value = '';
         }
     }
 };

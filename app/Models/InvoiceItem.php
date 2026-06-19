@@ -20,6 +20,7 @@ class InvoiceItem extends Model
         'unit_price',
         'total',
         'serial_numbers',
+        'serialless_quantity',
         'warranty_days',
         'service_guarantee_days',
         'service_guarantee_until',
@@ -30,6 +31,7 @@ class InvoiceItem extends Model
     {
         return [
             'service_guarantee_until' => 'date',
+            'serialless_quantity' => 'integer',
         ];
     }
 

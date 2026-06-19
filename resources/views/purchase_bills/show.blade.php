@@ -16,7 +16,7 @@
 <section class="card">
     <h2>Purchased Products</h2>
     <table>
-        <thead><tr><th>Product</th><th>Qty</th><th>Unit</th><th>Total</th><th>Warranty</th><th>Serials</th></tr></thead>
+        <thead><tr><th>Product</th><th>Qty</th><th>Serial-less Qty</th><th>Unit</th><th>Total</th><th>Warranty</th><th>Serials</th></tr></thead>
         <tbody>
         @foreach ($purchaseBill->items as $item)
             <tr>
@@ -25,6 +25,7 @@
                     <div class="muted">{{ $item->product->brand ?? 'No brand' }} - {{ $item->product->category ?? 'No category' }}{{ $item->product->subcategory ? ' / '.$item->product->subcategory : '' }}</div>
                 </td>
                 <td>{{ $item->quantity }}</td>
+                <td>{{ $item->serialless_quantity ?: 'N/A' }}</td>
                 <td>{{ number_format($item->unit_price, 2) }}</td>
                 <td>{{ number_format($item->total, 2) }}</td>
                 <td>

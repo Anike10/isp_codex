@@ -162,4 +162,80 @@ class ProductControllerTest extends TestCase
             ->assertSee('Own Use: 2')
             ->assertSee('Customer installation');
     }
+
+    public function test_serial_tracked_stock_movement_can_record_serialless_quantity(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        $product = Product::create([
+            'name' => 'ONU Device',
+            'sku' => 'ONU-SERIALLESS-USE',
+            'brand' => 'BDCOM',
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 3,
+            'low_stock_alert' => 1,
+        ]);
+
+        ProductSerial::create([
+            'product_id' => $product->id,
+            'serial_number' => 'ONU001',
+            'status' => 'in_stock',
+        ]);
+
+        $this->actingAs($user)->post(route('products.stock', $product), [
+            'type' => 'use',
+            'quantity' => 3,
+            'serial_numbers' => 'ONU001',
+            'serialless_quantity' => 2,
+            'reason' => 'Office install',
+        ])->assertRedirect(route('products.index'));
+
+        $this->assertSame(0, $product->refresh()->stock_quantity);
+        $this->assertDatabaseHas('stock_movements', [
+            'product_id' => $product->id,
+            'type' => 'use',
+            'quantity' => 3,
+            'serialless_quantity' => 2,
+            'reason' => 'Office install',
+        ]);
+
+        $this->actingAs($user)->get(route('products.show', $product))
+            ->assertOk()
+            ->assertSee('Serial-less Qty')
+            ->assertSee('2');
+    }
+
+    public function test_serial_tracked_stock_movement_requires_serial_or_serialless_count_for_every_piece(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        $product = Product::create([
+            'name' => 'ONU Device',
+            'sku' => 'ONU-SERIALLESS-MISSING',
+            'brand' => 'BDCOM',
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 3,
+            'low_stock_alert' => 1,
+        ]);
+
+        ProductSerial::create([
+            'product_id' => $product->id,
+            'serial_number' => 'ONU001',
+            'status' => 'in_stock',
+        ]);
+
+        $this->actingAs($user)->post(route('products.stock', $product), [
+            'type' => 'use',
+            'quantity' => 3,
+            'serial_numbers' => 'ONU001',
+            'serialless_quantity' => 1,
+            'reason' => 'Office install',
+        ])->assertSessionHasErrors('quantity');
+
+        $this->assertSame(3, $product->refresh()->stock_quantity);
+    }
 }

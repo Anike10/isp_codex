@@ -29,11 +29,12 @@
             <input name="reason" placeholder="Reason" style="width:220px">
             @if ($product->track_serial_numbers)
                 <textarea name="serial_numbers" rows="2" placeholder="Serials: 1001-1010, 1020-1030" style="min-width:280px"></textarea>
+                <input type="number" name="serialless_quantity" min="0" placeholder="Serial-less Qty" style="width:150px">
             @endif
             <button class="btn secondary" type="submit">Update Stock</button>
         </form>
         @if ($product->track_serial_numbers)
-            <div class="muted" style="margin-top:8px">For Own Use/Out, serial count must match quantity. You can use comma, new line, or range.</div>
+            <div class="muted" style="margin-top:8px">For serial-tracked stock, serial count plus serial-less quantity must match total quantity. You can use comma, new line, or range.</div>
         @endif
     </section>
 @endif
@@ -75,18 +76,19 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Date</th><th>Type</th><th>Quantity</th><th>Reason</th><th>Reference</th></tr></thead>
+    <thead><tr><th>Date</th><th>Type</th><th>Quantity</th><th>Serial-less Qty</th><th>Reason</th><th>Reference</th></tr></thead>
     <tbody>
     @forelse ($stockMovements as $movement)
         <tr>
             <td>{{ $movement->created_at->format('Y-m-d H:i') }}</td>
             <td>{{ $movement->type === 'use' ? 'Own Use' : ucfirst($movement->type) }}</td>
             <td>{{ $movement->quantity }}</td>
+            <td>{{ $movement->serialless_quantity ?: 'N/A' }}</td>
             <td>{{ $movement->reason ?? 'N/A' }}</td>
             <td>{{ $movement->reference_no ?? 'N/A' }}</td>
         </tr>
     @empty
-        <tr><td colspan="5">No stock movement recorded yet.</td></tr>
+        <tr><td colspan="6">No stock movement recorded yet.</td></tr>
     @endforelse
     </tbody>
 </table>

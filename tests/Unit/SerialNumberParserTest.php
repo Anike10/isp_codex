@@ -32,4 +32,18 @@ class SerialNumberParserTest extends TestCase
 
         $this->assertSame(['ONU010', 'ONU011'], $serials);
     }
+
+    public function test_it_formats_serials_as_compact_comma_separated_ranges(): void
+    {
+        $serials = (new SerialNumberParser)->formatCompact("ONU001\nONU002\nONU003\nONU010\nONU012\nONU013");
+
+        $this->assertSame('ONU001 to ONU003, ONU010, ONU012 to ONU013', $serials);
+    }
+
+    public function test_it_formats_bengali_digit_serials_as_compact_ranges(): void
+    {
+        $serials = (new SerialNumberParser)->formatCompact("\u{09E7}\u{09E6}\u{09E6}\u{09E7}\n\u{09E7}\u{09E6}\u{09E6}\u{09E8}\n\u{09E7}\u{09E6}\u{09E6}\u{09EA}");
+
+        $this->assertSame("\u{09E7}\u{09E6}\u{09E6}\u{09E7} to \u{09E7}\u{09E6}\u{09E6}\u{09E8}, \u{09E7}\u{09E6}\u{09E6}\u{09EA}", $serials);
+    }
 }

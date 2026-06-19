@@ -123,9 +123,9 @@ class InvoiceController extends Controller
     {
         $data = $this->validateInvoiceData($request);
 
-        [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
-
         try {
+            [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
+
             $invoice = DB::transaction(function () use ($data, $customerId, $itemsData, $subtotal, $total, $inventoryService): Invoice {
                 $invoice = Invoice::create([
                     'customer_id' => $customerId,
@@ -192,9 +192,10 @@ class InvoiceController extends Controller
         }
 
         $data = $this->validateInvoiceData($request);
-        [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
 
         try {
+            [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
+
             DB::transaction(function () use ($invoice, $data, $customerId, $itemsData, $subtotal, $total, $inventoryService) {
                 $this->restoreInvoiceInventory($invoice, $inventoryService);
 
@@ -320,6 +321,7 @@ class InvoiceController extends Controller
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.serial_numbers' => ['nullable', 'string'],
+            'items.*.serialless_quantity' => ['nullable', 'integer', 'min:0'],
             'discount_type' => ['required', 'in:amount,percent'],
             'discount' => ['required', 'numeric', 'min:0'],
             'vat_type' => ['required', 'in:amount,percent'],
@@ -359,10 +361,18 @@ class InvoiceController extends Controller
 
         foreach ($data['items'] as $item) {
             $serialNumbers = app(SerialNumberParser::class)->parse($item['serial_numbers'] ?? '');
-            $quantity = max((int) $item['quantity'], count($serialNumbers));
+            $seriallessQuantity = (int) ($item['serialless_quantity'] ?? 0);
+            $quantity = max((int) $item['quantity'], count($serialNumbers) + $seriallessQuantity);
             $product = ! empty($item['product_id']) ? Product::find($item['product_id']) : null;
             $productType = $product?->product_type ?? null;
             $serviceGuaranteeDays = $product?->service_guarantee_days;
+
+            if (! $product?->track_serial_numbers) {
+                $seriallessQuantity = 0;
+            } elseif (count($serialNumbers) + $seriallessQuantity !== $quantity) {
+                throw new InvalidArgumentException('For serial-tracked invoice items, serial count plus serial-less quantity must match quantity.');
+            }
+
             $total = $quantity * $item['unit_price'];
             $subtotal += $total;
             $itemsData[] = [
@@ -373,6 +383,7 @@ class InvoiceController extends Controller
                 'unit_price' => $item['unit_price'],
                 'total' => $total,
                 'serial_numbers' => trim((string) ($item['serial_numbers'] ?? '')) ?: null,
+                'serialless_quantity' => $seriallessQuantity,
                 'warranty_days' => $product?->warranty_days,
                 'service_guarantee_days' => $serviceGuaranteeDays,
                 'service_guarantee_until' => $serviceGuaranteeDays ? now()->addDays($serviceGuaranteeDays)->toDateString() : null,
@@ -468,7 +479,7 @@ class InvoiceController extends Controller
         }
 
         if ($product->track_inventory) {
-            $inventoryService->moveStock($product, 'out', $quantity, 'Invoice '.$invoice->invoice_no, $invoice->invoice_no);
+            $inventoryService->moveStock($product, 'out', $quantity, 'Invoice '.$invoice->invoice_no, $invoice->invoice_no, (int) $invoiceItem->serialless_quantity);
         }
 
         if ($serialNumbers === []) {
@@ -516,7 +527,7 @@ class InvoiceController extends Controller
             }
 
             if ($product->track_inventory) {
-                $inventoryService->moveStock($product, 'in', (int) $item->quantity, 'Invoice edit restore '.$invoice->invoice_no, $invoice->invoice_no);
+                $inventoryService->moveStock($product, 'in', (int) $item->quantity, 'Invoice edit restore '.$invoice->invoice_no, $invoice->invoice_no, (int) $item->serialless_quantity);
             }
 
             $serialNumbers = app(SerialNumberParser::class)->parse($item->serial_numbers ?? '');

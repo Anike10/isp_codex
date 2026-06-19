@@ -125,16 +125,24 @@ class ProductController extends Controller
             'quantity' => ['required', 'integer', 'min:1'],
             'reason' => ['nullable', 'string', 'max:255'],
             'serial_numbers' => ['nullable', 'string'],
+            'serialless_quantity' => ['nullable', 'integer', 'min:0'],
         ]);
 
         try {
             DB::transaction(function () use ($data, $inventoryService, $product): void {
                 $quantity = (int) $data['quantity'];
                 $serialNumbers = app(SerialNumberParser::class)->parse($data['serial_numbers'] ?? '');
+                $seriallessQuantity = (int) ($data['serialless_quantity'] ?? 0);
 
-                if ($product->track_serial_numbers && in_array($data['type'], ['out', 'use'], true)) {
-                    if (count($serialNumbers) !== $quantity) {
-                        throw new InvalidArgumentException('Serial number count must match quantity for serial-tracked stock out/use.');
+                if (! $product->track_serial_numbers) {
+                    $seriallessQuantity = 0;
+                } elseif (count($serialNumbers) + $seriallessQuantity !== $quantity) {
+                    throw new InvalidArgumentException('For serial-tracked stock movements, serial count plus serial-less quantity must match quantity.');
+                }
+
+                if ($product->track_serial_numbers && in_array($data['type'], ['out', 'use'], true) && $serialNumbers !== []) {
+                    if (count($serialNumbers) > $quantity) {
+                        throw new InvalidArgumentException('Serial number count cannot be greater than quantity.');
                     }
 
                     $foundSerials = $product->serials()
@@ -150,7 +158,7 @@ class ProductController extends Controller
                     }
                 }
 
-                $inventoryService->moveStock($product, $data['type'], $quantity, $data['reason'] ?? null);
+                $inventoryService->moveStock($product, $data['type'], $quantity, $data['reason'] ?? null, null, $seriallessQuantity);
 
                 if ($product->track_serial_numbers && $serialNumbers !== []) {
                     if ($data['type'] === 'in') {

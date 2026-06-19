@@ -1,6 +1,29 @@
 @extends('layouts.app')
 
 @section('content')
+<style>
+    .product-option {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .product-option-heading {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0;
+        font-weight: 700;
+    }
+
+    .product-option-heading input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        flex: 0 0 auto;
+    }
+</style>
+
 <div class="topbar">
     <div><h1>Add Product</h1><div class="muted">Create stock item for computer shop or ISP inventory</div></div>
     <a class="btn light" href="{{ route('products.index') }}">Back</a>
@@ -33,14 +56,14 @@
     </div>
     <div><label>Purchase Price</label><input type="number" step="0.01" name="purchase_price" value="{{ old('purchase_price', 0) }}" required></div>
     <div><label>Sale Price</label><input type="number" step="0.01" name="sale_price" value="{{ old('sale_price', 0) }}" required></div>
-    <div class="full">
+    <div class="full product-option">
         <input type="hidden" name="track_inventory" value="0">
-        <label><input type="checkbox" name="track_inventory" value="1" @checked(old('track_inventory', '1'))> Track inventory stock</label>
+        <label class="product-option-heading">Track inventory stock <input type="checkbox" name="track_inventory" value="1" @checked(old('track_inventory', '1'))></label>
         <span class="muted">Uncheck this for services or non-stock purchases that should not affect inventory.</span>
     </div>
-    <div data-inventory-field>
+    <div class="product-option" data-inventory-field>
         <input type="hidden" name="track_serial_numbers" value="0">
-        <label><input type="checkbox" name="track_serial_numbers" value="1" @checked(old('track_serial_numbers'))> Track serial numbers</label>
+        <label class="product-option-heading">Track serial numbers <input type="checkbox" name="track_serial_numbers" value="1" @checked(old('track_serial_numbers'))></label>
         <span class="muted">Enable this for routers, ONUs, devices, or anything with individual serial numbers.</span>
     </div>
     <div data-inventory-field><label>Default Warranty Days</label><input type="number" name="warranty_days" min="0" max="3650" value="{{ old('warranty_days') }}" placeholder="Example: 365"></div>

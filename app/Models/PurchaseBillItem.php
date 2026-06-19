@@ -15,6 +15,7 @@ class PurchaseBillItem extends Model
         'purchase_bill_id',
         'product_id',
         'quantity',
+        'serialless_quantity',
         'unit_price',
         'total',
         'warranty_months',
@@ -26,6 +27,7 @@ class PurchaseBillItem extends Model
         return [
             'unit_price' => 'decimal:2',
             'total' => 'decimal:2',
+            'serialless_quantity' => 'integer',
         ];
     }
 

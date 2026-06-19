@@ -16,6 +16,7 @@
             'quantity' => $item->quantity,
             'unit_price' => $item->unit_price,
             'serial_numbers' => $item->serial_numbers,
+            'serialless_quantity' => $item->serialless_quantity,
         ])->toArray()
         : [
         [
@@ -24,6 +25,7 @@
             'quantity' => 1,
             'unit_price' => '',
             'serial_numbers' => '',
+            'serialless_quantity' => '',
         ],
     ]);
     $selectedCustomer = old('customer_id')
@@ -709,8 +711,10 @@
                                     <div class="item-serials">
                                         <label for="items_{{ $index }}_serial_numbers">Serial Numbers</label>
                                         <textarea id="items_{{ $index }}_serial_numbers" name="items[{{ $index }}][serial_numbers]" rows="2" placeholder="Select a serial-tracked product first">{{ $item['serial_numbers'] ?? '' }}</textarea>
+                                        <label for="items_{{ $index }}_serialless_quantity">Serial-less Qty</label>
+                                        <input id="items_{{ $index }}_serialless_quantity" type="number" name="items[{{ $index }}][serialless_quantity]" min="0" value="{{ $item['serialless_quantity'] ?? '' }}" placeholder="Qty without serial">
                                         <div class="serial-options"></div>
-                                        <span class="field-note">Click available serials to add/remove them, or type one per line.</span>
+                                        <span class="field-note">For serial-tracked products, serial count plus serial-less quantity must match total quantity.</span>
                                     </div>
                                 </div>
                             @endforeach
@@ -1028,10 +1032,12 @@ function setSelectedSerials(row, serials) {
 
 function syncQuantityToSerials(row) {
     const serialCount = expandedSelectedSerials(row).length;
+    const seriallessCount = parseInt(row.querySelector('[name$="[serialless_quantity]"]')?.value || '0', 10) || 0;
     const quantity = row.querySelector('.quantity');
+    const trackedCount = serialCount + seriallessCount;
 
-    if (serialCount > 0 && quantity) {
-        quantity.value = serialCount;
+    if (trackedCount > 0 && quantity) {
+        quantity.value = trackedCount;
     }
 
     updateRowTotal(row);
@@ -1047,6 +1053,7 @@ function selectedProduct(row) {
 function refreshSerialOptions(row, focusSerialNumber = null) {
     const product = selectedProduct(row);
     const serialTextarea = row.querySelector('[name$="[serial_numbers]"]');
+    const seriallessInput = row.querySelector('[name$="[serialless_quantity]"]');
     const serialOptions = row.querySelector('.serial-options');
     const serialBlock = row.querySelector('.item-serials');
     let focusButton = null;
@@ -1059,11 +1066,18 @@ function refreshSerialOptions(row, focusSerialNumber = null) {
         serialBlock?.classList.add('is-hidden');
         serialTextarea.disabled = true;
         serialTextarea.value = '';
+        if (seriallessInput) {
+            seriallessInput.disabled = true;
+            seriallessInput.value = '';
+        }
         return;
     }
 
     serialBlock?.classList.remove('is-hidden');
     serialTextarea.disabled = false;
+    if (seriallessInput) {
+        seriallessInput.disabled = false;
+    }
     serialTextarea.placeholder = 'Click serials below, or type one per line';
     const chosen = expandedSelectedSerials(row);
 
@@ -1110,6 +1124,7 @@ function selectProductSuggestion(row, product) {
 
     if (previousProductId && String(previousProductId) !== String(product.id)) {
         row.querySelector('[name$="[serial_numbers]"]').value = '';
+        row.querySelector('[name$="[serialless_quantity]"]').value = '';
     }
 
     const unitPrice = row.querySelector('.unit-price');
@@ -1126,6 +1141,7 @@ function selectProductSuggestion(row, product) {
 function clearSelectedProduct(row) {
     row.querySelector('[data-product-id]').value = '';
     row.querySelector('[name$="[serial_numbers]"]').value = '';
+    row.querySelector('[name$="[serialless_quantity]"]').value = '';
     refreshSerialOptions(row);
 }
 
@@ -1221,8 +1237,10 @@ function addItemRow() {
         <div class="item-serials">
             <label for="items_${itemIndex}_serial_numbers">Serial Numbers</label>
             <textarea id="items_${itemIndex}_serial_numbers" name="items[${itemIndex}][serial_numbers]" rows="2" placeholder="Select a serial-tracked product first"></textarea>
+            <label for="items_${itemIndex}_serialless_quantity">Serial-less Qty</label>
+            <input id="items_${itemIndex}_serialless_quantity" type="number" name="items[${itemIndex}][serialless_quantity]" min="0" placeholder="Qty without serial">
             <div class="serial-options"></div>
-            <span class="field-note">Click available serials to add/remove them, or type one per line.</span>
+            <span class="field-note">For serial-tracked products, serial count plus serial-less quantity must match total quantity.</span>
         </div>
     `;
     container.appendChild(newRow);
@@ -1353,6 +1371,11 @@ document.addEventListener('input', function(e) {
         return;
     }
 
+    if (e.target.matches('[name$="[serialless_quantity]"]')) {
+        syncQuantityToSerials(e.target.closest('.item-row'));
+        return;
+    }
+
     if (e.target.classList.contains('quantity') || e.target.classList.contains('unit-price') || ['discount', 'vat', 'discountType', 'vatType'].includes(e.target.id)) {
         const row = e.target.closest('.item-row');
         if (row) {
@@ -1448,6 +1471,7 @@ function reindexItemRows() {
         const unitPrice = row.querySelector('.unit-price');
         const total = row.querySelector('.total');
         const serialNumbers = row.querySelector('[name$="[serial_numbers]"]');
+        const seriallessQuantity = row.querySelector('[name$="[serialless_quantity]"]');
         const orderButton = row.querySelector('.item-order');
 
         if (orderButton) {
@@ -1487,6 +1511,12 @@ function reindexItemRows() {
             serialNumbers.id = `items_${index}_serial_numbers`;
             serialNumbers.name = `items[${index}][serial_numbers]`;
             row.querySelector('label[for$="_serial_numbers"]')?.setAttribute('for', serialNumbers.id);
+        }
+
+        if (seriallessQuantity) {
+            seriallessQuantity.id = `items_${index}_serialless_quantity`;
+            seriallessQuantity.name = `items[${index}][serialless_quantity]`;
+            row.querySelector('label[for$="_serialless_quantity"]')?.setAttribute('for', seriallessQuantity.id);
         }
     });
 

@@ -221,6 +221,83 @@ class PurchaseBillTest extends TestCase
         }
     }
 
+    public function test_serial_tracked_purchase_can_record_serialless_quantity(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        $product = Product::create([
+            'name' => 'ONU Device',
+            'sku' => 'ONU-MIXED-001',
+            'brand' => 'BDCOM',
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 2,
+        ]);
+
+        $this->actingAs($user)->post(route('purchase-bills.store'), [
+            'bill_no' => 'PB-MIXED-001',
+            'purchase_date' => '2026-06-19',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 3,
+                    'unit_price' => 900,
+                    'serial_numbers' => 'ONU-MIXED-001',
+                    'serialless_quantity' => 2,
+                ],
+            ],
+        ])->assertRedirect(route('purchase-bills.index'));
+
+        $this->assertSame(3, $product->refresh()->stock_quantity);
+        $this->assertDatabaseHas('purchase_bill_items', [
+            'product_id' => $product->id,
+            'quantity' => 3,
+            'serialless_quantity' => 2,
+            'total' => 2700,
+        ]);
+        $this->assertDatabaseHas('stock_movements', [
+            'product_id' => $product->id,
+            'type' => 'in',
+            'quantity' => 3,
+            'serialless_quantity' => 2,
+            'reference_no' => 'PB-MIXED-001',
+        ]);
+    }
+
+    public function test_serial_tracked_purchase_requires_serial_or_serialless_count_for_every_piece(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        $product = Product::create([
+            'name' => 'ONU Device',
+            'sku' => 'ONU-MISSING-001',
+            'brand' => 'BDCOM',
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 2,
+        ]);
+
+        $this->actingAs($user)->post(route('purchase-bills.store'), [
+            'bill_no' => 'PB-MISSING-001',
+            'purchase_date' => '2026-06-19',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 3,
+                    'unit_price' => 900,
+                    'serial_numbers' => 'ONU-MISSING-001',
+                    'serialless_quantity' => 1,
+                ],
+            ],
+        ])->assertSessionHasErrors('items');
+
+        $this->assertSame(0, $product->refresh()->stock_quantity);
+    }
+
     public function test_serial_numbers_require_serial_tracking_enabled(): void
     {
         $user = User::factory()->create();

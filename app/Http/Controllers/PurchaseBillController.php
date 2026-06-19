@@ -82,6 +82,7 @@ class PurchaseBillController extends Controller
             'items.*.warranty_months' => ['nullable', 'integer', 'min:0', 'max:120'],
             'items.*.warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
             'items.*.serial_numbers' => ['nullable', 'string'],
+            'items.*.serialless_quantity' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $items = collect($data['items'])
@@ -110,7 +111,8 @@ class PurchaseBillController extends Controller
                     $quantity = (int) $item['quantity'];
                     $unitPrice = (float) $item['unit_price'];
                     $serialNumbers = app(SerialNumberParser::class)->parse($item['serial_numbers'] ?? '');
-                    $product = $this->resolvePurchaseProduct($item, $serialNumbers);
+                    $seriallessQuantity = (int) ($item['serialless_quantity'] ?? 0);
+                    $product = $this->resolvePurchaseProduct($item, $serialNumbers, $seriallessQuantity);
                     $warrantyMonths = isset($item['warranty_months']) && $item['warranty_months'] !== ''
                         ? (int) $item['warranty_months']
                         : null;
@@ -124,12 +126,19 @@ class PurchaseBillController extends Controller
                         throw new InvalidArgumentException('Serial numbers can only be added for serial-tracked products.');
                     }
 
+                    if (! $product->track_serial_numbers) {
+                        $seriallessQuantity = 0;
+                    } elseif (count($serialNumbers) + $seriallessQuantity !== $quantity) {
+                        throw new InvalidArgumentException('For serial-tracked purchase items, serial count plus serial-less quantity must match quantity.');
+                    }
+
                     $lineTotal = $quantity * $unitPrice;
                     $subtotal += $lineTotal;
 
                     $billItem = $purchaseBill->items()->create([
                         'product_id' => $product->id,
                         'quantity' => $quantity,
+                        'serialless_quantity' => $seriallessQuantity,
                         'unit_price' => $unitPrice,
                         'total' => $lineTotal,
                         'warranty_months' => $warrantyMonths,
@@ -137,7 +146,7 @@ class PurchaseBillController extends Controller
                     ]);
 
                     if ($product->track_inventory) {
-                        $inventoryService->moveStock($product, 'in', $quantity, 'Purchase bill '.$purchaseBill->bill_no, $purchaseBill->bill_no);
+                        $inventoryService->moveStock($product, 'in', $quantity, 'Purchase bill '.$purchaseBill->bill_no, $purchaseBill->bill_no, $seriallessQuantity);
                     }
 
                     foreach ($serialNumbers as $serialNumber) {
@@ -181,7 +190,7 @@ class PurchaseBillController extends Controller
         return $warrantyMonths ? $warrantyMonths * 30 : null;
     }
 
-    private function resolvePurchaseProduct(array $item, array $serialNumbers): Product
+    private function resolvePurchaseProduct(array $item, array $serialNumbers, int $seriallessQuantity): Product
     {
         if (! empty($item['product_id'])) {
             return Product::lockForUpdate()->findOrFail($item['product_id']);
@@ -204,12 +213,14 @@ class PurchaseBillController extends Controller
 
         $unitPrice = (float) ($item['unit_price'] ?? 0);
 
+        $tracksSerials = $serialNumbers !== [] || $seriallessQuantity > 0;
+
         return Product::create([
             'name' => $name,
             'sku' => $this->nextProductSku($name),
-            'product_type' => $serialNumbers !== [] ? 'serial_stock' : 'stock',
+            'product_type' => $tracksSerials ? 'serial_stock' : 'stock',
             'track_inventory' => true,
-            'track_serial_numbers' => $serialNumbers !== [],
+            'track_serial_numbers' => $tracksSerials,
             'warranty_days' => isset($item['warranty_days']) && $item['warranty_days'] !== '' ? (int) $item['warranty_days'] : null,
             'purchase_price' => $unitPrice,
             'sale_price' => $unitPrice,
