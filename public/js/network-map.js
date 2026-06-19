@@ -268,7 +268,6 @@
                 center: defaultView.center,
                 zoom: defaultView.zoom,
                 maxZoom: 22,
-                scrollZoom: false,
                 doubleClickZoom: false,
             });
 
@@ -295,7 +294,7 @@
 
             if (!handleFeatureDetails(event)) {
                 event.preventDefault();
-                centerEmptyMapPoint(event.lngLat);
+                centerEmptyMapPoint(event.point);
             }
         });
         state.map.on('mouseenter', 'network-nodes-circle', showHoverDetails);
@@ -306,7 +305,6 @@
         state.map.on('mousemove', handleMapMouseMove);
         state.map.on('mouseleave', clearPlacementPreview);
         state.map.on('mouseup', finishNodeDrag);
-        state.map.getCanvas().addEventListener('wheel', handleMapWheelZoom, { passive: false });
         state.map.getContainer().addEventListener('dragover', (event) => {
             if (state.pendingPortLink) {
                 event.preventDefault();
@@ -1141,11 +1139,16 @@
         return true;
     }
 
-    function centerEmptyMapPoint(lngLat) {
+    function centerEmptyMapPoint(clickedPoint) {
+        state.map.stop();
         const bounds = state.map.getCanvas().getBoundingClientRect();
+        const visibleCenter = visibleMapCenterPoint(bounds);
+        const nextCenter = state.map.unproject([
+            (bounds.width / 2) + clickedPoint.x - visibleCenter.x,
+            (bounds.height / 2) + clickedPoint.y - visibleCenter.y,
+        ]);
         state.map.easeTo({
-            center: [lngLat.lng, lngLat.lat],
-            offset: visibleMapCenterOffset(bounds),
+            center: [nextCenter.lng, nextCenter.lat],
             duration: 220,
             easing: (progress) => 1 - Math.pow(1 - progress, 3),
             essential: true,
@@ -3021,45 +3024,7 @@
         updatePlacementPreview(event);
     }
 
-    function handleMapWheelZoom(event) {
-        if (!event.deltaY) return;
-
-        event.preventDefault();
-        state.map.stop();
-
-        const deltaUnit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 12 : 400;
-        const zoomStep = Math.min(0.25, Math.max(0.05, Math.abs(event.deltaY) / deltaUnit));
-        const zoomingIn = event.deltaY < 0;
-        const targetZoom = zoomingIn
-            ? Math.min(state.map.getMaxZoom(), state.map.getZoom() + zoomStep)
-            : Math.max(state.map.getMinZoom(), state.map.getZoom() - zoomStep);
-
-        if (!zoomingIn) {
-            state.map.easeTo({ zoom: targetZoom, duration: 140, essential: true });
-            return;
-        }
-
-        const canvas = state.map.getCanvas();
-        const bounds = canvas.getBoundingClientRect();
-        const focus = state.map.unproject([
-            event.clientX - bounds.left,
-            event.clientY - bounds.top,
-        ]);
-        const target = [focus.lng, focus.lat];
-        const offset = visibleMapCenterOffset(bounds);
-
-        state.map.easeTo({ center: target, offset, duration: 0, essential: true });
-        state.map.easeTo({
-            center: target,
-            zoom: targetZoom,
-            offset,
-            duration: 140,
-            easing: (progress) => 1 - Math.pow(1 - progress, 3),
-            essential: true,
-        });
-    }
-
-    function visibleMapCenterOffset(bounds) {
+    function visibleMapCenterPoint(bounds) {
         const viewportWidth = document.documentElement.clientWidth;
         const viewportHeight = document.documentElement.clientHeight;
         const header = document.querySelector('.app-header');
@@ -3072,13 +3037,13 @@
         const visibleBottom = Math.min(viewportHeight, bounds.bottom);
 
         if (visibleRight <= visibleLeft || visibleBottom <= visibleTop) {
-            return [0, 0];
+            return { x: bounds.width / 2, y: bounds.height / 2 };
         }
 
-        return [
-            ((visibleLeft + visibleRight) / 2) - (bounds.left + bounds.width / 2),
-            ((visibleTop + visibleBottom) / 2) - (bounds.top + bounds.height / 2),
-        ];
+        return {
+            x: ((visibleLeft + visibleRight) / 2) - bounds.left,
+            y: ((visibleTop + visibleBottom) / 2) - bounds.top,
+        };
     }
 
     function updatePlacementCursor() {
