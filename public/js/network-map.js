@@ -1367,7 +1367,8 @@
             ...(props.olt_port_links || {}),
             ...(props.port_links || {}),
         };
-        if (Object.values(portLinks).some((link) => String(link.fiber_id) === targetFeatureId)) {
+        if (Object.values(portLinks).some((link) => String(link.fiber_id) === targetFeatureId
+            || String(link.target_device_id) === targetFeatureId)) {
             return true;
         }
 
@@ -1476,6 +1477,31 @@
             if (!isPortLinkDevice(device) || !isFeatureVisible(device)) return;
 
             Object.entries(devicePortLinks(device)).forEach(([port, link]) => {
+                if (link.link_type === 'direct_router') {
+                    const target = state.features.get(link.target_device_id);
+                    if (!target || !isFeatureVisible(target)) return;
+
+                    const deviceId = String(device.properties.id || device.id);
+                    const targetId = String(target.properties.id || target.id);
+                    const directLinkId = [`${deviceId}:${port}`, `${targetId}:${link.target_port || ''}`].sort().join('-');
+                    if (overlayIds.has(directLinkId)) return;
+                    overlayIds.add(directLinkId);
+                    overlays.push({
+                        type: 'Feature',
+                        geometry: {
+                            type: 'LineString',
+                            coordinates: [device.geometry.coordinates, target.geometry.coordinates],
+                        },
+                        properties: {
+                            id: `direct-router-${directLinkId}`,
+                            link_type: 'direct_router',
+                            medium: link.medium || 'Fiber',
+                            color_hex: link.color_hex || (link.medium === 'Copper' ? '#b54708' : '#06b6d4'),
+                        },
+                    });
+                    return;
+                }
+
                 const fiber = state.features.get(link.fiber_id);
                 if (!fiber || !visibleFiberIds.has(String(fiber.properties.id || fiber.id))) return;
 
@@ -1838,6 +1864,11 @@
                 renderOltPortTree(featureId, button.dataset.portTree);
             });
         });
+        panel.querySelectorAll('[data-port-direct]').forEach((button) => {
+            button.addEventListener('click', () => {
+                openDirectRouterLinkPanel(featureId, button.dataset.portDirect);
+            });
+        });
         panel.querySelectorAll('[data-port-unlink]').forEach((button) => {
             button.addEventListener('click', () => {
                 unlinkDevicePortFromFiberCore(featureId, button.dataset.portUnlink);
@@ -1857,10 +1888,14 @@
         const links = devicePortLinks(device);
         const rows = devicePorts(device).map((port) => {
             const link = links[port];
+            const directAction = device.properties.component_type === 'router' && !link
+                ? `<button type="button" data-port-direct="${escapeHtml(port)}">Direct</button>`
+                : '';
             return `
                 <div class="olt-port-row">
                     <button type="button" draggable="true" data-port-link="${escapeHtml(port)}">${escapeHtml(link ? port : `Make Link: ${port}`)}</button>
-                    <span>${link ? escapeHtml(`${link.fiber_code || 'Fiber'} / ${link.color_name || `Core ${link.core}`}`) : 'No fiber core linked'}</span>
+                    <span>${link ? escapeHtml(deviceLinkDescription(link)) : 'No link'}</span>
+                    ${directAction}
                     ${link ? `<button type="button" data-port-unlink="${escapeHtml(port)}">Unlink</button>` : ''}
                     <button type="button" data-port-tree="${escapeHtml(port)}" ${link ? '' : 'disabled'}>Tree</button>
                 </div>
@@ -1872,13 +1907,150 @@
             <div class="olt-panel-head">
                 <div>
                     <strong>${escapeHtml(featureDisplayName(device))}</strong>
-                    <span>Drag ${escapeHtml(label)} port onto a fiber cable core</span>
+                    <span>${device.properties.component_type === 'router'
+                        ? 'Use Direct for Router-to-Router, or drag a port onto a fiber cable core'
+                        : `Drag ${escapeHtml(label)} port onto a fiber cable core`}</span>
                 </div>
                 <button type="button" class="olt-panel-close">x</button>
             </div>
             <div class="olt-port-list">${rows}</div>
             <div class="olt-tree-view" data-olt-tree-view></div>
         `;
+    }
+
+    function deviceLinkDescription(link) {
+        if (link.link_type === 'direct_router') {
+            const target = state.features.get(link.target_device_id);
+            return `${target ? featureDisplayName(target) : 'Router'} ${link.target_port || ''} / ${link.medium || 'Fiber'}`;
+        }
+
+        return `${link.fiber_code || 'Fiber'} / ${link.color_name || `Core ${link.core}`}`;
+    }
+
+    function openDirectRouterLinkPanel(routerId, sourcePort) {
+        const router = state.features.get(routerId);
+        if (!router || router.properties.component_type !== 'router') return;
+
+        const options = directRouterPortOptions(routerId);
+        if (options.length === 0) {
+            setStatus('No free port is available on another router.');
+            return;
+        }
+
+        closeOltPortPanel();
+        closeFiberCorePanel();
+        const point = state.map.project(router.geometry.coordinates);
+        const panel = document.createElement('section');
+        panel.className = 'fiber-core-panel direct-router-panel';
+        panel.style.left = `${Math.min(Math.max(point.x + 16, 12), state.map.getContainer().clientWidth - 380)}px`;
+        panel.style.top = `${Math.min(Math.max(point.y + 16, 12), state.map.getContainer().clientHeight - 300)}px`;
+        panel.innerHTML = `
+            <div class="core-panel-head">
+                <div>
+                    <strong>${escapeHtml(devicePortLabel(router, sourcePort))}</strong>
+                    <span>Direct Router-to-Router Link</span>
+                </div>
+                <button type="button" class="core-panel-close">x</button>
+            </div>
+            <label class="core-panel-select">Target Router / Port
+                ${searchableDropdownHtml('direct_router_port', 'Type router name or port')}
+            </label>
+            <label class="core-panel-select">Medium
+                <select name="direct_link_medium">
+                    <option value="Fiber">Fiber</option>
+                    <option value="Copper">Copper</option>
+                </select>
+            </label>
+            <button type="button" class="btn" data-save-direct-router-link>Save Direct Link</button>
+        `;
+        state.map.getContainer().appendChild(panel);
+        state.corePanel = panel;
+
+        panel.querySelector('.core-panel-close').addEventListener('click', closeFiberCorePanel);
+        setupSearchableDropdown(
+            panel.querySelector('[data-searchable-dropdown="direct_router_port"]'),
+            options,
+            'Type router name or port'
+        );
+        panel.querySelector('[data-save-direct-router-link]').addEventListener('click', () => {
+            const targetValue = panel.querySelector('input[name="direct_router_port"]')?.value;
+            const medium = panel.querySelector('select[name="direct_link_medium"]')?.value;
+            if (!targetValue) {
+                setStatus('Choose a target router port from the dropdown.');
+                return;
+            }
+
+            saveDirectRouterLink(routerId, sourcePort, targetValue, medium);
+            closeFiberCorePanel();
+        });
+        setStatus('Choose the target router port and Fiber or Copper medium.');
+    }
+
+    function directRouterPortOptions(sourceRouterId) {
+        const options = [];
+        state.features.forEach((feature) => {
+            if (feature.geometry.type !== 'Point'
+                || feature.properties.component_type !== 'router'
+                || String(feature.properties.id || feature.id) === String(sourceRouterId)) return;
+
+            const links = devicePortLinks(feature);
+            devicePorts(feature).filter((port) => !links[port]).forEach((port) => {
+                options.push({
+                    value: `${feature.properties.id || feature.id}::${port}`,
+                    label: `${featureDisplayName(feature)} / ${port}`,
+                    search: `${featureDisplayName(feature)} ${port}`,
+                });
+            });
+        });
+
+        return options.sort((first, second) => first.label.localeCompare(second.label, undefined, {
+            numeric: true,
+            sensitivity: 'base',
+        }));
+    }
+
+    function saveDirectRouterLink(sourceRouterId, sourcePort, targetValue, medium) {
+        const separatorIndex = targetValue.indexOf('::');
+        if (separatorIndex < 1) return;
+
+        const targetRouterId = targetValue.slice(0, separatorIndex);
+        const targetPort = targetValue.slice(separatorIndex + 2);
+        const sourceRouter = state.features.get(sourceRouterId);
+        const targetRouter = state.features.get(targetRouterId);
+        if (!sourceRouter || !targetRouter || targetRouter.properties.component_type !== 'router') return;
+        if (devicePortLinks(sourceRouter)[sourcePort] || devicePortLinks(targetRouter)[targetPort]) {
+            setStatus('One of the selected router ports is already linked.');
+            return;
+        }
+
+        const normalizedMedium = medium === 'Copper' ? 'Copper' : 'Fiber';
+        const colorHex = normalizedMedium === 'Copper' ? '#b54708' : '#06b6d4';
+        sourceRouter.properties.port_links = {
+            ...(sourceRouter.properties.port_links || {}),
+            [sourcePort]: {
+                link_type: 'direct_router',
+                target_device_id: targetRouterId,
+                target_port: targetPort,
+                medium: normalizedMedium,
+                color_hex: colorHex,
+            },
+        };
+        targetRouter.properties.port_links = {
+            ...(targetRouter.properties.port_links || {}),
+            [targetPort]: {
+                link_type: 'direct_router',
+                target_device_id: sourceRouterId,
+                target_port: sourcePort,
+                medium: normalizedMedium,
+                color_hex: colorHex,
+            },
+        };
+
+        state.dirty = true;
+        refreshSources();
+        persistTopology();
+        openOltPortPanel(sourceRouterId);
+        setStatus(`${devicePortLabel(sourceRouter, sourcePort)} linked directly to ${devicePortLabel(targetRouter, targetPort)} via ${normalizedMedium}.`);
     }
 
     function handlePortDrop(event) {
@@ -2000,6 +2172,16 @@
         const link = devicePortLinks(device)[port];
         if (!link) return;
 
+        if (link.link_type === 'direct_router') {
+            removeDirectRouterLink(device, port, link);
+            state.dirty = true;
+            refreshSources();
+            persistTopology();
+            openOltPortPanel(deviceId);
+            setStatus(`${devicePortLabel(device, port)} direct link removed.`);
+            return;
+        }
+
         const fiber = state.features.get(link.fiber_id);
         const endpointLabel = devicePortLabel(device, port);
         if (fiber) {
@@ -2035,6 +2217,11 @@
         const existingLink = devicePortLinks(device)[port];
         if (!existingLink) return;
 
+        if (existingLink.link_type === 'direct_router') {
+            removeDirectRouterLink(device, port, existingLink);
+            return;
+        }
+
         const existingFiber = state.features.get(existingLink.fiber_id);
         if (!existingFiber) return;
 
@@ -2044,6 +2231,24 @@
             }
             return row;
         });
+    }
+
+    function removeDirectRouterLink(device, port, link) {
+        const remainingSourceLinks = { ...(device.properties.port_links || {}) };
+        delete remainingSourceLinks[port];
+        device.properties.port_links = remainingSourceLinks;
+
+        const target = state.features.get(link.target_device_id);
+        if (!target) return;
+
+        const targetLinks = { ...(target.properties.port_links || {}) };
+        const reciprocal = targetLinks[link.target_port];
+        if (reciprocal?.link_type === 'direct_router'
+            && String(reciprocal.target_device_id) === String(device.properties.id || device.id)
+            && reciprocal.target_port === port) {
+            delete targetLinks[link.target_port];
+            target.properties.port_links = targetLinks;
+        }
     }
 
     function isPortLinkDevice(feature) {
@@ -2110,6 +2315,18 @@
         const link = olt ? devicePortLinks(olt)[port] : null;
         const container = state.oltPanel?.querySelector('[data-olt-tree-view]');
         if (!container || !link) return;
+
+        if (link.link_type === 'direct_router') {
+            const target = state.features.get(link.target_device_id);
+            container.innerHTML = `
+                <div class="olt-tree-node"><strong>${escapeHtml(featureDisplayName(olt))} ${escapeHtml(port)}</strong></div>
+                <div class="olt-tree-branch">
+                    <div class="olt-tree-node">${escapeHtml(link.medium || 'Fiber')} direct link</div>
+                    <div class="olt-tree-node">${escapeHtml(target ? featureDisplayName(target) : 'Router')} ${escapeHtml(link.target_port || '')}</div>
+                </div>
+            `;
+            return;
+        }
 
         const fiber = state.features.get(link.fiber_id);
         const rows = fiber ? buildFiberCoreRowsForFeature(fiber) : [];

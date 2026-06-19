@@ -2,7 +2,7 @@
 
 @section('content')
     <link rel="stylesheet" href="{{ asset('vendor/maplibre-gl/maplibre-gl.css') }}?v=4.7.1">
-    <link rel="stylesheet" href="{{ asset('css/network-map.css') }}?v=20260619-4">
+    <link rel="stylesheet" href="{{ asset('css/network-map.css') }}?v=20260619-5">
 
     <section class="network-map-page">
         <aside class="network-sidebar">
@@ -121,5 +121,5 @@
         };
     </script>
     <script src="{{ asset('vendor/maplibre-gl/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map.js') }}?v=20260619-4"></script>
+    <script src="{{ asset('js/network-map.js') }}?v=20260619-5"></script>
 @endsection

@@ -34,6 +34,9 @@ class NetworkMapControllerTest extends TestCase
         $this->assertStringContainsString('appendSplitterPortLinks', $script);
         $this->assertStringContainsString('network-map-endpoint-options-', $script);
         $this->assertStringContainsString('withParallelLineOffsets', $script);
+        $this->assertStringContainsString('saveDirectRouterLink', $script);
+        $this->assertStringContainsString("link_type: 'direct_router'", $script);
+        $this->assertStringContainsString("medium === 'Copper'", $script);
         $this->assertStringContainsString("'line-offset': ['coalesce', ['get', '_map_line_offset'], 0]", $script);
         $this->assertStringContainsString('return completedCore.color_hex', $script);
         $this->assertStringNotContainsString("window.prompt('Fiber core number or color", $script);
@@ -190,6 +193,41 @@ class NetworkMapControllerTest extends TestCase
         File::deleteDirectory(public_path('network-map-photos'));
     }
 
+    public function test_direct_router_link_metadata_is_preserved(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $firstLink = [
+            'link_type' => 'direct_router',
+            'target_device_id' => 'router-2',
+            'target_port' => 'Port 2',
+            'medium' => 'Copper',
+            'color_hex' => '#b54708',
+        ];
+        $secondLink = [
+            'link_type' => 'direct_router',
+            'target_device_id' => 'router-1',
+            'target_port' => 'Port 1',
+            'medium' => 'Copper',
+            'color_hex' => '#b54708',
+        ];
+
+        $this->actingAs($user)->postJson(route('network-map.features.store'), [
+            'type' => 'FeatureCollection',
+            'features' => [
+                $this->routerFeature('router-1', 'ROUTER-001', [89.12, 23.90], ['Port 1' => $firstLink]),
+                $this->routerFeature('router-2', 'ROUTER-002', [89.13, 23.91], ['Port 2' => $secondLink]),
+            ],
+        ])->assertOk()
+            ->assertJsonFragment($firstLink)
+            ->assertJsonFragment($secondLink);
+
+        $this->actingAs($user)->getJson(route('network-map.features.index'))
+            ->assertOk()
+            ->assertJsonFragment(['medium' => 'Copper'])
+            ->assertJsonFragment(['target_device_id' => 'router-2']);
+    }
+
     public function test_invalid_geometry_is_rejected(): void
     {
         $user = User::factory()->create();
@@ -225,5 +263,23 @@ class NetworkMapControllerTest extends TestCase
         ));
 
         return new UploadedFile($path, $name, 'image/png', null, true);
+    }
+
+    private function routerFeature(string $id, string $name, array $coordinates, array $portLinks): array
+    {
+        return [
+            'type' => 'Feature',
+            'id' => $id,
+            'geometry' => ['type' => 'Point', 'coordinates' => $coordinates],
+            'properties' => [
+                'id' => $id,
+                'feature_type' => 'node',
+                'component_type' => 'router',
+                'name' => $name,
+                'total_ports' => 4,
+                'available_ports' => 3,
+                'port_links' => $portLinks,
+            ],
+        ];
     }
 }

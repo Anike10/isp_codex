@@ -680,8 +680,25 @@
 }
 
 .olt-port-row button[data-port-tree],
-.olt-port-row button[data-port-unlink] {
+.olt-port-row button[data-port-unlink],
+.olt-port-row button[data-port-direct] {
     cursor: pointer;
+}
+
+.olt-port-row button[data-port-direct] {
+    border-color: #a6f4c5;
+    background: #ecfdf3;
+    color: #027a48;
+}
+
+.direct-router-panel select {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid #ccd6e3;
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: #fff;
+    font: inherit;
 }
 
 .olt-port-row button:disabled {
