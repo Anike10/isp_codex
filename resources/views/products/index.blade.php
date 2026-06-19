@@ -65,6 +65,7 @@
                         <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
                         <input type="number" name="quantity" min="1" placeholder="Qty" style="width:90px" required>
                         @if ($product->track_serial_numbers)
+                            <input name="serial_numbers" placeholder="Serials / range" aria-label="Serial numbers or range" style="width:180px">
                             <input type="number" name="serialless_quantity" min="0" placeholder="Serial-less" style="width:120px">
                         @endif
                         <input name="reason" placeholder="Reason" style="width:150px">

@@ -136,6 +136,10 @@ class ProductControllerTest extends TestCase
             ]);
         }
 
+        $this->actingAs($user)->get(route('products.index'))
+            ->assertOk()
+            ->assertSee('Serials / range');
+
         $this->actingAs($user)->post(route('products.stock', $product), [
             'type' => 'use',
             'quantity' => 2,
