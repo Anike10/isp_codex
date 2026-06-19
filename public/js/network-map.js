@@ -20,6 +20,8 @@
         pendingEndpointLink: null,
         draggingNode: null,
         nodeDragJustFinished: false,
+        zoomFocusLngLat: null,
+        centerZoomOnPointer: false,
         hoverPopup: null,
         placementPreview: null,
         selectedFeatureId: null,
@@ -300,6 +302,8 @@
         state.map.on('mouseleave', 'network-links-line-hit', hideHoverDetails);
         state.map.on('mousedown', 'network-nodes-circle', startNodeDrag);
         state.map.on('mousemove', handleMapMouseMove);
+        state.map.on('zoomstart', handleZoomStart);
+        state.map.on('zoomend', handleZoomEnd);
         state.map.on('mouseleave', clearPlacementPreview);
         state.map.on('mouseup', finishNodeDrag);
         state.map.getContainer().addEventListener('dragover', (event) => {
@@ -3000,8 +3004,31 @@
     }
 
     function handleMapMouseMove(event) {
+        state.zoomFocusLngLat = { lng: event.lngLat.lng, lat: event.lngLat.lat };
         dragNode(event);
         updatePlacementPreview(event);
+    }
+
+    function handleZoomStart(event) {
+        const originalEvent = event.originalEvent;
+        const zoomButton = originalEvent?.target?.closest?.(
+            '.maplibregl-ctrl-zoom-in, .maplibregl-ctrl-zoom-out'
+        );
+        state.centerZoomOnPointer = Boolean(
+            state.zoomFocusLngLat
+            && (originalEvent?.type === 'wheel' || zoomButton)
+        );
+    }
+
+    function handleZoomEnd() {
+        if (!state.centerZoomOnPointer || !state.zoomFocusLngLat) return;
+
+        state.centerZoomOnPointer = false;
+        state.map.easeTo({
+            center: [state.zoomFocusLngLat.lng, state.zoomFocusLngLat.lat],
+            duration: 220,
+            essential: true,
+        });
     }
 
     function updatePlacementCursor() {
