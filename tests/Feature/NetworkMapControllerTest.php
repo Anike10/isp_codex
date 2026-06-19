@@ -33,6 +33,8 @@ class NetworkMapControllerTest extends TestCase
         $this->assertStringContainsString('setupSearchableDropdown', $script);
         $this->assertStringContainsString('appendSplitterPortLinks', $script);
         $this->assertStringContainsString('network-map-endpoint-options-', $script);
+        $this->assertStringContainsString('withParallelLineOffsets', $script);
+        $this->assertStringContainsString("'line-offset': ['coalesce', ['get', '_map_line_offset'], 0]", $script);
         $this->assertStringContainsString('return completedCore.color_hex', $script);
         $this->assertStringNotContainsString("window.prompt('Fiber core number or color", $script);
     }

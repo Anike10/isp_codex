@@ -327,6 +327,7 @@
                 'line-color': ['get', '_map_line_color'],
                 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2, 15, 5],
                 'line-opacity': 0.9,
+                'line-offset': ['coalesce', ['get', '_map_line_offset'], 0],
             },
         });
 
@@ -334,7 +335,12 @@
             id: 'network-links-line-hit',
             type: 'line',
             source: 'network-links',
-            paint: { 'line-color': '#000', 'line-width': 18, 'line-opacity': 0 },
+            paint: {
+                'line-color': '#000',
+                'line-width': 18,
+                'line-opacity': 0,
+                'line-offset': ['coalesce', ['get', '_map_line_offset'], 0],
+            },
         });
 
         state.map.addLayer({
@@ -346,6 +352,7 @@
                 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2, 16, 4],
                 'line-opacity': 0.95,
                 'line-dasharray': [1.2, 1],
+                'line-offset': ['coalesce', ['get', '_map_line_offset'], 0],
             },
         });
 
@@ -1432,9 +1439,9 @@
         const features = [...state.features.values()];
         const visibleFeatures = features.filter(isFeatureVisible);
         const nodes = visibleFeatures.filter((feature) => feature.geometry.type === 'Point');
-        const links = visibleFeatures
+        const links = withParallelLineOffsets(visibleFeatures
             .filter((feature) => feature.geometry.type === 'LineString')
-            .map(withMapLineColor);
+            .map(withMapLineColor));
 
         setSourceData('network-nodes', { type: 'FeatureCollection', features: nodes });
         setSourceData('network-links', { type: 'FeatureCollection', features: links });
@@ -1491,7 +1498,61 @@
 
         appendSplitterPortLinks(features, overlays, overlayIds);
 
-        setSourceData('endpoint-core-links', { type: 'FeatureCollection', features: overlays });
+        setSourceData('endpoint-core-links', {
+            type: 'FeatureCollection',
+            features: withParallelLineOffsets(overlays),
+        });
+    }
+
+    function withParallelLineOffsets(features) {
+        const groups = new Map();
+        features.forEach((feature) => {
+            const direction = canonicalLineDirection(feature.geometry?.coordinates || []);
+            if (direction.reverse) {
+                feature.geometry = {
+                    ...feature.geometry,
+                    coordinates: [...feature.geometry.coordinates].reverse(),
+                };
+            }
+            const key = direction.key;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(feature);
+        });
+
+        groups.forEach((group) => {
+            group.sort((first, second) => lineStableId(first).localeCompare(lineStableId(second), undefined, {
+                numeric: true,
+                sensitivity: 'base',
+            }));
+            group.forEach((feature, index) => {
+                feature.properties = {
+                    ...feature.properties,
+                    _map_line_offset: (index - ((group.length - 1) / 2)) * 7,
+                };
+            });
+        });
+
+        return features;
+    }
+
+    function canonicalLineDirection(coordinates) {
+        const normalized = coordinates.map((coordinate) => coordinate
+            .slice(0, 2)
+            .map((value) => Number(value).toFixed(7))
+            .join(','));
+        const forward = normalized.join(';');
+        const reverse = [...normalized].reverse().join(';');
+
+        const shouldReverse = forward.localeCompare(reverse) > 0;
+
+        return {
+            key: shouldReverse ? reverse : forward,
+            reverse: shouldReverse,
+        };
+    }
+
+    function lineStableId(feature) {
+        return String(feature.properties?.id || feature.id || feature.properties?.fiber_code || 'line');
     }
 
     function appendSplitterPortLinks(features, overlays, overlayIds) {
