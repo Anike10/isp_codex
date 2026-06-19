@@ -138,7 +138,9 @@ class ProductControllerTest extends TestCase
 
         $this->actingAs($user)->get(route('products.index'))
             ->assertOk()
-            ->assertSee('Serials / range');
+            ->assertSee('Serials / range')
+            ->assertSee('Available before movement: 3')
+            ->assertSee('syncStockForm');
 
         $this->actingAs($user)->post(route('products.stock', $product), [
             'type' => 'use',

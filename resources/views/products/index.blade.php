@@ -60,14 +60,15 @@
             <td>{{ number_format($product->sale_price, 2) }}</td>
             <td>
                 @if ($product->track_inventory)
-                    <form method="post" action="{{ route('products.stock', $product) }}" class="actions">
+                    <form method="post" action="{{ route('products.stock', $product) }}" class="actions product-stock-form" data-current-stock="{{ $product->stock_quantity }}" data-track-serials="{{ $product->track_serial_numbers ? '1' : '0' }}">
                         @csrf
-                        <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
-                        <input type="number" name="quantity" min="1" placeholder="Qty" style="width:90px" required>
+                        <select name="type" class="movement-type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
+                        <input type="number" name="quantity" class="movement-quantity" min="1" placeholder="Qty" style="width:90px" required>
                         @if ($product->track_serial_numbers)
-                            <input name="serial_numbers" placeholder="Serials / range" aria-label="Serial numbers or range" style="width:180px">
-                            <input type="number" name="serialless_quantity" min="0" placeholder="Serial-less" style="width:120px">
+                            <input name="serial_numbers" class="serial-numbers" placeholder="Serials / range" aria-label="Serial numbers or range" style="width:180px">
+                            <input type="number" name="serialless_quantity" class="serialless-quantity" min="0" placeholder="Serial-less" style="width:120px">
                         @endif
+                        <span class="stock-before muted" hidden>Available before movement: {{ $product->stock_quantity }}</span>
                         <input name="reason" placeholder="Reason" style="width:150px">
                         <button class="btn secondary" type="submit">Update</button>
                     </form>
@@ -82,4 +83,65 @@
     </tbody>
 </table>
 <div style="margin-top:16px">{{ $products->links() }}</div>
+
+<script>
+const serialDigitMap = {'০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'};
+
+function normalizeSerialDigits(value) {
+    return value.replace(/[০-৯]/g, digit => serialDigitMap[digit]);
+}
+
+function expandSerialPart(part) {
+    const match = part.match(/^([\p{L}_-]*)([0-9০-৯]+)\s*(?:-|to|থেকে)\s*([\p{L}_-]*)([0-9০-৯]+)$/iu);
+
+    if (!match) return [part];
+
+    const startPrefix = match[1];
+    const endPrefix = match[3] || startPrefix;
+    const startText = normalizeSerialDigits(match[2]);
+    const endText = normalizeSerialDigits(match[4]);
+    const start = Number(startText);
+    const end = Number(endText);
+
+    if (startPrefix !== endPrefix || !Number.isInteger(start) || !Number.isInteger(end) || end < start || end - start >= 1000) {
+        return [part];
+    }
+
+    const width = Math.max(startText.length, endText.length);
+    const serials = [];
+
+    for (let number = start; number <= end; number++) {
+        serials.push(startPrefix + String(number).padStart(width, '0'));
+    }
+
+    return serials;
+}
+
+function syncStockForm(form) {
+    const movementType = form.querySelector('.movement-type');
+    const stockBefore = form.querySelector('.stock-before');
+    const isOutgoing = ['out', 'use'].includes(movementType?.value);
+
+    if (stockBefore) stockBefore.hidden = !isOutgoing;
+
+    if (form.dataset.trackSerials !== '1') return;
+
+    const parts = (form.querySelector('.serial-numbers')?.value || '')
+        .split(/[\r\n,]+/)
+        .map(value => value.trim())
+        .filter(Boolean);
+    const serialCount = new Set(parts.flatMap(expandSerialPart)).size;
+    const seriallessCount = parseInt(form.querySelector('.serialless-quantity')?.value || '0', 10) || 0;
+    const quantity = form.querySelector('.movement-quantity');
+    const total = serialCount + seriallessCount;
+
+    if (quantity) quantity.value = total > 0 ? total : '';
+}
+
+document.querySelectorAll('.product-stock-form').forEach(form => {
+    form.addEventListener('input', () => syncStockForm(form));
+    form.addEventListener('change', () => syncStockForm(form));
+    syncStockForm(form);
+});
+</script>
 @endsection
