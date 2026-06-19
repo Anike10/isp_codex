@@ -12,15 +12,22 @@
 <style>
     .transfer-header { margin-bottom:16px; }
     .transfer-items { display:grid; gap:14px; }
-    .transfer-item { position:relative; display:grid; grid-template-columns:minmax(240px, 2fr) 110px 140px minmax(180px, 1fr) auto; gap:12px; align-items:end; }
-    .transfer-item .serial-area { grid-column:1 / -1; }
+    .transfer-item { position:relative; display:grid; grid-template-columns:52px minmax(240px, 2fr) 110px 140px minmax(180px, 1fr) auto; gap:12px; align-items:end; }
+    .transfer-item .serial-area { grid-column:2 / -1; }
+    .transfer-item.is-dragging { opacity:.55; border-color:#116149; box-shadow:0 10px 24px rgba(17,97,73,.14); }
+    .item-order { width:44px; min-height:40px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #c8d2df; border-radius:8px; background:#f8fafc; color:#172033; cursor:grab; font:inherit; font-weight:800; user-select:none; }
+    .item-order:active { cursor:grabbing; }
     .serial-options { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
     .serial-option { border:1px solid #c8d2df; border-radius:6px; background:#fff; color:#172033; padding:5px 8px; cursor:pointer; font:inherit; font-size:12px; }
     .serial-option.is-selected { border-color:#116149; background:#edf8f4; color:#0f513e; }
     .serial-option:focus { outline:2px solid #116149; outline-offset:2px; }
     .remove-transfer-item { background:#fff0f0; color:#b42318; }
-    @media (max-width:980px) { .transfer-item { grid-template-columns:1fr 1fr; } .transfer-item .serial-area { grid-column:1 / -1; } }
-    @media (max-width:560px) { .transfer-item { grid-template-columns:1fr; } .transfer-item .serial-area { grid-column:1; } }
+    .add-item-bar { display:flex; justify-content:space-between; gap:14px; align-items:center; margin-top:14px; padding:16px 18px; border:1px solid #d8dee9; border-radius:8px; background:#fff; }
+    .add-item-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .add-item-count { display:inline-flex; align-items:center; gap:8px; margin:0; color:#475467; font-size:13px; }
+    .add-item-count input { width:78px; min-height:40px; }
+    @media (max-width:980px) { .transfer-item { grid-template-columns:52px 1fr 1fr; } .transfer-item .serial-area { grid-column:2 / -1; } }
+    @media (max-width:560px) { .transfer-item { grid-template-columns:44px 1fr; } .transfer-item .serial-area { grid-column:1 / -1; } .add-item-bar { align-items:stretch; flex-direction:column; } }
 </style>
 
 <div class="topbar">
@@ -54,10 +61,16 @@
 
     <div class="topbar">
         <div><h2>Products</h2><div class="muted">Serial-tracked rows show only serials available in the source warehouse.</div></div>
-        <button class="btn secondary" type="button" id="addTransferItem">Add Product</button>
     </div>
     <div class="transfer-items" id="transferItems"></div>
 
+    <div class="add-item-bar">
+        <div class="muted">Items: <strong id="transferItemCount">0</strong> · Drag the numbered handle to reorder rows with their selected serials.</div>
+        <div class="add-item-actions">
+            <label class="add-item-count" for="addTransferItemCount">Rows <input id="addTransferItemCount" type="number" min="1" max="50" value="1" inputmode="numeric"></label>
+            <button class="btn secondary" type="button" id="addTransferItem">Add Item</button>
+        </div>
+    </div>
     <div class="actions" style="margin-top:16px"><button class="btn" type="submit">Transfer All Products</button></div>
 </form>
 
@@ -150,12 +163,18 @@ function refreshTransferRow(row) {
 }
 
 function reindexTransferRows() {
-    [...itemsContainer.querySelectorAll('.transfer-item')].forEach((row, index) => {
+    const rows = [...itemsContainer.querySelectorAll('.transfer-item')];
+    rows.forEach((row, index) => {
         row.querySelector('[data-product-input]').name = `items[${index}][product_id]`;
         row.querySelector('[data-quantity-input]').name = `items[${index}][quantity]`;
         row.querySelector('[data-serial-input]').name = `items[${index}][serial_numbers]`;
         row.querySelector('[data-serialless-input]').name = `items[${index}][serialless_quantity]`;
+        const orderButton = row.querySelector('.item-order');
+        orderButton.textContent = index + 1;
+        orderButton.setAttribute('aria-label', `Drag item ${index + 1} to reorder`);
+        row.querySelector('.remove-transfer-item').hidden = rows.length === 1;
     });
+    document.getElementById('transferItemCount').textContent = rows.length;
 }
 
 function addTransferRow(values = {}) {
@@ -163,6 +182,7 @@ function addTransferRow(values = {}) {
     row.className = 'card transfer-item';
     row.dataset.itemIndex = nextItemIndex++;
     row.innerHTML = `
+        <div><button type="button" class="item-order" draggable="true" aria-label="Drag item to reorder"></button></div>
         <div><label>Product</label><select data-product-input required><option value="">Select product</option></select><span class="muted" data-availability></span></div>
         <div><label>Quantity</label><input type="number" min="1" data-quantity-input required></div>
         <div data-serial-field><label>Serial-less Qty</label><input type="number" min="0" placeholder="Qty without serial" data-serialless-input></div>
@@ -193,7 +213,43 @@ function addTransferRow(values = {}) {
     refreshTransferRow(row);
 }
 
-document.getElementById('addTransferItem').addEventListener('click', () => addTransferRow());
+document.getElementById('addTransferItem').addEventListener('click', () => {
+    const countInput = document.getElementById('addTransferItemCount');
+    const count = Math.min(50, Math.max(1, parseInt(countInput.value || '1', 10) || 1));
+    for (let index = 0; index < count; index++) addTransferRow();
+    countInput.value = 1;
+});
+
+itemsContainer.addEventListener('dragstart', event => {
+    const handle = event.target.closest('.item-order');
+    const row = handle?.closest('.transfer-item');
+    if (!row) return;
+    row.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', '');
+});
+
+itemsContainer.addEventListener('dragover', event => {
+    const draggingRow = itemsContainer.querySelector('.transfer-item.is-dragging');
+    if (!draggingRow) return;
+    event.preventDefault();
+    const afterElement = getDragAfterElement(itemsContainer, event.clientY);
+    if (afterElement) itemsContainer.insertBefore(draggingRow, afterElement);
+    else itemsContainer.appendChild(draggingRow);
+});
+
+itemsContainer.addEventListener('dragend', event => {
+    event.target.closest('.transfer-item')?.classList.remove('is-dragging');
+    reindexTransferRows();
+});
+
+function getDragAfterElement(container, y) {
+    return [...container.querySelectorAll('.transfer-item:not(.is-dragging)')].reduce((closest, row) => {
+        const box = row.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        return offset < 0 && offset > closest.offset ? {offset, element:row} : closest;
+    }, {offset:Number.NEGATIVE_INFINITY, element:null}).element;
+}
 fromInput.addEventListener('change', () => {
     itemsContainer.querySelectorAll('[data-serial-input]').forEach(input => input.value = '');
     refreshDestinationOptions();

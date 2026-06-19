@@ -107,7 +107,11 @@ class WarehouseInventoryTest extends TestCase
         $this->actingAs($user)->get(route('warehouse-transfers.create'))
             ->assertOk()
             ->assertSee('ONU003')
-            ->assertSee('Available Serials in Source Warehouse');
+            ->assertSee('Available Serials in Source Warehouse')
+            ->assertSee('Add Item')
+            ->assertSee('transferItemCount')
+            ->assertSee('item-order')
+            ->assertSee('dragstart');
     }
 
     public function test_transfer_larger_than_source_stock_is_rejected_without_partial_movements(): void
