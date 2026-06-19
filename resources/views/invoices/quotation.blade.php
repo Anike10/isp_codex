@@ -1,9 +1,16 @@
+@php
+    $isStandaloneQuotation = $invoice instanceof \App\Models\Quotation;
+    $quotationNumber = $isStandaloneQuotation ? $invoice->quotation_no : 'QT-'.$invoice->invoice_no;
+    $quotationDate = $isStandaloneQuotation ? $invoice->quotation_date : now();
+    $validUntil = $isStandaloneQuotation ? $invoice->valid_until : now()->addDays(15);
+    $backUrl = $isStandaloneQuotation ? route('quotations.show', $invoice) : route('invoices.show', $invoice);
+@endphp
 <!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Quotation - {{ $invoice->invoice_no }}</title>
+    <title>Quotation - {{ $quotationNumber }}</title>
     <style>
         :root { --ink:#172033; --muted:#667085; --line:#cfd7e3; --brand:#116149; --brand-dark:#0b3f31; --soft:#eef7f3; }
         * { box-sizing:border-box; }
@@ -163,7 +170,7 @@
         </div>
         <label class="print-option"><input type="checkbox" id="noSignatureOption"> Print without signature</label>
         <button onclick="window.print()" class="btn">Print Quotation</button>
-        <a href="{{ route('invoices.show', $invoice) }}" class="btn light">Back to Invoice</a>
+        <a href="{{ $backUrl }}" class="btn light">Back to {{ $isStandaloneQuotation ? 'Quotation' : 'Invoice' }}</a>
     </div>
 
     <main class="page">
@@ -174,7 +181,7 @@
             </div>
             <div class="doc-title">
                 <h2>QUOTATION</h2>
-                <div class="doc-no">Ref: {{ $invoice->invoice_no }}</div>
+                <div class="doc-no">Ref: {{ $quotationNumber }}</div>
             </div>
         </section>
 
@@ -191,9 +198,9 @@
             <div class="box">
                 <h3>Quotation Details</h3>
                 <div class="box-body">
-                    <div class="kv"><span class="muted">Quotation No</span><span>QT-{{ $invoice->invoice_no }}</span></div>
-                    <div class="kv"><span class="muted">Date</span><span>{{ now()->format('d M Y') }}</span></div>
-                    <div class="kv"><span class="muted">Valid Until</span><span>{{ now()->addDays(15)->format('d M Y') }}</span></div>
+                    <div class="kv"><span class="muted">Quotation No</span><span>{{ $quotationNumber }}</span></div>
+                    <div class="kv"><span class="muted">Date</span><span>{{ $quotationDate?->format('d M Y') }}</span></div>
+                    <div class="kv"><span class="muted">Valid Until</span><span>{{ $validUntil?->format('d M Y') ?? 'Open' }}</span></div>
                     <div class="kv"><span class="muted">Reference Month</span><span>{{ $invoice->formatted_billing_month }}</span></div>
                 </div>
             </div>
@@ -213,9 +220,9 @@
         <section class="summary">
             <div class="notes">
                 <p class="strong">Terms & Conditions</p>
-                <p>This quotation is valid for 15 days. Delivery, installation and payment terms may vary based on final confirmation.</p>
+                <p style="white-space:pre-line">{{ $isStandaloneQuotation && filled($invoice->payment_note) ? $invoice->payment_note : 'This quotation is valid for 15 days. Delivery, installation and payment terms may vary based on final confirmation.' }}</p>
                 @if ($invoice->show_public_note && filled($invoice->public_note))
-                    <p class="strong" style="margin-top:8px;">Invoice Note</p>
+                    <p class="strong" style="margin-top:8px;">Quotation Note</p>
                     <p style="white-space:pre-line">{{ $invoice->public_note }}</p>
                 @endif
             </div>

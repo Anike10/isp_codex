@@ -74,6 +74,13 @@ let those responsibilities shape the implementation, validation, and notes.
   serial movement must stay consistent inside transactions.
 - Product/service invoices and monthly ISP service bills have different
   business meanings; keep their rules separate.
+- Standalone quotations live in `quotations` and `quotation_items`. They may
+  calculate a quoted total for the document, but must not affect invoice
+  totals, party dues, payments, ledgers, stock, or serial status.
+- `POST /quotations/{quotation}/make-invoice` creates one draft invoice from
+  the quotation inside a transaction. Inventory and serial availability are
+  checked and applied only at conversion time; repeated conversion returns the
+  existing invoice instead of creating a duplicate.
 
 ### 6. UX Designer For Office Operators
 

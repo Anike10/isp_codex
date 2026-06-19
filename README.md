@@ -10,6 +10,7 @@ A Laravel 12 application for an ISP and computer service business.
 - MikroTik router management and PPPoE user sync
 - OLT ONU live polling with status and optical power inventory
 - Monthly invoice generation
+- Separate quotation workflow with invoice-style entry, no accounting impact, and one-click conversion to a draft invoice
 - Customer direct payment and due tracking
 - bKash SMS payment parsing with duplicate TrxID protection
 - Advance balance and payment allocation ledger
@@ -82,6 +83,7 @@ Do not commit SSH passwords, `.env` secrets, SMS tokens, or database passwords.
 - `/olt-onus`
 - `/olt-onus/{oltOnu}` - ONU detail page and live refresh button
 - `/invoices`
+- `/quotations`
 - `/payments`
 - `/bkash-sms-payments`
 - `/payment-accounts`

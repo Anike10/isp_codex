@@ -2,15 +2,17 @@
 
 @section('content')
 @php
-    $isEdit = isset($invoice);
-    $selectedInvoiceType = old('invoice_type', $isEdit ? ($invoice->invoice_type ?? 'product') : request('type', 'product'));
+    $isQuotation = ($documentMode ?? 'invoice') === 'quotation';
+    $document = $isQuotation ? ($quotation ?? null) : ($invoice ?? null);
+    $isEdit = $document !== null;
+    $selectedInvoiceType = old('invoice_type', $isEdit ? ($document->invoice_type ?? 'product') : request('type', 'product'));
     $defaultProductName = $selectedInvoiceType === 'service' ? 'Service charge' : '';
-    $discountType = old('discount_type', $isEdit ? ($invoice->discount_type ?? 'amount') : 'amount');
-    $discountValue = old('discount', $isEdit ? ($invoice->discount_value ?? $invoice->discount) : '0.00');
-    $vatType = old('vat_type', $isEdit ? ($invoice->vat_type ?? 'amount') : 'amount');
-    $vatValue = old('vat', $isEdit ? ($invoice->vat_value ?? $invoice->vat ?? '0.00') : '0.00');
+    $discountType = old('discount_type', $isEdit ? ($document->discount_type ?? 'amount') : 'amount');
+    $discountValue = old('discount', $isEdit ? ($document->discount_value ?? $document->discount) : '0.00');
+    $vatType = old('vat_type', $isEdit ? ($document->vat_type ?? 'amount') : 'amount');
+    $vatValue = old('vat', $isEdit ? ($document->vat_value ?? $document->vat ?? '0.00') : '0.00');
     $invoiceItems = old('items', $isEdit
-        ? $invoice->items->map(fn ($item) => [
+        ? $document->items->map(fn ($item) => [
             'product_id' => $item->product_id,
             'product_name' => $item->product_name,
             'quantity' => $item->quantity,
@@ -36,8 +38,16 @@
     })->all();
     $selectedCustomer = old('customer_id')
         ? $customers->firstWhere('id', (int) old('customer_id'))
-        : ($isEdit ? $invoice->customer : null);
+        : ($isEdit ? $document->customer : null);
     $selectedCustomerId = old('customer_id', $selectedCustomer?->id);
+    $documentLabel = $isQuotation ? 'Quotation' : 'Invoice';
+    $formAction = $isQuotation
+        ? ($isEdit ? route('quotations.update', $document) : route('quotations.store'))
+        : ($isEdit ? route('invoices.update', $document) : route('invoices.store'));
+    $indexRoute = $isQuotation ? route('quotations.index') : route('invoices.index');
+    $cancelRoute = $isEdit
+        ? ($isQuotation ? route('quotations.show', $document) : route('invoices.show', $document))
+        : $indexRoute;
 @endphp
 
 <style>
@@ -556,13 +566,13 @@
 <div class="invoice-page">
     <div class="invoice-hero">
         <div>
-            <h1>{{ $isEdit ? 'Edit Invoice' : 'Create Invoice' }}</h1>
-            <div class="muted">{{ $isEdit ? 'Update this draft invoice before finalizing it.' : 'Create a clean product or one-time charge invoice, add multiple line items, apply discount and VAT, and review the payable amount before saving.' }}</div>
+            <h1>{{ $isEdit ? 'Edit '.$documentLabel : 'Create '.$documentLabel }}</h1>
+            <div class="muted">{{ $isQuotation ? 'Prepare a customer quotation without affecting accounts, dues, payments, or stock.' : ($isEdit ? 'Update this draft invoice before finalizing it.' : 'Create a clean product or one-time charge invoice, add multiple line items, apply discount and VAT, and review the payable amount before saving.') }}</div>
         </div>
-        <a class="btn light" href="{{ route('invoices.index') }}">Back to Invoices</a>
+        <a class="btn light" href="{{ $indexRoute }}">Back to {{ $isQuotation ? 'Quotations' : 'Invoices' }}</a>
     </div>
 
-    <form method="post" action="{{ $isEdit ? route('invoices.update', $invoice) : route('invoices.store') }}" id="invoiceForm">
+    <form method="post" action="{{ $formAction }}" id="invoiceForm">
         @csrf
         @if ($isEdit)
             @method('PUT')
@@ -572,8 +582,8 @@
                 <section class="invoice-panel">
                     <div class="section-head">
                         <div>
-                            <h2>Invoice Details</h2>
-                            <p>Select the party this invoice is for and define the billing period.</p>
+                            <h2>{{ $documentLabel }} Details</h2>
+                            <p>Select the party this {{ strtolower($documentLabel) }} is for and define its dates.</p>
                         </div>
                     </div>
                     <div class="section-body">
@@ -594,12 +604,12 @@
                             </div>
 
                             <div>
-                                <label for="billing_month">Billing Month <span class="required-mark">*</span></label>
-                                <input id="billing_month" type="month" name="billing_month" value="{{ old('billing_month', $isEdit ? $invoice->billing_month : now()->format('Y-m')) }}" required>
+                                <label for="billing_month">{{ $isQuotation ? 'Reference Month' : 'Billing Month' }} <span class="required-mark">*</span></label>
+                                <input id="billing_month" type="month" name="billing_month" value="{{ old('billing_month', $isEdit ? $document->billing_month : now()->format('Y-m')) }}" required>
                             </div>
 
                             <div>
-                                <label for="invoice_type">Invoice Type <span class="required-mark">*</span></label>
+                                <label for="invoice_type">{{ $documentLabel }} Type <span class="required-mark">*</span></label>
                                 <select id="invoice_type" name="invoice_type" required>
                                     <option value="product" @selected($selectedInvoiceType === 'product')>Product or one-time bill</option>
                                     <option value="service" @selected($selectedInvoiceType === 'service')>Service charge</option>
@@ -631,32 +641,43 @@
                                 <span class="field-note">Use fixed taka amount or percentage after discount.</span>
                             </div>
 
-                            <div>
-                                <label for="due_date">Due Date</label>
-                                <input id="due_date" type="date" name="due_date" value="{{ old('due_date', $isEdit ? $invoice->due_date?->format('Y-m-d') : null) }}">
-                            </div>
+                            @if($isQuotation)
+                                <div>
+                                    <label for="quotation_date">Quotation Date <span class="required-mark">*</span></label>
+                                    <input id="quotation_date" type="date" name="quotation_date" value="{{ old('quotation_date', $isEdit ? $document->quotation_date?->format('Y-m-d') : now()->format('Y-m-d')) }}" required>
+                                </div>
+                                <div>
+                                    <label for="valid_until">Valid Until</label>
+                                    <input id="valid_until" type="date" name="valid_until" value="{{ old('valid_until', $isEdit ? $document->valid_until?->format('Y-m-d') : now()->addDays(15)->format('Y-m-d')) }}">
+                                </div>
+                            @else
+                                <div>
+                                    <label for="due_date">Due Date</label>
+                                    <input id="due_date" type="date" name="due_date" value="{{ old('due_date', $isEdit ? $document->due_date?->format('Y-m-d') : null) }}">
+                                </div>
+                            @endif
 
                             <div class="invoice-note-field">
-                                <label for="payment_note">Payment Note Override</label>
-                                <textarea id="payment_note" name="payment_note" rows="3" placeholder="{{ $defaultPaymentNote ?? 'Default payment note' }}">{{ old('payment_note', $isEdit ? $invoice->payment_note : null) }}</textarea>
-                                <span class="field-note">Leave blank to use the default payment note: {{ $defaultPaymentNote ?? 'Please pay the due amount by the due date. Keep this bill for your records.' }}</span>
+                                <label for="payment_note">{{ $isQuotation ? 'Terms & Conditions' : 'Payment Note Override' }}</label>
+                                <textarea id="payment_note" name="payment_note" rows="3" placeholder="{{ $defaultPaymentNote ?? 'Default payment note' }}">{{ old('payment_note', $isEdit ? $document->payment_note : null) }}</textarea>
+                                <span class="field-note">{{ $isQuotation ? 'These terms appear on the printed quotation.' : 'Leave blank to use the default payment note: '.($defaultPaymentNote ?? 'Please pay the due amount by the due date. Keep this bill for your records.') }}</span>
                             </div>
 
                             <div class="invoice-note-field">
                                 <div class="invoice-note-header">
-                                    <label for="public_note">Invoice Note</label>
+                                    <label for="public_note">{{ $documentLabel }} Note</label>
                                     <label class="checkbox-line" for="show_public_note">
-                                        <input id="show_public_note" type="checkbox" name="show_public_note" value="1" @checked(old('show_public_note', $isEdit ? $invoice->show_public_note : false))>
-                                        Show on invoice
+                                        <input id="show_public_note" type="checkbox" name="show_public_note" value="1" @checked(old('show_public_note', $isEdit ? $document->show_public_note : false))>
+                                        Show on {{ strtolower($documentLabel) }}
                                     </label>
                                 </div>
-                                <textarea id="public_note" name="public_note" rows="3" placeholder="Write a note for the customer-facing invoice">{{ old('public_note', $isEdit ? $invoice->public_note : null) }}</textarea>
-                                <span class="field-note">This note appears on printed bill, quotation, and challan only when the checkbox is selected.</span>
+                                <textarea id="public_note" name="public_note" rows="3" placeholder="Write a customer-facing note">{{ old('public_note', $isEdit ? $document->public_note : null) }}</textarea>
+                                <span class="field-note">This note appears on the printed {{ strtolower($documentLabel) }} only when selected.</span>
                             </div>
 
                             <div class="invoice-note-field">
                                 <label for="private_note">Private Note</label>
-                                <textarea id="private_note" name="private_note" rows="3" placeholder="Internal note for office use only">{{ old('private_note', $isEdit ? $invoice->private_note : null) }}</textarea>
+                                <textarea id="private_note" name="private_note" rows="3" placeholder="Internal note for office use only">{{ old('private_note', $isEdit ? $document->private_note : null) }}</textarea>
                                 <span class="field-note">This note is never shown on printed customer documents.</span>
                             </div>
                         </div>
@@ -742,7 +763,7 @@
 
             <aside class="invoice-summary">
                 <div class="summary-title">
-                    <h2>Invoice Summary</h2>
+                    <h2>{{ $documentLabel }} Summary</h2>
                     <span class="badge">{{ $isEdit ? 'Editing Draft' : 'Draft' }}</span>
                 </div>
 
@@ -764,13 +785,13 @@
                 </div>
 
                 <div class="summary-total">
-                    Payable Amount
+                    {{ $isQuotation ? 'Quoted Amount' : 'Payable Amount' }}
                     <span>BDT <span id="grandTotal">0.00</span></span>
                 </div>
 
                 <div class="summary-actions">
-                    <button class="btn" type="submit">{{ $isEdit ? 'Update Invoice' : 'Create Invoice' }}</button>
-                    <a class="btn light" href="{{ $isEdit ? route('invoices.show', $invoice) : route('invoices.index') }}">Cancel</a>
+                    <button class="btn" type="submit">{{ $isEdit ? 'Update '.$documentLabel : 'Create '.$documentLabel }}</button>
+                    <a class="btn light" href="{{ $cancelRoute }}">Cancel</a>
                 </div>
             </aside>
         </div>

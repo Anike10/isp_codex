@@ -39,7 +39,6 @@
             <summary class="btn light">Print</summary>
             <div class="action-menu-panel">
                 <a class="btn light" href="{{ route('invoices.invoice', $invoice) }}" target="_blank">Invoice</a>
-                <a class="btn light" href="{{ route('invoices.quotation', $invoice) }}" target="_blank">Quotation</a>
                 <a class="btn light" href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank">Challan</a>
             </div>
         </details>

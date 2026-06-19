@@ -1,12 +1,12 @@
 <?php
 
-use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AccountingLedgerController;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BkashSmsPaymentController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerPaymentController;
-use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InvoiceController;
@@ -16,14 +16,15 @@ use App\Http\Controllers\OltOnuController;
 use App\Http\Controllers\PackageController;
 use App\Http\Controllers\PaymentAccountController;
 use App\Http\Controllers\PaymentController;
-use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductCategoryController;
+use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseBillController;
+use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\UserController;
-use App\Http\Controllers\WarrantyClaimController;
 use App\Http\Controllers\WarehouseController;
+use App\Http\Controllers\WarrantyClaimController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -51,6 +52,9 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_invoices')->group(function () {
+        Route::get('quotations/{quotation}/print', [QuotationController::class, 'print'])->name('quotations.print');
+        Route::post('quotations/{quotation}/make-invoice', [InvoiceController::class, 'makeFromQuotation'])->name('quotations.make-invoice');
+        Route::resource('quotations', QuotationController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
         Route::get('invoices/payment-note-default', [InvoiceController::class, 'editPaymentNoteDefault'])->name('invoices.payment-note-default.edit');
         Route::put('invoices/payment-note-default', [InvoiceController::class, 'updatePaymentNoteDefault'])->name('invoices.payment-note-default.update');
         Route::resource('invoices', InvoiceController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);

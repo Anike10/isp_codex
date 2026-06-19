@@ -2,25 +2,27 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Customer;
 use App\Models\AppSetting;
+use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PaymentAccount;
 use App\Models\Product;
 use App\Models\ProductSerial;
+use App\Models\Quotation;
 use App\Models\Subscription;
 use App\Services\BillingService;
 use App\Services\InventoryService;
 use App\Support\SerialNumberParser;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class InvoiceController extends Controller
 {
     private const PAYMENT_NOTE_SETTING_KEY = 'invoice_payment_note';
+
     private const DEFAULT_PAYMENT_NOTE = 'Please pay the due amount by the due date. Keep this bill for your records.';
 
     public function index(Request $request)
@@ -305,6 +307,81 @@ class InvoiceController extends Controller
         return redirect()
             ->route('invoices.show', $newInvoice)
             ->with('success', 'Invoice copied for '.$newInvoice->formatted_billing_month.'.');
+    }
+
+    public function makeFromQuotation(Quotation $quotation, InventoryService $inventoryService)
+    {
+        try {
+            $invoice = DB::transaction(function () use ($quotation, $inventoryService): Invoice {
+                $lockedQuotation = Quotation::query()->lockForUpdate()->findOrFail($quotation->id);
+                $lockedQuotation->load('items');
+
+                if ($lockedQuotation->converted_invoice_id) {
+                    return Invoice::findOrFail($lockedQuotation->converted_invoice_id);
+                }
+
+                foreach ($lockedQuotation->items as $item) {
+                    $product = $item->product_id ? Product::find($item->product_id) : null;
+                    if ($product?->track_serial_numbers) {
+                        $serialCount = count(app(SerialNumberParser::class)->parse($item->serial_numbers ?? ''));
+                        if ($serialCount + (int) $item->serialless_quantity !== (int) $item->quantity) {
+                            throw new InvalidArgumentException('Select serials or enter Serial-less Qty for every unit of '.$item->product_name.' before making the invoice.');
+                        }
+                    }
+                }
+
+                $invoice = Invoice::create([
+                    'customer_id' => $lockedQuotation->customer_id,
+                    'invoice_no' => Invoice::generateInvoiceNo($lockedQuotation->customer_id, $lockedQuotation->billing_month),
+                    'billing_month' => $lockedQuotation->billing_month,
+                    'invoice_type' => $lockedQuotation->invoice_type,
+                    'subtotal' => $lockedQuotation->subtotal,
+                    'discount' => $lockedQuotation->discount,
+                    'discount_type' => $lockedQuotation->discount_type,
+                    'discount_value' => $lockedQuotation->discount_value,
+                    'vat' => $lockedQuotation->vat,
+                    'vat_type' => $lockedQuotation->vat_type,
+                    'vat_value' => $lockedQuotation->vat_value,
+                    'total' => $lockedQuotation->total,
+                    'paid_amount' => 0,
+                    'due_amount' => $lockedQuotation->total,
+                    'status' => (float) $lockedQuotation->total <= 0 ? 'paid' : 'unpaid',
+                    'due_date' => $lockedQuotation->valid_until,
+                    'payment_note' => $lockedQuotation->payment_note,
+                    'public_note' => $lockedQuotation->public_note,
+                    'show_public_note' => $lockedQuotation->show_public_note,
+                    'private_note' => $lockedQuotation->private_note,
+                ]);
+
+                foreach ($lockedQuotation->items as $item) {
+                    $invoiceItem = $invoice->items()->create([
+                        'product_id' => $item->product_id,
+                        'product_name' => $item->product_name,
+                        'product_type' => $item->product_type,
+                        'quantity' => $item->quantity,
+                        'unit_price' => $item->unit_price,
+                        'total' => $item->total,
+                        'serial_numbers' => $item->serial_numbers,
+                        'serialless_quantity' => $item->serialless_quantity,
+                        'warranty_days' => $item->warranty_days,
+                        'service_guarantee_days' => $item->service_guarantee_days,
+                        'service_guarantee_until' => $item->service_guarantee_days ? now()->addDays($item->service_guarantee_days) : null,
+                    ]);
+                    $this->applyInvoiceItemInventory($invoice, $invoiceItem, $inventoryService);
+                }
+
+                $lockedQuotation->update([
+                    'converted_invoice_id' => $invoice->id,
+                    'status' => 'converted',
+                ]);
+
+                return $invoice;
+            });
+        } catch (InvalidArgumentException $exception) {
+            return back()->withErrors(['quotation' => $exception->getMessage()]);
+        }
+
+        return redirect()->route('invoices.show', $invoice)->with('success', 'Draft invoice created from quotation '.$quotation->quotation_no.'.');
     }
 
     private function validateInvoiceData(Request $request): array

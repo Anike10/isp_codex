@@ -120,6 +120,7 @@
     </div>
     <div class="actions">
         <a class="btn secondary" href="{{ route('invoices.create', ['type' => 'product']) }}">Create Invoice</a>
+        <a class="btn light" href="{{ route('quotations.create') }}">Create Quotation</a>
         <a class="btn light" href="{{ route('invoices.create', ['type' => 'service']) }}">Service Charge</a>
         <form method="post" action="{{ route('invoices.generate') }}" class="actions">
             @csrf
@@ -319,7 +320,6 @@
                         <summary class="btn light">More</summary>
                         <div class="action-menu-panel">
                             <a class="btn light" href="{{ route('invoices.invoice', $invoice) }}" target="_blank">Print Bill</a>
-                            <a class="btn light" href="{{ route('invoices.quotation', $invoice) }}" target="_blank">Quotation</a>
                             <a class="btn light" href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank">Challan</a>
                             @if ($canManageInvoices)
                                 <form method="post" action="{{ route('invoices.copy-next-month', $invoice) }}" onsubmit="return confirm('Copy this invoice for next month with same items and prices?');">
