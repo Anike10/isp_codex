@@ -3012,8 +3012,8 @@
         event.preventDefault();
         state.map.stop();
 
-        const deltaUnit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 3 : 100;
-        const zoomStep = Math.min(1, Math.max(0.15, Math.abs(event.deltaY) / deltaUnit));
+        const deltaUnit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 12 : 400;
+        const zoomStep = Math.min(0.25, Math.max(0.05, Math.abs(event.deltaY) / deltaUnit));
         const zoomingIn = event.deltaY < 0;
         const targetZoom = zoomingIn
             ? Math.min(state.map.getMaxZoom(), state.map.getZoom() + zoomStep)
@@ -3038,7 +3038,7 @@
             center: target,
             zoom: targetZoom,
             offset,
-            duration: 180,
+            duration: 140,
             easing: (progress) => 1 - Math.pow(1 - progress, 3),
             essential: true,
         });
