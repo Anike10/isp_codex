@@ -293,7 +293,10 @@
                 return;
             }
 
-            handleFeatureDetails(event);
+            if (!handleFeatureDetails(event)) {
+                event.preventDefault();
+                centerEmptyMapPoint(event.lngLat);
+            }
         });
         state.map.on('mouseenter', 'network-nodes-circle', showHoverDetails);
         state.map.on('mouseleave', 'network-nodes-circle', hideHoverDetails);
@@ -1131,10 +1134,22 @@
             layers: ['network-nodes-circle', 'network-links-line-hit'],
         });
 
-        if (!clicked.length) return;
+        if (!clicked.length) return false;
 
         event.preventDefault();
         openExistingFeature(clicked[0].properties.id);
+        return true;
+    }
+
+    function centerEmptyMapPoint(lngLat) {
+        const bounds = state.map.getCanvas().getBoundingClientRect();
+        state.map.easeTo({
+            center: [lngLat.lng, lngLat.lat],
+            offset: visibleMapCenterOffset(bounds),
+            duration: 220,
+            easing: (progress) => 1 - Math.pow(1 - progress, 3),
+            essential: true,
+        });
     }
 
     function showHoverDetails(event) {

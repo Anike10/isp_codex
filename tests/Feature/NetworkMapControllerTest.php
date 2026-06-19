@@ -35,6 +35,7 @@ class NetworkMapControllerTest extends TestCase
         $this->assertStringContainsString('network-map-endpoint-options-', $script);
         $this->assertStringContainsString('withParallelLineOffsets', $script);
         $this->assertStringContainsString('saveDirectDeviceLink', $script);
+        $this->assertStringContainsString('centerEmptyMapPoint', $script);
         $this->assertStringContainsString("link_type: 'direct_device'", $script);
         $this->assertStringContainsString("['direct_router', 'direct_device']", $script);
         $this->assertStringContainsString("medium === 'Copper'", $script);
