@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+    <link rel="stylesheet" href="{{ asset('vendor/maplibre-gl/maplibre-gl.css') }}">
     <link rel="stylesheet" href="{{ asset('css/network-map.css') }}">
 
     <section class="network-map-page">
@@ -31,7 +31,7 @@
                         <input type="number" id="defaultLng" step="0.000001" min="-180" max="180">
                     </label>
                     <label>Zoom
-                        <input type="number" id="defaultZoom" step="0.1" min="1" max="25">
+                        <input type="number" id="defaultZoom" step="0.1" min="1" max="22">
                     </label>
                     <div class="default-view-actions">
                         <button type="button" class="btn light" id="useCurrentView">Set Current</button>
@@ -120,6 +120,6 @@
             csrfToken: @json(csrf_token()),
         };
     </script>
-    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="{{ asset('vendor/maplibre-gl/maplibre-gl.js') }}"></script>
     <script src="{{ asset('js/network-map.js') }}"></script>
 @endsection

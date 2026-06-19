@@ -4,7 +4,7 @@
     const defaultViewStorageKey = 'network-map-default-view';
     const fallbackDefaultView = {
         center: [89.122, 23.9013],
-        zoom: 25,
+        zoom: 17,
     };
     const visibilityStorageKey = 'network-map-visible-types';
     const hiddenFeaturesStorageKey = 'network-map-hidden-features';
@@ -234,39 +234,49 @@
     document.addEventListener('DOMContentLoaded', init);
 
     function init() {
+        if (typeof window.maplibregl === 'undefined') {
+            setStatus('Map library could not load. Refresh the page and try again.');
+            return;
+        }
+
         const defaultView = loadDefaultView();
         state.visibleTypes = loadVisibleTypes();
         state.hiddenFeatureIds = loadHiddenFeatureIds();
 
-        state.map = new maplibregl.Map({
-            container: 'networkMap',
-            style: {
-                version: 8,
-                sources: Object.fromEntries(Object.entries(basemaps).map(([key, basemap]) => [
-                    `basemap-${key}`,
-                    {
+        try {
+            state.map = new maplibregl.Map({
+                container: 'networkMap',
+                style: {
+                    version: 8,
+                    sources: Object.fromEntries(Object.entries(basemaps).map(([key, basemap]) => [
+                        `basemap-${key}`,
+                        {
+                            type: 'raster',
+                            tiles: basemap.tiles,
+                            tileSize: 256,
+                            attribution: basemap.attribution,
+                        },
+                    ])),
+                    layers: Object.keys(basemaps).map((key) => ({
+                        id: `basemap-${key}`,
                         type: 'raster',
-                        tiles: basemap.tiles,
-                        tileSize: 256,
-                        attribution: basemap.attribution,
-                    },
-                ])),
-                layers: Object.keys(basemaps).map((key) => ({
-                    id: `basemap-${key}`,
-                    type: 'raster',
-                    source: `basemap-${key}`,
-                    layout: { visibility: key === state.activeBasemap ? 'visible' : 'none' },
-                })),
-            },
-            center: defaultView.center,
-            zoom: defaultView.zoom,
-            maxZoom: 25,
-            doubleClickZoom: false,
-        });
+                        source: `basemap-${key}`,
+                        layout: { visibility: key === state.activeBasemap ? 'visible' : 'none' },
+                    })),
+                },
+                center: defaultView.center,
+                zoom: defaultView.zoom,
+                maxZoom: 22,
+                doubleClickZoom: false,
+            });
 
-        state.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
-        state.map.on('load', onMapLoad);
-        bindUi();
+            state.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+            state.map.on('load', onMapLoad);
+            bindUi();
+        } catch (error) {
+            console.error('Network map initialization failed.', error);
+            setStatus(`Map could not start: ${error.message}`);
+        }
     }
 
     function onMapLoad() {
@@ -534,8 +544,14 @@
         return Array.isArray(view?.center)
             && view.center.length === 2
             && Number.isFinite(Number(view.center[0]))
+            && Number(view.center[0]) >= -180
+            && Number(view.center[0]) <= 180
             && Number.isFinite(Number(view.center[1]))
-            && Number.isFinite(Number(view.zoom));
+            && Number(view.center[1]) >= -90
+            && Number(view.center[1]) <= 90
+            && Number.isFinite(Number(view.zoom))
+            && Number(view.zoom) >= 1
+            && Number(view.zoom) <= 22;
     }
 
     function syncDefaultViewInputs(view) {
@@ -555,8 +571,8 @@
         if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
             throw new Error('Longitude must be between -180 and 180.');
         }
-        if (!Number.isFinite(zoom) || zoom < 1 || zoom > 25) {
-            throw new Error('Zoom must be between 1 and 25.');
+        if (!Number.isFinite(zoom) || zoom < 1 || zoom > 22) {
+            throw new Error('Zoom must be between 1 and 22.');
         }
 
         return { center: [lng, lat], zoom };

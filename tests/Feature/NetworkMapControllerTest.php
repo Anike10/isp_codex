@@ -14,6 +14,22 @@ class NetworkMapControllerTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_network_map_page_uses_self_hosted_map_library(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $this->actingAs($user)
+            ->get(route('network-map.index'))
+            ->assertOk()
+            ->assertSee(asset('vendor/maplibre-gl/maplibre-gl.css'), false)
+            ->assertSee(asset('vendor/maplibre-gl/maplibre-gl.js'), false)
+            ->assertDontSee('unpkg.com/maplibre-gl', false);
+
+        $this->assertFileExists(public_path('vendor/maplibre-gl/maplibre-gl.css'));
+        $this->assertFileExists(public_path('vendor/maplibre-gl/maplibre-gl.js'));
+    }
+
     public function test_network_map_topology_can_be_saved_and_returned_as_geojson(): void
     {
         $user = User::factory()->create();
