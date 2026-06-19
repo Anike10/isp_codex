@@ -1,6 +1,47 @@
 @extends('layouts.app')
 
 @section('content')
+<style>
+    .available-serial-options {
+        display: flex;
+        flex: 1 0 100%;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 2px;
+    }
+
+    .available-serial-options[hidden] {
+        display: none;
+    }
+
+    .available-serial-label {
+        flex-basis: 100%;
+        font-size: 12px;
+    }
+
+    .available-serial-option {
+        border: 1px solid #c8d2df;
+        border-radius: 6px;
+        background: #fff;
+        color: #172033;
+        padding: 5px 8px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+    }
+
+    .available-serial-option.is-selected {
+        border-color: #116149;
+        background: #edf8f4;
+        color: #0f513e;
+    }
+
+    .available-serial-option:focus {
+        outline: 2px solid #116149;
+        outline-offset: 2px;
+    }
+</style>
+
 <div class="topbar">
     <div><h1>Inventory</h1><div class="muted">Routers, cable, computer parts and accessories</div></div>
     <a class="btn" href="{{ route('products.create') }}">Add Product</a>
@@ -66,13 +107,13 @@
                         <input type="number" name="quantity" class="movement-quantity" min="1" placeholder="Qty" style="width:90px" required>
                         @if ($product->track_serial_numbers)
                             <input name="serial_numbers" class="serial-numbers" placeholder="Serials / range" aria-label="Serial numbers or range" style="width:180px">
-                            <select class="available-serial-picker" aria-label="Choose an in-stock serial" style="width:190px" hidden>
-                                <option value="">Choose in-stock serial ({{ $product->serials->count() }})</option>
+                            <input type="number" name="serialless_quantity" class="serialless-quantity" min="0" placeholder="Serial-less Qty" aria-label="Quantity without serial" style="width:140px">
+                            <div class="available-serial-options" hidden>
+                                <span class="available-serial-label muted">In-stock serials ({{ $product->serials->count() }})</span>
                                 @foreach ($product->serials as $serial)
-                                    <option value="{{ $serial->serial_number }}">{{ $serial->serial_number }}</option>
+                                    <button type="button" class="available-serial-option" data-serial="{{ $serial->serial_number }}" aria-pressed="false">{{ $serial->serial_number }}</button>
                                 @endforeach
-                            </select>
-                            <input type="number" name="serialless_quantity" class="serialless-quantity" min="0" placeholder="Serial-less" style="width:120px">
+                            </div>
                         @endif
                         <span class="stock-before muted" hidden>Available before movement: {{ $product->stock_quantity }}</span>
                         <input name="reason" placeholder="Reason" style="width:150px">
@@ -91,14 +132,14 @@
 <div style="margin-top:16px">{{ $products->links() }}</div>
 
 <script>
-const serialDigitMap = {'০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'};
+const serialDigitMap = {'\u09E6': '0', '\u09E7': '1', '\u09E8': '2', '\u09E9': '3', '\u09EA': '4', '\u09EB': '5', '\u09EC': '6', '\u09ED': '7', '\u09EE': '8', '\u09EF': '9'};
 
 function normalizeSerialDigits(value) {
-    return value.replace(/[০-৯]/g, digit => serialDigitMap[digit]);
+    return value.replace(/[\u09E6-\u09EF]/g, digit => serialDigitMap[digit]);
 }
 
 function expandSerialPart(part) {
-    const match = part.match(/^([\p{L}_-]*)([0-9০-৯]+)\s*(?:-|to|থেকে)\s*([\p{L}_-]*)([0-9০-৯]+)$/iu);
+    const match = part.match(/^([\p{L}_-]*)([0-9\u09E6-\u09EF]+)\s*(?:-|to|\u09A5\u09C7\u0995\u09C7)\s*([\p{L}_-]*)([0-9\u09E6-\u09EF]+)$/iu);
 
     if (!match) return [part];
 
@@ -126,11 +167,11 @@ function expandSerialPart(part) {
 function syncStockForm(form) {
     const movementType = form.querySelector('.movement-type');
     const stockBefore = form.querySelector('.stock-before');
-    const serialPicker = form.querySelector('.available-serial-picker');
+    const serialOptions = form.querySelector('.available-serial-options');
     const isOutgoing = ['out', 'use'].includes(movementType?.value);
 
     if (stockBefore) stockBefore.hidden = !isOutgoing;
-    if (serialPicker) serialPicker.hidden = !isOutgoing;
+    if (serialOptions) serialOptions.hidden = !isOutgoing;
 
     if (form.dataset.trackSerials !== '1') return;
 
@@ -143,30 +184,35 @@ function syncStockForm(form) {
     const quantity = form.querySelector('.movement-quantity');
     const total = serialCount + seriallessCount;
 
+    serialOptions?.querySelectorAll('.available-serial-option').forEach(button => {
+        const selected = new Set(parts.flatMap(expandSerialPart)).has(button.dataset.serial);
+        button.classList.toggle('is-selected', selected);
+        button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    });
+
     if (quantity) quantity.value = total > 0 ? total : '';
 }
 
 document.querySelectorAll('.product-stock-form').forEach(form => {
-    const serialPicker = form.querySelector('.available-serial-picker');
-
-    serialPicker?.addEventListener('change', () => {
+    form.querySelector('.available-serial-options')?.addEventListener('click', event => {
+        const button = event.target.closest('.available-serial-option');
         const serialInput = form.querySelector('.serial-numbers');
-        const selectedSerial = serialPicker.value;
+        const selectedSerial = button?.dataset.serial;
 
         if (!serialInput || !selectedSerial) return;
 
-        const serials = serialInput.value
+        const serials = [...new Set(serialInput.value
             .split(/[\r\n,]+/)
             .map(value => value.trim())
-            .filter(Boolean);
-        const expandedSerials = new Set(serials.flatMap(expandSerialPart));
+            .filter(Boolean)
+            .flatMap(expandSerialPart))];
+        const nextSerials = serials.includes(selectedSerial)
+            ? serials.filter(serial => serial !== selectedSerial)
+            : [...serials, selectedSerial];
 
-        if (!expandedSerials.has(selectedSerial)) {
-            serialInput.value = [...serials, selectedSerial].join(', ');
-        }
-
-        serialPicker.value = '';
+        serialInput.value = nextSerials.join(', ');
         syncStockForm(form);
+        button.focus();
     });
     form.addEventListener('input', () => syncStockForm(form));
     form.addEventListener('change', () => syncStockForm(form));
