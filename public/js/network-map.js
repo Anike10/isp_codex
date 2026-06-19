@@ -306,6 +306,7 @@
         state.map.on('zoomend', handleZoomEnd);
         state.map.on('mouseleave', clearPlacementPreview);
         state.map.on('mouseup', finishNodeDrag);
+        state.map.getCanvas().addEventListener('wheel', captureWheelZoomFocus, { passive: true });
         state.map.getContainer().addEventListener('dragover', (event) => {
             if (state.pendingPortLink) {
                 event.preventDefault();
@@ -3007,6 +3008,17 @@
         state.zoomFocusLngLat = { lng: event.lngLat.lng, lat: event.lngLat.lat };
         dragNode(event);
         updatePlacementPreview(event);
+    }
+
+    function captureWheelZoomFocus(event) {
+        const canvas = state.map.getCanvas();
+        const bounds = canvas.getBoundingClientRect();
+        const focus = state.map.unproject([
+            event.clientX - bounds.left,
+            event.clientY - bounds.top,
+        ]);
+        state.zoomFocusLngLat = { lng: focus.lng, lat: focus.lat };
+        state.centerZoomOnPointer = true;
     }
 
     function handleZoomStart(event) {

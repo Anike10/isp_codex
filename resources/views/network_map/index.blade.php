@@ -121,5 +121,5 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map.js') }}?v=20260620-2"></script>
+    <script src="{{ asset('js/network-map.js') }}?v=20260620-3"></script>
 @endsection
