@@ -952,6 +952,15 @@
     font-size: 13px;
 }
 
+.map-search-select {
+    display: block;
+    min-width: 0;
+}
+
+.map-search-select input {
+    width: 100%;
+}
+
 .core-map-row select {
     min-height: 34px;
     padding: 7px 8px;

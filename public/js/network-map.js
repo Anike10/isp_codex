@@ -8,6 +8,7 @@
     };
     const visibilityStorageKey = 'network-map-visible-types';
     const hiddenFeaturesStorageKey = 'network-map-hidden-features';
+    let endpointDropdownSequence = 0;
 
     const state = {
         map: null,
@@ -1459,6 +1460,7 @@
 
     function updateEndpointCoreLinks(features) {
         const overlays = [];
+        const overlayIds = new Set();
         const visibleFiberIds = new Set(features
             .filter((feature) => feature.geometry.type === 'LineString' && isFeatureVisible(feature))
             .map((feature) => String(feature.properties.id || feature.id)));
@@ -1487,7 +1489,55 @@
             });
         });
 
+        appendSplitterPortLinks(features, overlays, overlayIds);
+
         setSourceData('endpoint-core-links', { type: 'FeatureCollection', features: overlays });
+    }
+
+    function appendSplitterPortLinks(features, overlays, overlayIds) {
+        const splitters = features.filter((feature) => feature.geometry.type === 'Point'
+            && feature.properties.component_type === 'splitter');
+        const portsByLabel = new Map();
+
+        splitters.forEach((splitter) => {
+            const name = featureDisplayName(splitter);
+            buildSplitterRowsForFeature(splitter).forEach((row) => {
+                portsByLabel.set(`${name} ${row.port}`.toLowerCase(), { splitter, row });
+            });
+        });
+
+        splitters.forEach((splitter) => {
+            if (!isFeatureVisible(splitter)) return;
+
+            buildSplitterRowsForFeature(splitter).forEach((row) => {
+                const target = portsByLabel.get(String(row.connected_fiber || '').trim().toLowerCase());
+                if (!target || target.splitter === splitter || !isFeatureVisible(target.splitter)) return;
+
+                const splitterId = String(splitter.properties.id || splitter.id);
+                const targetId = String(target.splitter.properties.id || target.splitter.id);
+                const overlayId = [splitterId, row.port, targetId, target.row.port].sort().join('-');
+                if (overlayIds.has(overlayId)) return;
+                overlayIds.add(overlayId);
+
+                overlays.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: [target.splitter.geometry.coordinates, splitter.geometry.coordinates],
+                    },
+                    properties: {
+                        id: `splitter-link-${overlayId}`,
+                        link_type: 'splitter_core',
+                        color_hex: target.row.color_hex || coreColorHex(row.connected_core) || row.color_hex || '#f79009',
+                    },
+                });
+            });
+        });
+    }
+
+    function coreColorHex(colorName) {
+        const normalized = String(colorName || '').trim().toLowerCase();
+        return corePalette.find(([name]) => name.toLowerCase() === normalized)?.[1] || '';
     }
 
     function closestCoordinateOnLine(point, coordinates) {
@@ -3122,19 +3172,23 @@
             }
         });
 
-        return [...new Set(options)].sort();
+        return [...new Set(options)].sort((first, second) => first.localeCompare(second, undefined, {
+            numeric: true,
+            sensitivity: 'base',
+        }));
     }
 
     function endpointSelect(name, value, options, placeholder) {
         const normalizedValue = value || '';
-        const hasCustomValue = normalizedValue && !options.includes(normalizedValue);
-        const optionHtml = [
-            `<option value="">${escapeHtml(placeholder)}</option>`,
-            ...(hasCustomValue ? [`<option value="${escapeHtml(normalizedValue)}" selected>${escapeHtml(normalizedValue)}</option>`] : []),
-            ...options.map((option) => `<option value="${escapeHtml(option)}" ${option === normalizedValue ? 'selected' : ''}>${escapeHtml(option)}</option>`),
-        ].join('');
+        const listId = `network-map-endpoint-options-${++endpointDropdownSequence}`;
+        const optionHtml = options
+            .map((option) => `<option value="${escapeHtml(option)}"></option>`)
+            .join('');
 
-        return `<select data-map-field="${escapeHtml(name)}">${optionHtml}</select>`;
+        return `<span class="map-search-select">
+            <input type="search" data-map-field="${escapeHtml(name)}" value="${escapeHtml(normalizedValue)}" list="${listId}" autocomplete="off" placeholder="${escapeHtml(placeholder)}">
+            <datalist id="${listId}">${optionHtml}</datalist>
+        </span>`;
     }
 
     function coreColorSelect(name, value) {

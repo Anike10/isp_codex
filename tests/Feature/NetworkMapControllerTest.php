@@ -31,6 +31,8 @@ class NetworkMapControllerTest extends TestCase
 
         $script = File::get(public_path('js/network-map.js'));
         $this->assertStringContainsString('setupSearchableDropdown', $script);
+        $this->assertStringContainsString('appendSplitterPortLinks', $script);
+        $this->assertStringContainsString('network-map-endpoint-options-', $script);
         $this->assertStringContainsString('return completedCore.color_hex', $script);
         $this->assertStringNotContainsString("window.prompt('Fiber core number or color", $script);
     }
