@@ -20,8 +20,6 @@
         pendingEndpointLink: null,
         draggingNode: null,
         nodeDragJustFinished: false,
-        zoomFocusLngLat: null,
-        centerZoomOnPointer: false,
         hoverPopup: null,
         placementPreview: null,
         selectedFeatureId: null,
@@ -270,6 +268,7 @@
                 center: defaultView.center,
                 zoom: defaultView.zoom,
                 maxZoom: 22,
+                scrollZoom: false,
                 doubleClickZoom: false,
             });
 
@@ -302,12 +301,9 @@
         state.map.on('mouseleave', 'network-links-line-hit', hideHoverDetails);
         state.map.on('mousedown', 'network-nodes-circle', startNodeDrag);
         state.map.on('mousemove', handleMapMouseMove);
-        state.map.on('zoomstart', handleZoomStart);
-        state.map.on('zoomend', handleZoomEnd);
-        state.map.on('dragend', handleMapDragEnd);
         state.map.on('mouseleave', clearPlacementPreview);
         state.map.on('mouseup', finishNodeDrag);
-        state.map.getCanvas().addEventListener('wheel', captureWheelZoomFocus, { passive: true });
+        state.map.getCanvas().addEventListener('wheel', handleMapWheelZoom, { passive: false });
         state.map.getContainer().addEventListener('dragover', (event) => {
             if (state.pendingPortLink) {
                 event.preventDefault();
@@ -3006,54 +3002,68 @@
     }
 
     function handleMapMouseMove(event) {
-        state.zoomFocusLngLat = { lng: event.lngLat.lng, lat: event.lngLat.lat };
         dragNode(event);
         updatePlacementPreview(event);
     }
 
-    function captureWheelZoomFocus(event) {
+    function handleMapWheelZoom(event) {
+        if (!event.deltaY) return;
+
+        event.preventDefault();
+        state.map.stop();
+
+        const deltaUnit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 3 : 100;
+        const zoomStep = Math.min(1, Math.max(0.15, Math.abs(event.deltaY) / deltaUnit));
+        const zoomingIn = event.deltaY < 0;
+        const targetZoom = zoomingIn
+            ? Math.min(state.map.getMaxZoom(), state.map.getZoom() + zoomStep)
+            : Math.max(state.map.getMinZoom(), state.map.getZoom() - zoomStep);
+
+        if (!zoomingIn) {
+            state.map.easeTo({ zoom: targetZoom, duration: 140, essential: true });
+            return;
+        }
+
         const canvas = state.map.getCanvas();
         const bounds = canvas.getBoundingClientRect();
         const focus = state.map.unproject([
             event.clientX - bounds.left,
             event.clientY - bounds.top,
         ]);
-        state.zoomFocusLngLat = { lng: focus.lng, lat: focus.lat };
-        state.centerZoomOnPointer = true;
-    }
+        const target = [focus.lng, focus.lat];
+        const offset = visibleMapCenterOffset(bounds);
 
-    function handleZoomStart(event) {
-        const originalEvent = event.originalEvent;
-        const zoomButton = originalEvent?.target?.closest?.(
-            '.maplibregl-ctrl-zoom-in, .maplibregl-ctrl-zoom-out'
-        );
-        state.centerZoomOnPointer = Boolean(
-            state.zoomFocusLngLat
-            && (originalEvent?.type === 'wheel' || zoomButton)
-        );
-    }
-
-    function handleZoomEnd() {
-        if (!state.centerZoomOnPointer || !state.zoomFocusLngLat) return;
-
-        state.centerZoomOnPointer = false;
-        centerMapOnPointer();
-    }
-
-    function handleMapDragEnd() {
-        if (state.draggingNode || !state.zoomFocusLngLat) return;
-
-        centerMapOnPointer();
-    }
-
-    function centerMapOnPointer() {
-        const target = [state.zoomFocusLngLat.lng, state.zoomFocusLngLat.lat];
+        state.map.easeTo({ center: target, offset, duration: 0, essential: true });
         state.map.easeTo({
             center: target,
-            duration: 260,
+            zoom: targetZoom,
+            offset,
+            duration: 180,
             easing: (progress) => 1 - Math.pow(1 - progress, 3),
             essential: true,
         });
+    }
+
+    function visibleMapCenterOffset(bounds) {
+        const viewportWidth = document.documentElement.clientWidth;
+        const viewportHeight = document.documentElement.clientHeight;
+        const header = document.querySelector('.app-header');
+        const headerBottom = header
+            ? Math.min(viewportHeight, Math.max(0, header.getBoundingClientRect().bottom))
+            : 0;
+        const visibleLeft = Math.max(0, bounds.left);
+        const visibleRight = Math.min(viewportWidth, bounds.right);
+        const visibleTop = Math.max(headerBottom, bounds.top);
+        const visibleBottom = Math.min(viewportHeight, bounds.bottom);
+
+        if (visibleRight <= visibleLeft || visibleBottom <= visibleTop) {
+            return [0, 0];
+        }
+
+        return [
+            ((visibleLeft + visibleRight) / 2) - (bounds.left + bounds.width / 2),
+            ((visibleTop + visibleBottom) / 2) - (bounds.top + bounds.height / 2),
+        ];
     }
 
     function updatePlacementCursor() {
