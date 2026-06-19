@@ -36,6 +36,7 @@ class NetworkMapControllerTest extends TestCase
         $this->assertStringContainsString('withParallelLineOffsets', $script);
         $this->assertStringContainsString('saveDirectDeviceLink', $script);
         $this->assertStringContainsString('centerEmptyMapPoint', $script);
+        $this->assertStringContainsString('state.map.panBy', $script);
         $this->assertStringNotContainsString('handleMapWheelZoom', $script);
         $this->assertStringContainsString("link_type: 'direct_device'", $script);
         $this->assertStringContainsString("['direct_router', 'direct_device']", $script);
