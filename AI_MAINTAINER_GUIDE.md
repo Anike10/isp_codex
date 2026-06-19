@@ -644,6 +644,7 @@ Stock movement behavior:
 - Out and own-use movements fail if quantity exceeds the selected warehouse stock, even when total product stock is higher.
 - `products.stock_quantity` remains the aggregate across all warehouses; `product_warehouse_stocks` is the warehouse-level source of truth.
 - Transfers create paired `transfer_out` and `transfer_in` movements with one reference number and do not change aggregate product stock.
+- The transfer form accepts multiple product rows under one From/To warehouse selection; all rows share one reference and roll back together if any row fails.
 - In-stock serials carry `warehouse_id`; serial transfers must update both the warehouse balances and each selected serial location atomically.
 - Existing stock and in-stock serials are assigned to the seeded `Main Warehouse` by the warehouse migration.
 - Purchase bills and invoices use the default warehouse unless a future workflow explicitly captures another warehouse.

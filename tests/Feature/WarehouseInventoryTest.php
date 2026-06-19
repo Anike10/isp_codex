@@ -128,6 +128,55 @@ class WarehouseInventoryTest extends TestCase
         $this->assertDatabaseMissing('stock_movements', ['product_id' => $product->id, 'type' => 'transfer_out']);
     }
 
+    public function test_multiple_products_transfer_together_with_one_reference_and_atomic_rollback(): void
+    {
+        $user = $this->inventoryUser();
+        $main = Warehouse::where('is_default', true)->firstOrFail();
+        $branch = Warehouse::create(['name' => 'Batch Branch', 'code' => 'BATCH']);
+        $router = $this->product(['sku' => 'ROUTER-BATCH', 'stock_quantity' => 8]);
+        $onu = $this->product([
+            'sku' => 'ONU-BATCH',
+            'stock_quantity' => 3,
+            'track_serial_numbers' => true,
+            'product_type' => 'serial_stock',
+        ]);
+        foreach (['BATCH001', 'BATCH002', 'BATCH003'] as $number) {
+            ProductSerial::create([
+                'product_id' => $onu->id,
+                'warehouse_id' => $main->id,
+                'serial_number' => $number,
+                'status' => 'in_stock',
+            ]);
+        }
+
+        $this->actingAs($user)->post(route('warehouse-transfers.store'), [
+            'from_warehouse_id' => $main->id,
+            'to_warehouse_id' => $branch->id,
+            'reason' => 'Combined shipment',
+            'items' => [
+                ['product_id' => $router->id, 'quantity' => 3],
+                ['product_id' => $onu->id, 'quantity' => 2, 'serial_numbers' => 'BATCH001, BATCH002'],
+            ],
+        ])->assertRedirect(route('warehouses.show', $branch));
+
+        $this->assertDatabaseHas('product_warehouse_stocks', ['product_id' => $router->id, 'warehouse_id' => $branch->id, 'quantity' => 3]);
+        $this->assertDatabaseHas('product_warehouse_stocks', ['product_id' => $onu->id, 'warehouse_id' => $branch->id, 'quantity' => 2]);
+        $this->assertSame(1, StockMovement::where('reason', 'Combined shipment')->distinct()->count('reference_no'));
+        $this->assertSame(4, StockMovement::where('reason', 'Combined shipment')->count());
+
+        $beforeRouterStock = $router->warehouseStocks()->where('warehouse_id', $main->id)->value('quantity');
+        $this->actingAs($user)->from(route('warehouse-transfers.create'))->post(route('warehouse-transfers.store'), [
+            'from_warehouse_id' => $main->id,
+            'to_warehouse_id' => $branch->id,
+            'items' => [
+                ['product_id' => $router->id, 'quantity' => 1],
+                ['product_id' => $onu->id, 'quantity' => 99, 'serialless_quantity' => 99],
+            ],
+        ])->assertRedirect(route('warehouse-transfers.create'))->assertSessionHasErrors('items');
+
+        $this->assertSame($beforeRouterStock, $router->warehouseStocks()->where('warehouse_id', $main->id)->value('quantity'));
+    }
+
     private function inventoryUser(): User
     {
         $user = User::factory()->create();

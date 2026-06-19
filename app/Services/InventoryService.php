@@ -97,6 +97,7 @@ class InventoryService
         array $serialNumbers = [],
         int $seriallessQuantity = 0,
         ?string $reason = null,
+        ?string $referenceNo = null,
     ): array {
         if (! $product->track_inventory) {
             throw new InvalidArgumentException('This product does not track inventory.');
@@ -121,7 +122,7 @@ class InventoryService
             $seriallessQuantity = 0;
         }
 
-        return DB::transaction(function () use ($product, $fromWarehouse, $toWarehouse, $quantity, $serialNumbers, $seriallessQuantity, $reason): array {
+        return DB::transaction(function () use ($product, $fromWarehouse, $toWarehouse, $quantity, $serialNumbers, $seriallessQuantity, $reason, $referenceNo): array {
             $fromStock = $this->lockedWarehouseStock($product->id, $fromWarehouse->id);
             $toStock = $this->lockedWarehouseStock($product->id, $toWarehouse->id);
             $fromBefore = (int) $fromStock->quantity;
@@ -163,7 +164,7 @@ class InventoryService
             $fromStock->update(['quantity' => $fromBefore - $quantity]);
             $toStock->update(['quantity' => $toBefore + $quantity]);
 
-            $referenceNo = 'TRF-'.now()->format('YmdHis').'-'.Str::upper(Str::random(4));
+            $referenceNo ??= 'TRF-'.now()->format('YmdHis').'-'.Str::upper(Str::random(4));
             $reason ??= 'Warehouse transfer';
             $outMovement = StockMovement::create([
                 'product_id' => $product->id,
@@ -193,6 +194,34 @@ class InventoryService
             ]);
 
             return [$outMovement, $inMovement];
+        });
+    }
+
+    public function transferMany(Warehouse $fromWarehouse, Warehouse $toWarehouse, array $items, ?string $reason = null): array
+    {
+        if ($items === []) {
+            throw new InvalidArgumentException('At least one product is required for transfer.');
+        }
+
+        $referenceNo = 'TRF-'.now()->format('YmdHis').'-'.Str::upper(Str::random(4));
+
+        return DB::transaction(function () use ($fromWarehouse, $toWarehouse, $items, $reason, $referenceNo): array {
+            $movements = [];
+
+            foreach ($items as $item) {
+                $movements[] = $this->transfer(
+                    $item['product'],
+                    $fromWarehouse,
+                    $toWarehouse,
+                    (int) $item['quantity'],
+                    $item['serial_numbers'] ?? [],
+                    (int) ($item['serialless_quantity'] ?? 0),
+                    $reason,
+                    $referenceNo,
+                );
+            }
+
+            return $movements;
         });
     }
 

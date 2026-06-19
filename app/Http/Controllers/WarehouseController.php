@@ -79,6 +79,7 @@ class WarehouseController extends Controller
             ->get();
         $productData = $products->map(fn (Product $product): array => [
             'id' => $product->id,
+            'label' => $product->name.' ('.$product->sku.')',
             'track_serials' => (bool) $product->track_serial_numbers,
             'stocks' => $product->warehouseStocks->pluck('quantity', 'warehouse_id'),
             'serials' => $product->serials->map(fn ($serial): array => [
@@ -92,28 +93,44 @@ class WarehouseController extends Controller
 
     public function storeTransfer(Request $request, InventoryService $inventoryService)
     {
+        if (! $request->has('items') && $request->filled('product_id')) {
+            $request->merge(['items' => [[
+                'product_id' => $request->input('product_id'),
+                'quantity' => $request->input('quantity'),
+                'serial_numbers' => $request->input('serial_numbers'),
+                'serialless_quantity' => $request->input('serialless_quantity'),
+            ]]]);
+        }
+
         $data = $request->validate([
-            'product_id' => ['required', 'exists:products,id'],
             'from_warehouse_id' => ['required', 'exists:warehouses,id'],
             'to_warehouse_id' => ['required', 'different:from_warehouse_id', 'exists:warehouses,id'],
-            'quantity' => ['required', 'integer', 'min:1'],
-            'serial_numbers' => ['nullable', 'string'],
-            'serialless_quantity' => ['nullable', 'integer', 'min:0'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'distinct', 'exists:products,id'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.serial_numbers' => ['nullable', 'string'],
+            'items.*.serialless_quantity' => ['nullable', 'integer', 'min:0'],
             'reason' => ['nullable', 'string', 'max:255'],
         ]);
 
         try {
-            $inventoryService->transfer(
-                Product::findOrFail($data['product_id']),
+            $items = collect($data['items'])->map(fn (array $item): array => [
+                'product' => Product::findOrFail($item['product_id']),
+                'quantity' => (int) $item['quantity'],
+                'serial_numbers' => app(SerialNumberParser::class)->parse($item['serial_numbers'] ?? ''),
+                'serialless_quantity' => (int) ($item['serialless_quantity'] ?? 0),
+            ])->all();
+            $inventoryService->transferMany(
                 Warehouse::where('is_active', true)->findOrFail($data['from_warehouse_id']),
                 Warehouse::where('is_active', true)->findOrFail($data['to_warehouse_id']),
-                (int) $data['quantity'],
-                app(SerialNumberParser::class)->parse($data['serial_numbers'] ?? ''),
-                (int) ($data['serialless_quantity'] ?? 0),
+                $items,
                 $data['reason'] ?? null,
             );
         } catch (InvalidArgumentException $exception) {
-            return back()->withInput()->withErrors(['quantity' => $exception->getMessage()]);
+            return back()->withInput()->withErrors([
+                'items' => $exception->getMessage(),
+                'quantity' => $exception->getMessage(),
+            ]);
         }
 
         return redirect()->route('warehouses.show', $data['to_warehouse_id'])->with('success', 'Stock transferred successfully.');
