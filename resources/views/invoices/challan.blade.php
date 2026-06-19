@@ -166,6 +166,12 @@
         .box-body { padding: 10px; line-height: 1.7; }
         .muted { color: var(--muted); }
         .strong { font-weight: 700; }
+        .item-serials {
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: .9em;
+            overflow-wrap: anywhere;
+        }
 
         .kv {
             display: grid;
@@ -479,6 +485,7 @@
 </head>
 <body class="bw-print {{ $invoice->items->count() >= 30 ? 'compact-print dense-print' : ($invoice->items->count() >= 25 ? 'compact-print' : '') }}">
     @php
+        $serialFormatter = app(\App\Support\SerialNumberParser::class);
         $numberToWords = function (int $number) use (&$numberToWords): string {
             $ones = [
                 0 => 'Zero', 1 => 'One', 2 => 'Two', 3 => 'Three', 4 => 'Four',
@@ -599,7 +606,12 @@
                 @forelse ($invoice->items as $index => $item)
                     <tr>
                         <td class="center">{{ $index + 1 }}</td>
-                        <td>{{ $item->product_name }}</td>
+                        <td>
+                            <div>{{ $item->product_name }}</div>
+                            @if (filled($item->serial_numbers))
+                                <div class="item-serials">Serial: {{ $serialFormatter->formatCompact($item->serial_numbers) }}</div>
+                            @endif
+                        </td>
                         <td class="center">{{ $item->quantity }}</td>
                         <td class="right">{{ number_format($item->unit_price, 2) }}</td>
                         <td class="right">{{ number_format($item->total, 2) }}</td>

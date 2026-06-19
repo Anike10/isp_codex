@@ -247,6 +247,8 @@ class InvoiceSerialSaleTest extends TestCase
 
         $this->actingAs($user)->get(route('invoices.invoice', $invoice))
             ->assertOk()
+            ->assertSee('Serial:')
+            ->assertSee('ONU-MIXED-001')
             ->assertDontSee('Serial-less Qty');
     }
 
