@@ -2990,7 +2990,11 @@
         if (!feature || feature.geometry.type !== 'Point') return;
 
         event.preventDefault();
-        state.draggingNode = { featureId, startedAt: Date.now() };
+        state.draggingNode = {
+            featureId,
+            startPoint: { x: event.point.x, y: event.point.y },
+            moved: false,
+        };
         state.map.dragPan.disable();
         state.map.getCanvas().style.cursor = 'grabbing';
     }
@@ -3040,6 +3044,15 @@
     function dragNode(event) {
         if (!state.draggingNode) return;
 
+        if (!state.draggingNode.moved) {
+            const distance = Math.hypot(
+                event.point.x - state.draggingNode.startPoint.x,
+                event.point.y - state.draggingNode.startPoint.y
+            );
+            if (distance < 3) return;
+            state.draggingNode.moved = true;
+        }
+
         const feature = state.features.get(state.draggingNode.featureId);
         if (!feature) return;
 
@@ -3051,13 +3064,13 @@
     function finishNodeDrag() {
         if (!state.draggingNode) return;
 
-        const draggedForMs = Date.now() - state.draggingNode.startedAt;
+        const nodeMoved = state.draggingNode.moved;
         state.draggingNode = null;
         state.map.dragPan.enable();
         state.map.getCanvas().style.cursor = '';
-        state.dirty = true;
 
-        if (draggedForMs > 120) {
+        if (nodeMoved) {
+            state.dirty = true;
             state.nodeDragJustFinished = true;
             persistTopology();
             setStatus('Node moved. Linked fiber endpoints updated.');
