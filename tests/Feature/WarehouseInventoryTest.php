@@ -107,7 +107,7 @@ class WarehouseInventoryTest extends TestCase
         $this->actingAs($user)->get(route('warehouse-transfers.create'))
             ->assertOk()
             ->assertSee('ONU003')
-            ->assertSee('Available Serials in Source Warehouse')
+            ->assertSee('Available Serials in From Warehouse')
             ->assertSee('Add Item')
             ->assertSee('transferItemCount')
             ->assertSee('item-order')

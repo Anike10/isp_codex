@@ -10,10 +10,20 @@
     ]]);
 @endphp
 <style>
-    .transfer-header { margin-bottom:16px; }
-    .transfer-items { display:grid; gap:14px; }
-    .transfer-item { position:relative; display:grid; grid-template-columns:52px minmax(240px, 2fr) 110px 140px minmax(180px, 1fr) auto; gap:12px; align-items:end; }
-    .transfer-item .serial-area { grid-column:2 / -1; }
+    .transfer-header { margin-bottom:20px; }
+    .transfer-header label, .transfer-item label { color:#344054; font-size:13px; }
+    .transfer-items { display:grid; gap:16px; }
+    .transfer-item { position:relative; display:grid; grid-template-columns:52px minmax(260px, 1fr) 130px 160px 100px; gap:14px; align-items:start; padding:16px; }
+    .transfer-item .drag-cell { grid-column:1; }
+    .transfer-item .product-cell { grid-column:2; }
+    .transfer-item .quantity-cell { grid-column:3; }
+    .transfer-item .serialless-cell { grid-column:4; }
+    .transfer-item .action-cell { grid-column:5; }
+    .transfer-item .control-label { display:block; min-height:18px; margin-bottom:7px; color:#667085; font-size:11px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
+    .transfer-item .field-note { display:block; margin-top:6px; color:#667085; font-size:12px; line-height:1.35; }
+    .transfer-item .serial-area { grid-column:2 / -1; display:grid; grid-template-columns:minmax(240px, .8fr) minmax(300px, 1.2fr); gap:16px; padding:14px; border:1px solid #e1e7ef; border-radius:8px; background:#f8fafc; }
+    .transfer-item .serial-area[hidden], .transfer-item [hidden] { display:none; }
+    .transfer-item textarea { min-height:82px; }
     .transfer-item.is-dragging { opacity:.55; border-color:#116149; box-shadow:0 10px 24px rgba(17,97,73,.14); }
     .item-order { width:44px; min-height:40px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #c8d2df; border-radius:8px; background:#f8fafc; color:#172033; cursor:grab; font:inherit; font-weight:800; user-select:none; }
     .item-order:active { cursor:grabbing; }
@@ -21,13 +31,30 @@
     .serial-option { border:1px solid #c8d2df; border-radius:6px; background:#fff; color:#172033; padding:5px 8px; cursor:pointer; font:inherit; font-size:12px; }
     .serial-option.is-selected { border-color:#116149; background:#edf8f4; color:#0f513e; }
     .serial-option:focus { outline:2px solid #116149; outline-offset:2px; }
-    .remove-transfer-item { background:#fff0f0; color:#b42318; }
-    .add-item-bar { display:flex; justify-content:space-between; gap:14px; align-items:center; margin-top:14px; padding:16px 18px; border:1px solid #d8dee9; border-radius:8px; background:#fff; }
+    .remove-transfer-item { width:100%; justify-content:center; background:#fff0f0; color:#b42318; }
+    .add-item-bar { display:flex; justify-content:space-between; gap:14px; align-items:center; margin-top:16px; padding:16px 18px; border:1px dashed #c8d2df; border-radius:8px; background:#fff; }
     .add-item-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     .add-item-count { display:inline-flex; align-items:center; gap:8px; margin:0; color:#475467; font-size:13px; }
     .add-item-count input { width:78px; min-height:40px; }
-    @media (max-width:980px) { .transfer-item { grid-template-columns:52px 1fr 1fr; } .transfer-item .serial-area { grid-column:2 / -1; } }
-    @media (max-width:560px) { .transfer-item { grid-template-columns:44px 1fr; } .transfer-item .serial-area { grid-column:1 / -1; } .add-item-bar { align-items:stretch; flex-direction:column; } }
+    .transfer-submit-bar { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-top:16px; padding:16px 18px; border-radius:8px; background:#14213d; color:#fff; }
+    .transfer-submit-bar .muted { color:#dbe7ff; }
+    @media (max-width:980px) {
+        .transfer-item { grid-template-columns:52px 1fr 1fr; }
+        .transfer-item .product-cell { grid-column:2 / -1; }
+        .transfer-item .quantity-cell { grid-column:2; }
+        .transfer-item .serialless-cell { grid-column:3; }
+        .transfer-item .action-cell { grid-column:2 / -1; }
+        .transfer-item .action-cell .btn { width:auto; }
+        .transfer-item .serial-area { grid-column:2 / -1; }
+    }
+    @media (max-width:700px) {
+        .transfer-item { grid-template-columns:44px 1fr; }
+        .transfer-item .drag-cell { grid-column:1; }
+        .transfer-item .product-cell { grid-column:2; }
+        .transfer-item .quantity-cell, .transfer-item .serialless-cell, .transfer-item .action-cell { grid-column:1 / -1; }
+        .transfer-item .serial-area { grid-column:1 / -1; grid-template-columns:1fr; }
+        .add-item-bar, .transfer-submit-bar { align-items:stretch; flex-direction:column; }
+    }
 </style>
 
 <div class="topbar">
@@ -56,22 +83,25 @@
                 @endforeach
             </select>
         </div>
-        <div class="full"><label>Reason / Note</label><input name="reason" value="{{ old('reason') }}" placeholder="Common purpose for this transfer"></div>
+        <div class="full"><label>Transfer Note / Reason</label><input name="reason" value="{{ old('reason') }}" placeholder="Common purpose for all transferred products"></div>
     </section>
 
     <div class="topbar">
-        <div><h2>Products</h2><div class="muted">Serial-tracked rows show only serials available in the source warehouse.</div></div>
+        <div><h2>Transfer Items <span class="badge">Items: <strong id="transferItemCount">0</strong></span></h2><div class="muted">Serial-tracked rows show only serials available in the selected From Warehouse.</div></div>
     </div>
     <div class="transfer-items" id="transferItems"></div>
 
     <div class="add-item-bar">
-        <div class="muted">Items: <strong id="transferItemCount">0</strong> · Drag the numbered handle to reorder rows with their selected serials.</div>
+        <div class="muted"><strong>Add more rows</strong><br>Drag the numbered SL handle to reorder products with their selected serials.</div>
         <div class="add-item-actions">
             <label class="add-item-count" for="addTransferItemCount">Rows <input id="addTransferItemCount" type="number" min="1" max="50" value="1" inputmode="numeric"></label>
             <button class="btn secondary" type="button" id="addTransferItem">Add Item</button>
         </div>
     </div>
-    <div class="actions" style="margin-top:16px"><button class="btn" type="submit">Transfer All Products</button></div>
+    <div class="transfer-submit-bar">
+        <div><strong>Ready to transfer <span id="transferSubmitCount">0</span> item(s)</strong><div class="muted">All rows will use one reference and transfer together.</div></div>
+        <button class="btn" type="submit">Transfer All Products</button>
+    </div>
 </form>
 
 <script>
@@ -175,6 +205,7 @@ function reindexTransferRows() {
         row.querySelector('.remove-transfer-item').hidden = rows.length === 1;
     });
     document.getElementById('transferItemCount').textContent = rows.length;
+    document.getElementById('transferSubmitCount').textContent = rows.length;
 }
 
 function addTransferRow(values = {}) {
@@ -182,13 +213,15 @@ function addTransferRow(values = {}) {
     row.className = 'card transfer-item';
     row.dataset.itemIndex = nextItemIndex++;
     row.innerHTML = `
-        <div><button type="button" class="item-order" draggable="true" aria-label="Drag item to reorder"></button></div>
-        <div><label>Product</label><select data-product-input required><option value="">Select product</option></select><span class="muted" data-availability></span></div>
-        <div><label>Quantity</label><input type="number" min="1" data-quantity-input required></div>
-        <div data-serial-field><label>Serial-less Qty</label><input type="number" min="0" placeholder="Qty without serial" data-serialless-input></div>
-        <div data-serial-field><label>Serial Numbers</label><textarea rows="2" placeholder="Select serials below or type comma-separated serials" data-serial-input></textarea></div>
-        <div><button type="button" class="btn light remove-transfer-item">Remove</button></div>
-        <div class="serial-area" data-serial-area data-serial-field><label>Available Serials in Source Warehouse</label><div class="serial-options" data-serial-options></div></div>`;
+        <div class="drag-cell"><span class="control-label">SL</span><button type="button" class="item-order" draggable="true" aria-label="Drag item to reorder"></button></div>
+        <div class="product-cell"><label>Product</label><select data-product-input required><option value="">Select a product</option></select><span class="field-note" data-availability>Select product and From Warehouse</span></div>
+        <div class="quantity-cell"><label>Transfer Qty</label><input type="number" min="1" placeholder="0" data-quantity-input required><span class="field-note">Total units</span></div>
+        <div class="serialless-cell" data-serial-field><label>Serial-less Qty</label><input type="number" min="0" placeholder="Qty without serial" data-serialless-input><span class="field-note">Units without serial</span></div>
+        <div class="action-cell"><span class="control-label">Action</span><button type="button" class="btn light remove-transfer-item">Remove</button></div>
+        <div class="serial-area" data-serial-area data-serial-field>
+            <div><label>Selected Serial Numbers</label><textarea rows="2" placeholder="Click serials or type comma-separated values" data-serial-input></textarea><span class="field-note">Selected serial count is included in Transfer Qty.</span></div>
+            <div><label>Available Serials in From Warehouse</label><div class="serial-options" data-serial-options></div><span class="field-note">Click once to select; click again to remove.</span></div>
+        </div>`;
 
     const productInput = row.querySelector('[data-product-input]');
     transferProducts.forEach(product => productInput.add(new Option(product.label, product.id)));
