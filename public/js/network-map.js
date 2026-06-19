@@ -805,6 +805,13 @@
     }
 
     function fiberLineColor(feature) {
+        const completedCore = buildFiberCoreRowsForFeature(feature)
+            .filter((row) => row.in_point && row.out_point && row.color_hex)
+            .sort((first, second) => Number(first.core) - Number(second.core))[0];
+        if (completedCore) {
+            return completedCore.color_hex;
+        }
+
         const ponPorts = fiberPonPorts(feature);
         if (ponPorts.length > 1) {
             return multiPonFiberColor;
@@ -1660,11 +1667,21 @@
         state.map.getContainer().appendChild(panel);
         state.corePanel = panel;
 
+        setupSearchableDropdown(
+            panel.querySelector('[data-searchable-dropdown="splitter_port"]'),
+            splitterPortOptions(),
+            'Type splitter name or port'
+        );
+
         panel.querySelector('.core-panel-close').addEventListener('click', closeFiberCorePanel);
         panel.querySelectorAll('[data-core-link]').forEach((button) => {
             button.addEventListener('click', () => {
-                const select = panel.querySelector('select[name="splitter_port"]');
-                linkFiberCoreToSplitter(featureId, Number(button.dataset.coreIndex), button.dataset.coreLink, select.value);
+                const splitterPort = panel.querySelector('input[name="splitter_port"]')?.value;
+                if (!splitterPort) {
+                    setStatus('Choose a splitter port from the dropdown first.');
+                    return;
+                }
+                linkFiberCoreToSplitter(featureId, Number(button.dataset.coreIndex), button.dataset.coreLink, splitterPort);
             });
         });
 
@@ -1777,11 +1794,49 @@
         const device = state.features.get(deviceId);
         if (!isPortLinkDevice(device)) return;
 
-        const input = window.prompt('Fiber core number or color to link with this port:', '1');
-        if (!input) {
-            setStatus('Port link cancelled.');
-            return;
-        }
+        closeFiberCorePanel();
+        const rows = buildFiberCoreRowsForFeature(fiber);
+        const point = state.map.project(device.geometry.coordinates);
+        const panel = document.createElement('section');
+        panel.className = 'fiber-core-panel core-choice-panel';
+        panel.style.left = `${Math.min(Math.max(point.x + 16, 12), state.map.getContainer().clientWidth - 380)}px`;
+        panel.style.top = `${Math.min(Math.max(point.y + 16, 12), state.map.getContainer().clientHeight - 220)}px`;
+        panel.innerHTML = `
+            <div class="core-panel-head">
+                <div>
+                    <strong>${escapeHtml(devicePortLabel(device, port))}</strong>
+                    <span>Choose a core from ${escapeHtml(fiber.properties.fiber_code || 'Fiber')}</span>
+                </div>
+                <button type="button" class="core-panel-close">x</button>
+            </div>
+            <label class="core-panel-select">Fiber Core
+                ${searchableDropdownHtml('fiber_core', 'Type core number or color')}
+            </label>
+        `;
+        state.map.getContainer().appendChild(panel);
+        state.corePanel = panel;
+
+        panel.querySelector('.core-panel-close').addEventListener('click', closeFiberCorePanel);
+        setupSearchableDropdown(
+            panel.querySelector('[data-searchable-dropdown="fiber_core"]'),
+            rows.map((row) => ({
+                value: String(row.core),
+                label: `C${row.core} ${row.color_name}`,
+                color_hex: row.color_hex,
+                search: `${row.core} core ${row.color_name}`,
+            })),
+            'Type core number or color',
+            (coreNumber) => {
+                completeDevicePortCoreLink(deviceId, port, fiber, coreNumber);
+                closeFiberCorePanel();
+            }
+        );
+        setStatus('Type a core number or color, then choose it from the dropdown.');
+    }
+
+    function completeDevicePortCoreLink(deviceId, port, fiber, input) {
+        const device = state.features.get(deviceId);
+        if (!isPortLinkDevice(device)) return;
 
         const endpointLabel = devicePortLabel(device, port);
         let rows = buildFiberCoreRowsForFeature(fiber);
@@ -1972,11 +2027,7 @@
 
     function fiberCorePanelHtml(feature, coordinateIndex) {
         const rows = buildFiberCoreRowsForFeature(feature);
-        const ports = splitterPortOptions();
         const endpointName = coordinateIndex === 0 ? 'A-End' : 'Z-End';
-        const portOptions = ports.length
-            ? ports.map((port) => `<option value="${escapeHtml(port.value)}">${escapeHtml(port.label)}</option>`).join('')
-            : '<option value="">No splitter found</option>';
 
         return `
             <div class="core-panel-head">
@@ -1987,7 +2038,7 @@
                 <button type="button" class="core-panel-close">x</button>
             </div>
             <label class="core-panel-select">Splitter Port
-                <select name="splitter_port">${portOptions}</select>
+                ${searchableDropdownHtml('splitter_port', 'Type splitter name or port')}
             </label>
             <div class="core-chip-grid">
                 ${rows.map((row) => `
@@ -2032,15 +2083,96 @@
             if (feature.geometry.type !== 'Point' || feature.properties.component_type !== 'splitter') return;
 
             const name = feature.properties.name || 'Splitter';
-            ports.push({ label: `${name} IN`, value: `${name} IN` });
-            const count = Number(String(feature.properties.splitter_type || '1:8').split(':')[1] || 8);
-            for (let port = 1; port <= count; port++) {
-                const portLabel = `OUT-${String(port).padStart(2, '0')}`;
-                ports.push({ label: `${name} ${portLabel}`, value: `${name} ${portLabel}` });
-            }
+            buildSplitterRowsForFeature(feature).forEach((row) => {
+                const label = `${name} ${row.port}`;
+                ports.push({
+                    label,
+                    value: label,
+                    color_hex: row.color_hex,
+                    search: `${name} ${row.port} ${row.color_name}`,
+                });
+            });
         });
 
-        return ports;
+        return ports.sort((first, second) => first.label.localeCompare(second.label, undefined, {
+            numeric: true,
+            sensitivity: 'base',
+        }));
+    }
+
+    function searchableDropdownHtml(name, placeholder) {
+        return `
+            <span class="searchable-dropdown" data-searchable-dropdown="${escapeHtml(name)}">
+                <input type="search" data-dropdown-search autocomplete="off" placeholder="${escapeHtml(placeholder)}">
+                <input type="hidden" name="${escapeHtml(name)}" data-dropdown-value>
+                <span class="searchable-dropdown-list" data-dropdown-list role="listbox" hidden></span>
+            </span>
+        `;
+    }
+
+    function setupSearchableDropdown(container, options, placeholder, onSelect = null) {
+        if (!container) return;
+
+        const searchInput = container.querySelector('[data-dropdown-search]');
+        const valueInput = container.querySelector('[data-dropdown-value]');
+        const list = container.querySelector('[data-dropdown-list]');
+        searchInput.placeholder = placeholder;
+
+        const rankedOptions = (query) => {
+            const normalizedQuery = String(query || '').trim().toLowerCase();
+            return options
+                .filter((option) => !normalizedQuery || String(option.search || option.label).toLowerCase().includes(normalizedQuery))
+                .sort((first, second) => {
+                    const firstLabel = first.label.toLowerCase();
+                    const secondLabel = second.label.toLowerCase();
+                    const firstStarts = normalizedQuery && firstLabel.startsWith(normalizedQuery) ? 0 : 1;
+                    const secondStarts = normalizedQuery && secondLabel.startsWith(normalizedQuery) ? 0 : 1;
+                    return firstStarts - secondStarts || first.label.localeCompare(second.label, undefined, {
+                        numeric: true,
+                        sensitivity: 'base',
+                    });
+                });
+        };
+
+        const renderOptions = () => {
+            const matches = rankedOptions(searchInput.value);
+            list.innerHTML = matches.length
+                ? matches.map((option) => `
+                    <button type="button" role="option" data-dropdown-option="${escapeHtml(option.value)}">
+                        ${option.color_hex ? `<i style="background:${escapeHtml(option.color_hex)}"></i>` : ''}
+                        <span>${escapeHtml(option.label)}</span>
+                    </button>
+                `).join('')
+                : '<em>No matching option</em>';
+            list.hidden = false;
+        };
+
+        searchInput.addEventListener('focus', renderOptions);
+        searchInput.addEventListener('input', () => {
+            valueInput.value = '';
+            renderOptions();
+        });
+        searchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                list.hidden = true;
+            }
+        });
+        searchInput.addEventListener('blur', () => {
+            window.setTimeout(() => { list.hidden = true; }, 120);
+        });
+        list.addEventListener('mousedown', (event) => event.preventDefault());
+        list.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-dropdown-option]');
+            if (!button) return;
+
+            const option = options.find((item) => item.value === button.dataset.dropdownOption);
+            if (!option) return;
+
+            searchInput.value = option.label;
+            valueInput.value = option.value;
+            list.hidden = true;
+            if (onSelect) onSelect(option.value, option);
+        });
     }
 
     function linkFiberCoreToSplitter(featureId, coreNumber, side, splitterPort) {

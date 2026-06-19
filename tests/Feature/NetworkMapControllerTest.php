@@ -28,6 +28,11 @@ class NetworkMapControllerTest extends TestCase
 
         $this->assertFileExists(public_path('vendor/maplibre-gl/maplibre-gl.css'));
         $this->assertFileExists(public_path('vendor/maplibre-gl/maplibre-gl.js'));
+
+        $script = File::get(public_path('js/network-map.js'));
+        $this->assertStringContainsString('setupSearchableDropdown', $script);
+        $this->assertStringContainsString('return completedCore.color_hex', $script);
+        $this->assertStringNotContainsString("window.prompt('Fiber core number or color", $script);
     }
 
     public function test_network_map_topology_can_be_saved_and_returned_as_geojson(): void
