@@ -33,7 +33,10 @@ class ProductController extends Controller
             });
 
         return view('products.index', [
-            'products' => $query->latest()
+            'products' => $query->with(['serials' => fn ($query) => $query
+                ->where('status', 'in_stock')
+                ->orderBy('serial_number')])
+                ->latest()
                 ->paginate($this->perPage($request))
                 ->appends($request->query()),
             ...$this->productTaxonomyOptions(),

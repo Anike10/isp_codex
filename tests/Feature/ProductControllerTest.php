@@ -135,10 +135,18 @@ class ProductControllerTest extends TestCase
                 'status' => 'in_stock',
             ]);
         }
+        ProductSerial::create([
+            'product_id' => $product->id,
+            'serial_number' => 'ONU999',
+            'status' => 'out',
+        ]);
 
         $this->actingAs($user)->get(route('products.index'))
             ->assertOk()
             ->assertSee('Serials / range')
+            ->assertSee('Choose in-stock serial (3)')
+            ->assertSee('ONU001')
+            ->assertDontSee('ONU999')
             ->assertSee('Available before movement: 3')
             ->assertSee('syncStockForm');
 

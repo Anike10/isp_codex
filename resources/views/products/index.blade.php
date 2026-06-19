@@ -66,6 +66,12 @@
                         <input type="number" name="quantity" class="movement-quantity" min="1" placeholder="Qty" style="width:90px" required>
                         @if ($product->track_serial_numbers)
                             <input name="serial_numbers" class="serial-numbers" placeholder="Serials / range" aria-label="Serial numbers or range" style="width:180px">
+                            <select class="available-serial-picker" aria-label="Choose an in-stock serial" style="width:190px" hidden>
+                                <option value="">Choose in-stock serial ({{ $product->serials->count() }})</option>
+                                @foreach ($product->serials as $serial)
+                                    <option value="{{ $serial->serial_number }}">{{ $serial->serial_number }}</option>
+                                @endforeach
+                            </select>
                             <input type="number" name="serialless_quantity" class="serialless-quantity" min="0" placeholder="Serial-less" style="width:120px">
                         @endif
                         <span class="stock-before muted" hidden>Available before movement: {{ $product->stock_quantity }}</span>
@@ -120,9 +126,11 @@ function expandSerialPart(part) {
 function syncStockForm(form) {
     const movementType = form.querySelector('.movement-type');
     const stockBefore = form.querySelector('.stock-before');
+    const serialPicker = form.querySelector('.available-serial-picker');
     const isOutgoing = ['out', 'use'].includes(movementType?.value);
 
     if (stockBefore) stockBefore.hidden = !isOutgoing;
+    if (serialPicker) serialPicker.hidden = !isOutgoing;
 
     if (form.dataset.trackSerials !== '1') return;
 
@@ -139,6 +147,27 @@ function syncStockForm(form) {
 }
 
 document.querySelectorAll('.product-stock-form').forEach(form => {
+    const serialPicker = form.querySelector('.available-serial-picker');
+
+    serialPicker?.addEventListener('change', () => {
+        const serialInput = form.querySelector('.serial-numbers');
+        const selectedSerial = serialPicker.value;
+
+        if (!serialInput || !selectedSerial) return;
+
+        const serials = serialInput.value
+            .split(/[\r\n,]+/)
+            .map(value => value.trim())
+            .filter(Boolean);
+        const expandedSerials = new Set(serials.flatMap(expandSerialPart));
+
+        if (!expandedSerials.has(selectedSerial)) {
+            serialInput.value = [...serials, selectedSerial].join(', ');
+        }
+
+        serialPicker.value = '';
+        syncStockForm(form);
+    });
     form.addEventListener('input', () => syncStockForm(form));
     form.addEventListener('change', () => syncStockForm(form));
     syncStockForm(form);
