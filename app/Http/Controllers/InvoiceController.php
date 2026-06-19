@@ -423,14 +423,18 @@ class InvoiceController extends Controller
 
     private function productSuggestionData(?Invoice $invoice = null)
     {
+        $defaultWarehouseId = app(InventoryService::class)->defaultWarehouse()->id;
         $invoiceSerials = $invoice
             ? $invoice->items->pluck('serial_numbers')->filter()->flatMap(fn (string $serials): array => app(SerialNumberParser::class)->parse($serials))->values()
             : collect();
 
         return Product::query()
-            ->with(['serials' => function ($query) use ($invoiceSerials) {
-                $query->where(function ($query) use ($invoiceSerials) {
-                    $query->where('status', 'in_stock');
+            ->with(['serials' => function ($query) use ($invoiceSerials, $defaultWarehouseId) {
+                $query->where(function ($query) use ($invoiceSerials, $defaultWarehouseId) {
+                    $query->where(function ($query) use ($defaultWarehouseId): void {
+                        $query->where('status', 'in_stock')
+                            ->where('warehouse_id', $defaultWarehouseId);
+                    });
 
                     if ($invoiceSerials->isNotEmpty()) {
                         $query->orWhereIn('serial_number', $invoiceSerials);
@@ -479,7 +483,7 @@ class InvoiceController extends Controller
         }
 
         if ($product->track_inventory) {
-            $inventoryService->moveStock($product, 'out', $quantity, 'Invoice '.$invoice->invoice_no, $invoice->invoice_no, (int) $invoiceItem->serialless_quantity);
+            $inventoryService->moveStock($product, 'out', $quantity, 'Invoice '.$invoice->invoice_no, $invoice->invoice_no, (int) $invoiceItem->serialless_quantity, null, $serialNumbers);
         }
 
         if ($serialNumbers === []) {
@@ -488,6 +492,7 @@ class InvoiceController extends Controller
 
         $serialRows = ProductSerial::query()
             ->where('product_id', $product->id)
+            ->where('warehouse_id', $inventoryService->defaultWarehouse()->id)
             ->whereIn('serial_number', $serialNumbers)
             ->lockForUpdate()
             ->get()
@@ -514,6 +519,7 @@ class InvoiceController extends Controller
     private function restoreInvoiceInventory(Invoice $invoice, InventoryService $inventoryService): void
     {
         $invoice->loadMissing('items');
+        $defaultWarehouseId = $inventoryService->defaultWarehouse()->id;
 
         foreach ($invoice->items as $item) {
             if (! $item->product_id) {
@@ -526,11 +532,11 @@ class InvoiceController extends Controller
                 continue;
             }
 
-            if ($product->track_inventory) {
-                $inventoryService->moveStock($product, 'in', (int) $item->quantity, 'Invoice edit restore '.$invoice->invoice_no, $invoice->invoice_no, (int) $item->serialless_quantity);
-            }
-
             $serialNumbers = app(SerialNumberParser::class)->parse($item->serial_numbers ?? '');
+
+            if ($product->track_inventory) {
+                $inventoryService->moveStock($product, 'in', (int) $item->quantity, 'Invoice edit restore '.$invoice->invoice_no, $invoice->invoice_no, (int) $item->serialless_quantity, null, $serialNumbers);
+            }
 
             if ($serialNumbers === []) {
                 continue;
@@ -544,6 +550,7 @@ class InvoiceController extends Controller
                 ->get()
                 ->each(fn (ProductSerial $serial) => $serial->update([
                     'status' => 'in_stock',
+                    'warehouse_id' => $defaultWarehouseId,
                     'customer_id' => null,
                     'invoice_id' => null,
                     'invoice_item_id' => null,

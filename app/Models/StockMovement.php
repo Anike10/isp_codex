@@ -13,9 +13,14 @@ class StockMovement extends Model
     protected $fillable = [
         'entry_by',
         'product_id',
+        'warehouse_id',
+        'related_warehouse_id',
         'type',
         'quantity',
         'serialless_quantity',
+        'serial_numbers',
+        'balance_before',
+        'balance_after',
         'reason',
         'reference_no',
     ];
@@ -24,11 +29,23 @@ class StockMovement extends Model
     {
         return [
             'serialless_quantity' => 'integer',
+            'balance_before' => 'integer',
+            'balance_after' => 'integer',
         ];
     }
 
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
+
+    public function relatedWarehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class, 'related_warehouse_id');
     }
 }

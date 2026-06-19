@@ -36,9 +36,34 @@ class Product extends Model
         'track_serial_numbers' => 'boolean',
     ];
 
+    protected static function booted(): void
+    {
+        static::created(function (Product $product): void {
+            $product->refresh();
+
+            if (! $product->track_inventory || (int) $product->stock_quantity <= 0) {
+                return;
+            }
+
+            $defaultWarehouseId = Warehouse::query()->where('is_default', true)->value('id');
+
+            if ($defaultWarehouseId) {
+                $product->warehouseStocks()->firstOrCreate(
+                    ['warehouse_id' => $defaultWarehouseId],
+                    ['quantity' => (int) $product->stock_quantity],
+                );
+            }
+        });
+    }
+
     public function stockMovements(): HasMany
     {
         return $this->hasMany(StockMovement::class);
+    }
+
+    public function warehouseStocks(): HasMany
+    {
+        return $this->hasMany(ProductWarehouseStock::class);
     }
 
     public function productCategory(): BelongsTo

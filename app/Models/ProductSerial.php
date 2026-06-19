@@ -13,6 +13,7 @@ class ProductSerial extends Model
 
     protected $fillable = [
         'product_id',
+        'warehouse_id',
         'purchase_bill_id',
         'purchase_bill_item_id',
         'customer_id',
@@ -33,9 +34,25 @@ class ProductSerial extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::creating(function (ProductSerial $serial): void {
+            if ($serial->warehouse_id || ($serial->status ?? 'in_stock') !== 'in_stock') {
+                return;
+            }
+
+            $serial->warehouse_id = Warehouse::query()->where('is_default', true)->value('id');
+        });
+    }
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
     }
 
     public function purchaseBill(): BelongsTo

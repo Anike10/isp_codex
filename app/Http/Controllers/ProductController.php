@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\Warehouse;
 use App\Services\InventoryService;
 use App\Support\SerialNumberParser;
 use Illuminate\Http\Request;
@@ -33,13 +34,15 @@ class ProductController extends Controller
             });
 
         return view('products.index', [
-            'products' => $query->with(['serials' => fn ($query) => $query
+            'products' => $query->with(['warehouseStocks', 'serials' => fn ($query) => $query
                 ->where('status', 'in_stock')
                 ->orderBy('serial_number')])
                 ->latest()
                 ->paginate($this->perPage($request))
                 ->appends($request->query()),
             ...$this->productTaxonomyOptions(),
+            'warehouses' => Warehouse::query()->where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get(),
+            'defaultWarehouse' => Warehouse::query()->where('is_default', true)->firstOrFail(),
         ]);
     }
 
@@ -51,11 +54,12 @@ class ProductController extends Controller
     public function show(Request $request, Product $product)
     {
         $stockMovements = $product->stockMovements()
+            ->with(['warehouse', 'relatedWarehouse'])
             ->latest()
             ->paginate($this->perPage($request))
             ->appends($request->query());
         $serials = $product->serials()
-            ->with(['purchaseBill', 'customer'])
+            ->with(['purchaseBill', 'customer', 'warehouse'])
             ->latest()
             ->limit(200)
             ->get();
@@ -64,10 +68,13 @@ class ProductController extends Controller
             ->groupBy('status')
             ->pluck('total', 'status');
 
-        return view('products.show', compact('product', 'stockMovements', 'serials', 'serialGroups'));
+        $warehouses = Warehouse::query()->where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get();
+        $warehouseStocks = $product->warehouseStocks()->with('warehouse')->get();
+
+        return view('products.show', compact('product', 'stockMovements', 'serials', 'serialGroups', 'warehouses', 'warehouseStocks'));
     }
 
-    public function store(Request $request)
+    public function store(Request $request, InventoryService $inventoryService)
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -112,7 +119,13 @@ class ProductController extends Controller
 
         $data = $this->syncCategoryLabels($data);
 
-        Product::create($data);
+        $openingStock = (int) ($data['stock_quantity'] ?? 0);
+        $data['stock_quantity'] = 0;
+        $product = Product::create($data);
+
+        if ($product->track_inventory && $openingStock > 0) {
+            $inventoryService->moveStock($product, 'in', $openingStock, 'Opening stock');
+        }
 
         return redirect()->route('products.index')->with('success', 'Product created successfully.');
     }
@@ -129,10 +142,15 @@ class ProductController extends Controller
             'reason' => ['nullable', 'string', 'max:255'],
             'serial_numbers' => ['nullable', 'string'],
             'serialless_quantity' => ['nullable', 'integer', 'min:0'],
+            'warehouse_id' => ['nullable', 'exists:warehouses,id'],
         ]);
 
+        $warehouse = isset($data['warehouse_id'])
+            ? Warehouse::query()->where('is_active', true)->findOrFail($data['warehouse_id'])
+            : $inventoryService->defaultWarehouse();
+
         try {
-            DB::transaction(function () use ($data, $inventoryService, $product): void {
+            DB::transaction(function () use ($data, $inventoryService, $product, $warehouse): void {
                 $quantity = (int) $data['quantity'];
                 $serialNumbers = app(SerialNumberParser::class)->parse($data['serial_numbers'] ?? '');
                 $seriallessQuantity = (int) ($data['serialless_quantity'] ?? 0);
@@ -149,6 +167,7 @@ class ProductController extends Controller
                     }
 
                     $foundSerials = $product->serials()
+                        ->where('warehouse_id', $warehouse->id)
                         ->whereIn('serial_number', $serialNumbers)
                         ->where('status', 'in_stock')
                         ->pluck('serial_number')
@@ -157,23 +176,28 @@ class ProductController extends Controller
                     $missingSerials = array_values(array_diff($serialNumbers, $foundSerials));
 
                     if ($missingSerials !== []) {
-                        throw new InvalidArgumentException('These serials are not available in house: '.implode(', ', $missingSerials));
+                        throw new InvalidArgumentException('These serials are not available in the selected warehouse: '.implode(', ', $missingSerials));
                     }
                 }
 
-                $inventoryService->moveStock($product, $data['type'], $quantity, $data['reason'] ?? null, null, $seriallessQuantity);
+                $inventoryService->moveStock($product, $data['type'], $quantity, $data['reason'] ?? null, null, $seriallessQuantity, $warehouse, $serialNumbers);
 
                 if ($product->track_serial_numbers && $serialNumbers !== []) {
                     if ($data['type'] === 'in') {
                         foreach ($serialNumbers as $serialNumber) {
                             $product->serials()->firstOrCreate(
                                 ['serial_number' => $serialNumber],
-                                ['status' => 'in_stock', 'note' => $data['reason'] ?? null],
+                                ['warehouse_id' => $warehouse->id, 'status' => 'in_stock', 'note' => $data['reason'] ?? null],
                             );
+                            $product->serials()
+                                ->where('serial_number', $serialNumber)
+                                ->where('status', 'in_stock')
+                                ->update(['warehouse_id' => $warehouse->id]);
                         }
                     } elseif (in_array($data['type'], ['out', 'use'], true)) {
                         $product->serials()
                             ->whereIn('serial_number', $serialNumbers)
+                            ->where('warehouse_id', $warehouse->id)
                             ->update([
                                 'status' => $data['type'] === 'use' ? 'used' : 'out',
                                 'note' => $data['reason'] ?? null,

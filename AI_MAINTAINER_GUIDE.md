@@ -604,12 +604,20 @@ Files:
 - `PurchaseBillItem`
 - `ProductSerial`
 - `StockMovement`
+- `Warehouse`
+- `ProductWarehouseStock`
+- `WarehouseController`
 
 Routes:
 
 - `/products`
 - `/products/create`
 - `POST /products/{product}/stock`
+- `/warehouses`
+- `/warehouses/{warehouse}`
+- `/warehouse-transfers/create`
+- `POST /warehouse-transfers`
+- `/warehouse-movements`
 - `/purchase-bills`
 - `/purchase-bills/create`
 - `/purchase-bills/{purchase_bill}`
@@ -631,7 +639,14 @@ Stock movement behavior:
 - `in` increases stock.
 - `out` decreases stock.
 - `use` decreases stock for items used inside the business.
-- Out movement fails if quantity exceeds stock.
+- Every stock movement belongs to a warehouse and records the warehouse balance before and after the movement.
+- Movement history preserves serial-number snapshots, reference, reason, related warehouse, and entry operator for audit use.
+- Out and own-use movements fail if quantity exceeds the selected warehouse stock, even when total product stock is higher.
+- `products.stock_quantity` remains the aggregate across all warehouses; `product_warehouse_stocks` is the warehouse-level source of truth.
+- Transfers create paired `transfer_out` and `transfer_in` movements with one reference number and do not change aggregate product stock.
+- In-stock serials carry `warehouse_id`; serial transfers must update both the warehouse balances and each selected serial location atomically.
+- Existing stock and in-stock serials are assigned to the seeded `Main Warehouse` by the warehouse migration.
+- Purchase bills and invoices use the default warehouse unless a future workflow explicitly captures another warehouse.
 - Purchase bills add stock and create a stock movement using the purchase bill number as the reference.
 - Purchase bill item serial numbers are stored in `product_serials`; warranty end date is calculated from purchase date plus warranty months.
 - Vendor/wholesale shops are stored in the existing `customers` table as parties with `is_vendor=true`.

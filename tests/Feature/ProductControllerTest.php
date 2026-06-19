@@ -149,7 +149,7 @@ class ProductControllerTest extends TestCase
             ->assertSee('available-serial-option')
             ->assertSee('ONU001')
             ->assertDontSee('ONU999')
-            ->assertSee('Available before movement: 3')
+            ->assertSee('data-stock="3"', false)
             ->assertSee('syncStockForm');
 
         $this->actingAs($user)->post(route('products.stock', $product), [

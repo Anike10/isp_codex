@@ -23,6 +23,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WarrantyClaimController;
+use App\Http\Controllers\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -133,6 +134,10 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_products')->group(function () {
+        Route::get('warehouse-movements', [WarehouseController::class, 'movements'])->name('warehouse-movements.index');
+        Route::get('warehouse-transfers/create', [WarehouseController::class, 'createTransfer'])->name('warehouse-transfers.create');
+        Route::post('warehouse-transfers', [WarehouseController::class, 'storeTransfer'])->name('warehouse-transfers.store');
+        Route::resource('warehouses', WarehouseController::class)->only(['index', 'store', 'show']);
         Route::resource('product-categories', ProductCategoryController::class)->only(['index', 'store']);
         Route::resource('purchase-bills', PurchaseBillController::class)->only(['index', 'create', 'store', 'show']);
         Route::resource('products', ProductController::class)->only(['index', 'show', 'create', 'store']);

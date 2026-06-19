@@ -93,8 +93,10 @@ class PurchaseBillController extends Controller
             return back()->withInput()->withErrors(['items' => 'At least one product line is required.']);
         }
 
+        $defaultWarehouseId = $inventoryService->defaultWarehouse()->id;
+
         try {
-            DB::transaction(function () use ($data, $items, $inventoryService): void {
+            DB::transaction(function () use ($data, $items, $inventoryService, $defaultWarehouseId): void {
                 $partyId = $this->resolveVendorPartyId($data);
 
                 $purchaseBill = PurchaseBill::create([
@@ -146,12 +148,13 @@ class PurchaseBillController extends Controller
                     ]);
 
                     if ($product->track_inventory) {
-                        $inventoryService->moveStock($product, 'in', $quantity, 'Purchase bill '.$purchaseBill->bill_no, $purchaseBill->bill_no, $seriallessQuantity);
+                        $inventoryService->moveStock($product, 'in', $quantity, 'Purchase bill '.$purchaseBill->bill_no, $purchaseBill->bill_no, $seriallessQuantity, null, $serialNumbers);
                     }
 
                     foreach ($serialNumbers as $serialNumber) {
                         ProductSerial::create([
                             'product_id' => $product->id,
+                            'warehouse_id' => $defaultWarehouseId,
                             'purchase_bill_id' => $purchaseBill->id,
                             'purchase_bill_item_id' => $billItem->id,
                             'serial_number' => $serialNumber,

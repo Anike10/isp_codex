@@ -25,6 +25,11 @@
         <form method="post" action="{{ route('products.stock', $product) }}" class="actions">
             @csrf
             <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
+            <select name="warehouse_id" style="width:180px" required>
+                @foreach($warehouses as $warehouse)
+                    <option value="{{ $warehouse->id }}">{{ $warehouse->name }}</option>
+                @endforeach
+            </select>
             <input type="number" name="quantity" min="1" placeholder="Qty" style="width:120px" required>
             <input name="reason" placeholder="Reason" style="width:220px">
             @if ($product->track_serial_numbers)
@@ -39,6 +44,22 @@
     </section>
 @endif
 
+@if ($product->track_inventory)
+    <section class="card" style="margin-bottom:16px">
+        <div class="topbar"><div><h2>Warehouse Stock</h2><div class="muted">Total across warehouses: {{ $product->stock_quantity }}</div></div><a class="btn light" href="{{ route('warehouse-transfers.create', ['product_id' => $product->id]) }}">Transfer</a></div>
+        <table>
+            <thead><tr><th>Warehouse</th><th>Quantity</th><th>Action</th></tr></thead>
+            <tbody>
+            @forelse($warehouseStocks->where('quantity', '>', 0) as $warehouseStock)
+                <tr><td>{{ $warehouseStock->warehouse?->name ?? 'N/A' }}</td><td>{{ $warehouseStock->quantity }}</td><td><a class="btn light" href="{{ route('warehouses.show', $warehouseStock->warehouse_id) }}">View Warehouse</a></td></tr>
+            @empty
+                <tr><td colspan="3">No warehouse stock.</td></tr>
+            @endforelse
+            </tbody>
+        </table>
+    </section>
+@endif
+
 <section class="card" style="margin-bottom:16px">
     <h2>Serials & Warranty</h2>
     @if ($product->track_serial_numbers)
@@ -49,12 +70,13 @@
         </div>
     @endif
     <table>
-        <thead><tr><th>Serial</th><th>Status</th><th>Customer</th><th>Warranty Until</th><th>Purchase Bill</th><th>Action</th></tr></thead>
+        <thead><tr><th>Serial</th><th>Status</th><th>Warehouse</th><th>Customer</th><th>Warranty Until</th><th>Purchase Bill</th><th>Action</th></tr></thead>
         <tbody>
         @forelse ($serials as $serial)
             <tr>
                 <td><span class="badge">{{ $serial->serial_number }}</span></td>
                 <td>{{ $serial->status === 'in_stock' ? 'In house' : str_replace('_', ' ', ucfirst($serial->status)) }}</td>
+                <td>{{ $serial->warehouse?->name ?? 'N/A' }}</td>
                 <td>{{ $serial->customer?->name ?? 'N/A' }}</td>
                 <td>{{ $serial->warranty_until?->format('Y-m-d') ?? 'No warranty' }}</td>
                 <td>{{ $serial->purchaseBill?->bill_no ?? 'N/A' }}</td>
@@ -67,7 +89,7 @@
                 </td>
             </tr>
         @empty
-            <tr><td colspan="6">No serial tracked for this product.</td></tr>
+            <tr><td colspan="7">No serial tracked for this product.</td></tr>
         @endforelse
         </tbody>
     </table>
@@ -76,19 +98,25 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Date</th><th>Type</th><th>Quantity</th><th>Serial-less Qty</th><th>Reason</th><th>Reference</th></tr></thead>
+    <thead><tr><th>Date</th><th>Warehouse</th><th>Type</th><th>Quantity</th><th>Before</th><th>After</th><th>Related Warehouse</th><th>Serials</th><th>Serial-less Qty</th><th>Reason</th><th>Reference</th><th>Entry By</th></tr></thead>
     <tbody>
     @forelse ($stockMovements as $movement)
         <tr>
             <td>{{ $movement->created_at->format('Y-m-d H:i') }}</td>
-            <td>{{ $movement->type === 'use' ? 'Own Use' : ucfirst($movement->type) }}</td>
+            <td>{{ $movement->warehouse?->name ?? 'Legacy / N/A' }}</td>
+            <td>{{ $movement->type === 'use' ? 'Own Use' : str_replace('_', ' ', ucfirst($movement->type)) }}</td>
             <td>{{ $movement->quantity }}</td>
+            <td>{{ $movement->balance_before ?? 'N/A' }}</td>
+            <td>{{ $movement->balance_after ?? 'N/A' }}</td>
+            <td>{{ $movement->relatedWarehouse?->name ?? 'N/A' }}</td>
+            <td>{{ $movement->serial_numbers ?? 'N/A' }}</td>
             <td>{{ $movement->serialless_quantity ?: 'N/A' }}</td>
             <td>{{ $movement->reason ?? 'N/A' }}</td>
             <td>{{ $movement->reference_no ?? 'N/A' }}</td>
+            <td>{{ $movement->entry_by_type === 'user' ? 'User #'.$movement->entry_by : ($movement->entry_by ?? 'system') }}</td>
         </tr>
     @empty
-        <tr><td colspan="6">No stock movement recorded yet.</td></tr>
+        <tr><td colspan="12">No stock movement recorded yet.</td></tr>
     @endforelse
     </tbody>
 </table>

@@ -104,6 +104,12 @@
                     <form method="post" action="{{ route('products.stock', $product) }}" class="actions product-stock-form" data-current-stock="{{ $product->stock_quantity }}" data-track-serials="{{ $product->track_serial_numbers ? '1' : '0' }}">
                         @csrf
                         <select name="type" class="movement-type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
+                        <select name="warehouse_id" class="movement-warehouse" aria-label="Warehouse" style="width:150px" required>
+                            @foreach($warehouses as $warehouse)
+                                @php($warehouseQty = (int) ($product->warehouseStocks->firstWhere('warehouse_id', $warehouse->id)?->quantity ?? 0))
+                                <option value="{{ $warehouse->id }}" data-stock="{{ $warehouseQty }}" @selected($warehouse->id === $defaultWarehouse->id)>{{ $warehouse->name }}</option>
+                            @endforeach
+                        </select>
                         <input type="number" name="quantity" class="movement-quantity" min="1" placeholder="Qty" style="width:90px" required>
                         @if ($product->track_serial_numbers)
                             <input name="serial_numbers" class="serial-numbers" placeholder="Serials / range" aria-label="Serial numbers or range" style="width:180px">
@@ -111,11 +117,11 @@
                             <div class="available-serial-options" hidden>
                                 <span class="available-serial-label muted">In-stock serials ({{ $product->serials->count() }})</span>
                                 @foreach ($product->serials as $serial)
-                                    <button type="button" class="available-serial-option" data-serial="{{ $serial->serial_number }}" aria-pressed="false">{{ $serial->serial_number }}</button>
+                                    <button type="button" class="available-serial-option" data-serial="{{ $serial->serial_number }}" data-warehouse-id="{{ $serial->warehouse_id }}" aria-pressed="false">{{ $serial->serial_number }}</button>
                                 @endforeach
                             </div>
                         @endif
-                        <span class="stock-before muted" hidden>Available before movement: {{ $product->stock_quantity }}</span>
+                        <span class="stock-before muted" hidden></span>
                         <input name="reason" placeholder="Reason" style="width:150px">
                         <button class="btn secondary" type="submit">Update</button>
                     </form>
@@ -166,11 +172,19 @@ function expandSerialPart(part) {
 
 function syncStockForm(form) {
     const movementType = form.querySelector('.movement-type');
+    const warehouseInput = form.querySelector('.movement-warehouse');
     const stockBefore = form.querySelector('.stock-before');
     const serialOptions = form.querySelector('.available-serial-options');
+    const serialLabel = form.querySelector('.available-serial-label');
     const isOutgoing = ['out', 'use'].includes(movementType?.value);
 
-    if (stockBefore) stockBefore.hidden = !isOutgoing;
+    const selectedWarehouse = warehouseInput?.selectedOptions?.[0];
+    const warehouseStock = Number(selectedWarehouse?.dataset.stock || 0);
+
+    if (stockBefore) {
+        stockBefore.textContent = `Available before movement: ${warehouseStock}`;
+        stockBefore.hidden = !isOutgoing;
+    }
     if (serialOptions) serialOptions.hidden = !isOutgoing;
 
     if (form.dataset.trackSerials !== '1') return;
@@ -184,16 +198,26 @@ function syncStockForm(form) {
     const quantity = form.querySelector('.movement-quantity');
     const total = serialCount + seriallessCount;
 
+    let visibleSerialCount = 0;
     serialOptions?.querySelectorAll('.available-serial-option').forEach(button => {
+        const inSelectedWarehouse = button.dataset.warehouseId === warehouseInput?.value;
         const selected = new Set(parts.flatMap(expandSerialPart)).has(button.dataset.serial);
+        button.hidden = !inSelectedWarehouse;
+        if (inSelectedWarehouse) visibleSerialCount++;
         button.classList.toggle('is-selected', selected);
         button.setAttribute('aria-pressed', selected ? 'true' : 'false');
     });
+    if (serialLabel) serialLabel.textContent = `In-stock serials (${visibleSerialCount})`;
 
     if (quantity) quantity.value = total > 0 ? total : '';
 }
 
 document.querySelectorAll('.product-stock-form').forEach(form => {
+    form.querySelector('.movement-warehouse')?.addEventListener('change', () => {
+        const serialInput = form.querySelector('.serial-numbers');
+        if (serialInput) serialInput.value = '';
+        syncStockForm(form);
+    });
     form.querySelector('.available-serial-options')?.addEventListener('click', event => {
         const button = event.target.closest('.available-serial-option');
         const serialInput = form.querySelector('.serial-numbers');
