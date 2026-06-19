@@ -1143,14 +1143,11 @@
         state.map.stop();
         const bounds = state.map.getCanvas().getBoundingClientRect();
         const visibleCenter = visibleMapCenterPoint(bounds);
-        state.map.panBy([
-            clickedPoint.x - visibleCenter.x,
-            clickedPoint.y - visibleCenter.y,
-        ], {
-            duration: 220,
-            easing: (progress) => 1 - Math.pow(1 - progress, 3),
-            essential: true,
-        });
+        const nextCenter = state.map.unproject([
+            (bounds.width / 2) + clickedPoint.x - visibleCenter.x,
+            (bounds.height / 2) + clickedPoint.y - visibleCenter.y,
+        ]);
+        state.map.jumpTo({ center: [nextCenter.lng, nextCenter.lat] });
     }
 
     function showHoverDetails(event) {
