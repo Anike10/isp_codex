@@ -304,6 +304,7 @@
         state.map.on('mousemove', handleMapMouseMove);
         state.map.on('zoomstart', handleZoomStart);
         state.map.on('zoomend', handleZoomEnd);
+        state.map.on('dragend', handleMapDragEnd);
         state.map.on('mouseleave', clearPlacementPreview);
         state.map.on('mouseup', finishNodeDrag);
         state.map.getCanvas().addEventListener('wheel', captureWheelZoomFocus, { passive: true });
@@ -3036,9 +3037,21 @@
         if (!state.centerZoomOnPointer || !state.zoomFocusLngLat) return;
 
         state.centerZoomOnPointer = false;
+        centerMapOnPointer();
+    }
+
+    function handleMapDragEnd() {
+        if (state.draggingNode || !state.zoomFocusLngLat) return;
+
+        centerMapOnPointer();
+    }
+
+    function centerMapOnPointer() {
+        const target = [state.zoomFocusLngLat.lng, state.zoomFocusLngLat.lat];
         state.map.easeTo({
-            center: [state.zoomFocusLngLat.lng, state.zoomFocusLngLat.lat],
-            duration: 220,
+            center: target,
+            duration: 260,
+            easing: (progress) => 1 - Math.pow(1 - progress, 3),
             essential: true,
         });
     }
