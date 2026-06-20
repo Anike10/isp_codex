@@ -111,6 +111,10 @@ class WarehouseInventoryTest extends TestCase
             ->assertSee('Add Item')
             ->assertSee('transferItemCount')
             ->assertSee('item-order')
+            ->assertSee('transferProductOptions')
+            ->assertSee('data-product-search')
+            ->assertSee('Maximum transfer')
+            ->assertSee('quantityInput.max')
             ->assertSee('dragstart');
     }
 

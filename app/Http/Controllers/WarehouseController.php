@@ -79,6 +79,8 @@ class WarehouseController extends Controller
             ->get();
         $productData = $products->map(fn (Product $product): array => [
             'id' => $product->id,
+            'name' => $product->name,
+            'sku' => $product->sku,
             'label' => $product->name.' ('.$product->sku.')',
             'track_serials' => (bool) $product->track_serial_numbers,
             'stocks' => $product->warehouseStocks->pluck('quantity', 'warehouse_id'),

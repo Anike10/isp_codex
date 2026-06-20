@@ -21,6 +21,8 @@
     .transfer-item .action-cell { grid-column:5; }
     .transfer-item .control-label { display:block; min-height:18px; margin-bottom:7px; color:#667085; font-size:11px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
     .transfer-item .field-note { display:block; margin-top:6px; color:#667085; font-size:12px; line-height:1.35; }
+    .transfer-item .field-note.has-stock { color:#027a48; font-weight:800; }
+    .transfer-item .field-note.no-stock { color:#b42318; font-weight:800; }
     .transfer-item .serial-area { grid-column:2 / -1; display:grid; grid-template-columns:minmax(240px, .8fr) minmax(300px, 1.2fr); gap:16px; padding:14px; border:1px solid #e1e7ef; border-radius:8px; background:#f8fafc; }
     .transfer-item .serial-area[hidden], .transfer-item [hidden] { display:none; }
     .transfer-item textarea { min-height:82px; }
@@ -104,6 +106,12 @@
     </div>
 </form>
 
+<datalist id="transferProductOptions">
+    @foreach($productData as $product)
+        <option value="{{ $product['label'] }}"></option>
+    @endforeach
+</datalist>
+
 <script>
 const transferProducts = @json($productData);
 const initialTransferItems = @json($initialTransferItems);
@@ -142,6 +150,30 @@ function selectedProduct(row) {
     return transferProducts.find(product => String(product.id) === String(productId));
 }
 
+function productFromSearch(value) {
+    const query = String(value || '').trim().toLowerCase();
+    if (!query) return undefined;
+
+    return transferProducts.find(product => [product.label, product.name, product.sku]
+        .some(candidate => String(candidate || '').trim().toLowerCase() === query));
+}
+
+function chooseTransferProduct(row, product) {
+    const productInput = row.querySelector('[data-product-input]');
+    const productSearch = row.querySelector('[data-product-search]');
+    const changed = String(productInput.value || '') !== String(product?.id || '');
+    productInput.value = product?.id || '';
+    productSearch.setCustomValidity(product ? '' : 'Select a product from the suggestions.');
+
+    if (product && productSearch.value !== product.label) productSearch.value = product.label;
+    if (changed) {
+        row.querySelector('[data-serial-input]').value = '';
+        row.querySelector('[data-serialless-input]').value = '';
+        row.querySelector('[data-quantity-input]').value = '';
+    }
+    refreshTransferRow(row);
+}
+
 function refreshDestinationOptions() {
     [...toInput.options].forEach(option => option.disabled = option.value !== '' && option.value === fromInput.value);
     if (toInput.value === fromInput.value) toInput.value = '';
@@ -154,6 +186,7 @@ function refreshTransferRow(row) {
     const serialInput = row.querySelector('[data-serial-input]');
     const seriallessInput = row.querySelector('[data-serialless-input]');
     const quantityInput = row.querySelector('[data-quantity-input]');
+    const quantityNote = row.querySelector('[data-quantity-note]');
     const options = row.querySelector('[data-serial-options]');
     const availability = row.querySelector('[data-availability]');
     const serials = selectedSerials(row);
@@ -163,10 +196,16 @@ function refreshTransferRow(row) {
     const availableSerialless = Math.max(0, sourceStock - sourceSerials.length);
 
     availability.textContent = product && sourceId
-        ? 'Source stock: ' + sourceStock + (tracked ? ' | Serial-less available: ' + availableSerialless : '')
+        ? 'From Warehouse stock: ' + sourceStock + ' | Maximum transfer: ' + sourceStock
+            + (tracked ? ' | Serial-less available: ' + availableSerialless : '')
         : 'Select product and source warehouse';
+    availability.classList.toggle('has-stock', Boolean(product && sourceId && sourceStock > 0));
+    availability.classList.toggle('no-stock', Boolean(product && sourceId && sourceStock <= 0));
     row.querySelectorAll('[data-serial-field]').forEach(field => field.hidden = !tracked);
     quantityInput.readOnly = tracked;
+    quantityInput.max = product && sourceId ? String(sourceStock) : '';
+    quantityNote.textContent = product && sourceId ? 'Maximum: ' + sourceStock : 'Total units';
+    seriallessInput.max = tracked && sourceId ? String(availableSerialless) : '';
     options.innerHTML = '';
 
     if (tracked && sourceId) {
@@ -214,8 +253,8 @@ function addTransferRow(values = {}) {
     row.dataset.itemIndex = nextItemIndex++;
     row.innerHTML = `
         <div class="drag-cell"><span class="control-label">SL</span><button type="button" class="item-order" draggable="true" aria-label="Drag item to reorder"></button></div>
-        <div class="product-cell"><label>Product</label><select data-product-input required><option value="">Select a product</option></select><span class="field-note" data-availability>Select product and From Warehouse</span></div>
-        <div class="quantity-cell"><label>Transfer Qty</label><input type="number" min="1" placeholder="0" data-quantity-input required><span class="field-note">Total units</span></div>
+        <div class="product-cell"><label>Product</label><input type="hidden" data-product-input><input type="search" list="transferProductOptions" placeholder="Type product name or SKU" autocomplete="off" data-product-search required><span class="field-note" data-availability>Select product and From Warehouse</span></div>
+        <div class="quantity-cell"><label>Transfer Qty</label><input type="number" min="1" placeholder="0" data-quantity-input required><span class="field-note" data-quantity-note>Total units</span></div>
         <div class="serialless-cell" data-serial-field><label>Serial-less Qty</label><input type="number" min="0" placeholder="Qty without serial" data-serialless-input><span class="field-note">Units without serial</span></div>
         <div class="action-cell"><span class="control-label">Action</span><button type="button" class="btn light remove-transfer-item">Remove</button></div>
         <div class="serial-area" data-serial-area data-serial-field>
@@ -224,16 +263,24 @@ function addTransferRow(values = {}) {
         </div>`;
 
     const productInput = row.querySelector('[data-product-input]');
-    transferProducts.forEach(product => productInput.add(new Option(product.label, product.id)));
-    productInput.value = values.product_id || '';
+    const productSearch = row.querySelector('[data-product-search]');
+    const initialProduct = transferProducts.find(product => String(product.id) === String(values.product_id || ''));
+    productInput.value = initialProduct?.id || '';
+    productSearch.value = initialProduct?.label || '';
     row.querySelector('[data-quantity-input]').value = values.quantity || '';
     row.querySelector('[data-serial-input]').value = values.serial_numbers || '';
     row.querySelector('[data-serialless-input]').value = values.serialless_quantity || '';
-    productInput.addEventListener('change', () => {
-        row.querySelector('[data-serial-input]').value = '';
-        row.querySelector('[data-serialless-input]').value = '';
-        row.querySelector('[data-quantity-input]').value = '';
-        refreshTransferRow(row);
+    productSearch.addEventListener('input', () => {
+        const product = productFromSearch(productSearch.value);
+        if (product || productInput.value) chooseTransferProduct(row, product);
+    });
+    productSearch.addEventListener('change', () => {
+        chooseTransferProduct(row, productFromSearch(productSearch.value));
+    });
+    productSearch.addEventListener('blur', () => {
+        if (productSearch.value && !selectedProduct(row)) {
+            productSearch.setCustomValidity('Select a product from the suggestions.');
+        }
     });
     row.addEventListener('input', () => refreshTransferRow(row));
     row.querySelector('.remove-transfer-item').addEventListener('click', () => {
