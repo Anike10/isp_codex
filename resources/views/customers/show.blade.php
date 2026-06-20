@@ -26,7 +26,13 @@
             <strong>Active Until:</strong>
             @if ($customer->status === 'active' && $activeUntil)
                 {{ $activeUntil->format('Y-m-d') }}
-                <span class="muted">({{ $daysRemaining === 0 ? 'last day' : $daysRemaining.' days left' }})</span>
+                @if ($daysRemaining > 0)
+                    <span class="muted">({{ $daysRemaining }} days left)</span>
+                @elseif ($daysRemaining === 0)
+                    <span class="muted">(last day)</span>
+                @else
+                    <span class="badge overdue">Expired {{ abs($daysRemaining) }} days ago</span>
+                @endif
                 @if ($customer->hasActiveGracePeriod())
                     <span class="badge pending">Grace period</span>
                 @endif
@@ -43,12 +49,16 @@
                 Not used
             @endif
         </p>
-        @if ($customer->status === 'inactive' && ! $customer->grace_used_at)
-            <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="margin:10px 0">
-                @csrf
-                <input type="number" name="grace_days" min="1" max="365" placeholder="Grace days" required>
-                <button class="btn secondary" type="submit">Give Grace Period</button>
-            </form>
+        @if (($customer->status === 'inactive' || ($daysRemaining !== null && $daysRemaining < 0)) && ! $customer->grace_used_at)
+            @if ($customer->subscriptions->isNotEmpty())
+                <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="margin:10px 0">
+                    @csrf
+                    <input type="number" name="grace_days" min="1" max="365" placeholder="Grace days" required>
+                    <button class="btn secondary" type="submit">Give Grace Period</button>
+                </form>
+            @else
+                <p><a class="btn light" href="{{ route('customers.edit', $customer) }}">Assign package before giving grace</a></p>
+            @endif
         @endif
         <p><strong>Special ISP Customer:</strong> {{ $customer->never_suspend ? 'Yes - never close line and auto-generate bill' : 'No' }}</p>
         <p><strong>Email:</strong> {{ $customer->email ?? 'Not provided' }}</p>

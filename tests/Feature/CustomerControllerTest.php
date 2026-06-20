@@ -4,8 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\Customer;
 use App\Models\InternetPackage;
+use App\Models\Invoice;
 use App\Models\Permission;
+use App\Models\Subscription;
 use App\Models\User;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -60,5 +64,107 @@ class CustomerControllerTest extends TestCase
             'internet_package_id' => $package->id,
             'start_date' => '2026-06-02',
         ])->assertSessionHasErrors('connection_id');
+    }
+
+    public function test_expired_paid_period_shows_elapsed_days_and_null_due_date_is_disabled(): void
+    {
+        Carbon::setTestNow('2026-06-20 12:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $customer = Customer::create([
+                'name' => 'Expired Customer',
+                'phone' => '01733333333',
+                'connection_id' => 'EXPIRED-001',
+                'address' => 'Kushtia',
+                'status' => 'active',
+                'is_customer' => true,
+            ]);
+            Invoice::create([
+                'customer_id' => $customer->id,
+                'invoice_no' => 'INV-EXPIRED-001',
+                'billing_month' => '2026-06',
+                'invoice_type' => 'service',
+                'subtotal' => 1000,
+                'discount' => 0,
+                'vat' => 0,
+                'total' => 1000,
+                'paid_amount' => 0,
+                'due_amount' => 1000,
+                'status' => 'unpaid',
+                'due_date' => null,
+            ]);
+
+            $this->assertSame(-20, $customer->activeDaysRemaining());
+            $this->actingAs($user)->get(route('customers.index'))
+                ->assertOk()
+                ->assertSee('Expired 20 days ago')
+                ->assertSee('Assign package for grace');
+
+            Artisan::call('billing:disable-overdue-customers', ['--date' => '2026-06-20']);
+
+            $this->assertSame('inactive', $customer->refresh()->status);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_expired_active_customer_with_package_can_receive_grace_period(): void
+    {
+        Carbon::setTestNow('2026-06-20 12:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $package = InternetPackage::create([
+                'name' => 'Grace Package',
+                'speed' => '20 Mbps',
+                'mikrotik_profile' => 'Grace Package',
+                'monthly_price' => 1000,
+                'status' => 'active',
+            ]);
+            $customer = Customer::create([
+                'name' => 'Grace Customer',
+                'phone' => '01744444444',
+                'connection_id' => 'GRACE-001',
+                'address' => 'Kushtia',
+                'status' => 'active',
+                'is_customer' => true,
+            ]);
+            Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-05-01',
+                'status' => 'active',
+            ]);
+            Invoice::create([
+                'customer_id' => $customer->id,
+                'invoice_no' => 'INV-GRACE-001',
+                'billing_month' => '2026-06',
+                'invoice_type' => 'service',
+                'subtotal' => 1000,
+                'discount' => 0,
+                'vat' => 0,
+                'total' => 1000,
+                'paid_amount' => 0,
+                'due_amount' => 1000,
+                'status' => 'unpaid',
+            ]);
+
+            $this->actingAs($user)
+                ->from(route('customers.index'))
+                ->post(route('customers.grace-period', $customer), ['grace_days' => 3])
+                ->assertRedirect(route('customers.index'))
+                ->assertSessionHasNoErrors();
+
+            $customer->refresh();
+            $this->assertSame('active', $customer->status);
+            $this->assertSame(3, $customer->grace_days);
+            $this->assertSame('2026-06-23', $customer->grace_until->format('Y-m-d'));
+            $this->assertNotNull($customer->grace_used_at);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 }

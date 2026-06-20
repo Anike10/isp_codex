@@ -100,7 +100,14 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
 
     $overdueCustomerIds = Invoice::query()
         ->where('due_amount', '>', 0)
-        ->whereDate('due_date', '<=', $date)
+        ->where(function ($query) use ($date) {
+            $query->whereDate('due_date', '<=', $date)
+                ->orWhere(function ($query) use ($date) {
+                    $query->whereNull('due_date')
+                        ->where('invoice_type', 'service')
+                        ->where('billing_month', '<=', substr($date, 0, 7));
+                });
+        })
         ->whereHas('customer', fn ($query) => $query
             ->where('never_suspend', false)
             ->where(function ($query) use ($date) {

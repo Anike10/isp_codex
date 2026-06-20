@@ -19,6 +19,7 @@ class CustomerController extends Controller
     {
         $customers = Customer::query()
             ->with('activeSubscription.package')
+            ->withExists('subscriptions')
             ->withSum('invoices as total_due_amount', 'due_amount')
             ->withMax(['invoices as latest_paid_billing_month' => function ($query) {
                 $query->where('invoice_type', 'service')
@@ -165,6 +166,7 @@ class CustomerController extends Controller
     {
         $customer->load([
             'activeSubscription.package',
+            'subscriptions.package',
             'mikrotikRouter',
             'invoices' => fn ($query) => $query->latest(),
             'balanceTransactions' => fn ($query) => $query->latest()->limit(10),
@@ -186,8 +188,8 @@ class CustomerController extends Controller
             return back()->withErrors(['grace_days' => 'Grace period was already used for this customer.']);
         }
 
-        if ($customer->status !== 'inactive') {
-            return back()->withErrors(['grace_days' => 'Grace period can only be given to inactive customers.']);
+        if ($customer->status === 'active' && ($customer->activeDaysRemaining() ?? 0) >= 0) {
+            return back()->withErrors(['grace_days' => 'Grace period can only be given after the paid period expires.']);
         }
 
         $subscription = $customer->activeSubscription ?: $customer->subscriptions()->with('package')->latest()->first();

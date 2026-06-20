@@ -44,15 +44,36 @@
             <td>
                 @if ($customer->status === 'active' && $activeUntil)
                     <strong>{{ $activeUntil->format('Y-m-d') }}</strong>
-                    <div class="muted">{{ $daysRemaining === 0 ? 'Last day' : $daysRemaining.' days left' }}</div>
+                    @if ($daysRemaining > 0)
+                        <div class="muted">{{ $daysRemaining }} days left</div>
+                    @elseif ($daysRemaining === 0)
+                        <div class="muted">Last day</div>
+                    @else
+                        <div><span class="badge overdue">Expired {{ abs($daysRemaining) }} days ago</span></div>
+                    @endif
+                    @if ($daysRemaining < 0 && ! $customer->grace_used_at)
+                        @if ($customer->subscriptions_exists)
+                            <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
+                                @csrf
+                                <input type="number" name="grace_days" min="1" max="365" placeholder="Days" style="width:78px" required>
+                                <button class="btn secondary" type="submit">Grace</button>
+                            </form>
+                        @else
+                            <a class="btn light" style="margin-top:6px" href="{{ route('customers.edit', $customer) }}">Assign package for grace</a>
+                        @endif
+                    @endif
                 @elseif ($customer->status === 'active')
                     <span class="muted">No paid month</span>
                 @elseif (! $customer->grace_used_at)
-                    <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="gap:6px">
-                        @csrf
-                        <input type="number" name="grace_days" min="1" max="365" placeholder="Days" style="width:78px" required>
-                        <button class="btn secondary" type="submit">Grace</button>
-                    </form>
+                    @if ($customer->subscriptions_exists)
+                        <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="gap:6px">
+                            @csrf
+                            <input type="number" name="grace_days" min="1" max="365" placeholder="Days" style="width:78px" required>
+                            <button class="btn secondary" type="submit">Grace</button>
+                        </form>
+                    @else
+                        <a class="btn light" href="{{ route('customers.edit', $customer) }}">Assign package for grace</a>
+                    @endif
                 @else
                     <span class="muted">Grace used {{ $customer->grace_until?->format('Y-m-d') }}</span>
                 @endif

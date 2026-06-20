@@ -92,7 +92,7 @@ class Customer extends Model
             return null;
         }
 
-        return (int) max(0, now()->startOfDay()->diffInDays($activeUntil->copy()->startOfDay(), false));
+        return (int) now()->startOfDay()->diffInDays($activeUntil->copy()->startOfDay(), false);
     }
 
     public function subscriptions(): HasMany
