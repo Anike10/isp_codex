@@ -80,5 +80,5 @@
     </section>
 @endif
 
-@include('partials.record_versions', ['versions' => $payment->versions])
+@include('partials.record_versions', ['versions' => $versions])
 @endsection

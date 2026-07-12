@@ -77,9 +77,10 @@ class QuotationController extends Controller
 
     public function show(Quotation $quotation)
     {
-        $quotation->load(['customer', 'items.product', 'convertedInvoice', 'versions']);
+        $quotation->load(['customer', 'items.product', 'convertedInvoice']);
+        $versions = $quotation->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
-        return view('quotations.show', compact('quotation'));
+        return view('quotations.show', compact('quotation', 'versions'));
     }
 
     public function edit(Quotation $quotation)
@@ -113,9 +114,18 @@ class QuotationController extends Controller
             return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
         }
 
-        $oldSnapshot = $recordVersionService->snapshot($quotation, ['customer', 'items']);
+        $becameConverted = false;
 
-        DB::transaction(function () use ($quotation, $customerId, $items, $subtotal, $total, $data, $recordVersionService, $oldSnapshot): void {
+        DB::transaction(function () use (&$quotation, $customerId, $items, $subtotal, $total, $data, $recordVersionService, &$becameConverted): void {
+            $quotation = Quotation::query()->whereKey($quotation->id)->lockForUpdate()->firstOrFail();
+
+            if ($quotation->converted_invoice_id) {
+                $becameConverted = true;
+
+                return;
+            }
+
+            $oldSnapshot = $recordVersionService->snapshot($quotation, ['customer', 'items']);
             RecordVersionObserver::withoutRecording(fn () => $quotation->update($this->quotationAttributes($customerId, $subtotal, $total, $data)));
             $quotation->items()->delete();
             foreach ($items as $item) {
@@ -128,6 +138,12 @@ class QuotationController extends Controller
                 'quotation_no' => $quotation->quotation_no,
             ]);
         });
+
+        if ($becameConverted) {
+            return redirect()->route('quotations.show', $quotation)->withErrors([
+                'quotation' => 'Converted quotations cannot be edited.',
+            ]);
+        }
 
         return redirect()->route('quotations.show', $quotation)->with('success', 'Quotation updated successfully.');
     }

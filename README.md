@@ -17,8 +17,8 @@ A Laravel 12 application for an ISP and computer service business.
 - Customer direct payment and due tracking
 - bKash SMS payment parsing with duplicate TrxID protection
 - Advance balance and payment allocation ledger
-- Payment account and cash ledgers show both collection credits and expense debits in running balance
-- Edit history/audit snapshots for invoices, quotations, parties, payments, and other tracked operator-editable records through the shared `record_versions` table, including invoice finalization changes
+- Payment account and cash ledgers use database-level merged pagination and include payment credits, direct advance receipts, and expense debits without double-counting payment remainders
+- Edit history/audit snapshots for invoices, quotations, parties, payments, roles, permissions, and other tracked operator-editable records through the shared `record_versions` table, including invoice finalization changes
 - Payment accounts for cash, bKash, Nagad, and bank
 - Support ticket management
 - Multi-warehouse product inventory with per-warehouse stock, atomic transfers, detailed movement history, serial location tracking, purchase bills, and warranty tracking

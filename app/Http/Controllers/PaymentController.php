@@ -54,9 +54,10 @@ class PaymentController extends Controller
 
     public function show(Payment $payment)
     {
-        $payment->load(['customer', 'invoice', 'account', 'allocations.invoice', 'versions']);
+        $payment->load(['customer', 'invoice', 'account', 'allocations.invoice']);
+        $versions = $payment->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
-        return view('payments.show', compact('payment'));
+        return view('payments.show', compact('payment', 'versions'));
     }
 
     public function voucher(Payment $payment)

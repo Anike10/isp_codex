@@ -41,9 +41,10 @@ class PackageController extends Controller
 
     public function show(InternetPackage $package)
     {
-        $package->load('versions')->loadCount('subscriptions');
+        $package->loadCount('subscriptions');
+        $versions = $package->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
-        return view('packages.show', compact('package'));
+        return view('packages.show', compact('package', 'versions'));
     }
 
     public function store(Request $request)

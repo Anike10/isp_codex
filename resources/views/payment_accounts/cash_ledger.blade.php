@@ -117,12 +117,14 @@
             <tr>
                 <td>{{ $row['date']?->format('Y-m-d') }}</td>
                 <td>
-                    @if ($row['type'] === 'payment' && $row['invoice'])
-                        @if ($canOpenInvoices)
-                            <a href="{{ route('invoices.show', $row['invoice']) }}">{{ $row['invoice']->invoice_no }}</a>
+                    @if ($row['type'] === 'payment')
+                        @if ($row['invoice_id'] && $canOpenInvoices)
+                            <a href="{{ route('invoices.show', $row['invoice_id']) }}">{{ $row['invoice_no'] }}</a>
                         @else
-                            {{ $row['invoice']->invoice_no }}
+                            {{ $row['invoice_no'] ?: 'Payment' }}
                         @endif
+                    @elseif ($row['type'] === 'advance')
+                        Advance
                     @else
                         Expense
                     @endif

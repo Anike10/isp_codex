@@ -9,11 +9,11 @@ use App\Models\Subscription;
 use App\Observers\RecordVersionObserver;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\RecordVersionService;
-use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class CustomerController extends Controller
@@ -139,12 +139,14 @@ class CustomerController extends Controller
         $data['is_vendor'] = (bool) ($data['is_vendor'] ?? false);
         $this->ensurePartyHasRole($data);
         $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
-        $oldSnapshot = $recordVersionService->snapshot($customer, ['activeSubscription']);
 
-        DB::transaction(function () use ($customer, $data, $recordVersionService, $oldSnapshot): void {
+        DB::transaction(function () use (&$customer, $data, $recordVersionService): void {
+            $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+            $activeSubscription = $customer->activeSubscription()->with('package')->lockForUpdate()->first();
+            $customer->setRelation('activeSubscription', $activeSubscription);
+            $oldSnapshot = $recordVersionService->snapshot($customer, ['activeSubscription.package']);
+
             RecordVersionObserver::withoutRecording(fn () => $customer->update(Arr::except($data, ['internet_package_id', 'start_date'])));
-
-            $activeSubscription = $customer->activeSubscription;
 
             if (! empty($data['internet_package_id'])) {
                 if ($activeSubscription) {
@@ -168,7 +170,7 @@ class CustomerController extends Controller
                 ]);
             }
 
-            $newSnapshot = $recordVersionService->snapshot($customer->refresh(), ['activeSubscription']);
+            $newSnapshot = $recordVersionService->snapshot($customer->refresh(), ['activeSubscription.package']);
             $recordVersionService->recordUpdate($customer, $oldSnapshot, $newSnapshot, [
                 'source' => 'party_edit',
                 'party_name' => $customer->name,
@@ -194,10 +196,10 @@ class CustomerController extends Controller
             'tickets' => fn ($query) => $query->latest(),
             'productSerials' => fn ($query) => $query->with(['product', 'invoice', 'warrantyClaims'])->latest('sold_at')->limit(50),
             'warrantyClaims' => fn ($query) => $query->with(['product', 'productSerial'])->latest()->limit(10),
-            'versions',
         ]);
+        $versions = $customer->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
-        return view('customers.show', compact('customer'));
+        return view('customers.show', compact('customer', 'versions'));
     }
 
     public function grantGracePeriod(Request $request, Customer $customer)

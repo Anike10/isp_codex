@@ -17,6 +17,24 @@
     $fieldLabel = fn (string $field): string => collect(explode('.', $field))
         ->map(fn (string $part): string => str_replace('_', ' ', ucfirst($part)))
         ->implode(' / ');
+    $displayValue = fn ($value): string => is_bool($value)
+        ? ($value ? 'Yes' : 'No')
+        : (($value === null || $value === '') ? 'N/A' : (string) $value);
+    $flattenFields = function (array $values, string $prefix = '') use (&$flattenFields): array {
+        $flattened = [];
+
+        foreach ($values as $key => $value) {
+            $path = $prefix === '' ? (string) $key : $prefix.'.'.$key;
+
+            if (is_array($value)) {
+                $flattened += $flattenFields($value, $path);
+            } else {
+                $flattened[$path] = $value;
+            }
+        }
+
+        return $flattened;
+    };
 @endphp
 
 <section class="card" style="margin-top:16px">
@@ -183,9 +201,19 @@
                                 $looksLikeDocument = array_key_exists('invoice_no', $old) || array_key_exists('quotation_no', $old) || array_key_exists('billing_month', $old) || array_key_exists('items', $old);
                                 $isQuotation = array_key_exists('quotation_no', $old) || array_key_exists('quotation_date', $old);
                                 $documentNo = $old['invoice_no'] ?? $old['quotation_no'] ?? ($isQuotation ? 'Old Quotation Version' : 'Old Invoice Version');
-                                $fallbackFields = collect($old)
-                                    ->reject(fn ($value, $key) => is_array($value) || in_array($key, ['created_at', 'updated_at'], true))
-                                    ->take(18);
+                                $noteFields = collect([
+                                    'Payment Note' => $old['payment_note'] ?? null,
+                                    'Public Note' => $old['public_note'] ?? null,
+                                    'Private Note' => $old['private_note'] ?? null,
+                                    'Service Note' => $old['service_note'] ?? null,
+                                ])->filter(fn ($value) => $value !== null && $value !== '');
+                                $documentDetails = $flattenFields(collect($old)->except([
+                                    'invoice_no', 'quotation_no', 'quotation_date', 'valid_until', 'billing_month',
+                                    'invoice_type', 'status', 'due_date', 'finalized_at', 'customer', 'items',
+                                    'subtotal', 'discount', 'vat', 'total', 'paid_amount', 'due_amount',
+                                    'payment_note', 'public_note', 'private_note', 'service_note',
+                                ])->all());
+                                $fallbackFields = collect($flattenFields($old))->take(50);
                             @endphp
 
                             @if ($looksLikeDocument)
@@ -268,6 +296,24 @@
                                             @endif
                                         </div>
                                     </div>
+
+                                    @if ($noteFields->isNotEmpty())
+                                        <div class="version-preview-box" style="margin-top:14px">
+                                            <h3>Notes</h3>
+                                            @foreach ($noteFields as $label => $value)
+                                                <div class="version-preview-row"><span class="muted">{{ $label }}</span><span>{{ $value }}</span></div>
+                                            @endforeach
+                                        </div>
+                                    @endif
+
+                                    @if ($documentDetails !== [])
+                                        <div class="version-preview-box" style="margin-top:14px">
+                                            <h3>Other Details</h3>
+                                            @foreach (array_slice($documentDetails, 0, 30, true) as $field => $value)
+                                                <div class="version-preview-row"><span class="muted">{{ $fieldLabel($field) }}</span><span>{{ $displayValue($value) }}</span></div>
+                                            @endforeach
+                                        </div>
+                                    @endif
                                 </div>
                             @else
                                 <div class="version-preview">
@@ -279,7 +325,7 @@
                                     </div>
                                     <div class="version-preview-fallback">
                                         @foreach ($fallbackFields as $field => $value)
-                                            <div><span class="muted">{{ str_replace('_', ' ', ucfirst((string) $field)) }}</span><span>{{ is_bool($value) ? ($value ? 'Yes' : 'No') : ($value ?? 'N/A') }}</span></div>
+                                            <div><span class="muted">{{ $fieldLabel($field) }}</span><span>{{ $displayValue($value) }}</span></div>
                                         @endforeach
                                     </div>
                                 </div>
@@ -288,5 +334,8 @@
                 </article>
             @endforeach
         </div>
+        @if ($versions instanceof \Illuminate\Contracts\Pagination\Paginator)
+            <div style="margin-top:16px">{{ $versions->links() }}</div>
+        @endif
     @endif
 </section>

@@ -194,7 +194,7 @@
     </table>
 </section>
 
-@include('partials.record_versions', ['versions' => $customer->versions])
+@include('partials.record_versions', ['versions' => $versions])
 
 <section class="card" style="margin-top:16px">
     <h2>Advance Balance History</h2>

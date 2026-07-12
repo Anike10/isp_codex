@@ -73,8 +73,10 @@ let those responsibilities shape the implementation, validation, and notes.
 - Invoice totals, discounts, VAT, due amount, paid amount, stock movement, and
   serial movement must stay consistent inside transactions.
 - Payment account and cash ledger running balances must include both payment
-  collection credits and expense debits. Do not show a running balance timeline
-  that only lists collections while the summary cards subtract expenses.
+  collection credits, direct advance receipts, and expense debits. A direct
+  advance is a `customer_balance_transactions` credit with `payment_id = null`.
+  Never add a balance credit whose `payment_id` is set because its parent
+  `payments` row already represents the received money.
 - Product/service invoices and monthly ISP service bills have different
   business meanings; keep their rules separate.
 - Standalone quotations live in `quotations` and `quotation_items`. They may
@@ -318,9 +320,14 @@ Never commit real secrets to Markdown. Use placeholders and tell maintainers to 
 - Invoice and quotation edits use `RecordVersionService` to snapshot the document, party, and line items before and after the edit. This is intentional because document line items are deleted/recreated during draft edits.
 - Invoice finalization, including bulk finalization, must also create full invoice snapshots. Avoid query-builder `update(...)` for operator-facing invoice state changes unless you manually write a `record_versions` row.
 - Party edits update party fields, package/subscription changes, and the version row inside one DB transaction so history cannot drift from the actual party state.
+- Full-document and party snapshots must be taken after locking the edited row inside the transaction. Finalization must re-check the locked invoice so concurrent requests cannot create duplicate versions.
+- Snapshot normalization removes technical IDs, timestamps, entry metadata, and pivots so deleting/recreating unchanged line items does not create false edits. Sensitive nested fields remain masked.
+- Role permission and user role/permission pivot changes must be recorded explicitly; the generic `updated` observer cannot see `sync(...)` changes.
 - Simple operator-editable model edits use `RecordVersionObserver` for attribute-level old/new history. Sensitive fields containing password, token, secret, or key are masked.
 - Do not attach the generic observer to high-churn generated records such as live OLT polling rows, payment allocations, customer balance transactions, stock movements, or SMS status rows unless you also suppress system/background updates. Otherwise normal refresh/accounting work can create excessive history noise.
+- Product stock-only updates are represented by stock movements and are excluded from generic record versions. Initial purchase-bill subtotal calculation is also suppressed because it is creation, not an operator edit.
 - Operator pages should not show raw JSON as the primary history view. `resources/views/partials/record_versions.blade.php` renders invoice old versions in a full-width invoice-like preview with a distinct history background. Do not add fake action labels such as `History Copy`, and do not place the old-version preview inside a narrow table column; it must use the full content width so the historical invoice/record is readable. Keep future history UI readable first, with raw data only as a secondary/debug option if needed.
+- Detail pages paginate edit history with the `history_page` query parameter and order by descending record-version ID so same-second edits remain deterministic.
 
 ## Route And Permission Model
 
@@ -587,12 +594,13 @@ Balance formula:
 
 ```text
 Current Balance = Opening Balance + payments collected in this account
+                + direct advance receipts - expenses paid from this account
 ```
 
 Cash balance is calculated from all cash payments:
 
 ```text
-Cash Balance = SUM(payments.amount WHERE payment_method = cash)
+Cash Balance = cash payments + direct cash advance receipts - cash expenses
 ```
 
 Ledger page shows:
@@ -602,12 +610,16 @@ Ledger page shows:
 - Current balance
 - Transaction count
 - Transaction rows with invoice, customer, note, credit, and running balance
+- Direct advance rows from `customer_balance_transactions` where `direction = credit` and `payment_id IS NULL`
+- Expense debit rows
 - Payment allocation summary, so one payment can be audited across multiple invoices.
 - Advance balance credits and advance-used memo rows.
 
 Important accounting rule:
 
 - `payments` is the receipt row.
+- `customer_balance_transactions` rows with `payment_id` set are allocation/balance detail for an existing receipt and must not be counted again in payment-account totals.
+- Applying advance to an invoice is an internal balance allocation, not cash leaving the business, so advance-use debits do not reduce a payment account or cash ledger.
 - `payment_allocations` records exactly which invoice received how much.
 - `customer_balance_transactions` records advance balance increase/decrease.
 - Do not update `customers.account_balance` directly for payment/bKash flows; use `PaymentService`.

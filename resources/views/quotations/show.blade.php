@@ -83,5 +83,5 @@
 </section>
 @endif
 
-@include('partials.record_versions', ['versions' => $quotation->versions])
+@include('partials.record_versions', ['versions' => $versions])
 @endsection

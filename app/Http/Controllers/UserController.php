@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use App\Observers\RecordVersionObserver;
+use App\Services\RecordVersionService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
@@ -63,7 +66,7 @@ class UserController extends Controller
         ]);
     }
 
-    public function update(Request $request, User $user)
+    public function update(Request $request, User $user, RecordVersionService $recordVersionService)
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -84,9 +87,31 @@ class UserController extends Controller
             $payload['password'] = Hash::make($data['password']);
         }
 
-        $user->update($payload);
-        $user->roles()->sync($data['roles'] ?? []);
-        $user->permissions()->sync($data['permissions'] ?? []);
+        DB::transaction(function () use ($user, $payload, $data, $recordVersionService): void {
+            $user = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+            $oldSnapshot = $recordVersionService->snapshot($user, ['roles', 'permissions']);
+
+            if (array_key_exists('password', $payload)) {
+                $oldSnapshot['login_credential_changed'] = false;
+            }
+
+            RecordVersionObserver::withoutRecording(fn () => $user->update($payload));
+            $user->roles()->sync($data['roles'] ?? []);
+            $user->permissions()->sync($data['permissions'] ?? []);
+
+            $user->unsetRelation('roles');
+            $user->unsetRelation('permissions');
+            $newSnapshot = $recordVersionService->snapshot($user->refresh(), ['roles', 'permissions']);
+
+            if (array_key_exists('password', $payload)) {
+                $newSnapshot['login_credential_changed'] = true;
+            }
+
+            $recordVersionService->recordUpdate($user, $oldSnapshot, $newSnapshot, [
+                'source' => 'user_edit',
+                'user_email' => $user->email,
+            ]);
+        });
 
         return redirect()->route('users.index')->with('success', 'User updated successfully.');
     }

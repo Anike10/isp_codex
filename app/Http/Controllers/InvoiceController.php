@@ -11,12 +11,12 @@ use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\Quotation;
 use App\Models\Subscription;
+use App\Observers\RecordVersionObserver;
 use App\Services\BillingService;
 use App\Services\InventoryService;
 use App\Services\PaymentService;
 use App\Services\RecordVersionService;
 use App\Support\SerialNumberParser;
-use App\Observers\RecordVersionObserver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -201,12 +201,21 @@ class InvoiceController extends Controller
         }
 
         $data = $this->validateInvoiceData($request);
+        $becameFinalized = false;
 
         try {
             [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
-            $oldSnapshot = $recordVersionService->snapshot($invoice, ['customer', 'items']);
 
-            DB::transaction(function () use ($invoice, $data, $customerId, $itemsData, $subtotal, $total, $inventoryService, $recordVersionService, $oldSnapshot) {
+            DB::transaction(function () use (&$invoice, $data, $customerId, $itemsData, $subtotal, $total, $inventoryService, $recordVersionService, &$becameFinalized): void {
+                $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+
+                if ($invoice->isFinalized()) {
+                    $becameFinalized = true;
+
+                    return;
+                }
+
+                $oldSnapshot = $recordVersionService->snapshot($invoice, ['customer', 'items']);
                 $this->restoreInvoiceInventory($invoice, $inventoryService);
 
                 $paidAmount = (float) $invoice->paid_amount;
@@ -249,23 +258,32 @@ class InvoiceController extends Controller
             return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
         }
 
+        if ($becameFinalized) {
+            return redirect()->route('invoices.show', $invoice)->withErrors([
+                'invoice' => 'Finalized invoices cannot be edited.',
+            ]);
+        }
+
         return redirect()->route('invoices.show', $invoice)->with('success', 'Draft invoice updated successfully.');
     }
 
     public function finalize(Invoice $invoice, RecordVersionService $recordVersionService)
     {
-        if (! $invoice->isFinalized()) {
-            $oldSnapshot = $recordVersionService->snapshot($invoice, ['customer', 'items']);
+        DB::transaction(function () use (&$invoice, $recordVersionService): void {
+            $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
-            DB::transaction(function () use ($invoice, $recordVersionService, $oldSnapshot): void {
-                RecordVersionObserver::withoutRecording(fn () => $invoice->update(['finalized_at' => now()]));
-                $newSnapshot = $recordVersionService->snapshot($invoice->refresh(), ['customer', 'items']);
-                $recordVersionService->recordUpdate($invoice, $oldSnapshot, $newSnapshot, [
-                    'source' => 'invoice_finalize',
-                    'invoice_no' => $invoice->invoice_no,
-                ]);
-            });
-        }
+            if ($invoice->isFinalized()) {
+                return;
+            }
+
+            $oldSnapshot = $recordVersionService->snapshot($invoice, ['customer', 'items']);
+            RecordVersionObserver::withoutRecording(fn () => $invoice->update(['finalized_at' => now()]));
+            $newSnapshot = $recordVersionService->snapshot($invoice->refresh(), ['customer', 'items']);
+            $recordVersionService->recordUpdate($invoice, $oldSnapshot, $newSnapshot, [
+                'source' => 'invoice_finalize',
+                'invoice_no' => $invoice->invoice_no,
+            ]);
+        });
 
         return redirect()->route('invoices.show', $invoice)->with('success', 'Invoice finalized. Editing is now locked.');
     }
@@ -286,9 +304,14 @@ class InvoiceController extends Controller
             ->orderBy('id')
             ->chunkById(100, function ($invoices) use (&$finalizedCount, $recordVersionService): void {
                 foreach ($invoices as $invoice) {
-                    $oldSnapshot = $recordVersionService->snapshot($invoice, ['customer', 'items']);
+                    DB::transaction(function () use ($invoice, $recordVersionService, &$finalizedCount): void {
+                        $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
-                    DB::transaction(function () use ($invoice, $recordVersionService, $oldSnapshot, &$finalizedCount): void {
+                        if ($invoice->isFinalized()) {
+                            return;
+                        }
+
+                        $oldSnapshot = $recordVersionService->snapshot($invoice, ['customer', 'items']);
                         RecordVersionObserver::withoutRecording(fn () => $invoice->update(['finalized_at' => now()]));
                         $newSnapshot = $recordVersionService->snapshot($invoice->refresh(), ['customer', 'items']);
                         $recordVersionService->recordUpdate($invoice, $oldSnapshot, $newSnapshot, [
@@ -750,7 +773,8 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice)
     {
-        $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items', 'versions']);
+        $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items']);
+        $versions = $invoice->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
         $paymentAccounts = collect();
 
@@ -761,7 +785,7 @@ class InvoiceController extends Controller
                 ->get();
         }
 
-        return view('invoices.show', compact('invoice', 'paymentAccounts'));
+        return view('invoices.show', compact('invoice', 'paymentAccounts', 'versions'));
     }
 
     public function challan(Invoice $invoice)

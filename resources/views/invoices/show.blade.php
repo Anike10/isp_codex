@@ -174,7 +174,7 @@
 </section>
 @endif
 
-@include('partials.record_versions', ['versions' => $invoice->versions])
+@include('partials.record_versions', ['versions' => $versions])
 
 <section class="card" style="margin-top:16px">
     <h2>Payment Allocations</h2>

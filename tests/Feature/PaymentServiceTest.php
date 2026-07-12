@@ -256,6 +256,53 @@ class PaymentServiceTest extends TestCase
             ->assertSee('360.00');
     }
 
+    public function test_payment_account_ledger_running_balance_includes_prior_mixed_rows(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payment_accounts')->firstOrFail());
+        $customer = $this->createCustomer();
+        $account = PaymentAccount::create([
+            'payment_method' => 'bkash',
+            'account_name' => 'Office bKash',
+            'account_number' => '01800000000',
+            'opening_balance' => 100,
+            'status' => 'active',
+        ]);
+
+        for ($i = 0; $i < 13; $i++) {
+            $date = Carbon::create(2026, 1, 1)->addMonths($i);
+            $invoice = $this->createInvoice($customer, $date->format('Y-m'), 10, $date->copy()->day(10)->toDateString());
+
+            $this->paymentService()->recordPaymentForInvoices($customer, [$invoice->id], [
+                'amount' => 10,
+                'payment_method' => 'bkash',
+                'payment_account_id' => $account->id,
+                'payment_date' => $date->copy()->day(20)->toDateString(),
+            ]);
+            Expense::create([
+                'expense_type' => 'other',
+                'category' => 'transport',
+                'amount' => 4,
+                'payment_method' => 'bkash',
+                'payment_account_id' => $account->id,
+                'expense_date' => $date->copy()->day(20)->toDateString(),
+                'note' => 'Mixed ledger expense '.($i + 1),
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->get(route('payment-accounts.show', [
+                'payment_account' => $account,
+                'per_page' => 25,
+                'page' => 2,
+            ]))
+            ->assertOk()
+            ->assertSee('Before Page')
+            ->assertSee('182.00')
+            ->assertSee('178.00')
+            ->assertSee('Mixed ledger expense 13');
+    }
+
     public function test_payment_account_ledger_includes_expense_debits_in_running_balance(): void
     {
         $user = User::factory()->create();
@@ -325,6 +372,91 @@ class PaymentServiceTest extends TestCase
             ->assertSee('Cash transport paid.')
             ->assertSee('125.00')
             ->assertSee('375.00');
+    }
+
+    public function test_payment_account_ledger_and_index_include_direct_advance_receipts(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payment_accounts')->firstOrFail());
+        $customer = $this->createCustomer();
+        $account = PaymentAccount::create([
+            'payment_method' => 'bkash',
+            'account_name' => 'Advance bKash',
+            'account_number' => '01800000001',
+            'opening_balance' => 100,
+            'status' => 'active',
+        ]);
+
+        $this->paymentService()->addAdvanceCredit($customer, [
+            'amount' => 300,
+            'payment_method' => 'bkash',
+            'payment_account_id' => $account->id,
+            'payment_date' => '2026-06-01',
+            'reference' => 'ADV-LEDGER-001',
+            'note' => 'Direct advance collection.',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('payment-accounts.show', $account))
+            ->assertOk()
+            ->assertSee('Advance')
+            ->assertSee('Direct advance collection.')
+            ->assertSee('300.00')
+            ->assertSee('400.00');
+
+        $this->actingAs($user)
+            ->get(route('payment-accounts.index'))
+            ->assertOk()
+            ->assertSee('Advance bKash')
+            ->assertSee('300.00')
+            ->assertSee('400.00');
+
+        $this->actingAs($user)
+            ->get(route('payment-accounts.show', [
+                'payment_account' => $account,
+                'search' => 'ADV-LEDGER-001',
+            ]))
+            ->assertOk()
+            ->assertSee('Direct advance collection.');
+
+        $this->actingAs($user)
+            ->get(route('payment-accounts.show', [
+                'payment_account' => $account,
+                'from' => '2026-07-01',
+            ]))
+            ->assertOk()
+            ->assertSee('Before Filter')
+            ->assertSee('400.00');
+    }
+
+    public function test_cash_ledger_includes_direct_advance_but_payment_remainder_is_not_double_counted(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payment_accounts')->firstOrFail());
+        $customer = $this->createCustomer();
+
+        $this->paymentService()->addAdvanceCredit($customer, [
+            'amount' => 500,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-05-01',
+            'reference' => 'CASH-ADV-001',
+            'note' => 'Cash advance collection.',
+        ]);
+
+        $invoice = $this->createInvoice($customer, '2026-06', 500, '2026-06-10');
+        $this->paymentService()->recordPayment($invoice, [
+            'amount' => 700,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-06-15',
+            'note' => 'Cash payment with remainder.',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('payment-accounts.cash-ledger'))
+            ->assertOk()
+            ->assertSee('Cash advance collection.')
+            ->assertSee('1,200.00')
+            ->assertDontSee('1,400.00');
     }
 
     public function test_paid_invoice_cannot_accept_another_payment(): void
@@ -474,6 +606,35 @@ class PaymentServiceTest extends TestCase
 
         $this->assertSame(500.0, (float) $invoice->refresh()->due_amount);
         $this->assertDatabaseCount('payments', 0);
+    }
+
+    public function test_cash_advance_route_discards_a_forged_payment_account_id(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = $this->createCustomer();
+        $bkashAccount = PaymentAccount::create([
+            'payment_method' => 'bkash',
+            'account_name' => 'Office bKash',
+            'account_number' => '01800000000',
+            'opening_balance' => 0,
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($user)->post(route('customers.advance-payments.store', $customer), [
+            'amount' => 500,
+            'payment_method' => 'cash',
+            'payment_account_id' => $bkashAccount->id,
+            'payment_date' => '2026-06-02',
+            'reference' => 'CASH-NO-ACCOUNT',
+        ])->assertRedirect(route('customers.payments.create', $customer));
+
+        $this->assertDatabaseHas('customer_balance_transactions', [
+            'customer_id' => $customer->id,
+            'payment_method' => 'cash',
+            'payment_account_id' => null,
+            'amount' => 500,
+        ]);
     }
 
     private function paymentService(): PaymentService

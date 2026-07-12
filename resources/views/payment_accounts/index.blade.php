@@ -27,7 +27,7 @@
         @php
             $methodAccounts = $allAccounts->where('payment_method', $method);
             $opening = $methodAccounts->sum(fn ($account) => (float) $account->opening_balance);
-            $collected = $methodAccounts->sum(fn ($account) => (float) ($account->collected_amount ?? 0));
+            $collected = $methodAccounts->sum(fn ($account) => (float) ($account->collected_amount ?? 0) + (float) ($account->advance_collected_amount ?? 0));
             $spent = $methodAccounts->sum(fn ($account) => (float) ($account->spent_amount ?? 0));
         @endphp
         <div class="card stat">
@@ -74,7 +74,7 @@
         </tr>
         @forelse ($accounts as $account)
             @php
-                $collected = (float) ($account->collected_amount ?? 0);
+                $collected = (float) ($account->collected_amount ?? 0) + (float) ($account->advance_collected_amount ?? 0);
                 $spent = (float) ($account->spent_amount ?? 0);
                 $currentBalance = (float) $account->opening_balance + $collected - $spent;
             @endphp

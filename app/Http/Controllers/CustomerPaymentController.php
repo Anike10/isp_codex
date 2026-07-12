@@ -37,7 +37,9 @@ class CustomerPaymentController extends Controller
             'note' => ['nullable', 'string'],
         ]);
 
-        if ($data['payment_method'] !== 'cash' && empty($data['payment_account_id'])) {
+        if ($data['payment_method'] === 'cash') {
+            $data['payment_account_id'] = null;
+        } elseif (empty($data['payment_account_id'])) {
             return back()->withInput()->withErrors(['payment_account_id' => 'Please select an account for this payment method.']);
         }
 
@@ -93,7 +95,9 @@ class CustomerPaymentController extends Controller
             'invoice_allocations.*' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        if ($data['payment_method'] !== 'cash' && empty($data['payment_account_id'])) {
+        if ($data['payment_method'] === 'cash') {
+            $data['payment_account_id'] = null;
+        } elseif (empty($data['payment_account_id'])) {
             return back()->withInput()->withErrors(['payment_account_id' => 'Please select an account for this payment method.']);
         }
 

@@ -68,6 +68,6 @@ class Quotation extends Model
 
     public function versions(): MorphMany
     {
-        return $this->morphMany(RecordVersion::class, 'versionable')->latest();
+        return $this->morphMany(RecordVersion::class, 'versionable')->latest('id');
     }
 }

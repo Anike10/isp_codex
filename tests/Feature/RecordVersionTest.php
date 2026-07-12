@@ -2,13 +2,17 @@
 
 namespace Tests\Feature;
 
-use App\Models\Customer;
 use App\Models\BkashSmsPayment;
+use App\Models\Customer;
+use App\Models\InternetPackage;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Permission;
+use App\Models\Product;
 use App\Models\Quotation;
 use App\Models\RecordVersion;
+use App\Models\Role;
+use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -45,6 +49,10 @@ class RecordVersionTest extends TestCase
             'paid_amount' => 0,
             'due_amount' => 500,
             'status' => 'unpaid',
+            'payment_note' => 'Old payment guidance.',
+            'public_note' => 'Old public note.',
+            'show_public_note' => true,
+            'private_note' => 'Confidential old note.',
         ]);
         $invoice->items()->create([
             'product_name' => 'Old Service',
@@ -53,7 +61,7 @@ class RecordVersionTest extends TestCase
             'total' => 500,
         ]);
 
-        $this->actingAs($user)->put(route('invoices.update', $invoice), [
+        $payload = [
             'customer_id' => $customer->id,
             'billing_month' => '2026-07',
             'invoice_type' => 'service',
@@ -68,7 +76,10 @@ class RecordVersionTest extends TestCase
             'discount' => 0,
             'vat_type' => 'amount',
             'vat' => 0,
-        ])->assertRedirect(route('invoices.show', $invoice));
+        ];
+
+        $this->actingAs($user)->put(route('invoices.update', $invoice), $payload)
+            ->assertRedirect(route('invoices.show', $invoice));
 
         $version = RecordVersion::where('versionable_type', Invoice::class)
             ->where('versionable_id', $invoice->id)
@@ -81,6 +92,11 @@ class RecordVersionTest extends TestCase
         $this->assertSame(700, (int) $version->new_values['total']);
         $this->assertContains('items', $version->changed_fields);
 
+        $this->actingAs($user)->put(route('invoices.update', $invoice), $payload)
+            ->assertRedirect(route('invoices.show', $invoice));
+
+        $this->assertSame(1, RecordVersion::where('versionable_type', Invoice::class)->where('versionable_id', $invoice->id)->count());
+
         $this->actingAs($user)->get(route('invoices.show', $invoice))
             ->assertOk()
             ->assertSee('Edit History')
@@ -89,6 +105,9 @@ class RecordVersionTest extends TestCase
             ->assertSee('Subtotal')
             ->assertSee('Audit User')
             ->assertSee('Old Service')
+            ->assertSee('Old payment guidance.')
+            ->assertSee('Old public note.')
+            ->assertSee('Confidential old note.')
             ->assertDontSee('json_encode');
     }
 
@@ -104,6 +123,19 @@ class RecordVersionTest extends TestCase
             'status' => 'active',
             'is_customer' => true,
         ]);
+        $package = InternetPackage::create([
+            'name' => 'History Package 25',
+            'speed' => '25 Mbps',
+            'mikrotik_profile' => 'history25',
+            'monthly_price' => 1200,
+            'status' => 'active',
+        ]);
+        Subscription::create([
+            'customer_id' => $customer->id,
+            'internet_package_id' => $package->id,
+            'start_date' => '2026-07-01',
+            'status' => 'active',
+        ]);
 
         $payload = [
             'name' => 'Version Party',
@@ -113,6 +145,8 @@ class RecordVersionTest extends TestCase
             'address' => 'New Address',
             'status' => 'active',
             'is_customer' => '1',
+            'internet_package_id' => $package->id,
+            'start_date' => '2026-07-01',
         ];
 
         $this->actingAs($user)->put(route('customers.update', $customer), $payload)
@@ -129,12 +163,18 @@ class RecordVersionTest extends TestCase
         $this->assertSame('01721111111', $versions->first()->old_values['phone']);
         $this->assertSame('01720000000', $versions->last()->old_values['phone']);
 
+        $this->actingAs($user)->put(route('customers.update', $customer), $payload)
+            ->assertRedirect(route('customers.show', $customer));
+
+        $this->assertCount(2, $customer->versions()->get());
+
         $this->actingAs($user)->get(route('customers.show', $customer))
             ->assertOk()
             ->assertSee('Edit History')
             ->assertSee('View Old Version')
             ->assertDontSee('History Copy')
-            ->assertSee('01721111111');
+            ->assertSee('01721111111')
+            ->assertSee('History Package 25');
     }
 
     public function test_simple_model_update_records_payment_old_version(): void
@@ -346,6 +386,13 @@ class RecordVersionTest extends TestCase
         $this->assertNotNull($singleVersion->new_values['finalized_at']);
         $this->assertSame('invoice_finalize', $singleVersion->metadata['source']);
 
+        $this->actingAs($user)->post(route('invoices.finalize', $first))
+            ->assertRedirect(route('invoices.show', $first));
+
+        $this->assertSame(1, RecordVersion::where('versionable_type', Invoice::class)
+            ->where('versionable_id', $first->id)
+            ->count());
+
         $this->actingAs($user)->post(route('invoices.finalize-selected'), [
             'invoice_ids' => [$second->id, $third->id],
         ])->assertRedirect();
@@ -359,6 +406,133 @@ class RecordVersionTest extends TestCase
             $this->assertNotNull($version->new_values['finalized_at']);
             $this->assertSame('invoice_bulk_finalize', $version->metadata['source']);
         }
+    }
+
+    public function test_role_and_user_permission_only_changes_are_recorded(): void
+    {
+        $manager = User::factory()->create(['name' => 'Security Manager']);
+        $manager->permissions()->attach(Permission::where('name', 'manage_users')->firstOrFail());
+        $invoicePermission = Permission::where('name', 'manage_invoices')->firstOrFail();
+        $packagePermission = Permission::where('name', 'manage_packages')->firstOrFail();
+        $role = Role::create([
+            'name' => 'audited_role',
+            'label' => 'Audited Role',
+        ]);
+        $role->permissions()->attach($invoicePermission);
+
+        $this->actingAs($manager)->put(route('roles.update', $role), [
+            'name' => 'audited_role',
+            'label' => 'Audited Role',
+            'permissions' => [$packagePermission->id],
+        ])->assertRedirect(route('roles.index'));
+
+        $roleVersion = RecordVersion::where('versionable_type', Role::class)
+            ->where('versionable_id', $role->id)
+            ->firstOrFail();
+
+        $this->assertContains('permissions', $roleVersion->changed_fields);
+        $this->assertSame('manage_invoices', $roleVersion->old_values['permissions'][0]['name']);
+        $this->assertSame('manage_packages', $roleVersion->new_values['permissions'][0]['name']);
+        $this->assertSame('Security Manager', $roleVersion->edited_by_name);
+
+        $target = User::factory()->create([
+            'name' => 'Permission Target',
+            'email' => 'permission-target@example.test',
+        ]);
+        $target->roles()->attach($role);
+        $target->permissions()->attach($invoicePermission);
+
+        $this->actingAs($manager)->put(route('users.update', $target), [
+            'name' => 'Permission Target',
+            'email' => 'permission-target@example.test',
+            'password' => 'new-secure-password',
+            'roles' => [],
+            'permissions' => [$packagePermission->id],
+        ])->assertRedirect(route('users.index'));
+
+        $userVersion = RecordVersion::where('versionable_type', User::class)
+            ->where('versionable_id', $target->id)
+            ->firstOrFail();
+
+        $this->assertContains('roles', $userVersion->changed_fields);
+        $this->assertContains('permissions', $userVersion->changed_fields);
+        $this->assertContains('login_credential_changed', $userVersion->changed_fields);
+        $this->assertArrayNotHasKey('password', $userVersion->old_values);
+        $this->assertArrayNotHasKey('password', $userVersion->new_values);
+    }
+
+    public function test_record_history_is_paginated_and_uses_id_for_latest_order(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'History Party',
+            'phone' => '01770000000',
+            'connection_id' => 'HIST-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+        ]);
+        $invoice = $this->draftInvoice($customer, 'INV-HISTORY-001');
+
+        for ($i = 1; $i <= 12; $i++) {
+            RecordVersion::create([
+                'versionable_type' => Invoice::class,
+                'versionable_id' => $invoice->id,
+                'table_name' => 'invoices',
+                'action' => 'updated',
+                'edited_by' => (string) $user->id,
+                'edited_by_type' => 'user',
+                'edited_by_name' => $user->name,
+                'old_values' => ['note' => $i === 1 ? 'EARLIEST-HISTORY-MARKER' : ($i === 12 ? 'LATEST-HISTORY-MARKER' : 'History '.$i)],
+                'new_values' => ['note' => 'Updated '.$i],
+                'changed_fields' => ['note'],
+            ]);
+        }
+
+        $this->actingAs($user)->get(route('invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('LATEST-HISTORY-MARKER')
+            ->assertDontSee('EARLIEST-HISTORY-MARKER');
+
+        $this->actingAs($user)->get(route('invoices.show', [
+            'invoice' => $invoice,
+            'history_page' => 2,
+        ]))
+            ->assertOk()
+            ->assertSee('EARLIEST-HISTORY-MARKER')
+            ->assertDontSee('LATEST-HISTORY-MARKER');
+    }
+
+    public function test_stock_quantity_only_updates_do_not_duplicate_stock_audit(): void
+    {
+        $product = Product::create([
+            'name' => 'Audit Stock Product',
+            'sku' => 'AUDIT-STOCK-001',
+            'purchase_price' => 100,
+            'sale_price' => 150,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 1,
+        ]);
+
+        $product->update(['stock_quantity' => 5]);
+
+        $this->assertDatabaseMissing('record_versions', [
+            'versionable_type' => Product::class,
+            'versionable_id' => $product->id,
+        ]);
+
+        $product->update([
+            'stock_quantity' => 6,
+            'sale_price' => 175,
+        ]);
+
+        $version = RecordVersion::where('versionable_type', Product::class)
+            ->where('versionable_id', $product->id)
+            ->firstOrFail();
+
+        $this->assertSame(['sale_price'], $version->changed_fields);
+        $this->assertArrayNotHasKey('stock_quantity', $version->old_values);
+        $this->assertArrayNotHasKey('stock_quantity', $version->new_values);
     }
 
     private function draftInvoice(Customer $customer, string $invoiceNo): Invoice

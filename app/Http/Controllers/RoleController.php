@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Observers\RecordVersionObserver;
+use App\Services\RecordVersionService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class RoleController extends Controller
@@ -55,7 +58,7 @@ class RoleController extends Controller
         ]);
     }
 
-    public function update(Request $request, Role $role)
+    public function update(Request $request, Role $role, RecordVersionService $recordVersionService)
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100', 'alpha_dash', Rule::unique('roles', 'name')->ignore($role->id)],
@@ -64,11 +67,23 @@ class RoleController extends Controller
             'permissions.*' => ['exists:permissions,id'],
         ]);
 
-        $role->update([
-            'name' => $data['name'],
-            'label' => $data['label'],
-        ]);
-        $role->permissions()->sync($data['permissions'] ?? []);
+        DB::transaction(function () use ($role, $data, $recordVersionService): void {
+            $role = Role::query()->whereKey($role->id)->lockForUpdate()->firstOrFail();
+            $oldSnapshot = $recordVersionService->snapshot($role, ['permissions']);
+
+            RecordVersionObserver::withoutRecording(fn () => $role->update([
+                'name' => $data['name'],
+                'label' => $data['label'],
+            ]));
+            $role->permissions()->sync($data['permissions'] ?? []);
+
+            $role->unsetRelation('permissions');
+            $newSnapshot = $recordVersionService->snapshot($role->refresh(), ['permissions']);
+            $recordVersionService->recordUpdate($role, $oldSnapshot, $newSnapshot, [
+                'source' => 'role_edit',
+                'role_name' => $role->name,
+            ]);
+        });
 
         return redirect()->route('roles.index')->with('success', 'Role updated successfully.');
     }

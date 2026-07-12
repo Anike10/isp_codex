@@ -28,5 +28,5 @@
     </section>
 </div>
 
-@include('partials.record_versions', ['versions' => $package->versions])
+@include('partials.record_versions', ['versions' => $versions])
 @endsection

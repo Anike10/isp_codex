@@ -7,6 +7,7 @@ use App\Models\Permission;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductSerial;
+use App\Models\PurchaseBill;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -102,6 +103,15 @@ class PurchaseBillTest extends TestCase
             'serial_number' => 'ONU-A1',
             'warranty_until' => '2027-06-02 00:00:00',
             'status' => 'in_stock',
+        ]);
+        $purchaseBill = PurchaseBill::where('bill_no', 'PB-TEST-001')->firstOrFail();
+        $this->assertDatabaseMissing('record_versions', [
+            'versionable_type' => Product::class,
+            'versionable_id' => $product->id,
+        ]);
+        $this->assertDatabaseMissing('record_versions', [
+            'versionable_type' => PurchaseBill::class,
+            'versionable_id' => $purchaseBill->id,
         ]);
     }
 

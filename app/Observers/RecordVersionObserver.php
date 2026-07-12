@@ -2,6 +2,7 @@
 
 namespace App\Observers;
 
+use App\Models\Product;
 use App\Models\RecordVersion;
 use Illuminate\Database\Eloquent\Model;
 
@@ -26,9 +27,13 @@ class RecordVersionObserver
             return;
         }
 
-        $dirty = collect($model->getChanges())
-            ->except(['updated_at'])
-            ->all();
+        $ignoredFields = ['updated_at'];
+
+        if ($model instanceof Product) {
+            $ignoredFields[] = 'stock_quantity';
+        }
+
+        $dirty = collect($model->getChanges())->except($ignoredFields)->all();
 
         if ($dirty === []) {
             return;

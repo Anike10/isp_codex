@@ -9,6 +9,8 @@ class RecordVersionService
 {
     public function recordUpdate(Model $model, array $oldValues, array $newValues, array $metadata = []): ?RecordVersion
     {
+        $oldValues = $this->normalize($oldValues);
+        $newValues = $this->normalize($newValues);
         $changedFields = $this->changedFields($oldValues, $newValues);
 
         if ($changedFields === []) {
@@ -53,6 +55,7 @@ class RecordVersionService
 
             if (is_array($old) && is_array($new) && $this->isAssoc($old) && $this->isAssoc($new)) {
                 array_push($fields, ...$this->changedFields($old, $new, $path));
+
                 continue;
             }
 
@@ -67,16 +70,39 @@ class RecordVersionService
     private function normalize(array $values): array
     {
         foreach ($values as $key => $value) {
-            if ($value instanceof \BackedEnum) {
+            if (in_array((string) $key, ['id', 'created_at', 'updated_at', 'entry_by', 'entry_by_type', 'pivot'], true)) {
+                unset($values[$key]);
+
+                continue;
+            }
+
+            if ($this->isSensitiveField((string) $key)) {
+                $values[$key] = '[hidden]';
+            } elseif ($value instanceof \DateTimeInterface) {
+                $values[$key] = $value->format('Y-m-d H:i:s');
+            } elseif ($value instanceof \BackedEnum) {
                 $values[$key] = $value->value;
             } elseif (is_array($value)) {
                 $values[$key] = $this->normalize($value);
             }
         }
 
-        ksort($values);
+        if (! array_is_list($values)) {
+            ksort($values);
+        }
 
         return $values;
+    }
+
+    private function isSensitiveField(string $field): bool
+    {
+        foreach (['password', 'token', 'secret', 'key'] as $needle) {
+            if (str_contains(strtolower($field), $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function isAssoc(array $value): bool

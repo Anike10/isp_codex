@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductSerial;
 use App\Models\PurchaseBill;
+use App\Observers\RecordVersionObserver;
 use App\Services\InventoryService;
 use App\Support\SerialNumberParser;
 use Carbon\Carbon;
@@ -181,7 +182,7 @@ class PurchaseBillController extends Controller
                     }
                 }
 
-                $purchaseBill->update(['subtotal' => $subtotal]);
+                RecordVersionObserver::withoutRecording(fn () => $purchaseBill->update(['subtotal' => $subtotal]));
             });
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
