@@ -2,6 +2,7 @@
 
 @section('content')
 @php
+    $canOpenInvoices = auth()->user()?->hasPermission('manage_invoices');
     $accountsByMethod = $paymentAccounts
         ->groupBy('payment_method')
         ->map(fn ($accounts) => $accounts->map(fn ($account) => [
@@ -167,7 +168,11 @@
                 @forelse ($dueInvoices as $invoice)
                     <tr>
                         <td>
-                            <a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a>
+                            @if ($canOpenInvoices)
+                                <a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a>
+                            @else
+                                {{ $invoice->invoice_no }}
+                            @endif
                             <div class="muted">{{ $invoice->formatted_billing_month }} - {{ $invoice->due_date?->format('Y-m-d') ?? 'No due date' }}</div>
                         </td>
                         <td>{{ number_format($invoice->due_amount, 2) }}</td>

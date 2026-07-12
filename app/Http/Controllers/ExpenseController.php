@@ -19,6 +19,19 @@ class ExpenseController extends Controller
             ->when($request->filled('expense_type'), fn ($query) => $query->where('expense_type', $request->query('expense_type')))
             ->when($request->filled('category'), fn ($query) => $query->where('category', $request->query('category')))
             ->when($request->filled('employee_name'), fn ($query) => $query->where('employee_name', 'like', '%'.$request->query('employee_name').'%'))
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $search = trim((string) $request->query('search'));
+                $query->where(function ($query) use ($search) {
+                    $query->where('employee_name', 'like', "%{$search}%")
+                        ->orWhere('employee_designation', 'like', "%{$search}%")
+                        ->orWhere('salary_month', 'like', "%{$search}%")
+                        ->orWhere('reference', 'like', "%{$search}%")
+                        ->orWhere('note', 'like', "%{$search}%")
+                        ->orWhereHas('account', fn ($query) => $query
+                            ->where('account_name', 'like', "%{$search}%")
+                            ->orWhere('account_number', 'like', "%{$search}%"));
+                });
+            })
             ->when($from, fn ($query) => $query->whereDate('expense_date', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('expense_date', '<=', $to));
 

@@ -1,6 +1,10 @@
 @extends('layouts.app')
 
 @section('content')
+@php
+    $canOpenInvoices = auth()->user()?->hasPermission('manage_invoices');
+    $canOpenTickets = auth()->user()?->hasPermission('manage_tickets');
+@endphp
 <div class="topbar">
     <div>
         <h1>Dashboard</h1>
@@ -36,8 +40,14 @@
             <thead><tr><th>Invoice</th><th>Party</th><th>Due</th><th>Status</th></tr></thead>
             <tbody>
             @forelse ($recentInvoices as $invoice)
-                <tr data-href="{{ route('invoices.show', $invoice) }}">
-                    <td><a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a></td>
+                <tr @if ($canOpenInvoices) data-href="{{ route('invoices.show', $invoice) }}" @endif>
+                    <td>
+                        @if ($canOpenInvoices)
+                            <a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a>
+                        @else
+                            {{ $invoice->invoice_no }}
+                        @endif
+                    </td>
                     <td>{{ $invoice->customer->name }}</td>
                     <td>{{ number_format($invoice->due_amount, 2) }}</td>
                     <td><span class="badge {{ $invoice->status }}">{{ $invoice->status }}</span></td>
@@ -54,7 +64,7 @@
             <thead><tr><th>Subject</th><th>Party</th><th>Priority</th><th>Status</th></tr></thead>
             <tbody>
             @forelse ($recentTickets as $ticket)
-                <tr data-href="{{ route('tickets.show', $ticket) }}">
+                <tr @if ($canOpenTickets) data-href="{{ route('tickets.show', $ticket) }}" @endif>
                     <td>{{ $ticket->subject }}</td>
                     <td>{{ $ticket->customer->name }}</td>
                     <td>{{ $ticket->priority }}</td>

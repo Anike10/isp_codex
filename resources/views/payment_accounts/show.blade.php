@@ -2,13 +2,20 @@
 
 @section('content')
 @php
+    $canOpenInvoices = auth()->user()?->hasPermission('manage_invoices');
+    $canRecordPayments = auth()->user()?->hasPermission('manage_payments');
     $methodLabels = [
         'bkash' => 'bKash',
         'nagad' => 'Nagad',
         'bank' => 'Bank',
     ];
 
-    $runningBalance = (float) $paymentAccount->opening_balance;
+    $hasFilters = request()->filled('from')
+        || request()->filled('to')
+        || request()->filled('search')
+        || request()->filled('min_amount')
+        || request()->filled('max_amount');
+    $hasPriorPage = (int) request('page', 1) > 1;
 @endphp
 
 <div class="topbar">
@@ -21,7 +28,9 @@
         </div>
     </div>
     <div class="actions">
-        <a class="btn secondary" href="{{ route('payments.create') }}">Record Payment</a>
+        @if ($canRecordPayments)
+            <a class="btn secondary" href="{{ route('payments.create') }}">Record Payment</a>
+        @endif
         <a class="btn light" href="{{ route('payment-accounts.index') }}">Back</a>
     </div>
 </div>
@@ -45,9 +54,43 @@
     </div>
     <div class="card stat">
         <span class="muted">Transactions</span>
-        <strong>{{ $payments->total() }}</strong>
+        <strong>{{ $filteredTransactions }}</strong>
+    </div>
+    <div class="card stat">
+        <span class="muted">{{ $hasFilters ? 'Filtered Collection' : 'Listed Collection' }}</span>
+        <strong>{{ number_format($filteredCollected, 2) }}</strong>
     </div>
 </div>
+
+<form method="get" class="card form-grid" style="margin-bottom:16px">
+    <div>
+        <label>From Date</label>
+        <input type="date" name="from" value="{{ request('from') }}">
+    </div>
+    <div>
+        <label>To Date</label>
+        <input type="date" name="to" value="{{ request('to') }}">
+    </div>
+    <div class="full">
+        <label>Search</label>
+        <input name="search" value="{{ request('search') }}" placeholder="Party name, mobile, connection ID, invoice no, month, or note">
+    </div>
+    <div>
+        <label>Min Amount</label>
+        <input type="number" step="0.01" name="min_amount" value="{{ request('min_amount') }}">
+    </div>
+    <div>
+        <label>Max Amount</label>
+        <input type="number" step="0.01" name="max_amount" value="{{ request('max_amount') }}">
+    </div>
+    <div class="full actions">
+        <button class="btn secondary" type="submit">Search</button>
+        <a class="btn light" href="{{ route('payment-accounts.show', $paymentAccount) }}">Reset</a>
+        @if ($hasFilters)
+            <span class="muted">{{ $filteredTransactions }} matched, {{ number_format($filteredCollected, 2) }} collected.</span>
+        @endif
+    </div>
+</form>
 
 @include('partials.per_page')
 
@@ -64,11 +107,11 @@
     </thead>
     <tbody>
         <tr>
-            <td>{{ $paymentAccount->created_at?->format('Y-m-d') }}</td>
-            <td>Opening</td>
+            <td>{{ request('from') ?: $paymentAccount->created_at?->format('Y-m-d') }}</td>
+            <td>{{ request()->filled('from') ? 'Before Filter' : ($hasPriorPage ? 'Before Page' : 'Opening') }}</td>
             <td>N/A</td>
-            <td>Opening balance</td>
-            <td>{{ number_format($paymentAccount->opening_balance, 2) }}</td>
+            <td>{{ request()->filled('from') ? 'Opening balance plus collection before selected date' : ($hasPriorPage ? 'Balance before this page' : 'Opening balance') }}</td>
+            <td>{{ number_format((request()->filled('from') || $hasPriorPage) ? $runningBalance : (float) $paymentAccount->opening_balance, 2) }}</td>
             <td>{{ number_format($runningBalance, 2) }}</td>
         </tr>
         @forelse ($payments as $payment)
@@ -77,7 +120,13 @@
             @endphp
             <tr>
                 <td>{{ $payment->payment_date->format('Y-m-d') }}</td>
-                <td><a href="{{ route('invoices.show', $payment->invoice) }}">{{ $payment->invoice->invoice_no }}</a></td>
+                <td>
+                    @if ($canOpenInvoices)
+                        <a href="{{ route('invoices.show', $payment->invoice) }}">{{ $payment->invoice->invoice_no }}</a>
+                    @else
+                        {{ $payment->invoice->invoice_no }}
+                    @endif
+                </td>
                 <td>{{ $payment->customer->name }}</td>
                 <td>{{ $payment->note ?? 'Payment received' }}</td>
                 <td>{{ number_format($payment->amount, 2) }}</td>

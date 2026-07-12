@@ -10,7 +10,20 @@ class PackageController extends Controller
     public function index(Request $request)
     {
         return view('packages.index', [
-            'packages' => InternetPackage::latest()
+            'packages' => InternetPackage::query()
+                ->when($request->filled('search'), function ($query) use ($request) {
+                    $search = trim((string) $request->query('search'));
+                    $query->where(function ($query) use ($search) {
+                        $query->where('name', 'like', "%{$search}%")
+                            ->orWhere('speed', 'like', "%{$search}%")
+                            ->orWhere('mikrotik_profile', 'like', "%{$search}%")
+                            ->orWhere('description', 'like', "%{$search}%");
+                    });
+                })
+                ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))
+                ->when($request->filled('min_price'), fn ($query) => $query->where('monthly_price', '>=', (float) $request->query('min_price')))
+                ->when($request->filled('max_price'), fn ($query) => $query->where('monthly_price', '<=', (float) $request->query('max_price')))
+                ->latest()
                 ->paginate($this->perPage($request))
                 ->appends($request->query()),
         ]);

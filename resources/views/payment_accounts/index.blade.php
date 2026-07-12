@@ -37,6 +37,13 @@
     @endforeach
 </div>
 
+<form method="get" class="card form-grid" style="margin-bottom:16px">
+    <div><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Account name or number"></div>
+    <div><label>Method</label><select name="payment_method"><option value="">All methods</option>@foreach(['bkash'=>'bKash','nagad'=>'Nagad','bank'=>'Bank'] as $value=>$label)<option value="{{ $value }}" @selected(request('payment_method') === $value)>{{ $label }}</option>@endforeach</select></div>
+    <div><label>Status</label><select name="status"><option value="">All statuses</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>
+    <div class="actions" style="align-items:end"><button class="btn secondary" type="submit">Search</button><a class="btn light" href="{{ route('payment-accounts.index') }}">Reset</a></div>
+</form>
+
 @include('partials.per_page')
 
 <table>

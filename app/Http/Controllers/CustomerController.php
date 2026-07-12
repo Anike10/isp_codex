@@ -37,11 +37,20 @@ class CustomerController extends Controller
                         ->orWhere('mikrotik_username', 'like', "%{$search}%");
                 });
             })
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))
+            ->when($request->query('role') === 'customer', fn ($query) => $query->where('is_customer', true))
+            ->when($request->query('role') === 'vendor', fn ($query) => $query->where('is_vendor', true))
+            ->when($request->filled('package_id'), fn ($query) => $query->whereHas('activeSubscription', fn ($query) => $query->where('internet_package_id', $request->integer('package_id'))))
+            ->when($request->query('due_state') === 'due', fn ($query) => $query->whereHas('invoices', fn ($query) => $query->where('due_amount', '>', 0)))
+            ->when($request->query('due_state') === 'advance', fn ($query) => $query->where('account_balance', '>', 0))
             ->latest()
             ->paginate($this->perPage($request))
             ->appends($request->query());
 
-        return view('customers.index', compact('customers'));
+        return view('customers.index', [
+            'customers' => $customers,
+            'packages' => InternetPackage::where('status', 'active')->orderBy('name')->get(),
+        ]);
     }
 
     public function create()

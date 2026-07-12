@@ -13,6 +13,7 @@ use App\Models\Quotation;
 use App\Models\Subscription;
 use App\Services\BillingService;
 use App\Services\InventoryService;
+use App\Services\PaymentService;
 use App\Support\SerialNumberParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -78,8 +79,12 @@ class InvoiceController extends Controller
             ->latest()
             ->paginate($this->perPage($request))
             ->appends($request->query());
+        $paymentAccounts = PaymentAccount::where('status', 'active')
+            ->orderBy('payment_method')
+            ->orderBy('account_name')
+            ->get();
 
-        return view('invoices.index', compact('invoices', 'invoiceSummary', 'generatePreviewCount', 'generationPreviewMonth'));
+        return view('invoices.index', compact('invoices', 'invoiceSummary', 'generatePreviewCount', 'generationPreviewMonth', 'paymentAccounts'));
     }
 
     public function create()
@@ -259,6 +264,63 @@ class InvoiceController extends Controller
             ->update(['finalized_at' => now()]);
 
         return back()->with('success', $finalizedCount.' selected invoice(s) finalized. Editing is now locked.');
+    }
+
+    public function paySelected(Request $request, PaymentService $paymentService)
+    {
+        $data = $request->validate([
+            'invoice_ids' => ['required', 'array', 'min:1'],
+            'invoice_ids.*' => ['integer', 'exists:invoices,id'],
+            'amount' => ['required', 'numeric', 'min:1'],
+            'payment_method' => ['required', 'in:cash,bkash,nagad,bank'],
+            'payment_account_id' => ['nullable', 'exists:payment_accounts,id'],
+            'payment_date' => ['required', 'date'],
+            'note' => ['nullable', 'string'],
+        ]);
+
+        $invoiceIds = array_values(array_unique(array_map('intval', $data['invoice_ids'])));
+        $invoices = Invoice::with('customer')->whereIn('id', $invoiceIds)->get();
+
+        if ($invoices->isEmpty()) {
+            return back()->withErrors(['invoice_ids' => 'Please select at least one invoice.']);
+        }
+
+        if ($invoices->pluck('customer_id')->unique()->count() !== 1) {
+            return back()->withInput()->withErrors(['invoice_ids' => 'Payment for selected invoices is allowed only when all selected invoices belong to one party.']);
+        }
+
+        $dueTotal = round((float) $invoices->sum('due_amount'), 2);
+
+        if ($dueTotal <= 0) {
+            return back()->withInput()->withErrors(['invoice_ids' => 'Selected invoices have no due amount to pay.']);
+        }
+
+        if (round((float) $data['amount'], 2) !== $dueTotal) {
+            return back()->withInput()->withErrors(['amount' => 'Payment amount must match the selected invoice due total.']);
+        }
+
+        if ($data['payment_method'] === 'cash') {
+            $data['payment_account_id'] = null;
+        } else {
+            $account = PaymentAccount::where('id', $data['payment_account_id'] ?? null)
+                ->where('payment_method', $data['payment_method'])
+                ->where('status', 'active')
+                ->first();
+
+            if (! $account) {
+                return back()->withInput()->withErrors(['payment_account_id' => 'Please select a valid account for this payment method.']);
+            }
+
+            $data['payment_account_id'] = $account->id;
+        }
+
+        try {
+            $paymentService->recordPaymentForInvoices($invoices->first()->customer, $invoiceIds, $data);
+        } catch (InvalidArgumentException $exception) {
+            return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
+        }
+
+        return back()->with('success', $invoices->count().' selected invoice(s) paid with one payment.');
     }
 
     public function copyForNextMonth(Invoice $invoice)
@@ -639,7 +701,7 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice)
     {
-        $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'items']);
+        $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items']);
 
         $paymentAccounts = collect();
 

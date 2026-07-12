@@ -27,6 +27,9 @@ class QuotationController extends Controller
                 });
             })
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))
+            ->when($request->filled('from'), fn ($query) => $query->whereDate('quotation_date', '>=', $request->date('from')))
+            ->when($request->filled('to'), fn ($query) => $query->whereDate('quotation_date', '<=', $request->date('to')))
+            ->when($request->filled('valid_until'), fn ($query) => $query->whereDate('valid_until', '<=', $request->date('valid_until')))
             ->latest()
             ->paginate($this->perPage($request))
             ->appends($request->query());

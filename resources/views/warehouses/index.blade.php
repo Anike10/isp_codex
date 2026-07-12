@@ -17,12 +17,18 @@
     <div class="actions" style="align-items:end"><button class="btn" type="submit">Add Warehouse</button></div>
 </form>
 
+<form method="get" class="card form-grid" style="margin-bottom:16px">
+    <div><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Warehouse name, code, or address"></div>
+    <div><label>Status</label><select name="status"><option value="">All statuses</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>
+    <div class="actions" style="align-items:end"><button class="btn secondary" type="submit">Search</button><a class="btn light" href="{{ route('warehouses.index') }}">Reset</a></div>
+</form>
+
 <table>
     <thead><tr><th>Warehouse</th><th>Code</th><th>Address</th><th>Products in Stock</th><th>Total Units</th><th>Status</th><th>Action</th></tr></thead>
     <tbody>
     @foreach ($warehouses as $warehouse)
-        <tr>
-            <td>{{ $warehouse->name }} @if($warehouse->is_default)<span class="badge">Default</span>@endif</td>
+        <tr data-href="{{ route('warehouses.show', $warehouse) }}">
+            <td><a href="{{ route('warehouses.show', $warehouse) }}">{{ $warehouse->name }}</a> @if($warehouse->is_default)<span class="badge">Default</span>@endif</td>
             <td>{{ $warehouse->code }}</td>
             <td>{{ $warehouse->address ?: 'N/A' }}</td>
             <td>{{ $warehouse->stocked_products_count }}</td>

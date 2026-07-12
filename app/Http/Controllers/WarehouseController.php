@@ -15,11 +15,20 @@ use InvalidArgumentException;
 
 class WarehouseController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $warehouses = Warehouse::query()
             ->withSum('stocks', 'quantity')
             ->withCount(['stocks as stocked_products_count' => fn ($query) => $query->where('quantity', '>', 0)])
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $search = trim((string) $request->query('search'));
+                $query->where(function ($query) use ($search) {
+                    $query->where('name', 'like', "%{$search}%")
+                        ->orWhere('code', 'like', "%{$search}%")
+                        ->orWhere('address', 'like', "%{$search}%");
+                });
+            })
+            ->when($request->filled('status'), fn ($query) => $query->where('is_active', $request->query('status') === 'active'))
             ->orderByDesc('is_default')
             ->orderBy('name')
             ->get();
@@ -152,6 +161,23 @@ class WarehouseController extends Controller
             ->when($request->filled('warehouse_id'), fn ($query) => $query->where('warehouse_id', $request->integer('warehouse_id')))
             ->when($request->filled('product_id'), fn ($query) => $query->where('product_id', $request->integer('product_id')))
             ->when($request->filled('type'), fn ($query) => $query->where('type', $request->query('type')))
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $search = trim((string) $request->query('search'));
+                $query->where(function ($query) use ($search) {
+                    $query->where('reference_no', 'like', "%{$search}%")
+                        ->orWhere('reason', 'like', "%{$search}%")
+                        ->orWhere('serial_numbers', 'like', "%{$search}%")
+                        ->orWhereHas('product', fn ($query) => $query
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('sku', 'like', "%{$search}%"))
+                        ->orWhereHas('warehouse', fn ($query) => $query
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('code', 'like', "%{$search}%"))
+                        ->orWhereHas('relatedWarehouse', fn ($query) => $query
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('code', 'like', "%{$search}%"));
+                });
+            })
             ->when($request->filled('date_from'), fn ($query) => $query->whereDate('created_at', '>=', $request->date('date_from')))
             ->when($request->filled('date_to'), fn ($query) => $query->whereDate('created_at', '<=', $request->date('date_to')))
             ->latest()

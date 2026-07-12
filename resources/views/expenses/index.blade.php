@@ -2,6 +2,7 @@
 
 @section('content')
 @php
+    $canOpenPaymentAccountLedger = auth()->user()?->hasPermission('manage_payment_accounts');
     $methodLabels = [
         'cash' => 'Cash',
         'bkash' => 'bKash',
@@ -26,6 +27,7 @@
 </div>
 
 <form method="get" class="card actions" style="margin-bottom:16px">
+    <input name="search" value="{{ request('search') }}" placeholder="Search reference, note, employee, account">
     <select name="expense_type">
         <option value="">All types</option>
         @foreach ($types as $value => $label)
@@ -81,7 +83,17 @@
                 <td>
                     {{ $methodLabels[$expense->payment_method] ?? ucfirst($expense->payment_method) }}
                     @if ($expense->account)
-                        <div class="muted">{{ $expense->account->account_name }}</div>
+                        @if ($canOpenPaymentAccountLedger)
+                            <div><a class="muted" href="{{ route('payment-accounts.show', $expense->account) }}">{{ $expense->account->account_name }}</a></div>
+                        @else
+                            <div class="muted">{{ $expense->account->account_name }}</div>
+                        @endif
+                    @elseif ($expense->payment_method === 'cash')
+                        @if ($canOpenPaymentAccountLedger)
+                            <div><a class="muted" href="{{ route('payment-accounts.cash-ledger') }}">Cash Ledger</a></div>
+                        @else
+                            <div class="muted">Cash</div>
+                        @endif
                     @endif
                 </td>
                 <td>{{ number_format($expense->amount, 2) }}</td>

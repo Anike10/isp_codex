@@ -4,13 +4,31 @@
     @forelse($movements as $movement)
         <tr>
             <td>{{ $movement->created_at?->format('Y-m-d H:i') }}</td>
-            <td>{{ $movement->product?->name ?? 'Deleted product' }}</td>
-            <td>{{ $movement->warehouse?->name ?? 'Legacy / N/A' }}</td>
+            <td>
+                @if ($movement->product)
+                    <a href="{{ route('products.show', $movement->product) }}">{{ $movement->product->name }}</a>
+                @else
+                    Deleted product
+                @endif
+            </td>
+            <td>
+                @if ($movement->warehouse)
+                    <a href="{{ route('warehouses.show', $movement->warehouse) }}">{{ $movement->warehouse->name }}</a>
+                @else
+                    Legacy / N/A
+                @endif
+            </td>
             <td><span class="badge">{{ str_replace('_', ' ', strtoupper($movement->type)) }}</span></td>
             <td>{{ $movement->quantity }}</td>
             <td>{{ $movement->balance_before ?? 'N/A' }}</td>
             <td>{{ $movement->balance_after ?? 'N/A' }}</td>
-            <td>{{ $movement->relatedWarehouse?->name ?? 'N/A' }}</td>
+            <td>
+                @if ($movement->relatedWarehouse)
+                    <a href="{{ route('warehouses.show', $movement->relatedWarehouse) }}">{{ $movement->relatedWarehouse->name }}</a>
+                @else
+                    N/A
+                @endif
+            </td>
             <td>{{ $movement->serial_numbers ?? 'N/A' }}</td>
             <td>{{ $movement->reference_no ?? 'N/A' }}</td>
             <td>{{ $movement->reason ?? 'N/A' }}</td>

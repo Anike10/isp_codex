@@ -15,9 +15,32 @@ class PaymentController extends Controller
     {
         return view('payments.index', [
             'payments' => Payment::with(['customer', 'invoice', 'account'])
+                ->when($request->filled('search'), function ($query) use ($request) {
+                    $search = trim((string) $request->query('search'));
+                    $query->where(function ($query) use ($search) {
+                        $query->where('note', 'like', "%{$search}%")
+                            ->orWhereHas('customer', fn ($query) => $query
+                                ->where('name', 'like', "%{$search}%")
+                                ->orWhere('phone', 'like', "%{$search}%")
+                                ->orWhere('connection_id', 'like', "%{$search}%"))
+                            ->orWhereHas('invoice', fn ($query) => $query
+                                ->where('invoice_no', 'like', "%{$search}%")
+                                ->orWhere('billing_month', 'like', "%{$search}%"))
+                            ->orWhereHas('account', fn ($query) => $query
+                                ->where('account_name', 'like', "%{$search}%")
+                                ->orWhere('account_number', 'like', "%{$search}%"));
+                    });
+                })
+                ->when($request->filled('payment_method'), fn ($query) => $query->where('payment_method', $request->query('payment_method')))
+                ->when($request->filled('payment_account_id'), fn ($query) => $query->where('payment_account_id', $request->integer('payment_account_id')))
+                ->when($request->filled('from'), fn ($query) => $query->whereDate('payment_date', '>=', $request->date('from')))
+                ->when($request->filled('to'), fn ($query) => $query->whereDate('payment_date', '<=', $request->date('to')))
+                ->when($request->filled('min_amount'), fn ($query) => $query->where('amount', '>=', (float) $request->query('min_amount')))
+                ->when($request->filled('max_amount'), fn ($query) => $query->where('amount', '<=', (float) $request->query('max_amount')))
                 ->latest()
                 ->paginate($this->perPage($request))
                 ->appends($request->query()),
+            'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
         ]);
     }
 
@@ -27,6 +50,13 @@ class PaymentController extends Controller
             'invoices' => Invoice::with('customer')->where('due_amount', '>', 0)->latest()->get(),
             'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
         ]);
+    }
+
+    public function show(Payment $payment)
+    {
+        $payment->load(['customer', 'invoice', 'account', 'allocations.invoice']);
+
+        return view('payments.show', compact('payment'));
     }
 
     public function voucher(Payment $payment)
@@ -109,7 +139,33 @@ class PaymentController extends Controller
 
     private function paymentVoucherData(Payment $payment): array
     {
-        $payment->loadMissing(['customer', 'invoice', 'account']);
+        $payment->loadMissing(['customer', 'invoice', 'account', 'allocations.invoice']);
+        $canOpenInvoices = request()->user()?->hasPermission('manage_invoices');
+
+        $allocations = $payment->allocations
+            ->sortBy([
+                ['invoice.due_date', 'asc'],
+                ['invoice.id', 'asc'],
+            ])
+            ->map(fn ($allocation): array => [
+                'invoice_no' => $allocation->invoice?->invoice_no ?? 'N/A',
+                'bill_month' => $allocation->invoice?->formatted_billing_month ?? '',
+                'amount' => (float) $allocation->amount,
+                'url' => $canOpenInvoices && $allocation->invoice ? route('invoices.show', $allocation->invoice) : null,
+            ])
+            ->values();
+
+        $secondaryValue = $payment->invoice?->invoice_no ?? 'N/A';
+        $billMonth = $payment->invoice?->formatted_billing_month ?? '';
+
+        if ($allocations->count() > 1) {
+            $secondaryValue = $allocations->count().' invoices';
+            $billMonth = $allocations
+                ->pluck('bill_month')
+                ->filter()
+                ->unique()
+                ->implode(', ');
+        }
 
         return [
             'title' => 'Money Receipt',
@@ -120,13 +176,14 @@ class PaymentController extends Controller
             'paid_to_label' => 'Received From',
             'paid_to' => $payment->customer->name,
             'secondary_label' => 'Invoice',
-            'secondary_value' => $payment->invoice->invoice_no,
-            'bill_month' => $payment->invoice->formatted_billing_month,
+            'secondary_value' => $secondaryValue,
+            'bill_month' => $billMonth,
             'method' => ucfirst($payment->payment_method),
             'account' => $payment->account ? $payment->account->account_name.' - '.$payment->account->account_number : 'Cash',
             'reference' => 'Payment #'.$payment->id,
             'note' => $payment->note ?: 'Party payment received.',
-            'back_url' => route('payments.index'),
+            'allocations' => $allocations->all(),
+            'back_url' => route('payments.show', $payment),
         ];
     }
 }

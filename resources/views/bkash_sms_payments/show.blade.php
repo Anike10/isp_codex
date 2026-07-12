@@ -1,6 +1,10 @@
 @extends('layouts.app')
 
 @section('content')
+@php
+    $canOpenCustomers = auth()->user()?->hasPermission('manage_customers');
+    $canOpenInvoices = auth()->user()?->hasPermission('manage_invoices');
+@endphp
 <div class="topbar">
     <div>
         <h1>bKash SMS Details</h1>
@@ -51,14 +55,22 @@
         <h2>Updates</h2>
         <p><strong>Party:</strong>
             @if ($bkashSmsPayment->customer)
-                <a href="{{ route('customers.show', $bkashSmsPayment->customer) }}">{{ $bkashSmsPayment->customer->name }} - {{ $bkashSmsPayment->customer->connection_id }}</a>
+                @if ($canOpenCustomers)
+                    <a href="{{ route('customers.show', $bkashSmsPayment->customer) }}">{{ $bkashSmsPayment->customer->name }} - {{ $bkashSmsPayment->customer->connection_id }}</a>
+                @else
+                    {{ $bkashSmsPayment->customer->name }} - {{ $bkashSmsPayment->customer->connection_id }}
+                @endif
             @else
                 N/A
             @endif
         </p>
         <p><strong>Invoice:</strong>
             @if ($bkashSmsPayment->invoice)
-                <a href="{{ route('invoices.show', $bkashSmsPayment->invoice) }}">{{ $bkashSmsPayment->invoice->invoice_no }}</a>
+                @if ($canOpenInvoices)
+                    <a href="{{ route('invoices.show', $bkashSmsPayment->invoice) }}">{{ $bkashSmsPayment->invoice->invoice_no }}</a>
+                @else
+                    {{ $bkashSmsPayment->invoice->invoice_no }}
+                @endif
             @else
                 N/A
             @endif

@@ -127,6 +127,16 @@ class ServiceAndWarrantyTest extends TestCase
             'resolution_note' => 'Replacement provided',
         ])->assertRedirect();
 
+        $this->actingAs($user)
+            ->get(route('warranty-claims.show', $claim))
+            ->assertOk()
+            ->assertSee('Work History')
+            ->assertSee('Claim Created')
+            ->assertSee('Replacement Assigned')
+            ->assertSee('Old Serial')
+            ->assertSee('New Serial')
+            ->assertSee('Replacement provided');
+
         $this->assertDatabaseHas('warranty_claims', [
             'id' => $claim->id,
             'status' => 'replaced',
@@ -184,5 +194,111 @@ class ServiceAndWarrantyTest extends TestCase
             ->assertSee('SN-LOOKUP-001')
             ->assertSee('Lookup Customer')
             ->assertSee('Lookup Router');
+    }
+
+    public function test_warranty_manager_can_open_claim_index_and_created_claim_without_view_permission(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_warranty_claims')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Manager Warranty Customer',
+            'phone' => '01740000000',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => false,
+        ]);
+        $product = Product::create([
+            'name' => 'Manager Router',
+            'sku' => 'MGR-ROUTER',
+            'product_type' => 'serial_stock',
+            'track_inventory' => true,
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 1,
+        ]);
+        $serial = ProductSerial::create([
+            'product_id' => $product->id,
+            'customer_id' => $customer->id,
+            'serial_number' => 'SN-MGR-001',
+            'warranty_until' => now()->addYear()->toDateString(),
+            'sold_at' => now(),
+            'status' => 'sold',
+        ]);
+
+        $this->actingAs($user)->get(route('warranty-claims.index'))->assertOk();
+
+        $this->actingAs($user)->post(route('warranty-claims.store'), [
+            'customer_id' => $customer->id,
+            'product_serial_id' => $serial->id,
+            'claim_date' => now()->toDateString(),
+            'problem_description' => 'Adapter issue',
+            'action_type' => 'repair',
+        ])->assertRedirect();
+
+        $claim = WarrantyClaim::where('product_serial_id', $serial->id)->firstOrFail();
+
+        $this->actingAs($user)
+            ->get(route('warranty-claims.show', $claim))
+            ->assertOk()
+            ->assertSee($claim->claim_no);
+    }
+
+    public function test_repair_intake_can_create_service_invoice_for_accounting(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_warranty_claims')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Repair Customer',
+            'phone' => '01750000000',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => false,
+        ]);
+        $product = Product::create([
+            'name' => 'Repair Router',
+            'sku' => 'REP-ROUTER',
+            'product_type' => 'service',
+            'track_inventory' => false,
+            'track_serial_numbers' => false,
+            'purchase_price' => 0,
+            'sale_price' => 800,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 0,
+        ]);
+
+        $this->actingAs($user)->post(route('warranty-claims.store'), [
+            'customer_id' => $customer->id,
+            'product_id' => $product->id,
+            'claim_date' => now()->toDateString(),
+            'problem_description' => 'Firmware repair and service',
+            'action_type' => 'repair',
+            'service_charge' => 800,
+            'create_service_invoice' => '1',
+            'service_note' => 'Router repair service charge',
+        ])->assertRedirect();
+
+        $claim = WarrantyClaim::where('customer_id', $customer->id)->firstOrFail();
+        $invoice = Invoice::findOrFail($claim->service_invoice_id);
+
+        $this->assertSame(800.0, (float) $claim->service_charge);
+        $this->assertSame(800.0, (float) $invoice->due_amount);
+        $this->assertSame('unpaid', $invoice->status);
+        $this->assertDatabaseHas('invoice_items', [
+            'invoice_id' => $invoice->id,
+            'product_name' => 'Repair/service charge - '.$claim->claim_no,
+            'total' => 800,
+            'service_note' => 'Router repair service charge',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('warranty-claims.show', $claim))
+            ->assertOk()
+            ->assertSee('Service Charge')
+            ->assertSee('Invoice '.$invoice->invoice_no)
+            ->assertSee('Accounting Added');
     }
 }

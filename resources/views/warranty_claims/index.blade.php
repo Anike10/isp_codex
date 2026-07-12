@@ -3,7 +3,7 @@
 @section('content')
 <div class="topbar">
     <div><h1>Warranty Claims</h1><div class="muted">Track customer claims, repairs, replacements, vendor returns, and paid service.</div></div>
-    @if (auth()->user()?->hasPermission('manage_warranty_claims'))
+    @if (auth()->user()?->hasPermission('manage_warranty_claims') || auth()->user()?->hasPermission('manage_products'))
         <a class="btn" href="{{ route('warranty-claims.create') }}">New Claim</a>
     @endif
 </div>
@@ -29,7 +29,7 @@
 
 <table>
     <thead>
-        <tr><th>Claim</th><th>Customer</th><th>Product</th><th>Serial</th><th>Warranty</th><th>Status</th><th>Date</th></tr>
+        <tr><th>Claim</th><th>Customer</th><th>Product</th><th>Serial</th><th>Warranty</th><th>Status</th><th>Service Amount</th><th>Date</th></tr>
     </thead>
     <tbody>
     @forelse ($claims as $claim)
@@ -40,10 +40,18 @@
             <td>{{ $claim->productSerial?->serial_number ?? 'N/A' }}</td>
             <td><span class="badge {{ $claim->warranty_status === 'in_warranty' ? 'active' : ($claim->warranty_status === 'expired' ? 'due' : 'inactive') }}">{{ str_replace('_', ' ', $claim->warranty_status) }}</span></td>
             <td><span class="badge {{ in_array($claim->status, ['closed', 'delivered', 'replaced'], true) ? 'active' : ($claim->status === 'rejected' ? 'failed' : 'pending') }}">{{ str_replace('_', ' ', $claim->status) }}</span></td>
+            <td>
+                {{ number_format($claim->service_charge, 2) }}
+                @if ($claim->serviceInvoice)
+                    <div class="muted">{{ $claim->serviceInvoice->invoice_no }} - {{ $claim->serviceInvoice->status }}</div>
+                @elseif ((float) $claim->service_charge > 0)
+                    <div class="muted">Estimate only</div>
+                @endif
+            </td>
             <td>{{ $claim->claim_date?->format('Y-m-d') }}</td>
         </tr>
     @empty
-        <tr><td colspan="7">No warranty claims found.</td></tr>
+        <tr><td colspan="8">No warranty claims found.</td></tr>
     @endforelse
     </tbody>
 </table>

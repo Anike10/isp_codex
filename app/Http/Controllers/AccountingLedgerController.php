@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CustomerBalanceTransaction;
 use App\Models\Customer;
+use App\Models\CustomerBalanceTransaction;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -26,6 +26,11 @@ class AccountingLedgerController extends Controller
             abort(403, 'You do not have permission to access the full accounting ledger.');
         }
 
+        $canOpenInvoices = $request->user()?->hasPermission('manage_invoices');
+        $canOpenPayments = $request->user()?->hasPermission('manage_payments');
+        $canOpenCustomers = $request->user()?->hasPermission('manage_customers');
+        $canOpenExpenses = $request->user()?->hasPermission('manage_expenses');
+
         $invoices = Invoice::with('customer')
             ->when($customerId, fn ($query) => $query->where('customer_id', $customerId))
             ->when($from, fn ($query) => $query->whereDate('created_at', '>=', $from))
@@ -39,7 +44,7 @@ class AccountingLedgerController extends Controller
                 'debit' => (float) $invoice->total,
                 'credit' => 0,
                 'note' => ucfirst($invoice->invoice_type ?? 'service').' bill',
-                'url' => route('invoices.show', $invoice),
+                'url' => $canOpenInvoices ? route('invoices.show', $invoice) : null,
             ]);
 
         $payments = Payment::with(['customer', 'invoice', 'account', 'allocations.invoice'])
@@ -47,7 +52,7 @@ class AccountingLedgerController extends Controller
             ->when($from, fn ($query) => $query->whereDate('payment_date', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('payment_date', '<=', $to))
             ->get()
-            ->map(function (Payment $payment) {
+            ->map(function (Payment $payment) use ($canOpenInvoices, $canOpenPayments) {
                 $allocationSummary = $payment->allocations
                     ->map(fn ($allocation) => $allocation->invoice->invoice_no.' '.number_format((float) $allocation->amount, 2))
                     ->join(', ');
@@ -62,7 +67,9 @@ class AccountingLedgerController extends Controller
                     'note' => $payment->payment_method
                         .($payment->account ? ' - '.$payment->account->account_name : '')
                         .($allocationSummary ? ' | Allocated: '.$allocationSummary : ' | Added to advance'),
-                    'url' => route('invoices.show', $payment->invoice),
+                    'url' => $canOpenPayments
+                        ? route('payments.show', $payment)
+                        : ($canOpenInvoices ? route('invoices.show', $payment->invoice) : null),
                 ];
             });
 
@@ -77,7 +84,7 @@ class AccountingLedgerController extends Controller
             ->when($from, fn ($query) => $query->whereDate('transaction_date', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('transaction_date', '<=', $to))
             ->get()
-            ->map(function (CustomerBalanceTransaction $transaction) {
+            ->map(function (CustomerBalanceTransaction $transaction) use ($canOpenCustomers) {
                 $isCredit = $transaction->direction === 'credit';
 
                 return [
@@ -90,7 +97,7 @@ class AccountingLedgerController extends Controller
                     'note' => ($transaction->payment_method ?: 'advance')
                         .($transaction->account ? ' - '.$transaction->account->account_name : '')
                         .' | '.($isCredit ? 'Added to party balance' : 'Used from party balance: '.number_format((float) $transaction->amount, 2)),
-                    'url' => route('customers.show', $transaction->customer),
+                    'url' => $canOpenCustomers ? route('customers.show', $transaction->customer) : null,
                 ];
             });
 
@@ -109,7 +116,7 @@ class AccountingLedgerController extends Controller
                 'note' => (Expense::CATEGORIES[$expense->category] ?? ucfirst($expense->category))
                     .' | '.$expense->payment_method
                     .($expense->account ? ' - '.$expense->account->account_name : ''),
-                'url' => route('expenses.show', $expense),
+                'url' => $canOpenExpenses ? route('expenses.show', $expense) : null,
             ]);
 
         $entries = $invoices->concat($payments)->concat($balanceEntries)->concat($expenses)->sortBy('date')->values();

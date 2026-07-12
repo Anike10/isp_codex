@@ -73,11 +73,14 @@ Route::middleware('auth')->group(function () {
     Route::post('invoices/finalize-selected', [InvoiceController::class, 'finalizeSelected'])
         ->middleware('permission:finalize_invoices')
         ->name('invoices.finalize-selected');
+    Route::post('invoices/pay-selected', [InvoiceController::class, 'paySelected'])
+        ->middleware('permission:manage_payments')
+        ->name('invoices.pay-selected');
 
     Route::middleware('permission:manage_payments')->group(function () {
         Route::get('payments/{payment}/voucher', [PaymentController::class, 'voucher'])->name('payments.voucher');
         Route::get('payments/{payment}/thermal-voucher', [PaymentController::class, 'thermalVoucher'])->name('payments.thermal-voucher');
-        Route::resource('payments', PaymentController::class)->only(['index', 'create', 'store']);
+        Route::resource('payments', PaymentController::class)->only(['index', 'show', 'create', 'store']);
         Route::get('bkash-sms-payments', [BkashSmsPaymentController::class, 'index'])->name('bkash-sms-payments.index');
         Route::get('bkash-sms-payments/create', [BkashSmsPaymentController::class, 'create'])->name('bkash-sms-payments.create');
         Route::post('bkash-sms-payments', [BkashSmsPaymentController::class, 'manualStore'])->name('bkash-sms-payments.store');
@@ -148,7 +151,7 @@ Route::middleware('auth')->group(function () {
         Route::post('products/{product}/stock', [ProductController::class, 'moveStock'])->name('products.stock');
     });
 
-    Route::middleware('permission:view_warranty_claims,manage_products')->group(function () {
+    Route::middleware('permission:view_warranty_claims,manage_warranty_claims,manage_products')->group(function () {
         Route::get('warranty-claims', [WarrantyClaimController::class, 'index'])->name('warranty-claims.index');
     });
 
@@ -161,7 +164,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('warranty-claims/{warrantyClaim}', [WarrantyClaimController::class, 'show'])
-        ->middleware('permission:view_warranty_claims,manage_products')
+        ->middleware('permission:view_warranty_claims,manage_warranty_claims,manage_products')
         ->name('warranty-claims.show');
 
     Route::middleware('permission:manage_users')->group(function () {

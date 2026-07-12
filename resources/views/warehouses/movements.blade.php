@@ -10,6 +10,7 @@
     <div><label>Warehouse</label><select name="warehouse_id"><option value="">All</option>@foreach($warehouses as $warehouse)<option value="{{ $warehouse->id }}" @selected((int)request('warehouse_id') === $warehouse->id)>{{ $warehouse->name }}</option>@endforeach</select></div>
     <div><label>Product</label><select name="product_id"><option value="">All</option>@foreach($products as $product)<option value="{{ $product->id }}" @selected((int)request('product_id') === $product->id)>{{ $product->name }} ({{ $product->sku }})</option>@endforeach</select></div>
     <div><label>Type</label><select name="type"><option value="">All</option>@foreach(['in'=>'In','out'=>'Out','use'=>'Own Use','transfer_in'=>'Transfer In','transfer_out'=>'Transfer Out'] as $value=>$label)<option value="{{ $value }}" @selected(request('type') === $value)>{{ $label }}</option>@endforeach</select></div>
+    <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Product, SKU, warehouse, reference, serial, or reason"></div>
     <div><label>From Date</label><input type="date" name="date_from" value="{{ request('date_from') }}"></div>
     <div><label>To Date</label><input type="date" name="date_to" value="{{ request('date_to') }}"></div>
     <div class="actions"><button class="btn secondary" type="submit">Filter</button><a class="btn light" href="{{ route('warehouse-movements.index') }}">Reset</a></div>

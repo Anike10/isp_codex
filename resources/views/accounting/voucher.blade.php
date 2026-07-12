@@ -31,6 +31,10 @@
         .muted { color:var(--muted); }
         .strong { font-weight:700; }
         .note { margin-top:12px; border:1px solid var(--line); border-radius:6px; padding:10px; min-height:70px; line-height:1.6; }
+        .allocation-table { width:100%; border-collapse:collapse; margin-top:12px; }
+        .allocation-table th, .allocation-table td { border:1px solid var(--line); padding:7px 8px; text-align:left; }
+        .allocation-table th { background:var(--soft); color:#0b3f31; font-size:12px; text-transform:uppercase; }
+        .allocation-table td:last-child, .allocation-table th:last-child { text-align:right; }
         .signatures { display:grid; grid-template-columns:1fr 1fr; gap:36px; margin-top:42mm; }
         .signature { border-top:1px solid var(--ink); padding-top:8px; text-align:center; font-weight:700; }
         @media print {
@@ -117,6 +121,29 @@
         <div class="strong">Note</div>
         <div>{{ $voucher['note'] }}</div>
     </div>
+
+    @if (! empty($voucher['allocations']))
+        <table class="allocation-table">
+            <thead>
+                <tr><th>Invoice</th><th>Bill Month</th><th>Allocated Amount</th></tr>
+            </thead>
+            <tbody>
+                @foreach ($voucher['allocations'] as $allocation)
+                    <tr>
+                        <td>
+                            @if (! empty($allocation['url']))
+                                <a href="{{ $allocation['url'] }}">{{ $allocation['invoice_no'] }}</a>
+                            @else
+                                {{ $allocation['invoice_no'] }}
+                            @endif
+                        </td>
+                        <td>{{ $allocation['bill_month'] }}</td>
+                        <td>BDT {{ number_format($allocation['amount'], 2) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
 
     <div class="signatures">
         <div class="signature">Prepared By</div>

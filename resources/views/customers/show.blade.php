@@ -1,6 +1,12 @@
 @extends('layouts.app')
 
 @section('content')
+@php
+    $canOpenInvoices = auth()->user()?->hasPermission('manage_invoices');
+    $canOpenWarrantyClaims = auth()->user()?->hasPermission('view_warranty_claims')
+        || auth()->user()?->hasPermission('manage_warranty_claims')
+        || auth()->user()?->hasPermission('manage_products');
+@endphp
 <div class="topbar">
     <div><h1>{{ $customer->name }}</h1><div class="muted">{{ $customer->connection_id ?: 'Product-only party' }} - {{ $customer->phone }}</div></div>
     <div class="actions">
@@ -97,12 +103,24 @@
             <tr>
                 <td>{{ $serial->product?->name ?? 'N/A' }}</td>
                 <td><span class="badge">{{ $serial->serial_number }}</span></td>
-                <td>@if ($serial->invoice)<a href="{{ route('invoices.show', $serial->invoice) }}">{{ $serial->invoice->invoice_no }}</a>@else N/A @endif</td>
+                <td>
+                    @if ($serial->invoice)
+                        @if ($canOpenInvoices)
+                            <a href="{{ route('invoices.show', $serial->invoice) }}">{{ $serial->invoice->invoice_no }}</a>
+                        @else
+                            {{ $serial->invoice->invoice_no }}
+                        @endif
+                    @else
+                        N/A
+                    @endif
+                </td>
                 <td>{{ $serial->sold_at?->format('Y-m-d') ?? 'N/A' }}</td>
                 <td>{{ $warrantyLabel }}</td>
                 <td>
-                    @if ($openClaim)
+                    @if ($openClaim && $canOpenWarrantyClaims)
                         <a class="badge pending" href="{{ route('warranty-claims.show', $openClaim) }}">{{ str_replace('_', ' ', $openClaim->status) }}</a>
+                    @elseif ($openClaim)
+                        <span class="badge pending">{{ str_replace('_', ' ', $openClaim->status) }}</span>
                     @else
                         {{ str_replace('_', ' ', $serial->status) }}
                     @endif
@@ -110,7 +128,7 @@
                 <td>
                     @if (auth()->user()?->hasPermission('manage_warranty_claims') && ! $openClaim)
                         <a class="btn light" href="{{ route('warranty-claims.create', ['product_serial_id' => $serial->id]) }}">Warranty Claim</a>
-                    @elseif ($openClaim)
+                    @elseif ($openClaim && $canOpenWarrantyClaims)
                         <a class="btn light" href="{{ route('warranty-claims.show', $openClaim) }}">View Claim</a>
                     @else
                         N/A
@@ -131,7 +149,13 @@
         <tbody>
         @forelse ($customer->warrantyClaims as $claim)
             <tr>
-                <td><a href="{{ route('warranty-claims.show', $claim) }}">{{ $claim->claim_no }}</a></td>
+                <td>
+                    @if ($canOpenWarrantyClaims)
+                        <a href="{{ route('warranty-claims.show', $claim) }}">{{ $claim->claim_no }}</a>
+                    @else
+                        {{ $claim->claim_no }}
+                    @endif
+                </td>
                 <td>{{ $claim->product?->name ?? 'Manual claim' }}</td>
                 <td>{{ $claim->productSerial?->serial_number ?? 'N/A' }}</td>
                 <td><span class="badge pending">{{ str_replace('_', ' ', $claim->status) }}</span></td>
@@ -151,7 +175,13 @@
         <tbody>
         @forelse ($customer->invoices as $invoice)
             <tr>
-                <td><a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a></td>
+                <td>
+                    @if ($canOpenInvoices)
+                        <a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a>
+                    @else
+                        {{ $invoice->invoice_no }}
+                    @endif
+                </td>
                 <td>{{ $invoice->formatted_billing_month }}</td>
                 <td>{{ number_format($invoice->total, 2) }}</td>
                 <td>{{ number_format($invoice->due_amount, 2) }}</td>

@@ -21,6 +21,10 @@ class ProductController extends Controller
                 $categoryIds = $this->categoryAndDescendantIds((int) $request->query('product_category_id'));
                 $query->whereIn('product_category_id', $categoryIds);
             })
+            ->when($request->query('stock_state') === 'low', fn ($query) => $query->whereColumn('stock_quantity', '<=', 'low_stock_alert')->where('track_inventory', true))
+            ->when($request->query('stock_state') === 'out', fn ($query) => $query->where('stock_quantity', '<=', 0)->where('track_inventory', true))
+            ->when($request->query('stock_state') === 'tracked', fn ($query) => $query->where('track_inventory', true))
+            ->when($request->query('stock_state') === 'serial', fn ($query) => $query->where('track_serial_numbers', true))
             ->when($request->filled('search'), function ($query) use ($request): void {
                 $search = trim((string) $request->query('search'));
                 $query->where(function ($query) use ($search): void {

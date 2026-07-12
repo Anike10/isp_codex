@@ -5,6 +5,14 @@
     $canManageInvoices = auth()->user()?->hasPermission('manage_invoices');
     $canFinalizeInvoices = auth()->user()?->hasPermission('finalize_invoices');
     $canRecordPayments = auth()->user()?->hasPermission('manage_payments');
+    $canBulkSelectInvoices = $canFinalizeInvoices || $canRecordPayments;
+    $accountsByMethod = $paymentAccounts
+        ->groupBy('payment_method')
+        ->map(fn ($accounts) => $accounts->map(fn ($account) => [
+            'id' => $account->id,
+            'label' => $account->account_name.' - '.$account->account_number,
+        ])->values())
+        ->toArray();
 @endphp
 
 <style>
@@ -87,6 +95,24 @@
         justify-content: flex-end;
     }
 
+    .invoice-bulk-payment {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(5, minmax(120px, 1fr));
+        margin-top: 12px;
+    }
+
+    .invoice-bulk-payment .full {
+        grid-column: 1 / -1;
+    }
+
+    .bulk-payment-status {
+        align-self: end;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+    }
+
     .invoice-select-cell {
         width: 42px;
         text-align: center;
@@ -106,6 +132,10 @@
         .invoice-bulk-actions {
             align-items: stretch;
             flex-direction: column;
+        }
+
+        .invoice-bulk-payment {
+            grid-template-columns: 1fr;
         }
     }
 </style>
@@ -220,24 +250,70 @@
 @if ($canFinalizeInvoices)
     <form method="post" action="{{ route('invoices.finalize-selected') }}" id="bulkFinalizeForm" onsubmit="return confirm('Finalize all selected draft invoices? You will not be able to edit them after finalizing.');">
         @csrf
+        <div id="bulkFinalizeInvoiceIds"></div>
     </form>
+@endif
+@if ($canRecordPayments)
+    <form method="post" action="{{ route('invoices.pay-selected') }}" id="bulkPaymentForm" onsubmit="return confirm('Record one payment for all selected due invoices?');">
+        @csrf
+        <div id="bulkPaymentInvoiceIds"></div>
+    </form>
+@endif
+@if ($canBulkSelectInvoices)
     <div class="card invoice-bulk-actions">
         <div>
             <strong>Bulk Final</strong>
-            <div class="muted">Select draft invoices from this list, then finalize all selected together.</div>
+            <div class="muted">Select invoices from this list, then finalize drafts or record one payment for one party.</div>
         </div>
         <div class="actions">
             <button class="btn light" type="button" id="selectAllInvoices">Select all</button>
             <button class="btn light" type="button" id="deselectAllInvoices">Deselect all</button>
-            <button class="btn" type="submit" form="bulkFinalizeForm" id="finalizeSelectedInvoices">Final all selected</button>
+            @if ($canFinalizeInvoices)
+                <button class="btn" type="submit" form="bulkFinalizeForm" id="finalizeSelectedInvoices">Final all selected</button>
+            @endif
         </div>
+        @if ($canRecordPayments)
+            <div class="invoice-bulk-payment">
+                <div>
+                    <label>Payment For On</label>
+                    <input type="number" step="0.01" name="amount" id="bulkPaymentAmount" form="bulkPaymentForm" readonly required>
+                </div>
+                <div>
+                    <label>Method</label>
+                    <select name="payment_method" id="bulkPaymentMethod" form="bulkPaymentForm" required>
+                        <option value="cash">Cash</option>
+                        <option value="bkash">bKash</option>
+                        <option value="nagad">Nagad</option>
+                        <option value="bank">Bank</option>
+                    </select>
+                </div>
+                <div id="bulkPaymentAccountWrap">
+                    <label>Account</label>
+                    <select name="payment_account_id" id="bulkPaymentAccount" form="bulkPaymentForm">
+                        <option value="">Select account</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Payment Date</label>
+                    <input type="date" name="payment_date" value="{{ now()->toDateString() }}" form="bulkPaymentForm" required>
+                </div>
+                <div class="bulk-payment-status" id="bulkPaymentStatus">Select due invoices from one party.</div>
+                <div class="full">
+                    <label>Note</label>
+                    <textarea name="note" form="bulkPaymentForm">Bulk payment from selected invoices.</textarea>
+                </div>
+                <div class="full actions">
+                    <button class="btn secondary" type="submit" form="bulkPaymentForm" id="bulkPaymentSubmit">Payment For On</button>
+                </div>
+            </div>
+        @endif
     </div>
 @endif
 
 <table class="invoice-table">
     <thead>
         <tr>
-            @if ($canFinalizeInvoices)
+            @if ($canBulkSelectInvoices)
                 <th class="invoice-select-cell">Select</th>
             @endif
             <th>Invoice</th>
@@ -263,15 +339,16 @@
                 : ($isOverdue ? 'invoice-row-overdue' : ((float) $invoice->due_amount > 0 ? 'invoice-row-due' : ''));
         @endphp
         <tr class="{{ $rowClass }}" data-href="{{ route('invoices.show', $invoice) }}">
-            @if ($canFinalizeInvoices)
+            @if ($canBulkSelectInvoices)
                 <td class="invoice-select-cell">
-                    @if (! $invoice->isFinalized())
+                    @if (! $invoice->isFinalized() || (float) $invoice->due_amount > 0)
                         <input
                             type="checkbox"
-                            name="invoice_ids[]"
                             value="{{ $invoice->id }}"
-                            form="bulkFinalizeForm"
                             class="invoice-select"
+                            data-customer-id="{{ $invoice->customer_id }}"
+                            data-due="{{ (float) $invoice->due_amount }}"
+                            data-finalizable="{{ $invoice->isFinalized() ? '0' : '1' }}"
                             @checked(request('final_state') === 'draft')
                         >
                     @else
@@ -333,38 +410,129 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="{{ $canFinalizeInvoices ? 13 : 12 }}">No invoices found.</td></tr>
+        <tr><td colspan="{{ $canBulkSelectInvoices ? 13 : 12 }}">No invoices found.</td></tr>
     @endforelse
     </tbody>
 </table>
 <div style="margin-top:16px">{{ $invoices->links() }}</div>
-@if ($canFinalizeInvoices)
+@if ($canBulkSelectInvoices)
     <script>
         const invoiceSelects = Array.from(document.querySelectorAll('.invoice-select'));
         const selectAllInvoices = document.getElementById('selectAllInvoices');
         const deselectAllInvoices = document.getElementById('deselectAllInvoices');
         const finalizeSelectedInvoices = document.getElementById('finalizeSelectedInvoices');
+        const bulkFinalizeInvoiceIds = document.getElementById('bulkFinalizeInvoiceIds');
+        const bulkPaymentInvoiceIds = document.getElementById('bulkPaymentInvoiceIds');
+        const bulkPaymentAmount = document.getElementById('bulkPaymentAmount');
+        const bulkPaymentSubmit = document.getElementById('bulkPaymentSubmit');
+        const bulkPaymentStatus = document.getElementById('bulkPaymentStatus');
+        const bulkPaymentMethod = document.getElementById('bulkPaymentMethod');
+        const bulkPaymentAccount = document.getElementById('bulkPaymentAccount');
+        const bulkPaymentAccountWrap = document.getElementById('bulkPaymentAccountWrap');
+        const accountsByMethod = @json($accountsByMethod);
 
         function refreshFinalizeSelectedButton() {
-            const selectedCount = invoiceSelects.filter((input) => input.checked).length;
-            finalizeSelectedInvoices.disabled = selectedCount === 0;
-            finalizeSelectedInvoices.textContent = selectedCount > 0
-                ? 'Final all selected (' + selectedCount + ')'
+            const selectedFinalizable = invoiceSelects.filter((input) => input.checked && input.dataset.finalizable === '1');
+
+            if (bulkFinalizeInvoiceIds) {
+                bulkFinalizeInvoiceIds.innerHTML = '';
+                selectedFinalizable.forEach((input) => {
+                    const hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'invoice_ids[]';
+                    hidden.value = input.value;
+                    bulkFinalizeInvoiceIds.appendChild(hidden);
+                });
+            }
+
+            if (! finalizeSelectedInvoices) {
+                return;
+            }
+
+            finalizeSelectedInvoices.disabled = selectedFinalizable.length === 0;
+            finalizeSelectedInvoices.textContent = selectedFinalizable.length > 0
+                ? 'Final all selected (' + selectedFinalizable.length + ')'
                 : 'Final all selected';
+        }
+
+        function refreshPaymentAccountOptions() {
+            if (! bulkPaymentMethod || ! bulkPaymentAccount || ! bulkPaymentAccountWrap) {
+                return;
+            }
+
+            const method = bulkPaymentMethod.value;
+            const needsAccount = method !== 'cash';
+
+            bulkPaymentAccountWrap.style.display = needsAccount ? 'block' : 'none';
+            bulkPaymentAccount.required = needsAccount;
+            bulkPaymentAccount.innerHTML = '<option value="">Select account</option>';
+
+            if (! needsAccount) {
+                bulkPaymentAccount.value = '';
+                return;
+            }
+
+            (accountsByMethod[method] || []).forEach((account) => {
+                const option = document.createElement('option');
+                option.value = account.id;
+                option.textContent = account.label;
+                bulkPaymentAccount.appendChild(option);
+            });
+        }
+
+        function refreshBulkPayment() {
+            if (! bulkPaymentAmount || ! bulkPaymentSubmit || ! bulkPaymentStatus || ! bulkPaymentInvoiceIds) {
+                return;
+            }
+
+            const selectedDue = invoiceSelects.filter((input) => input.checked && Number(input.dataset.due) > 0);
+            const customerIds = Array.from(new Set(selectedDue.map((input) => input.dataset.customerId)));
+            const dueTotal = selectedDue.reduce((total, input) => total + Number(input.dataset.due), 0);
+            const isOneParty = customerIds.length === 1;
+
+            bulkPaymentInvoiceIds.innerHTML = '';
+
+            if (isOneParty) {
+                selectedDue.forEach((input) => {
+                    const hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'invoice_ids[]';
+                    hidden.value = input.value;
+                    bulkPaymentInvoiceIds.appendChild(hidden);
+                });
+            }
+
+            bulkPaymentAmount.value = dueTotal > 0 ? dueTotal.toFixed(2) : '';
+            bulkPaymentSubmit.disabled = selectedDue.length === 0 || ! isOneParty;
+
+            if (selectedDue.length === 0) {
+                bulkPaymentStatus.textContent = 'Select due invoices from one party.';
+            } else if (! isOneParty) {
+                bulkPaymentStatus.textContent = 'Selected invoices must be from one party.';
+            } else {
+                bulkPaymentStatus.textContent = selectedDue.length + ' invoice(s), total ' + dueTotal.toFixed(2);
+            }
+        }
+
+        function refreshBulkActions() {
+            refreshFinalizeSelectedButton();
+            refreshBulkPayment();
         }
 
         selectAllInvoices?.addEventListener('click', function () {
             invoiceSelects.forEach((input) => input.checked = true);
-            refreshFinalizeSelectedButton();
+            refreshBulkActions();
         });
 
         deselectAllInvoices?.addEventListener('click', function () {
             invoiceSelects.forEach((input) => input.checked = false);
-            refreshFinalizeSelectedButton();
+            refreshBulkActions();
         });
 
-        invoiceSelects.forEach((input) => input.addEventListener('change', refreshFinalizeSelectedButton));
-        refreshFinalizeSelectedButton();
+        invoiceSelects.forEach((input) => input.addEventListener('change', refreshBulkActions));
+        bulkPaymentMethod?.addEventListener('change', refreshPaymentAccountOptions);
+        refreshPaymentAccountOptions();
+        refreshBulkActions();
     </script>
 @endif
 @endsection

@@ -195,12 +195,12 @@
         </button>
         <nav class="nav" id="app-nav">
             @php
-                $canManageNetwork = auth()->user()?->hasPermission('manage_customers')
-                    || auth()->user()?->hasPermission('manage_packages')
+                $canManageNetwork = auth()->user()?->hasPermission('manage_packages')
                     || auth()->user()?->hasPermission('manage_mikrotik_routers');
                 $canManageBilling = auth()->user()?->hasPermission('manage_invoices')
                     || auth()->user()?->hasPermission('manage_payments')
                     || auth()->user()?->hasPermission('manage_payment_accounts')
+                    || auth()->user()?->hasPermission('manage_customers')
                     || auth()->user()?->hasPermission('manage_expenses');
                 $canManageWarranty = auth()->user()?->hasPermission('view_warranty_claims')
                     || auth()->user()?->hasPermission('manage_warranty_claims')
@@ -216,9 +216,6 @@
                 <details class="nav-group">
                     <summary>Network</summary>
                     <div class="nav-menu">
-                        @if (auth()->user()?->hasPermission('manage_customers'))
-                            <a href="{{ route('customers.index') }}">Parties</a>
-                        @endif
                         @if (auth()->user()?->hasPermission('manage_packages'))
                             <a href="{{ route('packages.index') }}">Packages</a>
                         @endif
@@ -238,6 +235,9 @@
                 <details class="nav-group">
                     <summary>Billing</summary>
                     <div class="nav-menu">
+                        @if (auth()->user()?->hasPermission('manage_customers'))
+                            <a href="{{ route('customers.index') }}">Parties</a>
+                        @endif
                         @if (auth()->user()?->hasPermission('manage_invoices'))
                             <a href="{{ route('invoices.index') }}">Invoices</a>
                             <a href="{{ route('invoices.create') }}">Create Invoice</a>

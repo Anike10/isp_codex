@@ -111,6 +111,23 @@
         <label>Problem Description</label>
         <textarea name="problem_description" required placeholder="Describe the issue, customer complaint, physical condition, adapter/power status, etc.">{{ old('problem_description') }}</textarea>
     </div>
+    <div>
+        <label>Service / Repair Charge</label>
+        <input type="number" name="service_charge" min="0" step="0.01" value="{{ old('service_charge') }}" placeholder="Leave blank if not decided">
+        <span class="muted">Use this when the repair/service should be tracked as income or due.</span>
+    </div>
+    <div>
+        <label>Create Due Invoice Now</label>
+        <select name="create_service_invoice">
+            <option value="0" @selected(old('create_service_invoice', '0') === '0')>No, keep as estimate</option>
+            <option value="1" @selected(old('create_service_invoice') === '1')>Yes, create due invoice</option>
+        </select>
+        <span class="muted">If yes, this amount will appear in invoice due and party ledger.</span>
+    </div>
+    <div class="full">
+        <label>Service Invoice Note</label>
+        <input name="service_note" value="{{ old('service_note') }}" placeholder="Repair work, diagnosis fee, parts/service note">
+    </div>
     <div class="full"><button class="btn" type="submit">Create Claim</button></div>
 </form>
 

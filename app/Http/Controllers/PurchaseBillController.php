@@ -22,10 +22,27 @@ class PurchaseBillController extends Controller
         return view('purchase_bills.index', [
             'purchaseBills' => PurchaseBill::query()
                 ->with('party')
+                ->when($request->filled('search'), function ($query) use ($request) {
+                    $search = trim((string) $request->query('search'));
+                    $query->where(function ($query) use ($search) {
+                        $query->where('bill_no', 'like', "%{$search}%")
+                            ->orWhere('note', 'like', "%{$search}%")
+                            ->orWhereHas('party', fn ($query) => $query
+                                ->where('name', 'like', "%{$search}%")
+                                ->orWhere('phone', 'like', "%{$search}%")
+                                ->orWhere('connection_id', 'like', "%{$search}%"));
+                    });
+                })
+                ->when($request->filled('party_id'), fn ($query) => $query->where('party_id', $request->integer('party_id')))
+                ->when($request->filled('from'), fn ($query) => $query->whereDate('purchase_date', '>=', $request->date('from')))
+                ->when($request->filled('to'), fn ($query) => $query->whereDate('purchase_date', '<=', $request->date('to')))
+                ->when($request->filled('min_amount'), fn ($query) => $query->where('subtotal', '>=', (float) $request->query('min_amount')))
+                ->when($request->filled('max_amount'), fn ($query) => $query->where('subtotal', '<=', (float) $request->query('max_amount')))
                 ->latest('purchase_date')
                 ->latest()
                 ->paginate($this->perPage($request))
                 ->appends($request->query()),
+            'vendors' => Customer::query()->where('is_vendor', true)->orderBy('name')->get(['id', 'name', 'phone']),
         ]);
     }
 

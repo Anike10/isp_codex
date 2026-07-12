@@ -20,6 +20,27 @@ class BkashSmsPaymentController extends Controller
     {
         return view('bkash_sms_payments.index', [
             'smsPayments' => BkashSmsPayment::with(['customer', 'invoice', 'payment'])
+                ->when($request->filled('search'), function ($query) use ($request) {
+                    $search = trim((string) $request->query('search'));
+                    $query->where(function ($query) use ($search) {
+                        $query->where('trx_id', 'like', "%{$search}%")
+                            ->orWhere('ledger_trx_id', 'like', "%{$search}%")
+                            ->orWhere('reference', 'like', "%{$search}%")
+                            ->orWhere('customer_number', 'like', "%{$search}%")
+                            ->orWhere('message', 'like', "%{$search}%")
+                            ->orWhere('raw_sms', 'like', "%{$search}%")
+                            ->orWhereHas('customer', fn ($query) => $query
+                                ->where('name', 'like', "%{$search}%")
+                                ->orWhere('phone', 'like', "%{$search}%")
+                                ->orWhere('connection_id', 'like', "%{$search}%"))
+                            ->orWhereHas('invoice', fn ($query) => $query->where('invoice_no', 'like', "%{$search}%"));
+                    });
+                })
+                ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))
+                ->when($request->filled('from'), fn ($query) => $query->whereDate('created_at', '>=', $request->date('from')))
+                ->when($request->filled('to'), fn ($query) => $query->whereDate('created_at', '<=', $request->date('to')))
+                ->when($request->filled('min_amount'), fn ($query) => $query->where('amount', '>=', (float) $request->query('min_amount')))
+                ->when($request->filled('max_amount'), fn ($query) => $query->where('amount', '<=', (float) $request->query('max_amount')))
                 ->latest()
                 ->paginate($this->perPage($request))
                 ->appends($request->query()),

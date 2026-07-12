@@ -183,6 +183,102 @@ class PaymentService
         return $payment;
     }
 
+    public function recordPaymentForInvoices(Customer $customer, array $invoiceIds, array $data): Payment
+    {
+        if ((float) $data['amount'] <= 0) {
+            throw new InvalidArgumentException('Payment amount must be greater than zero.');
+        }
+
+        $payment = DB::transaction(function () use ($customer, $invoiceIds, $data) {
+            $customer = Customer::whereKey($customer->id)->lockForUpdate()->firstOrFail();
+            $invoices = Invoice::query()
+                ->where('customer_id', $customer->id)
+                ->whereIn('id', $invoiceIds)
+                ->where('due_amount', '>', 0)
+                ->orderBy('due_date')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($invoices->count() !== count(array_unique($invoiceIds))) {
+                throw new InvalidArgumentException('Selected invoice list contains paid invoices or invoices from another party.');
+            }
+
+            $selectedDue = round((float) $invoices->sum('due_amount'), 2);
+            $paymentAmount = round((float) $data['amount'], 2);
+
+            if ($paymentAmount !== $selectedDue) {
+                throw new InvalidArgumentException('Payment amount must match the selected invoice due total.');
+            }
+
+            $firstInvoice = $invoices->first();
+
+            $payment = Payment::create([
+                'entry_by' => $data['entry_by'] ?? null,
+                'customer_id' => $customer->id,
+                'invoice_id' => $firstInvoice->id,
+                'amount' => $paymentAmount,
+                'payment_method' => $data['payment_method'],
+                'payment_account_id' => $data['payment_account_id'] ?? null,
+                'payment_date' => $data['payment_date'],
+                'note' => $data['note'] ?? null,
+            ]);
+
+            foreach ($invoices as $invoice) {
+                $amount = (float) $invoice->due_amount;
+
+                PaymentAllocation::create([
+                    'entry_by' => $data['entry_by'] ?? null,
+                    'customer_id' => $customer->id,
+                    'invoice_id' => $invoice->id,
+                    'payment_id' => $payment->id,
+                    'source_type' => 'payment',
+                    'amount' => $amount,
+                    'allocated_at' => $data['payment_date'],
+                    'note' => $data['note'] ?? 'Bulk payment from selected invoices.',
+                ]);
+
+                $invoice->paid_amount += $amount;
+                $invoice->due_amount = 0;
+                $invoice->status = 'paid';
+                $invoice->save();
+            }
+
+            $remainingDue = Invoice::where('customer_id', $customer->id)->where('due_amount', '>', 0)->sum('due_amount');
+
+            if ((float) $remainingDue <= 0) {
+                $customer->update(['status' => 'active']);
+
+                $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
+
+                if ($subscription) {
+                    $subscription->update([
+                        'status' => 'active',
+                        'end_date' => null,
+                    ]);
+                }
+            }
+
+            return $payment;
+        });
+
+        $payment->load('customer');
+
+        if ((float) Invoice::where('customer_id', $payment->customer_id)->where('due_amount', '>', 0)->sum('due_amount') <= 0) {
+            try {
+                $this->mikrotikSyncService->sync($payment->customer);
+            } catch (Throwable $exception) {
+                Log::warning('MikroTik sync failed after selected invoice payment activation.', [
+                    'payment_id' => $payment->id,
+                    'customer_id' => $payment->customer_id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        return $payment;
+    }
+
     public function addAdvanceCredit(Customer $customer, array $data): CustomerBalanceTransaction
     {
         if ((float) $data['amount'] <= 0) {

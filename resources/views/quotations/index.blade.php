@@ -1,6 +1,9 @@
 @extends('layouts.app')
 
 @section('content')
+@php
+    $canOpenPartyLedger = auth()->user()?->hasPermission('manage_payment_accounts') || auth()->user()?->hasPermission('manage_customers');
+@endphp
 <div class="topbar">
     <div>
         <h1>Quotations</h1>
@@ -29,6 +32,9 @@
             <option value="converted" @selected(request('status') === 'converted')>Converted</option>
         </select>
     </div>
+    <div><label>From Date</label><input type="date" name="from" value="{{ request('from') }}"></div>
+    <div><label>To Date</label><input type="date" name="to" value="{{ request('to') }}"></div>
+    <div><label>Valid Until Before</label><input type="date" name="valid_until" value="{{ request('valid_until') }}"></div>
     <div class="full actions">
         <button class="btn secondary" type="submit">Search</button>
         <a class="btn light" href="{{ route('quotations.index') }}">Reset</a>
@@ -44,11 +50,18 @@
         </thead>
         <tbody>
         @forelse ($quotations as $quotation)
-            <tr>
-                <td><strong>{{ $quotation->quotation_no }}</strong></td>
+            <tr data-href="{{ route('quotations.show', $quotation) }}">
+                <td><a href="{{ route('quotations.show', $quotation) }}"><strong>{{ $quotation->quotation_no }}</strong></a></td>
                 <td>{{ $quotation->quotation_date?->format('Y-m-d') }}</td>
                 <td>{{ $quotation->valid_until?->format('Y-m-d') ?? 'Open' }}</td>
-                <td>{{ $quotation->customer->name }}<br><span class="muted">{{ $quotation->customer->phone }}</span></td>
+                <td>
+                    @if ($canOpenPartyLedger)
+                        <a href="{{ route('accounting.ledger', ['customer_id' => $quotation->customer_id]) }}">{{ $quotation->customer->name }}</a>
+                    @else
+                        {{ $quotation->customer->name }}
+                    @endif
+                    <br><span class="muted">{{ $quotation->customer->phone }}</span>
+                </td>
                 <td>{{ number_format($quotation->total, 2) }}</td>
                 <td><span class="badge {{ $quotation->status === 'converted' ? 'active' : 'due' }}">{{ ucfirst($quotation->status) }}</span></td>
                 <td>

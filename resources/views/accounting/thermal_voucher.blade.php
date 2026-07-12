@@ -32,6 +32,8 @@
         .section { padding:6px 0; border-bottom:1px dashed var(--line); }
         .note { padding-top:6px; line-height:1.4; }
         .note-title { font-weight:800; margin-bottom:2px; }
+        .allocation-row { display:grid; grid-template-columns:minmax(0, 1fr) 21mm; gap:4px; padding:3px 0; line-height:1.35; }
+        .allocation-row .amount-value { text-align:right; font-weight:700; }
         body.paper-58 .receipt { padding-left:2.4mm; padding-right:2.4mm; font-size:11px; }
         body.paper-58 .brand h1 { font-size:15px; }
         body.paper-58 .row { grid-template-columns:20mm minmax(0, 1fr); gap:3px; }
@@ -87,6 +89,18 @@
             <div class="row"><span class="label">{{ $voucher['paid_to_label'] }}</span><span class="value">{{ $voucher['paid_to'] }}</span></div>
             <div class="row"><span class="label">Bill Month</span><span class="value">{{ $voucher['bill_month'] }}</span></div>
         </div>
+
+        @if (! empty($voucher['allocations']))
+            <div class="section">
+                <div class="note-title">Invoice Allocation</div>
+                @foreach ($voucher['allocations'] as $allocation)
+                    <div class="allocation-row">
+                        <span>{{ $allocation['invoice_no'] }} {{ $allocation['bill_month'] ? '('.$allocation['bill_month'].')' : '' }}</span>
+                        <span class="amount-value">{{ number_format($allocation['amount'], 2) }}</span>
+                    </div>
+                @endforeach
+            </div>
+        @endif
 
         <div class="note">
             <div class="note-title">Note</div>

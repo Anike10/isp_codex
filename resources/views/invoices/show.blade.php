@@ -2,7 +2,8 @@
 
 @section('content')
 @php
-    $canRecordPayment = auth()->user()?->hasPermission('manage_payments') && (float) $invoice->due_amount > 0;
+    $canViewPaymentVoucher = auth()->user()?->hasPermission('manage_payments');
+    $canRecordPayment = $canViewPaymentVoucher && (float) $invoice->due_amount > 0;
     $serialFormatter = app(\App\Support\SerialNumberParser::class);
     $accountsByMethod = ($paymentAccounts ?? collect())
         ->groupBy('payment_method')
@@ -179,12 +180,38 @@
         <thead><tr><th>Date</th><th>Amount</th><th>Source</th><th>Account</th><th>Note</th></tr></thead>
         <tbody>
         @forelse ($invoice->allocations as $allocation)
+            @php
+                $paymentAllocations = $allocation->payment?->allocations ?? collect();
+                $paymentInvoiceCount = $paymentAllocations->count();
+                $paymentTotal = (float) ($allocation->payment?->amount ?? 0);
+            @endphp
             <tr>
                 <td>{{ $allocation->allocated_at->format('Y-m-d') }}</td>
                 <td>{{ number_format($allocation->amount, 2) }}</td>
-                <td>{{ $allocation->source_type === 'advance' ? 'Advance Balance' : 'Payment #'.$allocation->payment_id }}</td>
+                <td>
+                    @if ($allocation->source_type === 'advance')
+                        Advance Balance
+                    @else
+                        @if ($canViewPaymentVoucher)
+                            <a href="{{ route('payments.show', $allocation->payment) }}">Payment #{{ $allocation->payment_id }}</a>
+                        @else
+                            Payment #{{ $allocation->payment_id }}
+                        @endif
+                        @if ($paymentTotal > 0)
+                            <div class="muted">Total payment: {{ number_format($paymentTotal, 2) }}</div>
+                        @endif
+                        @if ($paymentInvoiceCount > 1)
+                            <div class="muted">Split across {{ $paymentInvoiceCount }} invoices</div>
+                        @endif
+                    @endif
+                </td>
                 <td>{{ $allocation->payment?->account ? $allocation->payment->account->account_name.' - '.$allocation->payment->account->account_number : ($allocation->payment?->payment_method === 'cash' ? 'Cash Ledger' : 'N/A') }}</td>
-                <td>{{ $allocation->note }}</td>
+                <td>
+                    {{ $allocation->note }}
+                    @if ($allocation->source_type !== 'advance' && $paymentInvoiceCount > 1)
+                        <div class="muted">This invoice share: {{ number_format($allocation->amount, 2) }} of {{ number_format($paymentTotal, 2) }}</div>
+                    @endif
+                </td>
             </tr>
         @empty
             <tr><td colspan="5">No allocations yet.</td></tr>

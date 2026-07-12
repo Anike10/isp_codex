@@ -9,6 +9,7 @@ use App\Models\ProductSerial;
 use App\Models\User;
 use App\Models\WarrantyClaim;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
@@ -35,7 +36,7 @@ class WarrantyClaimController extends Controller
     public function index(Request $request)
     {
         $claims = WarrantyClaim::query()
-            ->with(['customer', 'product', 'productSerial', 'vendor'])
+            ->with(['customer', 'product', 'productSerial', 'vendor', 'serviceInvoice'])
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))
             ->when($request->filled('search'), function ($query) use ($request): void {
                 $search = trim((string) $request->query('search'));
@@ -128,6 +129,9 @@ class WarrantyClaimController extends Controller
             'action_type' => ['required', Rule::in(self::ACTION_TYPES)],
             'assigned_to' => ['nullable', 'exists:users,id'],
             'vendor_id' => ['nullable', Rule::exists('customers', 'id')->where('is_vendor', true)],
+            'service_charge' => ['nullable', 'numeric', 'min:0'],
+            'create_service_invoice' => ['nullable', 'boolean'],
+            'service_note' => ['nullable', 'string', 'max:500'],
         ]);
 
         try {
@@ -135,6 +139,7 @@ class WarrantyClaimController extends Controller
                 $serial = ! empty($data['product_serial_id'])
                     ? ProductSerial::query()->with(['product', 'invoiceItem'])->lockForUpdate()->findOrFail($data['product_serial_id'])
                     : null;
+                $serviceCharge = round((float) ($data['service_charge'] ?? 0), 2);
 
                 if ($serial && $serial->status === 'in_stock') {
                     throw new InvalidArgumentException('In-stock serials cannot be claimed as customer warranty.');
@@ -161,11 +166,30 @@ class WarrantyClaimController extends Controller
                     'status' => 'pending',
                     'assigned_to' => $data['assigned_to'] ?? null,
                     'vendor_id' => $data['vendor_id'] ?? null,
+                    'service_charge' => $serviceCharge,
                     'entry_by' => auth()->user()?->name,
                     'entry_by_type' => auth()->user() ? 'user' : null,
                 ]);
 
-                $this->log($claim, null, 'pending', 'Warranty claim created.');
+                $this->log(
+                    $claim,
+                    null,
+                    'pending',
+                    'Warranty claim created for '
+                        .($serial?->product?->name ?? 'manual product')
+                        .'. Serial: '.($serial?->serial_number ?? 'N/A')
+                        .'. Problem: '.$data['problem_description']
+                        .($serviceCharge > 0 ? '. Service charge: '.number_format($serviceCharge, 2) : '')
+                );
+
+                if (! empty($data['create_service_invoice']) && $serviceCharge > 0) {
+                    $invoice = $this->createServiceInvoiceRecord($claim, $serviceCharge, $data['service_note'] ?? null);
+                    $claim->update([
+                        'service_invoice_id' => $invoice->id,
+                        'service_charge' => $serviceCharge,
+                    ]);
+                    $this->log($claim, $claim->status, $claim->status, 'Service invoice '.$invoice->invoice_no.' created at intake for '.number_format($serviceCharge, 2).'.');
+                }
 
                 return $claim;
             });
@@ -191,9 +215,11 @@ class WarrantyClaimController extends Controller
             'serviceInvoice',
             'logs' => fn ($query) => $query->latest(),
         ]);
+        $timelineEvents = $this->timelineEvents($warrantyClaim);
 
         return view('warranty_claims.show', [
             'claim' => $warrantyClaim,
+            'timelineEvents' => $timelineEvents,
             'statuses' => self::STATUSES,
             'actionTypes' => self::ACTION_TYPES,
             'vendors' => Customer::query()->where('is_vendor', true)->orderBy('name')->get(),
@@ -234,7 +260,7 @@ class WarrantyClaimController extends Controller
                 'closed_at' => $closedAt,
             ]);
 
-            $this->log($warrantyClaim, $oldStatus, $data['status'], $data['note'] ?? null);
+            $this->log($warrantyClaim, $oldStatus, $data['status'], $this->statusUpdateNote($data, $warrantyClaim));
         });
 
         return back()->with('success', 'Warranty claim updated.');
@@ -289,7 +315,15 @@ class WarrantyClaimController extends Controller
                     'closed_at' => now(),
                 ]);
 
-                $this->log($warrantyClaim, $oldStatus, 'replaced', 'Replacement serial '.$replacement->serial_number.' assigned.');
+                $this->log(
+                    $warrantyClaim,
+                    $oldStatus,
+                    'replaced',
+                    'Replacement completed. Old serial: '
+                        .($warrantyClaim->productSerial?->serial_number ?? 'N/A')
+                        .'. New serial: '.$replacement->serial_number
+                        .'. '.($data['resolution_note'] ?? '')
+                );
             });
         } catch (InvalidArgumentException $exception) {
             return back()->withErrors(['replacement_product_serial_id' => $exception->getMessage()]);
@@ -305,30 +339,12 @@ class WarrantyClaimController extends Controller
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $invoice = DB::transaction(function () use ($data, $warrantyClaim): Invoice {
-            $invoice = Invoice::create([
-                'customer_id' => $warrantyClaim->customer_id,
-                'invoice_no' => Invoice::generateInvoiceNo($warrantyClaim->customer_id, now()->format('Y-m')),
-                'billing_month' => now()->format('Y-m'),
-                'invoice_type' => 'product',
-                'subtotal' => $data['service_charge'],
-                'discount' => 0,
-                'vat' => 0,
-                'total' => $data['service_charge'],
-                'paid_amount' => 0,
-                'due_amount' => $data['service_charge'],
-                'status' => ((float) $data['service_charge']) <= 0 ? 'paid' : 'unpaid',
-            ]);
+        if ($warrantyClaim->service_invoice_id) {
+            return back()->withErrors(['service_charge' => 'Service invoice already exists for this claim.']);
+        }
 
-            $invoice->items()->create([
-                'product_id' => null,
-                'product_name' => 'Paid warranty service - '.$warrantyClaim->claim_no,
-                'product_type' => 'warranty',
-                'quantity' => 1,
-                'unit_price' => $data['service_charge'],
-                'total' => $data['service_charge'],
-                'service_note' => $data['note'] ?? null,
-            ]);
+        $invoice = DB::transaction(function () use ($data, $warrantyClaim): Invoice {
+            $invoice = $this->createServiceInvoiceRecord($warrantyClaim, (float) $data['service_charge'], $data['note'] ?? null);
 
             $oldStatus = $warrantyClaim->status;
             $warrantyClaim->update([
@@ -337,12 +353,52 @@ class WarrantyClaimController extends Controller
                 'service_invoice_id' => $invoice->id,
                 'service_charge' => $data['service_charge'],
             ]);
-            $this->log($warrantyClaim, $oldStatus, 'paid_service', 'Paid service invoice '.$invoice->invoice_no.' created.');
+            $this->log(
+                $warrantyClaim,
+                $oldStatus,
+                'paid_service',
+                'Paid service invoice '.$invoice->invoice_no.' created for '.number_format((float) $data['service_charge'], 2).'. '.($data['note'] ?? '')
+            );
 
             return $invoice;
         });
 
-        return redirect()->route('invoices.show', $invoice)->with('success', 'Paid service invoice created from warranty claim.');
+        if ($request->user()?->hasPermission('manage_invoices')) {
+            return redirect()->route('invoices.show', $invoice)->with('success', 'Paid service invoice created from warranty claim.');
+        }
+
+        return redirect()->route('warranty-claims.show', $warrantyClaim)->with('success', 'Paid service invoice created from warranty claim.');
+    }
+
+    private function createServiceInvoiceRecord(WarrantyClaim $claim, float $serviceCharge, ?string $note = null): Invoice
+    {
+        $serviceCharge = round($serviceCharge, 2);
+
+        $invoice = Invoice::create([
+            'customer_id' => $claim->customer_id,
+            'invoice_no' => Invoice::generateInvoiceNo($claim->customer_id, now()->format('Y-m')),
+            'billing_month' => now()->format('Y-m'),
+            'invoice_type' => 'product',
+            'subtotal' => $serviceCharge,
+            'discount' => 0,
+            'vat' => 0,
+            'total' => $serviceCharge,
+            'paid_amount' => 0,
+            'due_amount' => $serviceCharge,
+            'status' => $serviceCharge <= 0 ? 'paid' : 'unpaid',
+        ]);
+
+        $invoice->items()->create([
+            'product_id' => null,
+            'product_name' => 'Repair/service charge - '.$claim->claim_no,
+            'product_type' => 'warranty',
+            'quantity' => 1,
+            'unit_price' => $serviceCharge,
+            'total' => $serviceCharge,
+            'service_note' => $note,
+        ]);
+
+        return $invoice;
     }
 
     private function log(WarrantyClaim $claim, ?string $oldStatus, string $newStatus, ?string $note = null): void
@@ -354,5 +410,145 @@ class WarrantyClaimController extends Controller
             'entry_by' => auth()->user()?->name,
             'entry_by_type' => auth()->user() ? 'user' : null,
         ]);
+    }
+
+    private function statusUpdateNote(array $data, WarrantyClaim $claim): string
+    {
+        $parts = [];
+
+        if (filled($data['note'] ?? null)) {
+            $parts[] = trim((string) $data['note']);
+        }
+
+        $parts[] = 'Action: '.$this->label((string) $data['action_type']);
+
+        if (! empty($data['vendor_id'])) {
+            $parts[] = 'Vendor: '.(Customer::find($data['vendor_id'])?->name ?? 'N/A');
+        }
+
+        if (filled($data['diagnosis_note'] ?? null)) {
+            $parts[] = 'Diagnosis: '.trim((string) $data['diagnosis_note']);
+        }
+
+        if (filled($data['resolution_note'] ?? null)) {
+            $parts[] = 'Resolution: '.trim((string) $data['resolution_note']);
+        }
+
+        if (filled($data['delivery_note'] ?? null)) {
+            $parts[] = 'Delivery: '.trim((string) $data['delivery_note']);
+        }
+
+        return implode(' | ', array_filter($parts));
+    }
+
+    private function timelineEvents(WarrantyClaim $claim): Collection
+    {
+        $events = collect();
+
+        $events->push([
+            'date' => $claim->created_at,
+            'title' => 'Claim Created',
+            'status' => $this->label($claim->status),
+            'actor' => $claim->entry_by ?: 'System',
+            'note' => $claim->problem_description,
+            'details' => [
+                'Claim Date' => $claim->claim_date?->format('Y-m-d'),
+                'Party' => $claim->customer->name.' - '.$claim->customer->phone,
+                'Product' => $claim->product?->name ?? 'Manual claim',
+                'Serial' => $claim->productSerial?->serial_number ?? 'N/A',
+                'Warranty' => $this->label($claim->warranty_status),
+                'Action' => $this->label($claim->action_type),
+                'Assigned' => $claim->assignedUser?->name ?? 'Not assigned',
+                'Vendor' => $claim->vendor?->name ?? 'N/A',
+                'Invoice' => $claim->invoice?->invoice_no ?? 'N/A',
+            ],
+        ]);
+
+        if ($claim->received_at) {
+            $events->push([
+                'date' => $claim->received_at,
+                'title' => 'Product Received',
+                'status' => 'Received',
+                'actor' => 'System',
+                'note' => 'Device/product was marked as received for warranty processing.',
+                'details' => [
+                    'Received At' => $claim->received_at->format('Y-m-d H:i'),
+                    'Serial' => $claim->productSerial?->serial_number ?? 'N/A',
+                ],
+            ]);
+        }
+
+        foreach ($claim->logs as $log) {
+            if (! $log->old_status && $log->new_status === 'pending') {
+                continue;
+            }
+
+            $events->push([
+                'date' => $log->created_at,
+                'title' => $log->old_status === $log->new_status ? 'Accounting Added' : ($log->old_status ? 'Status Updated' : 'Initial Log'),
+                'status' => $this->label($log->new_status),
+                'actor' => $log->entry_by ?: 'System',
+                'note' => $log->note ?: 'No note provided.',
+                'details' => [
+                    'From' => $log->old_status ? $this->label($log->old_status) : 'N/A',
+                    'To' => $this->label($log->new_status),
+                    'Entry Type' => $log->entry_by_type ?: 'system',
+                ],
+            ]);
+        }
+
+        if ($claim->replacementProductSerial) {
+            $events->push([
+                'date' => $claim->closed_at ?: $claim->updated_at,
+                'title' => 'Replacement Assigned',
+                'status' => 'Replaced',
+                'actor' => $claim->entry_by ?: 'System',
+                'note' => $claim->resolution_note ?: 'Replacement product serial assigned.',
+                'details' => [
+                    'Old Serial' => $claim->productSerial?->serial_number ?? 'N/A',
+                    'New Serial' => $claim->replacementProductSerial->serial_number,
+                    'Replacement Product' => $claim->replacementProduct?->name ?? $claim->product?->name ?? 'N/A',
+                    'Closed At' => $claim->closed_at?->format('Y-m-d H:i') ?? 'N/A',
+                ],
+            ]);
+        }
+
+        if ($claim->serviceInvoice) {
+            $events->push([
+                'date' => $claim->updated_at,
+                'title' => 'Paid Service Invoice',
+                'status' => 'Paid Service',
+                'actor' => $claim->entry_by ?: 'System',
+                'note' => $claim->resolution_note ?: 'Paid service invoice created from warranty claim.',
+                'details' => [
+                    'Invoice' => $claim->serviceInvoice->invoice_no,
+                    'Charge' => number_format((float) $claim->service_charge, 2),
+                ],
+            ]);
+        }
+
+        if ($claim->closed_at && ! $claim->replacementProductSerial) {
+            $events->push([
+                'date' => $claim->closed_at,
+                'title' => 'Claim Closed',
+                'status' => $this->label($claim->status),
+                'actor' => $claim->entry_by ?: 'System',
+                'note' => $claim->resolution_note ?: $claim->delivery_note ?: 'Claim completed.',
+                'details' => [
+                    'Closed At' => $claim->closed_at->format('Y-m-d H:i'),
+                    'Final Status' => $this->label($claim->status),
+                    'Delivery Note' => $claim->delivery_note ?: 'N/A',
+                ],
+            ]);
+        }
+
+        return $events
+            ->sortByDesc(fn (array $event) => $event['date']?->timestamp ?? 0)
+            ->values();
+    }
+
+    private function label(?string $value): string
+    {
+        return $value ? str_replace('_', ' ', ucfirst($value)) : 'N/A';
     }
 }

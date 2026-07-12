@@ -1,6 +1,10 @@
 @extends('layouts.app')
 
 @section('content')
+@php
+    $canOpenPaymentAccounts = auth()->user()?->hasPermission('manage_payment_accounts');
+    $canOpenCustomers = auth()->user()?->hasPermission('manage_customers');
+@endphp
 <div class="topbar">
     <div>
         <h1>{{ $selectedCustomer ? 'Party Ledger' : 'Accounting Ledger' }}</h1>
@@ -12,7 +16,11 @@
             @endif
         </div>
     </div>
-    <a class="btn light" href="{{ route('payment-accounts.index') }}">Back</a>
+    @if ($canOpenPaymentAccounts)
+        <a class="btn light" href="{{ route('payment-accounts.index') }}">Back</a>
+    @elseif ($canOpenCustomers)
+        <a class="btn light" href="{{ route('customers.index') }}">Back</a>
+    @endif
 </div>
 
 <form method="get" class="card actions" style="margin-bottom:16px">
@@ -24,8 +32,13 @@
     <button class="btn secondary" type="submit">Filter</button>
     <a class="btn light" href="{{ $selectedCustomer ? route('accounting.ledger', ['customer_id' => $selectedCustomer->id]) : route('accounting.ledger') }}">Reset</a>
     @if ($selectedCustomer)
-        <a class="btn light" href="{{ route('accounting.ledger') }}">All Ledger</a>
-        <a class="btn light" href="{{ route('customers.show', $selectedCustomer) }}">Party Details</a>
+        @if ($canOpenPaymentAccounts)
+            <a class="btn light" href="{{ route('accounting.ledger') }}">All Ledger</a>
+        @endif
+        @if ($canOpenCustomers)
+            <a class="btn light" href="{{ route('customers.show', $selectedCustomer) }}">Party Details</a>
+            <a class="btn" href="{{ route('customers.payments.create', $selectedCustomer) }}">Record Payment</a>
+        @endif
     @endif
 </form>
 
@@ -41,11 +54,17 @@
         @php $running = 0; @endphp
         @forelse ($entries as $entry)
             @php $running += $entry['debit'] - $entry['credit']; @endphp
-            <tr data-href="{{ $entry['url'] }}">
+            <tr @if ($entry['url']) data-href="{{ $entry['url'] }}" @endif>
                 <td>{{ $entry['date']?->format('Y-m-d') }}</td>
                 <td>{{ $entry['type'] }}</td>
                 <td>{{ $entry['customer'] }}</td>
-                <td><a href="{{ $entry['url'] }}">{{ $entry['reference'] }}</a></td>
+                <td>
+                    @if ($entry['url'])
+                        <a href="{{ $entry['url'] }}">{{ $entry['reference'] }}</a>
+                    @else
+                        {{ $entry['reference'] }}
+                    @endif
+                </td>
                 <td>{{ $entry['note'] }}</td>
                 <td>{{ number_format($entry['debit'], 2) }}</td>
                 <td>{{ number_format($entry['credit'], 2) }}</td>

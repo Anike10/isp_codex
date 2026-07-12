@@ -67,6 +67,16 @@
             @endforeach
         </select>
     </div>
+    <div>
+        <label>Stock</label>
+        <select name="stock_state">
+            <option value="">All stock</option>
+            <option value="tracked" @selected(request('stock_state') === 'tracked')>Tracked only</option>
+            <option value="serial" @selected(request('stock_state') === 'serial')>Serial tracked</option>
+            <option value="low" @selected(request('stock_state') === 'low')>Low stock</option>
+            <option value="out" @selected(request('stock_state') === 'out')>Out of stock</option>
+        </select>
+    </div>
     <div class="full actions">
         <button class="btn secondary" type="submit">Filter</button>
         <a class="btn light" href="{{ route('products.index') }}">Reset</a>
@@ -80,7 +90,7 @@
     <tbody>
     @forelse ($products as $product)
         <tr data-href="{{ route('products.show', $product) }}">
-            <td>{{ $product->name }}</td>
+            <td><a href="{{ route('products.show', $product) }}">{{ $product->name }}</a></td>
             <td>{{ $product->sku }}</td>
             <td>{{ $product->barcode ?? 'N/A' }}</td>
             <td>{{ $product->brand ?? 'N/A' }}</td>

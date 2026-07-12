@@ -5,12 +5,14 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\Invoice;
+use App\Models\PaymentAccount;
 use App\Models\Permission;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 use Tests\TestCase;
 
@@ -37,6 +39,220 @@ class PaymentServiceTest extends TestCase
         $this->assertSame(0.0, (float) $selectedInvoice->refresh()->due_amount);
         $this->assertSame(700.0, (float) $selectedInvoice->paid_amount);
         $this->assertSame('paid', $selectedInvoice->status);
+    }
+
+    public function test_selected_invoice_payment_pays_only_selected_due_invoices(): void
+    {
+        $customer = $this->createCustomer();
+
+        $unselectedInvoice = $this->createInvoice($customer, '2026-04', 500, '2026-04-10');
+        $firstSelectedInvoice = $this->createInvoice($customer, '2026-05', 700, '2026-05-10');
+        $secondSelectedInvoice = $this->createInvoice($customer, '2026-06', 300, '2026-06-10');
+
+        $payment = $this->paymentService()->recordPaymentForInvoices($customer, [
+            $firstSelectedInvoice->id,
+            $secondSelectedInvoice->id,
+        ], [
+            'amount' => 1000,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-06-15',
+            'note' => 'Bulk payment from selected invoices.',
+        ]);
+
+        $this->assertSame(1000.0, (float) $payment->amount);
+        $this->assertSame(500.0, (float) $unselectedInvoice->refresh()->due_amount);
+        $this->assertSame('unpaid', $unselectedInvoice->status);
+        $this->assertSame(0.0, (float) $firstSelectedInvoice->refresh()->due_amount);
+        $this->assertSame('paid', $firstSelectedInvoice->status);
+        $this->assertSame(0.0, (float) $secondSelectedInvoice->refresh()->due_amount);
+        $this->assertSame('paid', $secondSelectedInvoice->status);
+        $this->assertSame(2, $payment->allocations()->count());
+    }
+
+    public function test_payment_voucher_shows_all_allocated_invoices(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payments')->firstOrFail());
+        $customer = $this->createCustomer();
+        $firstInvoice = $this->createInvoice($customer, '2026-05', 2500, '2026-05-10');
+        $secondInvoice = $this->createInvoice($customer, '2026-06', 750, '2026-06-10');
+
+        $payment = $this->paymentService()->recordPaymentForInvoices($customer, [
+            $firstInvoice->id,
+            $secondInvoice->id,
+        ], [
+            'amount' => 3250,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-07-12',
+            'note' => 'Bulk payment from selected invoices.',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('payments.voucher', $payment))
+            ->assertOk()
+            ->assertSee('BDT 3,250.00')
+            ->assertSee('2 invoices')
+            ->assertSee($firstInvoice->invoice_no)
+            ->assertSee('BDT 2,500.00')
+            ->assertSee($secondInvoice->invoice_no)
+            ->assertSee('BDT 750.00');
+    }
+
+    public function test_payment_detail_page_shows_allocations_and_payment_index_links_to_details(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payments')->firstOrFail());
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $user->permissions()->attach(Permission::where('name', 'manage_payment_accounts')->firstOrFail());
+        $customer = $this->createCustomer();
+        $firstInvoice = $this->createInvoice($customer, '2026-05', 2500, '2026-05-10');
+        $secondInvoice = $this->createInvoice($customer, '2026-06', 750, '2026-06-10');
+
+        $payment = $this->paymentService()->recordPaymentForInvoices($customer, [
+            $firstInvoice->id,
+            $secondInvoice->id,
+        ], [
+            'amount' => 3250,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-07-12',
+            'note' => 'Bulk payment from selected invoices.',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('payments.show', $payment))
+            ->assertOk()
+            ->assertSee('Payment #'.$payment->id)
+            ->assertSee('3,250.00')
+            ->assertSee($firstInvoice->invoice_no)
+            ->assertSee('2,500.00')
+            ->assertSee($secondInvoice->invoice_no)
+            ->assertSee('750.00');
+
+        $this->actingAs($user)
+            ->get(route('payments.index'))
+            ->assertOk()
+            ->assertSee('data-href="'.route('payments.show', $payment).'"', false)
+            ->assertSee(route('payments.show', $payment), false)
+            ->assertSee(route('accounting.ledger', ['customer_id' => $customer->id]), false)
+            ->assertSee(route('invoices.show', $firstInvoice), false)
+            ->assertSee(route('payment-accounts.cash-ledger'), false);
+
+        $this->actingAs($user)
+            ->get(route('invoices.show', $secondInvoice))
+            ->assertOk()
+            ->assertSee(route('payments.show', $payment), false)
+            ->assertDontSee(route('payments.voucher', $payment), false);
+    }
+
+    public function test_payment_index_hides_ledger_links_without_account_permissions(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payments')->firstOrFail());
+        $customer = $this->createCustomer();
+        $invoice = $this->createInvoice($customer, '2026-05', 500, '2026-05-10');
+
+        $payment = $this->paymentService()->recordPaymentForInvoices($customer, [$invoice->id], [
+            'amount' => 500,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-07-12',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('payments.index'))
+            ->assertOk()
+            ->assertSee(route('payments.show', $payment), false)
+            ->assertDontSee(route('invoices.show', $invoice), false)
+            ->assertDontSee(route('accounting.ledger', ['customer_id' => $customer->id]), false)
+            ->assertDontSee(route('payment-accounts.cash-ledger'), false);
+
+        $this->actingAs($user)
+            ->get(route('payments.show', $payment))
+            ->assertOk()
+            ->assertSee($invoice->invoice_no)
+            ->assertDontSee(route('invoices.show', $invoice), false);
+    }
+
+    public function test_payment_account_ledger_can_be_filtered_by_date_search_and_amount(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payment_accounts')->firstOrFail());
+        $customer = $this->createCustomer();
+        $account = PaymentAccount::create([
+            'payment_method' => 'bkash',
+            'account_name' => 'Office bKash',
+            'account_number' => '01800000000',
+            'opening_balance' => 100,
+            'status' => 'active',
+        ]);
+        $firstInvoice = $this->createInvoice($customer, '2026-05', 2500, '2026-05-10');
+        $secondInvoice = $this->createInvoice($customer, '2026-06', 750, '2026-06-10');
+
+        $this->paymentService()->recordPaymentForInvoices($customer, [$firstInvoice->id], [
+            'amount' => 2500,
+            'payment_method' => 'bkash',
+            'payment_account_id' => $account->id,
+            'payment_date' => '2026-06-20',
+            'note' => 'May bill collection.',
+        ]);
+        $this->paymentService()->recordPaymentForInvoices($customer, [$secondInvoice->id], [
+            'amount' => 750,
+            'payment_method' => 'bkash',
+            'payment_account_id' => $account->id,
+            'payment_date' => '2026-07-12',
+            'note' => 'June bill collection.',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('payment-accounts.show', [
+                'payment_account' => $account,
+                'from' => '2026-07-01',
+                'to' => '2026-07-31',
+                'search' => '2026-06',
+                'min_amount' => 700,
+                'max_amount' => 800,
+            ]))
+            ->assertOk()
+            ->assertSee('Filtered Collection')
+            ->assertSee('750.00')
+            ->assertSee($secondInvoice->invoice_no)
+            ->assertDontSee($firstInvoice->invoice_no);
+    }
+
+    public function test_payment_account_ledger_running_balance_includes_previous_paginated_rows(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payment_accounts')->firstOrFail());
+        $customer = $this->createCustomer();
+        $account = PaymentAccount::create([
+            'payment_method' => 'bkash',
+            'account_name' => 'Office bKash',
+            'account_number' => '01800000000',
+            'opening_balance' => 100,
+            'status' => 'active',
+        ]);
+
+        for ($i = 0; $i < 26; $i++) {
+            $date = Carbon::create(2026, 1, 1)->addMonths($i);
+            $invoice = $this->createInvoice($customer, $date->format('Y-m'), 10, $date->copy()->day(10)->toDateString());
+
+            $this->paymentService()->recordPaymentForInvoices($customer, [$invoice->id], [
+                'amount' => 10,
+                'payment_method' => 'bkash',
+                'payment_account_id' => $account->id,
+                'payment_date' => $date->copy()->day(20)->toDateString(),
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->get(route('payment-accounts.show', [
+                'payment_account' => $account,
+                'per_page' => 25,
+                'page' => 2,
+            ]))
+            ->assertOk()
+            ->assertSee('Before Page')
+            ->assertSee('350.00')
+            ->assertSee('360.00');
     }
 
     public function test_paid_invoice_cannot_accept_another_payment(): void
