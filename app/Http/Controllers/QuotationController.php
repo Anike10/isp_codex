@@ -6,10 +6,13 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\Quotation;
+use App\Observers\RecordVersionObserver;
 use App\Services\InventoryService;
+use App\Services\RecordVersionService;
 use App\Support\SerialNumberParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class QuotationController extends Controller
 {
@@ -50,7 +53,12 @@ class QuotationController extends Controller
     public function store(Request $request)
     {
         $data = $this->validateData($request);
-        [$customerId, $items, $subtotal, $total, $data] = $this->prepareData($data);
+
+        try {
+            [$customerId, $items, $subtotal, $total, $data] = $this->prepareData($data);
+        } catch (InvalidArgumentException $exception) {
+            return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
+        }
 
         $quotation = DB::transaction(function () use ($customerId, $items, $subtotal, $total, $data): Quotation {
             $quotation = Quotation::create($this->quotationAttributes($customerId, $subtotal, $total, $data) + [
@@ -69,7 +77,7 @@ class QuotationController extends Controller
 
     public function show(Quotation $quotation)
     {
-        $quotation->load(['customer', 'items.product', 'convertedInvoice']);
+        $quotation->load(['customer', 'items.product', 'convertedInvoice', 'versions']);
 
         return view('quotations.show', compact('quotation'));
     }
@@ -91,21 +99,34 @@ class QuotationController extends Controller
         ]);
     }
 
-    public function update(Request $request, Quotation $quotation)
+    public function update(Request $request, Quotation $quotation, RecordVersionService $recordVersionService)
     {
         if ($quotation->converted_invoice_id) {
             return redirect()->route('quotations.show', $quotation)->withErrors(['quotation' => 'Converted quotations cannot be edited.']);
         }
 
         $data = $this->validateData($request);
-        [$customerId, $items, $subtotal, $total, $data] = $this->prepareData($data);
 
-        DB::transaction(function () use ($quotation, $customerId, $items, $subtotal, $total, $data): void {
-            $quotation->update($this->quotationAttributes($customerId, $subtotal, $total, $data));
+        try {
+            [$customerId, $items, $subtotal, $total, $data] = $this->prepareData($data);
+        } catch (InvalidArgumentException $exception) {
+            return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
+        }
+
+        $oldSnapshot = $recordVersionService->snapshot($quotation, ['customer', 'items']);
+
+        DB::transaction(function () use ($quotation, $customerId, $items, $subtotal, $total, $data, $recordVersionService, $oldSnapshot): void {
+            RecordVersionObserver::withoutRecording(fn () => $quotation->update($this->quotationAttributes($customerId, $subtotal, $total, $data)));
             $quotation->items()->delete();
             foreach ($items as $item) {
                 $quotation->items()->create($item);
             }
+
+            $newSnapshot = $recordVersionService->snapshot($quotation->refresh(), ['customer', 'items']);
+            $recordVersionService->recordUpdate($quotation, $oldSnapshot, $newSnapshot, [
+                'source' => 'quotation_edit',
+                'quotation_no' => $quotation->quotation_no,
+            ]);
         });
 
         return redirect()->route('quotations.show', $quotation)->with('success', 'Quotation updated successfully.');
@@ -168,6 +189,17 @@ class QuotationController extends Controller
             $serials = app(SerialNumberParser::class)->parse($item['serial_numbers'] ?? '');
             $serialless = (int) ($item['serialless_quantity'] ?? 0);
             $quantity = max((int) $item['quantity'], count($serials) + $serialless);
+
+            if ($serials !== [] && ! $product?->track_serial_numbers) {
+                throw new InvalidArgumentException('Serial numbers can only be used for serial-tracked quotation products.');
+            }
+
+            if (! $product?->track_serial_numbers) {
+                $serialless = 0;
+            } elseif (count($serials) + $serialless !== $quantity) {
+                throw new InvalidArgumentException('For serial-tracked quotation items, serial count plus serial-less quantity must match quantity.');
+            }
+
             $lineTotal = round($quantity * (float) $item['unit_price'], 2);
             $subtotal += $lineTotal;
             $items[] = [

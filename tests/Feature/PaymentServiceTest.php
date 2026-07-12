@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\Expense;
 use App\Models\InternetPackage;
 use App\Models\Invoice;
 use App\Models\PaymentAccount;
@@ -255,6 +256,77 @@ class PaymentServiceTest extends TestCase
             ->assertSee('360.00');
     }
 
+    public function test_payment_account_ledger_includes_expense_debits_in_running_balance(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payment_accounts')->firstOrFail());
+        $customer = $this->createCustomer();
+        $account = PaymentAccount::create([
+            'payment_method' => 'bkash',
+            'account_name' => 'Office bKash',
+            'account_number' => '01800000000',
+            'opening_balance' => 100,
+            'status' => 'active',
+        ]);
+        $invoice = $this->createInvoice($customer, '2026-06', 750, '2026-06-10');
+
+        $this->paymentService()->recordPaymentForInvoices($customer, [$invoice->id], [
+            'amount' => 750,
+            'payment_method' => 'bkash',
+            'payment_account_id' => $account->id,
+            'payment_date' => '2026-07-12',
+            'note' => 'June bill collection.',
+        ]);
+        Expense::create([
+            'expense_type' => 'other',
+            'category' => 'rent',
+            'amount' => 250,
+            'payment_method' => 'bkash',
+            'payment_account_id' => $account->id,
+            'expense_date' => '2026-07-13',
+            'note' => 'Office rent paid.',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('payment-accounts.show', $account))
+            ->assertOk()
+            ->assertSee('Debit')
+            ->assertSee('Office rent paid.')
+            ->assertSee('250.00')
+            ->assertSee('600.00');
+    }
+
+    public function test_cash_ledger_includes_cash_expense_debits_in_running_balance(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payment_accounts')->firstOrFail());
+        $customer = $this->createCustomer();
+        $invoice = $this->createInvoice($customer, '2026-06', 500, '2026-06-10');
+
+        $this->paymentService()->recordPaymentForInvoices($customer, [$invoice->id], [
+            'amount' => 500,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-07-12',
+            'note' => 'Cash bill collection.',
+        ]);
+        Expense::create([
+            'expense_type' => 'other',
+            'category' => 'transport',
+            'amount' => 125,
+            'payment_method' => 'cash',
+            'expense_date' => '2026-07-13',
+            'note' => 'Cash transport paid.',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('payment-accounts.cash-ledger'))
+            ->assertOk()
+            ->assertSee('Debit')
+            ->assertSee('Cash transport paid.')
+            ->assertSee('125.00')
+            ->assertSee('375.00');
+    }
+
     public function test_paid_invoice_cannot_accept_another_payment(): void
     {
         $customer = $this->createCustomer();
@@ -377,6 +449,31 @@ class PaymentServiceTest extends TestCase
 
         $this->assertSame(1000.0, (float) $currentInvoice->due_amount);
         $this->assertSame('unpaid', $currentInvoice->status);
+    }
+
+    public function test_customer_payment_rejects_account_from_another_payment_method(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = $this->createCustomer();
+        $invoice = $this->createInvoice($customer, '2026-05', 500, '2026-05-10');
+        $bkashAccount = PaymentAccount::create([
+            'payment_method' => 'bkash',
+            'account_name' => 'Office bKash',
+            'account_number' => '01800000000',
+            'opening_balance' => 0,
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($user)->post(route('customers.payments.store', $customer), [
+            'amount' => 500,
+            'payment_method' => 'bank',
+            'payment_account_id' => $bkashAccount->id,
+            'payment_date' => '2026-06-02',
+        ])->assertSessionHasErrors('payment_account_id');
+
+        $this->assertSame(500.0, (float) $invoice->refresh()->due_amount);
+        $this->assertDatabaseCount('payments', 0);
     }
 
     private function paymentService(): PaymentService

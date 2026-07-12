@@ -12,9 +12,13 @@ A Laravel 12 application for an ISP and computer service business.
 - FTTX network map with reciprocal equipment links, drag/list linking, Fiber/Copper media, custom colors, and parallel link rendering
 - Monthly invoice generation
 - Separate quotation workflow with invoice-style entry, no accounting impact, and one-click conversion to a draft invoice
+- Quotation, invoice, purchase, and stock flows enforce serial-tracked quantity as `serial count + serial-less quantity = line quantity`
+- Invoice copy-for-next-month creates a safe draft copy without duplicating stock product links or serial assignments
 - Customer direct payment and due tracking
 - bKash SMS payment parsing with duplicate TrxID protection
 - Advance balance and payment allocation ledger
+- Payment account and cash ledgers show both collection credits and expense debits in running balance
+- Edit history/audit snapshots for invoices, quotations, parties, payments, and other tracked operator-editable records through the shared `record_versions` table, including invoice finalization changes
 - Payment accounts for cash, bKash, Nagad, and bank
 - Support ticket management
 - Multi-warehouse product inventory with per-warehouse stock, atomic transfers, detailed movement history, serial location tracking, purchase bills, and warranty tracking
@@ -79,13 +83,14 @@ Do not commit SSH passwords, `.env` secrets, SMS tokens, or database passwords.
 
 - `/` dashboard
 - `/customers`
-- `/packages`
+- `/packages` and `/packages/{package}/edit`
 - `/mikrotik-routers`
 - `/olt-onus`
 - `/olt-onus/{oltOnu}` - ONU detail page and live refresh button
 - `/invoices`
 - `/quotations`
 - `/payments`
+- Invoice, party, and payment detail pages include an `Edit History` section when old versions exist.
 - `/bkash-sms-payments`
 - `/payment-accounts`
 - `/accounting/ledger`
@@ -487,12 +492,15 @@ AI_MAINTAINER_GUIDE.md
 - `app/Http/Controllers`: Page and form logic
 - `app/Services/BillingService.php`: Monthly bill generation
 - `app/Services/PaymentService.php`: Payment allocation and advance balance logic
+- `app/Services/RecordVersionService.php`: Full old/new snapshots for complex edits such as invoices, quotations, and parties
+- `app/Observers/RecordVersionObserver.php`: Attribute-level edit history for tracked models
 - `app/Services/BkashSmsPaymentService.php`: bKash SMS parsing and matching
 - `app/Services/MikrotikCustomerSyncService.php`: MikroTik PPPoE sync
 - `app/Services/OltSshClient.php`: SSH client for live OLT polling with legacy HSGQ host key support
 - `app/Services/OltTelnetClient.php`: Telnet client for live OLT polling
 - `app/Services/OltLiveOutputParser.php`: Parses live OLT ONU status and power output
 - `resources/views`: Blade admin screens
+- `resources/views/partials/record_versions.blade.php`: Full-width old-version preview UI for edit history
 - `PROJECT_ROADMAP.md`: Longer roadmap and developer documentation
 
 ## Documentation Rule
@@ -509,6 +517,7 @@ Always update docs when changing:
 - routes, menus, permissions, or URLs
 - database migrations or required artisan commands
 - payment, billing, bKash SMS, MikroTik, OLT, or customer-status business rules
+- audit/version-history behavior, including old snapshot structure and operator history preview UI
 - production deployment steps or server paths
 - `.env` keys, external device credentials, webhook URLs, cron jobs, or scheduler commands
 - known limitations, troubleshooting steps, or rollback process

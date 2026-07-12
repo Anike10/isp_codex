@@ -6,9 +6,12 @@ use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\MikrotikRouter;
 use App\Models\Subscription;
+use App\Observers\RecordVersionObserver;
 use App\Services\MikrotikCustomerSyncService;
+use App\Services\RecordVersionService;
 use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 use Throwable;
@@ -114,7 +117,7 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function update(Request $request, Customer $customer)
+    public function update(Request $request, Customer $customer, RecordVersionService $recordVersionService)
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -136,32 +139,41 @@ class CustomerController extends Controller
         $data['is_vendor'] = (bool) ($data['is_vendor'] ?? false);
         $this->ensurePartyHasRole($data);
         $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
+        $oldSnapshot = $recordVersionService->snapshot($customer, ['activeSubscription']);
 
-        $customer->update(Arr::except($data, ['internet_package_id', 'start_date']));
+        DB::transaction(function () use ($customer, $data, $recordVersionService, $oldSnapshot): void {
+            RecordVersionObserver::withoutRecording(fn () => $customer->update(Arr::except($data, ['internet_package_id', 'start_date'])));
 
-        $activeSubscription = $customer->activeSubscription;
+            $activeSubscription = $customer->activeSubscription;
 
-        if (! empty($data['internet_package_id'])) {
-            if ($activeSubscription) {
+            if (! empty($data['internet_package_id'])) {
+                if ($activeSubscription) {
+                    $activeSubscription->update([
+                        'internet_package_id' => $data['internet_package_id'],
+                        'start_date' => $data['start_date'] ?? $activeSubscription->start_date ?? now()->toDateString(),
+                        'end_date' => null,
+                    ]);
+                } else {
+                    Subscription::create([
+                        'customer_id' => $customer->id,
+                        'internet_package_id' => $data['internet_package_id'],
+                        'start_date' => $data['start_date'] ?? now()->toDateString(),
+                        'status' => 'active',
+                    ]);
+                }
+            } elseif ($activeSubscription) {
                 $activeSubscription->update([
-                    'internet_package_id' => $data['internet_package_id'],
-                    'start_date' => $data['start_date'] ?? $activeSubscription->start_date ?? now()->toDateString(),
-                    'end_date' => null,
-                ]);
-            } else {
-                Subscription::create([
-                    'customer_id' => $customer->id,
-                    'internet_package_id' => $data['internet_package_id'],
-                    'start_date' => $data['start_date'] ?? now()->toDateString(),
-                    'status' => 'active',
+                    'status' => 'inactive',
+                    'end_date' => now()->toDateString(),
                 ]);
             }
-        } elseif ($activeSubscription) {
-            $activeSubscription->update([
-                'status' => 'inactive',
-                'end_date' => now()->toDateString(),
+
+            $newSnapshot = $recordVersionService->snapshot($customer->refresh(), ['activeSubscription']);
+            $recordVersionService->recordUpdate($customer, $oldSnapshot, $newSnapshot, [
+                'source' => 'party_edit',
+                'party_name' => $customer->name,
             ]);
-        }
+        });
 
         $syncResult = $this->syncMikrotikCustomer($customer);
 
@@ -182,6 +194,7 @@ class CustomerController extends Controller
             'tickets' => fn ($query) => $query->latest(),
             'productSerials' => fn ($query) => $query->with(['product', 'invoice', 'warrantyClaims'])->latest('sold_at')->limit(50),
             'warrantyClaims' => fn ($query) => $query->with(['product', 'productSerial'])->latest()->limit(10),
+            'versions',
         ]);
 
         return view('customers.show', compact('customer'));

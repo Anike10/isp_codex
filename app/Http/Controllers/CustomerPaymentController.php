@@ -41,6 +41,17 @@ class CustomerPaymentController extends Controller
             return back()->withInput()->withErrors(['payment_account_id' => 'Please select an account for this payment method.']);
         }
 
+        if ($data['payment_method'] !== 'cash') {
+            $account = PaymentAccount::where('id', $data['payment_account_id'])
+                ->where('payment_method', $data['payment_method'])
+                ->where('status', 'active')
+                ->first();
+
+            if (! $account) {
+                return back()->withInput()->withErrors(['payment_account_id' => 'Please select a valid account for this payment method.']);
+            }
+        }
+
         $billingService->generateCurrentServiceBillForCustomer($customer);
 
         $invoice = $customer->invoices()->where('due_amount', '>', 0)->orderBy('due_date')->orderBy('id')->first();

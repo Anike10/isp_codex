@@ -60,6 +60,10 @@
         <span class="muted">{{ $hasFilters ? 'Filtered Collection' : 'Listed Collection' }}</span>
         <strong>{{ number_format($filteredCollected, 2) }}</strong>
     </div>
+    <div class="card stat">
+        <span class="muted">{{ $hasFilters ? 'Filtered Expense' : 'Listed Expense' }}</span>
+        <strong>{{ number_format($filteredSpent, 2) }}</strong>
+    </div>
 </div>
 
 <form method="get" class="card form-grid" style="margin-bottom:16px">
@@ -87,7 +91,7 @@
         <button class="btn secondary" type="submit">Search</button>
         <a class="btn light" href="{{ route('payment-accounts.show', $paymentAccount) }}">Reset</a>
         @if ($hasFilters)
-            <span class="muted">{{ $filteredTransactions }} matched, {{ number_format($filteredCollected, 2) }} collected.</span>
+            <span class="muted">{{ $filteredTransactions }} matched, {{ number_format($filteredCollected, 2) }} collected, {{ number_format($filteredSpent, 2) }} spent.</span>
         @endif
     </div>
 </form>
@@ -102,6 +106,7 @@
             <th>Party</th>
             <th>Note</th>
             <th>Credit</th>
+            <th>Debit</th>
             <th>Running Balance</th>
         </tr>
     </thead>
@@ -110,34 +115,40 @@
             <td>{{ request('from') ?: $paymentAccount->created_at?->format('Y-m-d') }}</td>
             <td>{{ request()->filled('from') ? 'Before Filter' : ($hasPriorPage ? 'Before Page' : 'Opening') }}</td>
             <td>N/A</td>
-            <td>{{ request()->filled('from') ? 'Opening balance plus collection before selected date' : ($hasPriorPage ? 'Balance before this page' : 'Opening balance') }}</td>
+            <td>{{ request()->filled('from') ? 'Opening balance plus prior collection minus prior expense' : ($hasPriorPage ? 'Balance before this page' : 'Opening balance') }}</td>
             <td>{{ number_format((request()->filled('from') || $hasPriorPage) ? $runningBalance : (float) $paymentAccount->opening_balance, 2) }}</td>
+            <td>{{ number_format(0, 2) }}</td>
             <td>{{ number_format($runningBalance, 2) }}</td>
         </tr>
-        @forelse ($payments as $payment)
+        @forelse ($ledgerRows as $row)
             @php
-                $runningBalance += (float) $payment->amount;
+                $runningBalance += (float) $row['signed_amount'];
             @endphp
             <tr>
-                <td>{{ $payment->payment_date->format('Y-m-d') }}</td>
+                <td>{{ $row['date']?->format('Y-m-d') }}</td>
                 <td>
-                    @if ($canOpenInvoices)
-                        <a href="{{ route('invoices.show', $payment->invoice) }}">{{ $payment->invoice->invoice_no }}</a>
+                    @if ($row['type'] === 'payment' && $row['invoice'])
+                        @if ($canOpenInvoices)
+                            <a href="{{ route('invoices.show', $row['invoice']) }}">{{ $row['invoice']->invoice_no }}</a>
+                        @else
+                            {{ $row['invoice']->invoice_no }}
+                        @endif
                     @else
-                        {{ $payment->invoice->invoice_no }}
+                        Expense
                     @endif
                 </td>
-                <td>{{ $payment->customer->name }}</td>
-                <td>{{ $payment->note ?? 'Payment received' }}</td>
-                <td>{{ number_format($payment->amount, 2) }}</td>
+                <td>{{ $row['party'] }}</td>
+                <td>{{ $row['note'] }}</td>
+                <td>{{ number_format($row['credit'], 2) }}</td>
+                <td>{{ number_format($row['debit'], 2) }}</td>
                 <td>{{ number_format($runningBalance, 2) }}</td>
             </tr>
         @empty
             <tr>
-                <td colspan="6">No transactions recorded for this account yet.</td>
+                <td colspan="7">No transactions recorded for this account yet.</td>
             </tr>
         @endforelse
     </tbody>
 </table>
-<div style="margin-top:16px">{{ $payments->links() }}</div>
+<div style="margin-top:16px">{{ $ledgerRows->links() }}</div>
 @endsection

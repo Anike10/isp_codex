@@ -82,4 +82,6 @@
     @if ($quotation->private_note)<p><strong>Private Note:</strong> <span style="white-space:pre-line">{{ $quotation->private_note }}</span></p>@endif
 </section>
 @endif
+
+@include('partials.record_versions', ['versions' => $quotation->versions])
 @endsection

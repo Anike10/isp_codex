@@ -48,7 +48,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_packages')->group(function () {
-        Route::resource('packages', PackageController::class)->only(['index', 'show', 'create', 'store']);
+        Route::resource('packages', PackageController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
     });
 
     Route::middleware('permission:manage_invoices')->group(function () {

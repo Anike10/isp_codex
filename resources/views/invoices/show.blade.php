@@ -43,7 +43,7 @@
                 <a class="btn light" href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank">Challan</a>
             </div>
         </details>
-        <form method="post" action="{{ route('invoices.copy-next-month', $invoice) }}" onsubmit="return confirm('Copy this invoice for next month with same items and prices?');">
+        <form method="post" action="{{ route('invoices.copy-next-month', $invoice) }}" onsubmit="return confirm('Copy this invoice for next month? Stock product links and serials will not be reused automatically.');">
             @csrf
             <button class="btn light" type="submit">Copy for Next Month</button>
         </form>
@@ -173,6 +173,8 @@
     </table>
 </section>
 @endif
+
+@include('partials.record_versions', ['versions' => $invoice->versions])
 
 <section class="card" style="margin-top:16px">
     <h2>Payment Allocations</h2>

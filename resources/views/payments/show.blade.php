@@ -79,4 +79,6 @@
         <p style="white-space:pre-line">{{ $payment->note }}</p>
     </section>
 @endif
+
+@include('partials.record_versions', ['versions' => $payment->versions])
 @endsection

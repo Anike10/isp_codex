@@ -3,12 +3,17 @@
 namespace App\Providers;
 
 use App\Models\BkashSmsPayment;
+use App\Models\AppSetting;
 use App\Models\Customer;
 use App\Models\CustomerBalanceTransaction;
+use App\Models\Employee;
+use App\Models\EmployeeSalaryRevision;
+use App\Models\Expense;
 use App\Models\InternetPackage;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\MikrotikRouter;
+use App\Models\NetworkMapFeature;
 use App\Models\OltOnu;
 use App\Models\OltDevice;
 use App\Models\Payment;
@@ -20,12 +25,18 @@ use App\Models\ProductCategory;
 use App\Models\ProductSerial;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
+use App\Models\Quotation;
+use App\Models\QuotationItem;
 use App\Models\Role;
 use App\Models\StockMovement;
 use App\Models\Subscription;
 use App\Models\SupportTicket;
 use App\Models\User;
+use App\Models\Warehouse;
+use App\Models\WarrantyClaim;
+use App\Models\WarrantyClaimLog;
 use App\Observers\EntryByObserver;
+use App\Observers\RecordVersionObserver;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\ServiceProvider;
 
@@ -73,6 +84,34 @@ class AppServiceProvider extends ServiceProvider
             User::class,
         ] as $model) {
             $model::observe(EntryByObserver::class);
+        }
+
+        foreach ([
+            AppSetting::class,
+            Customer::class,
+            Employee::class,
+            EmployeeSalaryRevision::class,
+            Expense::class,
+            InternetPackage::class,
+            Invoice::class,
+            InvoiceItem::class,
+            Payment::class,
+            PaymentAccount::class,
+            Product::class,
+            ProductCategory::class,
+            Quotation::class,
+            QuotationItem::class,
+            PurchaseBill::class,
+            PurchaseBillItem::class,
+            Role::class,
+            Subscription::class,
+            SupportTicket::class,
+            User::class,
+            Warehouse::class,
+            WarrantyClaim::class,
+            WarrantyClaimLog::class,
+        ] as $model) {
+            $model::observe(RecordVersionObserver::class);
         }
     }
 }

@@ -6,7 +6,10 @@
         <h1>{{ $package->name }}</h1>
         <div class="muted">{{ $package->speed }} internet package</div>
     </div>
-    <a class="btn light" href="{{ route('packages.index') }}">Back</a>
+    <div class="actions">
+        <a class="btn secondary" href="{{ route('packages.edit', $package) }}">Edit</a>
+        <a class="btn light" href="{{ route('packages.index') }}">Back</a>
+    </div>
 </div>
 
 <div class="grid two">
@@ -24,4 +27,6 @@
         <p><strong>Description:</strong> {{ $package->description ?? 'No description' }}</p>
     </section>
 </div>
+
+@include('partials.record_versions', ['versions' => $package->versions])
 @endsection

@@ -14,7 +14,9 @@ use App\Models\Subscription;
 use App\Services\BillingService;
 use App\Services\InventoryService;
 use App\Services\PaymentService;
+use App\Services\RecordVersionService;
 use App\Support\SerialNumberParser;
+use App\Observers\RecordVersionObserver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -190,7 +192,7 @@ class InvoiceController extends Controller
         ]);
     }
 
-    public function update(Request $request, Invoice $invoice, InventoryService $inventoryService)
+    public function update(Request $request, Invoice $invoice, InventoryService $inventoryService, RecordVersionService $recordVersionService)
     {
         if ($invoice->isFinalized()) {
             return redirect()->route('invoices.show', $invoice)->withErrors([
@@ -202,14 +204,15 @@ class InvoiceController extends Controller
 
         try {
             [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
+            $oldSnapshot = $recordVersionService->snapshot($invoice, ['customer', 'items']);
 
-            DB::transaction(function () use ($invoice, $data, $customerId, $itemsData, $subtotal, $total, $inventoryService) {
+            DB::transaction(function () use ($invoice, $data, $customerId, $itemsData, $subtotal, $total, $inventoryService, $recordVersionService, $oldSnapshot) {
                 $this->restoreInvoiceInventory($invoice, $inventoryService);
 
                 $paidAmount = (float) $invoice->paid_amount;
                 $dueAmount = max(0, $total - $paidAmount);
 
-                $invoice->update([
+                RecordVersionObserver::withoutRecording(fn () => $invoice->update([
                     'customer_id' => $customerId,
                     'billing_month' => $data['billing_month'],
                     'invoice_type' => $data['invoice_type'] ?? $invoice->invoice_type ?? 'product',
@@ -228,13 +231,19 @@ class InvoiceController extends Controller
                     'public_note' => $data['public_note'] ?? null,
                     'show_public_note' => (bool) ($data['show_public_note'] ?? false),
                     'private_note' => $data['private_note'] ?? null,
-                ]);
+                ]));
 
                 $invoice->items()->delete();
                 foreach ($itemsData as $itemData) {
                     $invoiceItem = $invoice->items()->create($itemData);
                     $this->applyInvoiceItemInventory($invoice, $invoiceItem, $inventoryService);
                 }
+
+                $newSnapshot = $recordVersionService->snapshot($invoice->refresh(), ['customer', 'items']);
+                $recordVersionService->recordUpdate($invoice, $oldSnapshot, $newSnapshot, [
+                    'source' => 'invoice_edit',
+                    'invoice_no' => $invoice->invoice_no,
+                ]);
             });
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
@@ -243,25 +252,53 @@ class InvoiceController extends Controller
         return redirect()->route('invoices.show', $invoice)->with('success', 'Draft invoice updated successfully.');
     }
 
-    public function finalize(Invoice $invoice)
+    public function finalize(Invoice $invoice, RecordVersionService $recordVersionService)
     {
         if (! $invoice->isFinalized()) {
-            $invoice->update(['finalized_at' => now()]);
+            $oldSnapshot = $recordVersionService->snapshot($invoice, ['customer', 'items']);
+
+            DB::transaction(function () use ($invoice, $recordVersionService, $oldSnapshot): void {
+                RecordVersionObserver::withoutRecording(fn () => $invoice->update(['finalized_at' => now()]));
+                $newSnapshot = $recordVersionService->snapshot($invoice->refresh(), ['customer', 'items']);
+                $recordVersionService->recordUpdate($invoice, $oldSnapshot, $newSnapshot, [
+                    'source' => 'invoice_finalize',
+                    'invoice_no' => $invoice->invoice_no,
+                ]);
+            });
         }
 
         return redirect()->route('invoices.show', $invoice)->with('success', 'Invoice finalized. Editing is now locked.');
     }
 
-    public function finalizeSelected(Request $request)
+    public function finalizeSelected(Request $request, RecordVersionService $recordVersionService)
     {
         $data = $request->validate([
             'invoice_ids' => ['required', 'array', 'min:1'],
             'invoice_ids.*' => ['integer', 'exists:invoices,id'],
         ]);
 
-        $finalizedCount = Invoice::whereIn('id', $data['invoice_ids'])
+        $finalizedCount = 0;
+
+        Invoice::query()
+            ->with(['customer', 'items'])
+            ->whereIn('id', $data['invoice_ids'])
             ->whereNull('finalized_at')
-            ->update(['finalized_at' => now()]);
+            ->orderBy('id')
+            ->chunkById(100, function ($invoices) use (&$finalizedCount, $recordVersionService): void {
+                foreach ($invoices as $invoice) {
+                    $oldSnapshot = $recordVersionService->snapshot($invoice, ['customer', 'items']);
+
+                    DB::transaction(function () use ($invoice, $recordVersionService, $oldSnapshot, &$finalizedCount): void {
+                        RecordVersionObserver::withoutRecording(fn () => $invoice->update(['finalized_at' => now()]));
+                        $newSnapshot = $recordVersionService->snapshot($invoice->refresh(), ['customer', 'items']);
+                        $recordVersionService->recordUpdate($invoice, $oldSnapshot, $newSnapshot, [
+                            'source' => 'invoice_bulk_finalize',
+                            'invoice_no' => $invoice->invoice_no,
+                        ]);
+                        $finalizedCount++;
+                    });
+                }
+            });
 
         return back()->with('success', $finalizedCount.' selected invoice(s) finalized. Editing is now locked.');
     }
@@ -325,7 +362,7 @@ class InvoiceController extends Controller
 
     public function copyForNextMonth(Invoice $invoice)
     {
-        $invoice->loadMissing('items');
+        $invoice->loadMissing('items.product');
         $nextBillingMonth = Carbon::createFromFormat('!Y-m', $invoice->billing_month)
             ->addMonthNoOverflow()
             ->format('Y-m');
@@ -355,11 +392,23 @@ class InvoiceController extends Controller
             ]);
 
             foreach ($invoice->items as $item) {
+                $copyableProductId = $item->product && ! $item->product->track_inventory
+                    ? $item->product_id
+                    : null;
+
                 $copy->items()->create([
+                    'product_id' => $copyableProductId,
                     'product_name' => $item->product_name,
+                    'product_type' => $item->product_type,
                     'quantity' => $item->quantity,
                     'unit_price' => $item->unit_price,
                     'total' => $item->total,
+                    'serial_numbers' => null,
+                    'serialless_quantity' => 0,
+                    'warranty_days' => $item->warranty_days,
+                    'service_guarantee_days' => $item->service_guarantee_days,
+                    'service_guarantee_until' => $item->service_guarantee_days ? now()->addDays($item->service_guarantee_days) : null,
+                    'service_note' => $item->service_note,
                 ]);
             }
 
@@ -701,7 +750,7 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice)
     {
-        $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items']);
+        $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items', 'versions']);
 
         $paymentAccounts = collect();
 

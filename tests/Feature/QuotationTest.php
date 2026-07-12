@@ -106,6 +106,28 @@ class QuotationTest extends TestCase
         $this->assertSame(5, $product->refresh()->stock_quantity);
     }
 
+    public function test_serial_tracked_quotation_requires_serial_or_serialless_count_for_every_piece(): void
+    {
+        [$user, $customer, $product] = $this->fixture(true);
+        ProductSerial::create([
+            'product_id' => $product->id,
+            'serial_number' => 'ONU-001',
+            'status' => 'in_stock',
+        ]);
+
+        $payload = $this->quotationPayload($customer, $product);
+        $payload['items'][0]['quantity'] = 3;
+        $payload['items'][0]['serial_numbers'] = 'ONU-001';
+        $payload['items'][0]['serialless_quantity'] = 1;
+
+        $this->actingAs($user)
+            ->post(route('quotations.store'), $payload)
+            ->assertSessionHasErrors('items');
+
+        $this->assertDatabaseCount('quotations', 0);
+        $this->assertSame(5, $product->refresh()->stock_quantity);
+    }
+
     private function fixture(bool $serialTracked = false): array
     {
         $user = User::factory()->create();

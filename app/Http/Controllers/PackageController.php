@@ -34,16 +34,41 @@ class PackageController extends Controller
         return view('packages.create');
     }
 
+    public function edit(InternetPackage $package)
+    {
+        return view('packages.create', compact('package'));
+    }
+
     public function show(InternetPackage $package)
     {
-        $package->loadCount('subscriptions');
+        $package->load('versions')->loadCount('subscriptions');
 
         return view('packages.show', compact('package'));
     }
 
     public function store(Request $request)
     {
-        $data = $request->validate([
+        $data = $this->validatePackage($request);
+        $data['mikrotik_profile'] = $data['mikrotik_profile'] ?: $data['name'];
+
+        InternetPackage::create($data);
+
+        return redirect()->route('packages.index')->with('success', 'Package created successfully.');
+    }
+
+    public function update(Request $request, InternetPackage $package)
+    {
+        $data = $this->validatePackage($request);
+        $data['mikrotik_profile'] = $data['mikrotik_profile'] ?: $data['name'];
+
+        $package->update($data);
+
+        return redirect()->route('packages.show', $package)->with('success', 'Package updated successfully.');
+    }
+
+    private function validatePackage(Request $request): array
+    {
+        return $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'speed' => ['required', 'string', 'max:100'],
             'mikrotik_profile' => ['nullable', 'string', 'max:255'],
@@ -51,11 +76,5 @@ class PackageController extends Controller
             'description' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
         ]);
-
-        $data['mikrotik_profile'] = $data['mikrotik_profile'] ?: $data['name'];
-
-        InternetPackage::create($data);
-
-        return redirect()->route('packages.index')->with('success', 'Package created successfully.');
     }
 }

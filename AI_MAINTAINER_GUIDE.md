@@ -72,15 +72,27 @@ let those responsibilities shape the implementation, validation, and notes.
   payment/allocation services and maintain ledger integrity.
 - Invoice totals, discounts, VAT, due amount, paid amount, stock movement, and
   serial movement must stay consistent inside transactions.
+- Payment account and cash ledger running balances must include both payment
+  collection credits and expense debits. Do not show a running balance timeline
+  that only lists collections while the summary cards subtract expenses.
 - Product/service invoices and monthly ISP service bills have different
   business meanings; keep their rules separate.
 - Standalone quotations live in `quotations` and `quotation_items`. They may
   calculate a quoted total for the document, but must not affect invoice
   totals, party dues, payments, ledgers, stock, or serial status.
+- Quotation save/update should still validate serial-tracked lines the same
+  way invoice and purchase flows do: `serial count + serial-less quantity`
+  must equal line quantity. This prevents operators from saving a quotation
+  that later fails during invoice conversion for a predictable counting issue.
 - `POST /quotations/{quotation}/make-invoice` creates one draft invoice from
   the quotation inside a transaction. Inventory and serial availability are
   checked and applied only at conversion time; repeated conversion returns the
   existing invoice instead of creating a duplicate.
+- `POST /invoices/{invoice}/copy-next-month` is a recurring/manual draft-copy
+  helper. It must not duplicate stock-bound `product_id`, serial numbers, or
+  serial-less counts, because copying a stock sale is not the same as issuing
+  stock again. Keep copied stock lines as manual text/price lines unless a
+  future workflow explicitly re-selects available stock and applies inventory.
 
 ### 6. UX Designer For Office Operators
 
@@ -269,6 +281,7 @@ git status -sb
 - `app/Services/BillingService.php`: monthly service bill generation
 - `app/Services/PaymentService.php`: payment recording and invoice due update
 - `app/Services/InventoryService.php`: stock in/out/own-use movement and stock balance updates
+- `app/Http/Controllers/PackageController.php`: internet package create/edit/show workflow
 - `app/Http/Controllers/PaymentAccountController.php`: account balances and ledger
 - `app/Http/Controllers/OltOnuController.php`: OLT device setup, live refresh, and ONU inventory
 - `app/Services/OltSnmpClient.php`: optional SNMP-first single ONU status/power polling for fast row refresh
@@ -292,11 +305,22 @@ Documentation must be updated when changing:
 - routes, controllers, views, menus, permissions, or public URLs
 - database migrations, models, relationships, or required artisan commands
 - billing, payment allocation, bKash SMS, customer status, grace period, MikroTik sync, OLT live polling, or accounting rules
+- audit/version-history behavior, including what old snapshots contain and how operators view previous versions
 - production deploy flow, server path, ownership, cache commands, migrations, cron, scheduler, webhook URLs, or backup/rollback process
 - external integrations, `.env` keys, device connection methods, command names, ports, or known limitations
 - tests, troubleshooting steps, or operational recovery instructions
 
 Never commit real secrets to Markdown. Use placeholders and tell maintainers to get passwords/tokens from the approved secure source.
+
+### Record Version / Edit History Notes
+
+- Edited records are preserved in `record_versions` with `old_values`, `new_values`, `changed_fields`, `edited_by`, `edited_by_type`, and `edited_by_name`.
+- Invoice and quotation edits use `RecordVersionService` to snapshot the document, party, and line items before and after the edit. This is intentional because document line items are deleted/recreated during draft edits.
+- Invoice finalization, including bulk finalization, must also create full invoice snapshots. Avoid query-builder `update(...)` for operator-facing invoice state changes unless you manually write a `record_versions` row.
+- Party edits update party fields, package/subscription changes, and the version row inside one DB transaction so history cannot drift from the actual party state.
+- Simple operator-editable model edits use `RecordVersionObserver` for attribute-level old/new history. Sensitive fields containing password, token, secret, or key are masked.
+- Do not attach the generic observer to high-churn generated records such as live OLT polling rows, payment allocations, customer balance transactions, stock movements, or SMS status rows unless you also suppress system/background updates. Otherwise normal refresh/accounting work can create excessive history noise.
+- Operator pages should not show raw JSON as the primary history view. `resources/views/partials/record_versions.blade.php` renders invoice old versions in a full-width invoice-like preview with a distinct history background. Do not add fake action labels such as `History Copy`, and do not place the old-version preview inside a narrow table column; it must use the full content width so the historical invoice/record is readable. Keep future history UI readable first, with raw data only as a secondary/debug option if needed.
 
 ## Route And Permission Model
 
