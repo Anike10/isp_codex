@@ -17,7 +17,7 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Return</th><th>Invoice</th><th>Party</th><th>Date</th><th>Total Credit</th><th>Note</th></tr></thead>
+    <thead><tr><th>Return</th><th>Invoice</th><th>Party</th><th>Date</th><th>Total Credit</th><th>Invoice Credit</th><th>Advance Credit</th><th>Note</th></tr></thead>
     <tbody>
     @forelse ($saleReturns as $saleReturn)
         <tr data-href="{{ route('sale-returns.show', $saleReturn) }}">
@@ -26,10 +26,12 @@
             <td>{{ $saleReturn->customer->name }}</td>
             <td>{{ $saleReturn->return_date->format('Y-m-d') }}</td>
             <td>{{ number_format($saleReturn->subtotal, 2) }}</td>
+            <td>{{ number_format($saleReturn->invoice_credit_amount, 2) }}</td>
+            <td>{{ number_format($saleReturn->advance_credit_amount, 2) }}</td>
             <td>{{ $saleReturn->note ?? 'N/A' }}</td>
         </tr>
     @empty
-        <tr><td colspan="6">No sale returns found.</td></tr>
+        <tr><td colspan="8">No sale returns found.</td></tr>
     @endforelse
     </tbody>
 </table>

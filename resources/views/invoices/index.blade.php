@@ -174,7 +174,7 @@
     <section class="card invoice-stat">
         <span>Total Billed</span>
         <strong>BDT {{ number_format($invoiceSummary['total_amount'], 2) }}</strong>
-        <small>Paid invoices {{ number_format($invoiceSummary['paid_count']) }}</small>
+        <small>Paid {{ number_format($invoiceSummary['paid_count']) }} / Returned {{ number_format($invoiceSummary['returned_count']) }}</small>
     </section>
     <section class="card invoice-stat">
         <span>Advance Balance</span>
@@ -196,7 +196,7 @@
         <label>Payment Status</label>
         <select name="status">
             <option value="">All statuses</option>
-            @foreach (['unpaid', 'partial', 'paid'] as $status)
+            @foreach (['unpaid', 'partial', 'paid', 'returned'] as $status)
                 <option value="{{ $status }}" @selected(request('status') === $status)>{{ ucfirst($status) }}</option>
             @endforeach
         </select>

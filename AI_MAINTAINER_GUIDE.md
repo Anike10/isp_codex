@@ -717,6 +717,7 @@ Stock movement behavior:
 - Purchase bills add stock and create a stock movement using the purchase bill number as the reference.
 - Purchase bills accept one optional vendor bill/invoice copy (PDF/JPG/PNG/WEBP, max 10 MB), stored on the private `local` disk under `purchase-bill-documents/YYYY/MM` and served through `GET /purchase-bills/{purchaseBill}/document` behind `manage_products`.
 - Draft purchase-bill edits preserve the existing document when no file is submitted. A successful replacement deletes the old file; a failed database operation deletes the newly uploaded file so private storage does not accumulate orphan replacements.
+- Sale returns must apply credit to the locked source invoice before touching customer advance: `invoice_credit_amount = min(return subtotal, current due)` and only `advance_credit_amount = subtotal - invoice credit` enters `customer.account_balance`. A fully settled invoice with no payment is `returned`; a partly settled invoice is `partial`. Never credit the full return to advance while leaving the same invoice due, because customer pages then show a misleading unpaid invoice offset by hidden advance.
 
 ### Vehicle and fleet management
 

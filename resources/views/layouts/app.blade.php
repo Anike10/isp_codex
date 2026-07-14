@@ -88,6 +88,7 @@
         .badge.final { background:#ecfdf3; color:#027a48; }
         .badge.overdue { background:#fff0f0; color:var(--danger); }
         .badge.paid, .badge.active { background:#ecfdf3; color:#027a48; }
+        .badge.returned { background:#eef2ff; color:#3730a3; }
         .badge.processed, .badge.balance { background:#ecfdf3; color:#027a48; }
         .badge.pending { background:#fff7ed; color:var(--warn); }
         .badge.duplicate { background:#eef2ff; color:#175cd3; }

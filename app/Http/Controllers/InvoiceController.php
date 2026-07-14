@@ -78,6 +78,7 @@ class InvoiceController extends Controller
             'unpaid_count' => (clone $invoiceQuery)->where('status', 'unpaid')->count(),
             'partial_count' => (clone $invoiceQuery)->where('status', 'partial')->count(),
             'paid_count' => (clone $invoiceQuery)->where('status', 'paid')->count(),
+            'returned_count' => (clone $invoiceQuery)->where('status', 'returned')->count(),
             'draft_count' => (clone $invoiceQuery)->whereNull('finalized_at')->count(),
             'final_count' => (clone $invoiceQuery)->whereNotNull('finalized_at')->count(),
             'total_amount' => (float) (clone $invoiceQuery)->sum('total'),

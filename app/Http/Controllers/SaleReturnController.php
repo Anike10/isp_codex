@@ -96,6 +96,8 @@ class SaleReturnController extends Controller
                     'return_no' => $data['return_no'],
                     'return_date' => $data['return_date'],
                     'subtotal' => 0,
+                    'invoice_credit_amount' => 0,
+                    'advance_credit_amount' => 0,
                     'note' => $data['note'] ?? null,
                 ]);
 
@@ -148,7 +150,7 @@ class SaleReturnController extends Controller
                 }
 
                 $saleReturn->update(['subtotal' => $subtotal]);
-                $this->creditCustomerForReturn($invoice, $saleReturn, $subtotal, $data['return_date']);
+                $this->applyReturnCredit($invoice, $saleReturn, $subtotal, $data['return_date']);
 
                 return $saleReturn;
             });
@@ -156,7 +158,7 @@ class SaleReturnController extends Controller
             return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
         }
 
-        return redirect()->route('sale-returns.show', $saleReturn)->with('success', 'Sale return saved, stock restored, and customer balance credited.');
+        return redirect()->route('sale-returns.show', $saleReturn)->with('success', 'Sale return saved, stock restored, and credit applied to the source invoice.');
     }
 
     public function show(SaleReturn $saleReturn)
@@ -274,14 +276,37 @@ class SaleReturnController extends Controller
             ]));
     }
 
-    private function creditCustomerForReturn(Invoice $invoice, SaleReturn $saleReturn, float $amount, string $returnDate): void
+    private function applyReturnCredit(Invoice $invoice, SaleReturn $saleReturn, float $amount, string $returnDate): void
     {
         if ($amount <= 0) {
             return;
         }
 
+        $invoiceDue = max(0, (float) $invoice->due_amount);
+        $invoiceCredit = round(min($amount, $invoiceDue), 2);
+        $advanceCredit = round(max(0, $amount - $invoiceCredit), 2);
+
+        if ($invoiceCredit > 0) {
+            $newDue = round(max(0, $invoiceDue - $invoiceCredit), 2);
+            $invoice->update([
+                'due_amount' => $newDue,
+                'status' => $newDue <= 0
+                    ? ((float) $invoice->paid_amount > 0 ? 'paid' : 'returned')
+                    : 'partial',
+            ]);
+        }
+
+        $saleReturn->update([
+            'invoice_credit_amount' => $invoiceCredit,
+            'advance_credit_amount' => $advanceCredit,
+        ]);
+
+        if ($advanceCredit <= 0) {
+            return;
+        }
+
         $customer = Customer::query()->whereKey($invoice->customer_id)->lockForUpdate()->firstOrFail();
-        $balanceAfter = (float) $customer->account_balance + $amount;
+        $balanceAfter = round((float) $customer->account_balance + $advanceCredit, 2);
 
         CustomerBalanceTransaction::create([
             'customer_id' => $customer->id,
@@ -289,11 +314,11 @@ class SaleReturnController extends Controller
             'payment_account_id' => null,
             'payment_method' => 'sale_return',
             'direction' => 'credit',
-            'amount' => $amount,
+            'amount' => $advanceCredit,
             'balance_after' => $balanceAfter,
             'transaction_date' => $returnDate,
             'reference' => $saleReturn->return_no,
-            'note' => 'Sale return credit for invoice '.$invoice->invoice_no.'.',
+            'note' => 'Sale return excess credit after settling invoice '.$invoice->invoice_no.'.',
         ]);
 
         $customer->update(['account_balance' => $balanceAfter]);
