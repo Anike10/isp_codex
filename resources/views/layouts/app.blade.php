@@ -241,6 +241,7 @@
                         @if (auth()->user()?->hasPermission('manage_invoices'))
                             <a href="{{ route('invoices.index') }}">Invoices</a>
                             <a href="{{ route('invoices.create') }}">Create Invoice</a>
+                            <a href="{{ route('sale-returns.index') }}">Sale Returns</a>
                             <a href="{{ route('quotations.index') }}">Quotations</a>
                             <a href="{{ route('quotations.create') }}">Create Quotation</a>
                             <a href="{{ route('invoices.payment-note-default.edit') }}">Payment Note Default</a>

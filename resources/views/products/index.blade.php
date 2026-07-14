@@ -48,6 +48,7 @@
 </div>
 
 <form method="get" class="card form-grid" style="margin-bottom:16px">
+    <div><label>Product Serial Search</label><input name="serial_search" value="{{ $serialSearch }}" placeholder="Enter product serial number"></div>
     <div><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Name, SKU, barcode, brand, category"></div>
     <div>
         <label>Brand</label>
@@ -83,6 +84,102 @@
     </div>
 </form>
 
+@if ($serialSearch !== '')
+    <section class="card" style="margin-bottom:16px">
+        <div class="topbar">
+            <div>
+                <h2>Serial Trace</h2>
+                <div class="muted">Search: {{ $serialSearch }}</div>
+            </div>
+        </div>
+
+        <table>
+            <thead><tr><th>Serial</th><th>Product</th><th>Purchase</th><th>Current Status</th><th>Warehouse</th><th>Sale</th><th>Return / Note</th></tr></thead>
+            <tbody>
+            @forelse ($serialTraceSerials as $serial)
+                @php($returnItems = $serial->invoiceItem?->saleReturnItems?->filter(fn ($item) => $item->serial_numbers && str_contains($item->serial_numbers, $serial->serial_number)) ?? collect())
+                <tr>
+                    <td><span class="badge">{{ $serial->serial_number }}</span></td>
+                    <td>
+                        @if ($serial->product)
+                            <a href="{{ route('products.show', $serial->product) }}">{{ $serial->product->name }}</a>
+                            <div class="muted">{{ $serial->product->sku }}</div>
+                        @else
+                            N/A
+                        @endif
+                    </td>
+                    <td>
+                        @if ($serial->purchaseBill)
+                            <a href="{{ route('purchase-bills.show', $serial->purchaseBill) }}">{{ $serial->purchaseBill->bill_no }}</a>
+                            <div class="muted">{{ $serial->purchaseBill->purchase_date?->format('Y-m-d') ?? 'No date' }}{{ $serial->purchaseBill->party ? ' - '.$serial->purchaseBill->party->name : '' }}</div>
+                        @else
+                            N/A
+                        @endif
+                    </td>
+                    <td>{{ $serial->status === 'in_stock' ? 'In house' : str_replace('_', ' ', ucfirst($serial->status)) }}</td>
+                    <td>
+                        @if ($serial->warehouse)
+                            <a href="{{ route('warehouses.show', $serial->warehouse) }}">{{ $serial->warehouse->name }}</a>
+                        @else
+                            N/A
+                        @endif
+                    </td>
+                    <td>
+                        @if ($serial->invoice)
+                            <a href="{{ route('invoices.show', $serial->invoice) }}">{{ $serial->invoice->invoice_no }}</a>
+                            <div class="muted">{{ $serial->sold_at?->format('Y-m-d H:i') ?? $serial->invoice->created_at?->format('Y-m-d H:i') }}{{ $serial->invoice->customer ? ' - '.$serial->invoice->customer->name : '' }}</div>
+                        @else
+                            N/A
+                        @endif
+                    </td>
+                    <td>
+                        @forelse ($returnItems as $returnItem)
+                            <a href="{{ route('sale-returns.show', $returnItem->saleReturn) }}">{{ $returnItem->saleReturn->return_no }}</a><br>
+                        @empty
+                            {{ $serial->note ?? 'N/A' }}
+                        @endforelse
+                    </td>
+                </tr>
+            @empty
+                <tr><td colspan="7">No serial found.</td></tr>
+            @endforelse
+            </tbody>
+        </table>
+
+        @if ($serialTraceMovements->isNotEmpty())
+            <h3 style="margin-top:16px">Movement History</h3>
+            <table>
+                <thead><tr><th>Date</th><th>Product</th><th>Warehouse</th><th>Type</th><th>Qty</th><th>Serials</th><th>Reference</th><th>Reason</th></tr></thead>
+                <tbody>
+                @foreach ($serialTraceMovements as $movement)
+                    <tr>
+                        <td>{{ $movement->created_at->format('Y-m-d H:i') }}</td>
+                        <td>{{ $movement->product?->name ?? 'N/A' }}</td>
+                        <td>
+                            {{ $movement->warehouse?->name ?? 'N/A' }}
+                            @if ($movement->relatedWarehouse)
+                                <div class="muted">To/From: {{ $movement->relatedWarehouse->name }}</div>
+                            @endif
+                        </td>
+                        <td>{{ $movement->type === 'use' ? 'Own Use' : str_replace('_', ' ', ucfirst($movement->type)) }}</td>
+                        <td>{{ $movement->quantity }}</td>
+                        <td>{{ $movement->serial_numbers ?? 'N/A' }}</td>
+                        <td>
+                            @if ($movement->reference_no && isset($serialTraceReferenceLinks[$movement->reference_no]))
+                                <a href="{{ $serialTraceReferenceLinks[$movement->reference_no] }}">{{ $movement->reference_no }}</a>
+                            @else
+                                {{ $movement->reference_no ?? 'N/A' }}
+                            @endif
+                        </td>
+                        <td>{{ $movement->reason ?? 'N/A' }}</td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+        @endif
+    </section>
+@endif
+
 @include('partials.per_page')
 
 <table>
@@ -90,7 +187,10 @@
     <tbody>
     @forelse ($products as $product)
         <tr data-href="{{ route('products.show', $product) }}">
-            <td><a href="{{ route('products.show', $product) }}">{{ $product->name }}</a></td>
+            <td>
+                <a href="{{ route('products.show', $product) }}">{{ $product->name }}</a>
+                <div style="margin-top:6px"><a class="btn light" href="{{ route('products.edit', $product) }}">Edit</a></div>
+            </td>
             <td>{{ $product->sku }}</td>
             <td>{{ $product->barcode ?? 'N/A' }}</td>
             <td>{{ $product->brand ?? 'N/A' }}</td>

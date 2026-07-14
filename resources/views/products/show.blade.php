@@ -6,7 +6,10 @@
         <h1>{{ $product->name }}</h1>
         <div class="muted">{{ $product->sku }}{{ $product->barcode ? ' - Barcode: '.$product->barcode : '' }} - {{ $product->brand ?? 'No brand' }} - {{ $product->category ?? 'No category' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}</div>
     </div>
-    <a class="btn light" href="{{ route('products.index') }}">Back</a>
+    <div class="actions">
+        <a class="btn secondary" href="{{ route('products.edit', $product) }}">Edit</a>
+        <a class="btn light" href="{{ route('products.index') }}">Back</a>
+    </div>
 </div>
 
 <div class="grid stats" style="margin-bottom:16px">
@@ -65,6 +68,7 @@
     @if ($product->track_serial_numbers)
         <div class="actions" style="margin-bottom:14px">
             <span class="badge">In House: {{ $serialGroups['in_stock'] ?? 0 }}</span>
+            <span class="badge">Serial-less: {{ $seriallessInStock }}</span>
             <span class="badge">Own Use: {{ $serialGroups['used'] ?? 0 }}</span>
             <span class="badge">Out: {{ $serialGroups['out'] ?? 0 }}</span>
         </div>
@@ -79,7 +83,13 @@
                 <td>{{ $serial->warehouse?->name ?? 'N/A' }}</td>
                 <td>{{ $serial->customer?->name ?? 'N/A' }}</td>
                 <td>{{ $serial->warranty_until?->format('Y-m-d') ?? 'No warranty' }}</td>
-                <td>{{ $serial->purchaseBill?->bill_no ?? 'N/A' }}</td>
+                <td>
+                    @if ($serial->purchaseBill)
+                        <a href="{{ route('purchase-bills.show', $serial->purchaseBill) }}">{{ $serial->purchaseBill->bill_no }}</a>
+                    @else
+                        N/A
+                    @endif
+                </td>
                 <td>
                     @if ($serial->customer_id && auth()->user()?->hasPermission('manage_warranty_claims'))
                         <a class="btn light" href="{{ route('warranty-claims.create', ['product_serial_id' => $serial->id]) }}">Claim</a>
@@ -112,7 +122,13 @@
             <td>{{ $movement->serial_numbers ?? 'N/A' }}</td>
             <td>{{ $movement->serialless_quantity ?: 'N/A' }}</td>
             <td>{{ $movement->reason ?? 'N/A' }}</td>
-            <td>{{ $movement->reference_no ?? 'N/A' }}</td>
+            <td>
+                @if ($movement->reference_no && isset($referenceLinks[$movement->reference_no]))
+                    <a href="{{ $referenceLinks[$movement->reference_no] }}">{{ $movement->reference_no }}</a>
+                @else
+                    {{ $movement->reference_no ?? 'N/A' }}
+                @endif
+            </td>
             <td>{{ $movement->entry_by_type === 'user' ? 'User #'.$movement->entry_by : ($movement->entry_by ?? 'system') }}</td>
         </tr>
     @empty

@@ -11,7 +11,7 @@
 </div>
 
 <form method="get" class="card actions" style="margin-bottom:16px">
-    <input name="search" value="{{ request('search') }}" placeholder="Product name or SKU">
+    <input name="search" value="{{ request('search') }}" placeholder="Product name, SKU, or serial">
     <button class="btn secondary" type="submit">Search</button>
 </form>
 
@@ -37,5 +37,5 @@
 <div style="margin-top:16px">{{ $stocks->links() }}</div>
 
 <h2 style="margin-top:24px">Recent In / Out History</h2>
-@include('warehouses.partials.movement_table', ['movements' => $recentMovements])
+@include('warehouses.partials.movement_table', ['movements' => $recentMovements, 'referenceLinks' => $referenceLinks])
 @endsection

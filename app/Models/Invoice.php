@@ -97,6 +97,11 @@ class Invoice extends Model
         return $this->hasMany(InvoiceItem::class);
     }
 
+    public function saleReturns(): HasMany
+    {
+        return $this->hasMany(SaleReturn::class);
+    }
+
     public function versions(): MorphMany
     {
         return $this->morphMany(RecordVersion::class, 'versionable')->latest('id');

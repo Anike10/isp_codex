@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class PurchaseBill extends Model
 {
@@ -17,6 +18,7 @@ class PurchaseBill extends Model
         'purchase_date',
         'subtotal',
         'note',
+        'finalized_at',
     ];
 
     protected function casts(): array
@@ -24,7 +26,13 @@ class PurchaseBill extends Model
         return [
             'purchase_date' => 'date',
             'subtotal' => 'decimal:2',
+            'finalized_at' => 'datetime',
         ];
+    }
+
+    public function isFinalized(): bool
+    {
+        return $this->finalized_at !== null;
     }
 
     public function party(): BelongsTo
@@ -35,5 +43,10 @@ class PurchaseBill extends Model
     public function items(): HasMany
     {
         return $this->hasMany(PurchaseBillItem::class);
+    }
+
+    public function versions(): MorphMany
+    {
+        return $this->morphMany(RecordVersion::class, 'versionable')->latest('id');
     }
 }

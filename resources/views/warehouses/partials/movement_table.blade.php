@@ -30,7 +30,13 @@
                 @endif
             </td>
             <td>{{ $movement->serial_numbers ?? 'N/A' }}</td>
-            <td>{{ $movement->reference_no ?? 'N/A' }}</td>
+            <td>
+                @if ($movement->reference_no && isset($referenceLinks[$movement->reference_no]))
+                    <a href="{{ $referenceLinks[$movement->reference_no] }}">{{ $movement->reference_no }}</a>
+                @else
+                    {{ $movement->reference_no ?? 'N/A' }}
+                @endif
+            </td>
             <td>{{ $movement->reason ?? 'N/A' }}</td>
             <td>{{ $movement->entry_by_type === 'user' ? 'User #'.$movement->entry_by : ($movement->entry_by ?? 'system') }}</td>
         </tr>

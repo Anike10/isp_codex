@@ -196,11 +196,12 @@
                         <summary class="btn light">View Old Version</summary>
                             @php
                                 $old = $version->old_values ?? [];
-                                $customer = $old['customer'] ?? [];
+                                $customer = $old['customer'] ?? ($old['party'] ?? []);
                                 $items = $old['items'] ?? [];
-                                $looksLikeDocument = array_key_exists('invoice_no', $old) || array_key_exists('quotation_no', $old) || array_key_exists('billing_month', $old) || array_key_exists('items', $old);
+                                $isPurchaseBill = array_key_exists('bill_no', $old) || array_key_exists('purchase_date', $old);
+                                $looksLikeDocument = array_key_exists('invoice_no', $old) || array_key_exists('quotation_no', $old) || array_key_exists('billing_month', $old) || $isPurchaseBill || array_key_exists('items', $old);
                                 $isQuotation = array_key_exists('quotation_no', $old) || array_key_exists('quotation_date', $old);
-                                $documentNo = $old['invoice_no'] ?? $old['quotation_no'] ?? ($isQuotation ? 'Old Quotation Version' : 'Old Invoice Version');
+                                $documentNo = $old['invoice_no'] ?? $old['quotation_no'] ?? $old['bill_no'] ?? ($isQuotation ? 'Old Quotation Version' : ($isPurchaseBill ? 'Old Purchase Bill Version' : 'Old Invoice Version'));
                                 $noteFields = collect([
                                     'Payment Note' => $old['payment_note'] ?? null,
                                     'Public Note' => $old['public_note'] ?? null,
@@ -208,9 +209,9 @@
                                     'Service Note' => $old['service_note'] ?? null,
                                 ])->filter(fn ($value) => $value !== null && $value !== '');
                                 $documentDetails = $flattenFields(collect($old)->except([
-                                    'invoice_no', 'quotation_no', 'quotation_date', 'valid_until', 'billing_month',
+                                    'invoice_no', 'quotation_no', 'bill_no', 'quotation_date', 'valid_until', 'purchase_date', 'billing_month',
                                     'invoice_type', 'status', 'due_date', 'finalized_at', 'customer', 'items',
-                                    'subtotal', 'discount', 'vat', 'total', 'paid_amount', 'due_amount',
+                                    'party', 'subtotal', 'discount', 'vat', 'total', 'paid_amount', 'due_amount',
                                     'payment_note', 'public_note', 'private_note', 'service_note',
                                 ])->all());
                                 $fallbackFields = collect($flattenFields($old))->take(50);
@@ -228,22 +229,26 @@
 
                                     <div class="version-preview-grid">
                                         <div class="version-preview-box">
-                                            <h3>{{ $isQuotation ? 'Quotation' : 'Invoice' }}</h3>
-                                            @if ($isQuotation)
+                                            <h3>{{ $isPurchaseBill ? 'Purchase Bill' : ($isQuotation ? 'Quotation' : 'Invoice') }}</h3>
+                                            @if ($isPurchaseBill)
+                                                <div class="version-preview-row"><span class="muted">Date</span><span>{{ $dateOnly($old['purchase_date'] ?? null) }}</span></div>
+                                            @elseif ($isQuotation)
                                                 <div class="version-preview-row"><span class="muted">Date</span><span>{{ $dateOnly($old['quotation_date'] ?? null) }}</span></div>
                                                 <div class="version-preview-row"><span class="muted">Valid Until</span><span>{{ $dateOnly($old['valid_until'] ?? null) }}</span></div>
                                             @endif
-                                            <div class="version-preview-row"><span class="muted">{{ $isQuotation ? 'Reference Month' : 'Month' }}</span><span>{{ $old['billing_month'] ?? 'N/A' }}</span></div>
-                                            <div class="version-preview-row"><span class="muted">Type</span><span>{{ ucfirst((string) ($old['invoice_type'] ?? 'N/A')) }}</span></div>
-                                            <div class="version-preview-row"><span class="muted">Status</span><span>{{ ucfirst((string) ($old['status'] ?? 'N/A')) }}</span></div>
-                                            @if (! $isQuotation)
-                                                <div class="version-preview-row"><span class="muted">Due Date</span><span>{{ $dateOnly($old['due_date'] ?? null) }}</span></div>
-                                                <div class="version-preview-row"><span class="muted">Finalized</span><span>{{ $dateOnly($old['finalized_at'] ?? null) }}</span></div>
+                                            @if (! $isPurchaseBill)
+                                                <div class="version-preview-row"><span class="muted">{{ $isQuotation ? 'Reference Month' : 'Month' }}</span><span>{{ $old['billing_month'] ?? 'N/A' }}</span></div>
+                                                <div class="version-preview-row"><span class="muted">Type</span><span>{{ ucfirst((string) ($old['invoice_type'] ?? 'N/A')) }}</span></div>
+                                                <div class="version-preview-row"><span class="muted">Status</span><span>{{ ucfirst((string) ($old['status'] ?? 'N/A')) }}</span></div>
                                             @endif
+                                            @if (! $isQuotation && ! $isPurchaseBill)
+                                                <div class="version-preview-row"><span class="muted">Due Date</span><span>{{ $dateOnly($old['due_date'] ?? null) }}</span></div>
+                                            @endif
+                                            <div class="version-preview-row"><span class="muted">Finalized</span><span>{{ $dateOnly($old['finalized_at'] ?? null) }}</span></div>
                                         </div>
 
                                         <div class="version-preview-box">
-                                            <h3>Party</h3>
+                                            <h3>{{ $isPurchaseBill ? 'Vendor Party' : 'Party' }}</h3>
                                             <div class="version-preview-row"><span class="muted">Name</span><span>{{ $customer['name'] ?? 'N/A' }}</span></div>
                                             <div class="version-preview-row"><span class="muted">Phone</span><span>{{ $customer['phone'] ?? 'N/A' }}</span></div>
                                             <div class="version-preview-row"><span class="muted">Connection</span><span>{{ $customer['connection_id'] ?? 'N/A' }}</span></div>
@@ -268,7 +273,7 @@
                                                 <tr>
                                                     <td>{{ $itemIndex + 1 }}</td>
                                                     <td>
-                                                        {{ $item['product_name'] ?? 'N/A' }}
+                                                        {{ $item['product_name'] ?? ($item['product']['name'] ?? 'N/A') }}
                                                         @if (! empty($item['serial_numbers']))
                                                             <div class="muted">Serials: {{ $item['serial_numbers'] }}</div>
                                                         @endif
@@ -289,8 +294,8 @@
                                             <div><span class="muted">Subtotal</span><strong>{{ $money($old['subtotal'] ?? 0) }}</strong></div>
                                             <div><span class="muted">Discount</span><strong>{{ $money($old['discount'] ?? 0) }}</strong></div>
                                             <div><span class="muted">VAT</span><strong>{{ $money($old['vat'] ?? 0) }}</strong></div>
-                                            <div><span class="muted">{{ $isQuotation ? 'Quoted Total' : 'Total' }}</span><strong>{{ $money($old['total'] ?? 0) }}</strong></div>
-                                            @if (! $isQuotation)
+                                            <div><span class="muted">{{ $isPurchaseBill ? 'Purchase Total' : ($isQuotation ? 'Quoted Total' : 'Total') }}</span><strong>{{ $money($isPurchaseBill ? ($old['subtotal'] ?? 0) : ($old['total'] ?? 0)) }}</strong></div>
+                                            @if (! $isQuotation && ! $isPurchaseBill)
                                                 <div><span class="muted">Paid</span><strong>{{ $money($old['paid_amount'] ?? 0) }}</strong></div>
                                                 <div><span class="muted">Due</span><strong>{{ $money($old['due_amount'] ?? 0) }}</strong></div>
                                             @endif

@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\ProductWarehouseStock;
+use App\Models\Invoice;
+use App\Models\PurchaseBill;
+use App\Models\SaleReturn;
 use App\Models\StockMovement;
 use App\Models\Warehouse;
 use App\Services\InventoryService;
@@ -59,11 +62,15 @@ class WarehouseController extends Controller
             ->with(['product.serials' => fn ($query) => $query
                 ->where('warehouse_id', $warehouse->id)
                 ->where('status', 'in_stock')])
-            ->when($request->filled('search'), function ($query) use ($request): void {
+            ->when($request->filled('search'), function ($query) use ($request, $warehouse): void {
                 $search = trim((string) $request->query('search'));
                 $query->whereHas('product', fn ($query) => $query
                     ->where('name', 'like', "%{$search}%")
-                    ->orWhere('sku', 'like', "%{$search}%"));
+                    ->orWhere('sku', 'like', "%{$search}%")
+                    ->orWhereHas('serials', fn ($query) => $query
+                        ->where('warehouse_id', $warehouse->id)
+                        ->where('status', 'in_stock')
+                        ->where('serial_number', 'like', "%{$search}%")));
             })
             ->orderByDesc('quantity')
             ->paginate($this->perPage($request))
@@ -74,8 +81,9 @@ class WarehouseController extends Controller
             ->latest()
             ->limit(20)
             ->get();
+        $referenceLinks = $this->stockReferenceLinks($recentMovements->pluck('reference_no')->filter()->unique()->values()->all());
 
-        return view('warehouses.show', compact('warehouse', 'stocks', 'recentMovements'));
+        return view('warehouses.show', compact('warehouse', 'stocks', 'recentMovements', 'referenceLinks'));
     }
 
     public function createTransfer()
@@ -169,7 +177,8 @@ class WarehouseController extends Controller
                         ->orWhere('serial_numbers', 'like', "%{$search}%")
                         ->orWhereHas('product', fn ($query) => $query
                             ->where('name', 'like', "%{$search}%")
-                            ->orWhere('sku', 'like', "%{$search}%"))
+                            ->orWhere('sku', 'like', "%{$search}%")
+                            ->orWhereHas('serials', fn ($query) => $query->where('serial_number', 'like', "%{$search}%")))
                         ->orWhereHas('warehouse', fn ($query) => $query
                             ->where('name', 'like', "%{$search}%")
                             ->orWhere('code', 'like', "%{$search}%"))
@@ -183,9 +192,39 @@ class WarehouseController extends Controller
             ->latest()
             ->paginate($this->perPage($request))
             ->appends($request->query());
+        $referenceLinks = $this->stockReferenceLinks($movements->getCollection()->pluck('reference_no')->filter()->unique()->values()->all());
         $warehouses = Warehouse::query()->orderBy('name')->get();
         $products = Product::query()->where('track_inventory', true)->orderBy('name')->get();
 
-        return view('warehouses.movements', compact('movements', 'warehouses', 'products'));
+        return view('warehouses.movements', compact('movements', 'warehouses', 'products', 'referenceLinks'));
+    }
+
+    private function stockReferenceLinks(array $references): array
+    {
+        if ($references === []) {
+            return [];
+        }
+
+        $links = [];
+
+        foreach (PurchaseBill::query()
+            ->whereIn('bill_no', $references)
+            ->get(['id', 'bill_no']) as $purchaseBill) {
+            $links[$purchaseBill->bill_no] = route('purchase-bills.show', $purchaseBill);
+        }
+
+        foreach (Invoice::query()
+            ->whereIn('invoice_no', $references)
+            ->get(['id', 'invoice_no']) as $invoice) {
+            $links[$invoice->invoice_no] = route('invoices.show', $invoice);
+        }
+
+        foreach (SaleReturn::query()
+            ->whereIn('return_no', $references)
+            ->get(['id', 'return_no']) as $saleReturn) {
+            $links[$saleReturn->return_no] = route('sale-returns.show', $saleReturn);
+        }
+
+        return $links;
     }
 }

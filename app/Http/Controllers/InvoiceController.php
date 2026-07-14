@@ -52,6 +52,14 @@ class InvoiceController extends Controller
                             $query->where('name', 'like', "%{$search}%")
                                 ->orWhere('phone', 'like', "%{$search}%")
                                 ->orWhere('connection_id', 'like', "%{$search}%");
+                        })
+                        ->orWhereHas('items', function ($query) use ($search) {
+                            $query->where('product_name', 'like', "%{$search}%")
+                                ->orWhere('serial_numbers', 'like', "%{$search}%")
+                                ->orWhereHas('product', fn ($query) => $query
+                                    ->where('name', 'like', "%{$search}%")
+                                    ->orWhere('sku', 'like', "%{$search}%"))
+                                ->orWhereHas('product.serials', fn ($query) => $query->where('serial_number', 'like', "%{$search}%"));
                         });
                 });
             })
@@ -533,6 +541,7 @@ class InvoiceController extends Controller
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.serial_numbers' => ['nullable', 'string'],
             'items.*.serialless_quantity' => ['nullable', 'integer', 'min:0'],
+            'items.*.track_serial_numbers' => ['nullable', 'boolean'],
             'discount_type' => ['required', 'in:amount,percent'],
             'discount' => ['required', 'numeric', 'min:0'],
             'vat_type' => ['required', 'in:amount,percent'],
@@ -573,15 +582,21 @@ class InvoiceController extends Controller
         foreach ($data['items'] as $item) {
             $serialNumbers = app(SerialNumberParser::class)->parse($item['serial_numbers'] ?? '');
             $seriallessQuantity = (int) ($item['serialless_quantity'] ?? 0);
-            $quantity = max((int) $item['quantity'], count($serialNumbers) + $seriallessQuantity);
+            $quantity = (int) $item['quantity'];
             $product = ! empty($item['product_id']) ? Product::find($item['product_id']) : null;
             $productType = $product?->product_type ?? null;
             $serviceGuaranteeDays = $product?->service_guarantee_days;
+            $isSerialTrackedLine = $product?->track_serial_numbers || (! $product && (bool) ($item['track_serial_numbers'] ?? false));
+            $trackedCount = count($serialNumbers) + $seriallessQuantity;
 
-            if (! $product?->track_serial_numbers) {
+            if ($isSerialTrackedLine && $trackedCount > $quantity) {
+                $quantity = $trackedCount;
+            }
+
+            if (! $isSerialTrackedLine) {
                 $seriallessQuantity = 0;
-            } elseif (count($serialNumbers) + $seriallessQuantity !== $quantity) {
-                throw new InvalidArgumentException('For serial-tracked invoice items, serial count plus serial-less quantity must match quantity.');
+            } elseif ($trackedCount !== $quantity) {
+                throw new InvalidArgumentException(($item['product_name'] ?? 'This item').' is serial-tracked. Select serials or enter Serial-less Qty for all '.$quantity.' unit(s). Current count: '.count($serialNumbers).' serial(s) + '.$seriallessQuantity.' serial-less.');
             }
 
             $total = $quantity * $item['unit_price'];
@@ -650,38 +665,44 @@ class InvoiceController extends Controller
                     if ($invoiceSerials->isNotEmpty()) {
                         $query->orWhereIn('serial_number', $invoiceSerials);
                     }
-                })->orderBy('serial_number');
+                })
+                    ->orderByRaw('warranty_until is null')
+                    ->orderBy('warranty_until')
+                    ->orderBy('serial_number');
             }])
             ->orderBy('name')
             ->get()
-            ->map(fn (Product $product): array => [
-                'id' => $product->id,
-                'name' => $product->name,
-                'sku' => $product->sku,
-                'barcode' => $product->barcode,
-                'brand' => $product->brand,
-                'sale_price' => (float) $product->sale_price,
-                'stock_quantity' => (int) $product->stock_quantity,
-                'product_type' => $product->product_type,
-                'service_guarantee_days' => $product->service_guarantee_days,
-                'track_inventory' => (bool) $product->track_inventory,
-                'track_serials' => (bool) $product->track_serial_numbers,
-                'serials' => $product->serials->map(fn (ProductSerial $serial): array => [
-                    'serial_number' => $serial->serial_number,
-                    'warranty_until' => $serial->warranty_until?->format('Y-m-d'),
-                    'status' => $serial->status,
-                ])->values(),
-            ])
+            ->map(function (Product $product): array {
+                $inStockSerialCount = $product->serials
+                    ->where('status', 'in_stock')
+                    ->count();
+
+                return [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'barcode' => $product->barcode,
+                    'brand' => $product->brand,
+                    'sale_price' => (float) $product->sale_price,
+                    'stock_quantity' => (int) $product->stock_quantity,
+                    'serialless_stock' => $product->track_serial_numbers ? max(0, (int) $product->stock_quantity - $inStockSerialCount) : 0,
+                    'product_type' => $product->product_type,
+                    'service_guarantee_days' => $product->service_guarantee_days,
+                    'track_inventory' => (bool) $product->track_inventory,
+                    'track_serials' => (bool) $product->track_serial_numbers,
+                    'serials' => $product->serials->map(fn (ProductSerial $serial): array => [
+                        'serial_number' => $serial->serial_number,
+                        'warranty_until' => $serial->warranty_until?->format('Y-m-d'),
+                        'status' => $serial->status,
+                    ])->values(),
+                ];
+            })
             ->values();
     }
 
     private function applyInvoiceItemInventory(Invoice $invoice, InvoiceItem $invoiceItem, InventoryService $inventoryService): void
     {
         if (empty($invoiceItem->product_id)) {
-            if (! empty($invoiceItem->serial_numbers)) {
-                throw new InvalidArgumentException('Select a product before using serial numbers.');
-            }
-
             return;
         }
 
@@ -773,7 +794,7 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice)
     {
-        $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items']);
+        $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items.saleReturnItems.saleReturn']);
         $versions = $invoice->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
         $paymentAccounts = collect();

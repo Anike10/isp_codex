@@ -1,19 +1,26 @@
 @extends('layouts.app')
 
 @section('content')
+@php
+    $isEditing = isset($purchaseBill);
+    $formAction = $isEditing ? route('purchase-bills.update', $purchaseBill) : route('purchase-bills.store');
+@endphp
 <div class="topbar">
-    <div><h1>Add Purchase Bill</h1><div class="muted">Enter wholesale/vendor bills and add stock with serial and warranty details</div></div>
-    <a class="btn light" href="{{ route('purchase-bills.index') }}">Back</a>
+    <div><h1>{{ $isEditing ? 'Edit Purchase Bill' : 'Add Purchase Bill' }}</h1><div class="muted">Enter wholesale/vendor bills and add stock with serial and warranty details</div></div>
+    <a class="btn light" href="{{ $isEditing ? route('purchase-bills.show', $purchaseBill) : route('purchase-bills.index') }}">Back</a>
 </div>
 
-<form method="post" action="{{ route('purchase-bills.store') }}" class="card" id="purchaseBillForm">
+<form method="post" action="{{ $formAction }}" class="card" id="purchaseBillForm">
     @csrf
+    @if ($isEditing)
+        @method('put')
+    @endif
     <div class="form-grid">
         <div>
             <label>Vendor Party</label>
-            @php($selectedVendor = $vendors->firstWhere('id', (int) old('party_id')))
+            @php($selectedVendor = $vendors->firstWhere('id', (int) old('party_id', $purchaseBill->party_id ?? null)))
             <div class="vendor-picker" style="position:relative">
-                <input type="hidden" id="party_id" name="party_id" value="{{ old('party_id') }}">
+                <input type="hidden" id="party_id" name="party_id" value="{{ old('party_id', $purchaseBill->party_id ?? '') }}">
                 <input
                     id="party_name"
                     name="party_name"
@@ -27,8 +34,8 @@
             <span class="muted">Select an existing vendor, or keep a new name to add it automatically.</span>
         </div>
         <div><label>Bill No</label><input name="bill_no" value="{{ old('bill_no', $defaultBillNo) }}" required></div>
-        <div><label>Purchase Date</label><input type="date" name="purchase_date" value="{{ old('purchase_date', now()->toDateString()) }}" required></div>
-        <div class="full"><label>Note</label><textarea name="note" rows="2">{{ old('note') }}</textarea></div>
+        <div><label>Purchase Date</label><input type="date" name="purchase_date" value="{{ old('purchase_date', isset($purchaseBill) ? $purchaseBill->purchase_date->format('Y-m-d') : now()->toDateString()) }}" required></div>
+        <div class="full"><label>Note</label><textarea name="note" rows="2">{{ old('note', $purchaseBill->note ?? '') }}</textarea></div>
     </div>
 
     <h2 style="margin-top:18px">Products</h2>
@@ -62,7 +69,18 @@
             </tr>
         </thead>
         <tbody id="purchaseRows">
-            @php($oldItems = old('items', [['product_id' => '', 'quantity' => 1, 'unit_price' => 0, 'warranty_days' => '', 'serial_numbers' => '', 'serialless_quantity' => '']]))
+            @php($existingItems = isset($purchaseBill) ? $purchaseBill->items->map(fn ($item) => [
+                'product_id' => $item->product_id,
+                'product_name' => $item->product?->name,
+                'quantity' => $item->quantity,
+                'unit_price' => $item->unit_price,
+                'warranty_days' => $item->warranty_days,
+                'warranty_months' => $item->warranty_months,
+                'serial_numbers' => $item->serials->pluck('serial_number')->implode(', '),
+                'serialless_quantity' => $item->serialless_quantity,
+                'track_serial_numbers' => $item->product?->track_serial_numbers,
+            ])->toArray() : [['product_id' => '', 'quantity' => 1, 'unit_price' => 0, 'warranty_days' => '', 'serial_numbers' => '', 'serialless_quantity' => '', 'track_serial_numbers' => '1']])
+            @php($oldItems = old('items', $existingItems))
             @foreach ($oldItems as $index => $item)
                 <tr>
                     <td>
@@ -85,7 +103,14 @@
                     <td><input type="number" name="items[{{ $index }}][quantity]" min="1" value="{{ $item['quantity'] ?? 1 }}" required></td>
                     <td><input type="number" name="items[{{ $index }}][unit_price]" min="0" step="0.01" value="{{ $item['unit_price'] ?? 0 }}" required></td>
                     <td><input type="number" name="items[{{ $index }}][warranty_days]" min="0" max="3650" value="{{ $item['warranty_days'] ?? ($item['warranty_months'] ?? '') }}"></td>
-                    <td><textarea name="items[{{ $index }}][serial_numbers]" rows="2" placeholder="1001-1010, 1020-1030">{{ $item['serial_numbers'] ?? '' }}</textarea></td>
+                    <td>
+                        <input type="hidden" name="items[{{ $index }}][track_serial_numbers]" value="0" data-name="track_serial_numbers">
+                        <label style="display:inline-flex;align-items:center;gap:8px;margin-bottom:8px">
+                            Serial item
+                            <input type="checkbox" name="items[{{ $index }}][track_serial_numbers]" value="1" data-name="track_serial_numbers" @checked(old("items.$index.track_serial_numbers", $item['track_serial_numbers'] ?? empty($item['product_id'] ?? '')))>
+                        </label>
+                        <textarea name="items[{{ $index }}][serial_numbers]" rows="2" placeholder="1001-1010, 1020-1030">{{ $item['serial_numbers'] ?? '' }}</textarea>
+                    </td>
                     <td><input type="number" name="items[{{ $index }}][serialless_quantity]" min="0" value="{{ $item['serialless_quantity'] ?? '' }}" placeholder="0"></td>
                     <td><button class="btn light" type="button" data-remove-row>Remove</button></td>
                 </tr>
@@ -95,7 +120,7 @@
 
     <div class="actions" style="margin-top:14px">
         <button class="btn light" type="button" id="addPurchaseRow">Add Product Row</button>
-        <button class="btn" type="submit">Save Purchase Bill</button>
+        <button class="btn" type="submit">{{ $isEditing ? 'Update Purchase Bill' : 'Save Purchase Bill' }}</button>
     </div>
 </form>
 
@@ -161,7 +186,11 @@
         <td><input data-name="quantity" type="number" min="1" value="1" required></td>
         <td><input data-name="unit_price" type="number" min="0" step="0.01" value="0" required></td>
         <td><input data-name="warranty_days" type="number" min="0" max="3650"></td>
-        <td><textarea data-name="serial_numbers" rows="2" placeholder="1001-1010, 1020-1030"></textarea></td>
+        <td>
+            <input type="hidden" data-name="track_serial_numbers" value="0">
+            <label style="display:inline-flex;align-items:center;gap:8px;margin-bottom:8px">Serial item <input data-name="track_serial_numbers" type="checkbox" value="1" checked></label>
+            <textarea data-name="serial_numbers" rows="2" placeholder="1001-1010, 1020-1030"></textarea>
+        </td>
         <td><input data-name="serialless_quantity" type="number" min="0" placeholder="0"></td>
         <td><button class="btn light" type="button" data-remove-row>Remove</button></td>
     </tr>
@@ -197,11 +226,16 @@ const syncProductDefaults = row => {
     const warrantyDays = row.querySelector('input[name$="[warranty_days]"], input[data-name="warranty_days"]');
     const serialNumbers = row.querySelector('textarea[name$="[serial_numbers]"], textarea[data-name="serial_numbers"]');
     const seriallessQuantity = row.querySelector('input[name$="[serialless_quantity]"], input[data-name="serialless_quantity"]');
+    const serialCheckbox = row.querySelector('input[type="checkbox"][name$="[track_serial_numbers]"], input[type="checkbox"][data-name="track_serial_numbers"]');
 
     if (!selected) {
+        if (serialCheckbox) {
+            serialCheckbox.disabled = false;
+            serialCheckbox.checked = true;
+        }
         if (serialNumbers) {
             serialNumbers.disabled = false;
-            serialNumbers.placeholder = 'Serials allowed for new products';
+            serialNumbers.placeholder = '1001-1010, 1020-1030';
         }
         if (seriallessQuantity) {
             seriallessQuantity.disabled = false;
@@ -224,6 +258,11 @@ const syncProductDefaults = row => {
         if (!selected.track_serials) {
             serialNumbers.value = '';
         }
+    }
+
+    if (serialCheckbox) {
+        serialCheckbox.checked = Boolean(selected.track_serials);
+        serialCheckbox.disabled = true;
     }
 
     if (seriallessQuantity) {

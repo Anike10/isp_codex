@@ -186,7 +186,7 @@
 <form method="get" class="card form-grid" style="margin-bottom:16px">
     <div class="full">
         <label>Search</label>
-        <input name="search" value="{{ request('search') }}" placeholder="Party name, mobile, connection ID, invoice no, or month">
+        <input name="search" value="{{ request('search') }}" placeholder="Party, mobile, connection ID, invoice no, product, serial, or month">
     </div>
     <div>
         <label>Billing Month</label>

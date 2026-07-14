@@ -47,6 +47,7 @@
             @csrf
             <button class="btn light" type="submit">Copy for Next Month</button>
         </form>
+        <a class="btn light" href="{{ route('sale-returns.create', ['invoice_id' => $invoice->id]) }}">Sale Return</a>
         <a class="btn light" href="{{ route('invoices.index') }}">Back</a>
     </div>
 </div>
@@ -167,6 +168,31 @@
                 <td>{{ $item->quantity }}</td>
                 <td>{{ number_format($item->unit_price, 2) }}</td>
                 <td>{{ number_format($item->total, 2) }}</td>
+            </tr>
+        @endforeach
+        </tbody>
+    </table>
+</section>
+@endif
+
+@php
+    $saleReturnItems = $invoice->items->flatMap->saleReturnItems;
+@endphp
+@if ($saleReturnItems->isNotEmpty())
+<section class="card" style="margin-top:16px">
+    <h2>Sale Returns</h2>
+    <table>
+        <thead><tr><th>Date</th><th>Return No</th><th>Product</th><th>Qty</th><th>Serial-less Qty</th><th>Serials</th><th>Credit</th></tr></thead>
+        <tbody>
+        @foreach ($saleReturnItems as $returnItem)
+            <tr>
+                <td>{{ $returnItem->saleReturn->return_date->format('Y-m-d') }}</td>
+                <td><a href="{{ route('sale-returns.show', $returnItem->saleReturn) }}">{{ $returnItem->saleReturn->return_no }}</a></td>
+                <td>{{ $returnItem->product_name }}</td>
+                <td>{{ $returnItem->quantity }}</td>
+                <td>{{ $returnItem->serialless_quantity ?: 'N/A' }}</td>
+                <td>{{ filled($returnItem->serial_numbers) ? $serialFormatter->formatCompact($returnItem->serial_numbers) : 'N/A' }}</td>
+                <td>{{ number_format($returnItem->total, 2) }}</td>
             </tr>
         @endforeach
         </tbody>

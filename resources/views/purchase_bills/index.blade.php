@@ -10,7 +10,7 @@
 </div>
 
 <form method="get" class="card form-grid" style="margin-bottom:16px">
-    <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Bill no, vendor name, phone, connection ID, or note"></div>
+    <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Bill no, vendor, product, serial, phone, connection ID, or note"></div>
     <div><label>Vendor</label><select name="party_id"><option value="">All vendors</option>@foreach($vendors as $vendor)<option value="{{ $vendor->id }}" @selected((int) request('party_id') === $vendor->id)>{{ $vendor->name }} - {{ $vendor->phone }}</option>@endforeach</select></div>
     <div><label>From Date</label><input type="date" name="from" value="{{ request('from') }}"></div>
     <div><label>To Date</label><input type="date" name="to" value="{{ request('to') }}"></div>

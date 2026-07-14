@@ -141,6 +141,11 @@ class Customer extends Model
         return $this->hasMany(PurchaseBill::class, 'party_id');
     }
 
+    public function saleReturns(): HasMany
+    {
+        return $this->hasMany(SaleReturn::class);
+    }
+
     public function tickets(): HasMany
     {
         return $this->hasMany(SupportTicket::class);

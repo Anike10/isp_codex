@@ -9,6 +9,7 @@ use App\Models\ProductSerial;
 use App\Models\PurchaseBill;
 use App\Observers\RecordVersionObserver;
 use App\Services\InventoryService;
+use App\Services\RecordVersionService;
 use App\Support\SerialNumberParser;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -31,7 +32,11 @@ class PurchaseBillController extends Controller
                             ->orWhereHas('party', fn ($query) => $query
                                 ->where('name', 'like', "%{$search}%")
                                 ->orWhere('phone', 'like', "%{$search}%")
-                                ->orWhere('connection_id', 'like', "%{$search}%"));
+                                ->orWhere('connection_id', 'like', "%{$search}%"))
+                            ->orWhereHas('items.serials', fn ($query) => $query->where('serial_number', 'like', "%{$search}%"))
+                            ->orWhereHas('items.product', fn ($query) => $query
+                                ->where('name', 'like', "%{$search}%")
+                                ->orWhere('sku', 'like', "%{$search}%"));
                     });
                 })
                 ->when($request->filled('party_id'), fn ($query) => $query->where('party_id', $request->integer('party_id')))
@@ -49,9 +54,184 @@ class PurchaseBillController extends Controller
 
     public function create()
     {
-        $products = Product::query()->with('productCategory.parent.parent.parent')->orderBy('name')->get();
+        return view('purchase_bills.create', [
+            ...$this->formData(),
+            'defaultBillNo' => $this->nextBillNo(),
+        ]);
+    }
+
+    public function store(Request $request, InventoryService $inventoryService)
+    {
+        try {
+            $data = $this->validatePurchaseBillData($request);
+
+            DB::transaction(function () use ($data, $inventoryService): void {
+                $purchaseBill = PurchaseBill::create([
+                    'party_id' => $this->resolveVendorPartyId($data),
+                    'bill_no' => $data['bill_no'],
+                    'purchase_date' => $data['purchase_date'],
+                    'subtotal' => 0,
+                    'note' => $data['note'] ?? null,
+                ]);
+
+                $subtotal = $this->applyPurchaseItems($purchaseBill, $data, $inventoryService);
+                RecordVersionObserver::withoutRecording(fn () => $purchaseBill->update(['subtotal' => $subtotal]));
+            });
+        } catch (InvalidArgumentException $exception) {
+            return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
+        }
+
+        return redirect()->route('purchase-bills.index')->with('success', 'Purchase bill saved and stock updated.');
+    }
+
+    public function edit(PurchaseBill $purchaseBill)
+    {
+        if ($purchaseBill->isFinalized()) {
+            return redirect()->route('purchase-bills.show', $purchaseBill)->withErrors([
+                'purchase_bill' => 'Finalized purchase bills cannot be edited.',
+            ]);
+        }
+
+        $purchaseBill->load(['party', 'items.product', 'items.serials']);
 
         return view('purchase_bills.create', [
+            ...$this->formData(),
+            'purchaseBill' => $purchaseBill,
+            'defaultBillNo' => $purchaseBill->bill_no,
+        ]);
+    }
+
+    public function update(Request $request, PurchaseBill $purchaseBill, InventoryService $inventoryService, RecordVersionService $recordVersionService)
+    {
+        if ($purchaseBill->isFinalized()) {
+            return redirect()->route('purchase-bills.show', $purchaseBill)->withErrors([
+                'purchase_bill' => 'Finalized purchase bills cannot be edited.',
+            ]);
+        }
+
+        $becameFinalized = false;
+
+        try {
+            $data = $this->validatePurchaseBillData($request, $purchaseBill);
+
+            DB::transaction(function () use (&$purchaseBill, $data, $inventoryService, $recordVersionService, &$becameFinalized): void {
+                $purchaseBill = PurchaseBill::query()
+                    ->with(['items.product', 'items.serials'])
+                    ->whereKey($purchaseBill->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if ($purchaseBill->isFinalized()) {
+                    $becameFinalized = true;
+
+                    return;
+                }
+
+                $oldSnapshot = $recordVersionService->snapshot($purchaseBill, ['party', 'items.product', 'items.serials']);
+                $this->restorePurchaseInventory($purchaseBill, $inventoryService);
+
+                RecordVersionObserver::withoutRecording(fn () => $purchaseBill->update([
+                    'party_id' => $this->resolveVendorPartyId($data),
+                    'bill_no' => $data['bill_no'],
+                    'purchase_date' => $data['purchase_date'],
+                    'subtotal' => 0,
+                    'note' => $data['note'] ?? null,
+                ]));
+
+                $purchaseBill->items()->delete();
+                $subtotal = $this->applyPurchaseItems($purchaseBill, $data, $inventoryService);
+                RecordVersionObserver::withoutRecording(fn () => $purchaseBill->update(['subtotal' => $subtotal]));
+
+                $newSnapshot = $recordVersionService->snapshot($purchaseBill->refresh(), ['party', 'items.product', 'items.serials']);
+                $recordVersionService->recordUpdate($purchaseBill, $oldSnapshot, $newSnapshot, [
+                    'source' => 'purchase_bill_edit',
+                    'bill_no' => $purchaseBill->bill_no,
+                ]);
+            });
+        } catch (InvalidArgumentException $exception) {
+            return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
+        }
+
+        if ($becameFinalized) {
+            return redirect()->route('purchase-bills.show', $purchaseBill)->withErrors([
+                'purchase_bill' => 'Finalized purchase bills cannot be edited.',
+            ]);
+        }
+
+        return redirect()->route('purchase-bills.show', $purchaseBill)->with('success', 'Draft purchase bill updated successfully.');
+    }
+
+    public function finalize(PurchaseBill $purchaseBill, RecordVersionService $recordVersionService)
+    {
+        DB::transaction(function () use (&$purchaseBill, $recordVersionService): void {
+            $purchaseBill = PurchaseBill::query()->whereKey($purchaseBill->id)->lockForUpdate()->firstOrFail();
+
+            if ($purchaseBill->isFinalized()) {
+                return;
+            }
+
+            $oldSnapshot = $recordVersionService->snapshot($purchaseBill, ['party', 'items.product', 'items.serials']);
+            RecordVersionObserver::withoutRecording(fn () => $purchaseBill->update(['finalized_at' => now()]));
+            $newSnapshot = $recordVersionService->snapshot($purchaseBill->refresh(), ['party', 'items.product', 'items.serials']);
+            $recordVersionService->recordUpdate($purchaseBill, $oldSnapshot, $newSnapshot, [
+                'source' => 'purchase_bill_finalize',
+                'bill_no' => $purchaseBill->bill_no,
+            ]);
+        });
+
+        return redirect()->route('purchase-bills.show', $purchaseBill)->with('success', 'Purchase bill finalized. Editing is now locked.');
+    }
+
+    public function show(PurchaseBill $purchaseBill)
+    {
+        $purchaseBill->load(['party', 'items.product', 'items.serials']);
+        $versions = $purchaseBill->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
+
+        return view('purchase_bills.show', compact('purchaseBill', 'versions'));
+    }
+
+    private function validatePurchaseBillData(Request $request, ?PurchaseBill $purchaseBill = null): array
+    {
+        $data = $request->validate([
+            'party_id' => ['nullable', Rule::exists('customers', 'id')->where('is_vendor', true)],
+            'party_name' => ['nullable', 'string', 'max:255'],
+            'bill_no' => [
+                'required',
+                'string',
+                'max:100',
+                Rule::unique('purchase_bills', 'bill_no')->ignore($purchaseBill?->id),
+            ],
+            'purchase_date' => ['required', 'date'],
+            'note' => ['nullable', 'string'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['nullable', 'exists:products,id'],
+            'items.*.product_name' => ['required_without:items.*.product_id', 'nullable', 'string', 'max:255'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'items.*.warranty_months' => ['nullable', 'integer', 'min:0', 'max:120'],
+            'items.*.warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'items.*.serial_numbers' => ['nullable', 'string'],
+            'items.*.serialless_quantity' => ['nullable', 'integer', 'min:0'],
+            'items.*.track_serial_numbers' => ['nullable', 'boolean'],
+        ]);
+
+        $data['items'] = collect($data['items'])
+            ->filter(fn (array $item): bool => (! empty($item['product_id']) || trim((string) ($item['product_name'] ?? '')) !== '') && (int) ($item['quantity'] ?? 0) > 0)
+            ->values()
+            ->all();
+
+        if ($data['items'] === []) {
+            throw new InvalidArgumentException('At least one product line is required.');
+        }
+
+        return $data;
+    }
+
+    private function formData(): array
+    {
+        $products = Product::query()->with('productCategory.parent.parent.parent')->orderBy('name')->get();
+
+        return [
             'vendors' => Customer::query()->where('is_vendor', true)->orderBy('name')->get(),
             'vendorSuggestionData' => Customer::query()
                 ->where('is_vendor', true)
@@ -80,122 +260,94 @@ class PurchaseBillController extends Controller
             ])->values(),
             'brands' => Product::query()->whereNotNull('brand')->where('brand', '!=', '')->distinct()->orderBy('brand')->pluck('brand'),
             'categoryTree' => ProductCategory::query()->with('children.children.children.children')->whereNull('parent_id')->orderBy('name')->get(),
-            'defaultBillNo' => $this->nextBillNo(),
-        ]);
+        ];
     }
 
-    public function store(Request $request, InventoryService $inventoryService)
+    private function applyPurchaseItems(PurchaseBill $purchaseBill, array $data, InventoryService $inventoryService): float
     {
-        $data = $request->validate([
-            'party_id' => ['nullable', Rule::exists('customers', 'id')->where('is_vendor', true)],
-            'party_name' => ['nullable', 'string', 'max:255'],
-            'bill_no' => ['required', 'string', 'max:100', 'unique:purchase_bills,bill_no'],
-            'purchase_date' => ['required', 'date'],
-            'note' => ['nullable', 'string'],
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['nullable', 'exists:products,id'],
-            'items.*.product_name' => ['required_without:items.*.product_id', 'nullable', 'string', 'max:255'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
-            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
-            'items.*.warranty_months' => ['nullable', 'integer', 'min:0', 'max:120'],
-            'items.*.warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
-            'items.*.serial_numbers' => ['nullable', 'string'],
-            'items.*.serialless_quantity' => ['nullable', 'integer', 'min:0'],
-        ]);
-
-        $items = collect($data['items'])
-            ->filter(fn (array $item): bool => (! empty($item['product_id']) || trim((string) ($item['product_name'] ?? '')) !== '') && (int) ($item['quantity'] ?? 0) > 0)
-            ->values();
-
-        if ($items->isEmpty()) {
-            return back()->withInput()->withErrors(['items' => 'At least one product line is required.']);
-        }
-
         $defaultWarehouseId = $inventoryService->defaultWarehouse()->id;
+        $subtotal = 0.0;
 
-        try {
-            DB::transaction(function () use ($data, $items, $inventoryService, $defaultWarehouseId): void {
-                $partyId = $this->resolveVendorPartyId($data);
+        foreach ($data['items'] as $item) {
+            $quantity = (int) $item['quantity'];
+            $unitPrice = (float) $item['unit_price'];
+            $serialNumbers = app(SerialNumberParser::class)->parse($item['serial_numbers'] ?? '');
+            $seriallessQuantity = (int) ($item['serialless_quantity'] ?? 0);
+            $product = $this->resolvePurchaseProduct($item, $serialNumbers, $seriallessQuantity);
+            $warrantyMonths = isset($item['warranty_months']) && $item['warranty_months'] !== ''
+                ? (int) $item['warranty_months']
+                : null;
+            $warrantyDays = $this->warrantyDays($item, $product, $warrantyMonths);
 
-                $purchaseBill = PurchaseBill::create([
-                    'party_id' => $partyId,
-                    'bill_no' => $data['bill_no'],
-                    'purchase_date' => $data['purchase_date'],
-                    'subtotal' => 0,
-                    'note' => $data['note'] ?? null,
+            if (count($serialNumbers) > $quantity) {
+                $quantity = count($serialNumbers);
+            }
+
+            if (! $product->track_serial_numbers && $serialNumbers !== []) {
+                throw new InvalidArgumentException('Serial numbers can only be added for serial-tracked products.');
+            }
+
+            if (! $product->track_serial_numbers) {
+                $seriallessQuantity = 0;
+            } elseif (count($serialNumbers) + $seriallessQuantity !== $quantity) {
+                throw new InvalidArgumentException($product->name.' is serial-tracked. Enter serial numbers or Serial-less Qty for all '.$quantity.' unit(s). Current count: '.count($serialNumbers).' serial(s) + '.$seriallessQuantity.' serial-less.');
+            }
+
+            $lineTotal = $quantity * $unitPrice;
+            $subtotal += $lineTotal;
+
+            $billItem = $purchaseBill->items()->create([
+                'product_id' => $product->id,
+                'quantity' => $quantity,
+                'serialless_quantity' => $seriallessQuantity,
+                'unit_price' => $unitPrice,
+                'total' => $lineTotal,
+                'warranty_months' => $warrantyMonths,
+                'warranty_days' => $warrantyDays,
+            ]);
+
+            if ($product->track_inventory) {
+                $inventoryService->moveStock($product, 'in', $quantity, 'Purchase bill '.$purchaseBill->bill_no, $purchaseBill->bill_no, $seriallessQuantity, null, $serialNumbers);
+            }
+
+            foreach ($serialNumbers as $serialNumber) {
+                ProductSerial::create([
+                    'product_id' => $product->id,
+                    'warehouse_id' => $defaultWarehouseId,
+                    'purchase_bill_id' => $purchaseBill->id,
+                    'purchase_bill_item_id' => $billItem->id,
+                    'serial_number' => $serialNumber,
+                    'warranty_until' => $warrantyDays ? Carbon::parse($data['purchase_date'])->addDays($warrantyDays)->toDateString() : null,
+                    'status' => 'in_stock',
                 ]);
-
-                $subtotal = 0;
-
-                foreach ($items as $item) {
-                    $quantity = (int) $item['quantity'];
-                    $unitPrice = (float) $item['unit_price'];
-                    $serialNumbers = app(SerialNumberParser::class)->parse($item['serial_numbers'] ?? '');
-                    $seriallessQuantity = (int) ($item['serialless_quantity'] ?? 0);
-                    $product = $this->resolvePurchaseProduct($item, $serialNumbers, $seriallessQuantity);
-                    $warrantyMonths = isset($item['warranty_months']) && $item['warranty_months'] !== ''
-                        ? (int) $item['warranty_months']
-                        : null;
-                    $warrantyDays = $this->warrantyDays($item, $product, $warrantyMonths);
-
-                    if (count($serialNumbers) > $quantity) {
-                        $quantity = count($serialNumbers);
-                    }
-
-                    if (! $product->track_serial_numbers && $serialNumbers !== []) {
-                        throw new InvalidArgumentException('Serial numbers can only be added for serial-tracked products.');
-                    }
-
-                    if (! $product->track_serial_numbers) {
-                        $seriallessQuantity = 0;
-                    } elseif (count($serialNumbers) + $seriallessQuantity !== $quantity) {
-                        throw new InvalidArgumentException('For serial-tracked purchase items, serial count plus serial-less quantity must match quantity.');
-                    }
-
-                    $lineTotal = $quantity * $unitPrice;
-                    $subtotal += $lineTotal;
-
-                    $billItem = $purchaseBill->items()->create([
-                        'product_id' => $product->id,
-                        'quantity' => $quantity,
-                        'serialless_quantity' => $seriallessQuantity,
-                        'unit_price' => $unitPrice,
-                        'total' => $lineTotal,
-                        'warranty_months' => $warrantyMonths,
-                        'warranty_days' => $warrantyDays,
-                    ]);
-
-                    if ($product->track_inventory) {
-                        $inventoryService->moveStock($product, 'in', $quantity, 'Purchase bill '.$purchaseBill->bill_no, $purchaseBill->bill_no, $seriallessQuantity, null, $serialNumbers);
-                    }
-
-                    foreach ($serialNumbers as $serialNumber) {
-                        ProductSerial::create([
-                            'product_id' => $product->id,
-                            'warehouse_id' => $defaultWarehouseId,
-                            'purchase_bill_id' => $purchaseBill->id,
-                            'purchase_bill_item_id' => $billItem->id,
-                            'serial_number' => $serialNumber,
-                            'warranty_until' => $warrantyDays ? Carbon::parse($data['purchase_date'])->addDays($warrantyDays)->toDateString() : null,
-                            'status' => 'in_stock',
-                        ]);
-                    }
-                }
-
-                RecordVersionObserver::withoutRecording(fn () => $purchaseBill->update(['subtotal' => $subtotal]));
-            });
-        } catch (InvalidArgumentException $exception) {
-            return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
+            }
         }
 
-        return redirect()->route('purchase-bills.index')->with('success', 'Purchase bill saved and stock updated.');
+        return $subtotal;
     }
 
-    public function show(PurchaseBill $purchaseBill)
+    private function restorePurchaseInventory(PurchaseBill $purchaseBill, InventoryService $inventoryService): void
     {
-        $purchaseBill->load(['party', 'items.product', 'items.serials']);
+        $purchaseBill->loadMissing(['items.product', 'items.serials']);
 
-        return view('purchase_bills.show', compact('purchaseBill'));
+        foreach ($purchaseBill->items as $item) {
+            $product = Product::query()->lockForUpdate()->find($item->product_id);
+
+            if (! $product?->track_inventory) {
+                continue;
+            }
+
+            $serialNumbers = $item->serials->pluck('serial_number')->all();
+
+            foreach ($item->serials as $serial) {
+                if ($serial->status !== 'in_stock') {
+                    throw new InvalidArgumentException('Purchase bill cannot be edited because serial '.$serial->serial_number.' is already '.$serial->status.'.');
+                }
+            }
+
+            $inventoryService->moveStock($product, 'out', (int) $item->quantity, 'Purchase bill edit restore '.$purchaseBill->bill_no, $purchaseBill->bill_no, (int) $item->serialless_quantity, null, $serialNumbers);
+            ProductSerial::query()->where('purchase_bill_item_id', $item->id)->delete();
+        }
     }
 
     private function warrantyDays(array $item, Product $product, ?int $warrantyMonths): ?int
@@ -234,7 +386,7 @@ class PurchaseBillController extends Controller
 
         $unitPrice = (float) ($item['unit_price'] ?? 0);
 
-        $tracksSerials = $serialNumbers !== [] || $seriallessQuantity > 0;
+        $tracksSerials = (bool) ($item['track_serial_numbers'] ?? false) || $serialNumbers !== [] || $seriallessQuantity > 0;
 
         return Product::create([
             'name' => $name,

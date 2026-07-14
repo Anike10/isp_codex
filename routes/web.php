@@ -21,6 +21,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseBillController;
 use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\SaleReturnController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WarehouseController;
@@ -65,6 +66,7 @@ Route::middleware('auth')->group(function () {
         Route::get('invoices/{invoice}/challan', fn ($invoice) => redirect()->route('invoices.invoice', $invoice))->name('invoices.challan');
         Route::get('invoices/{invoice}/quotation', [InvoiceController::class, 'quotation'])->name('invoices.quotation');
         Route::get('invoices/{invoice}/delivery-challan', [InvoiceController::class, 'deliveryChallan'])->name('invoices.delivery-challan');
+        Route::resource('sale-returns', SaleReturnController::class)->only(['index', 'create', 'store', 'show']);
     });
 
     Route::post('invoices/{invoice}/finalize', [InvoiceController::class, 'finalize'])
@@ -146,8 +148,9 @@ Route::middleware('auth')->group(function () {
         Route::post('warehouse-transfers', [WarehouseController::class, 'storeTransfer'])->name('warehouse-transfers.store');
         Route::resource('warehouses', WarehouseController::class)->only(['index', 'store', 'show']);
         Route::resource('product-categories', ProductCategoryController::class)->only(['index', 'store']);
-        Route::resource('purchase-bills', PurchaseBillController::class)->only(['index', 'create', 'store', 'show']);
-        Route::resource('products', ProductController::class)->only(['index', 'show', 'create', 'store']);
+        Route::post('purchase-bills/{purchaseBill}/finalize', [PurchaseBillController::class, 'finalize'])->name('purchase-bills.finalize');
+        Route::resource('purchase-bills', PurchaseBillController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+        Route::resource('products', ProductController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
         Route::post('products/{product}/stock', [ProductController::class, 'moveStock'])->name('products.stock');
     });
 

@@ -19,6 +19,7 @@
             'unit_price' => $item->unit_price,
             'serial_numbers' => $item->serial_numbers,
             'serialless_quantity' => $item->serialless_quantity,
+            'track_serial_numbers' => $item->product?->track_serial_numbers ?? (! empty($item->serial_numbers) || (int) $item->serialless_quantity > 0),
         ])->toArray()
         : [
         [
@@ -28,6 +29,7 @@
             'unit_price' => '',
             'serial_numbers' => '',
             'serialless_quantity' => '',
+            'track_serial_numbers' => '1',
         ],
     ]);
     $invoiceItems = collect($invoiceItems)->map(function (array $item): array {
@@ -242,6 +244,27 @@
 
     .item-serials label {
         display: block;
+    }
+
+    .serial-inline-controls {
+        display: grid;
+        gap: 8px;
+    }
+
+    .serial-controls-head {
+        display: grid;
+        grid-template-columns: minmax(120px, 1fr) 150px auto;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .serial-controls-head label {
+        margin: 0;
+    }
+
+    .serialless-stock-badge {
+        align-self: center;
+        white-space: nowrap;
     }
 
     .serial-options {
@@ -545,6 +568,14 @@
             grid-column: 1 / -1;
         }
 
+        .serial-inline-controls {
+            grid-template-columns: 1fr;
+        }
+
+        .serial-controls-head {
+            grid-template-columns: 1fr;
+        }
+
         .add-item-bar {
             gap: 10px;
         }
@@ -736,10 +767,19 @@
                                         <button type="button" class="btn light remove-item" @if (count($invoiceItems) === 1) style="display:none;" @endif aria-label="Remove item">X</button>
                                     </div>
                                     <div class="item-serials">
-                                        <label for="items_{{ $index }}_serial_numbers">Serial Numbers</label>
-                                        <textarea id="items_{{ $index }}_serial_numbers" name="items[{{ $index }}][serial_numbers]" rows="2" placeholder="Select a serial-tracked product first">{{ $item['serial_numbers'] ?? '' }}</textarea>
-                                        <label for="items_{{ $index }}_serialless_quantity">Serial-less Qty</label>
-                                        <input id="items_{{ $index }}_serialless_quantity" type="number" name="items[{{ $index }}][serialless_quantity]" min="0" value="{{ $item['serialless_quantity'] ?? '' }}" placeholder="Qty without serial">
+                                        <input type="hidden" name="items[{{ $index }}][track_serial_numbers]" value="0" data-serial-track-hidden>
+                                        <label class="checkbox-line" style="display:inline-flex;margin-bottom:8px">
+                                            <input type="checkbox" name="items[{{ $index }}][track_serial_numbers]" value="1" data-serial-track-checkbox @checked(old("items.$index.track_serial_numbers", $item['track_serial_numbers'] ?? empty($item['product_id'] ?? '')))>
+                                            Serial item
+                                        </label>
+                                        <div class="serial-inline-controls">
+                                            <div class="serial-controls-head">
+                                                <label for="items_{{ $index }}_serial_numbers">Serial Numbers</label>
+                                                <input id="items_{{ $index }}_serialless_quantity" type="number" name="items[{{ $index }}][serialless_quantity]" min="0" value="{{ $item['serialless_quantity'] ?? '' }}" placeholder="Serial-less Qty">
+                                                <span class="badge serialless-stock-badge" hidden>Serial-less Stock: 0</span>
+                                            </div>
+                                            <textarea id="items_{{ $index }}_serial_numbers" name="items[{{ $index }}][serial_numbers]" rows="1" placeholder="Click serials below, or type comma-separated serials">{{ $item['serial_numbers'] ?? '' }}</textarea>
+                                        </div>
                                         <div class="serial-options"></div>
                                         <span class="field-note">For serial-tracked products, serial count plus serial-less quantity must match total quantity.</span>
                                     </div>
@@ -1077,10 +1117,26 @@ function selectedProduct(row) {
     return products.find(product => String(product.id) === String(productId));
 }
 
+function updateSeriallessStockBadge(row, product = selectedProduct(row)) {
+    const badge = row.querySelector('.serialless-stock-badge');
+
+    if (!badge) return;
+
+    if (!product?.track_serials) {
+        badge.hidden = true;
+        badge.textContent = 'Serial-less Stock: 0';
+        return;
+    }
+
+    badge.hidden = false;
+    badge.textContent = `Serial-less Stock: ${product.serialless_stock || 0}`;
+}
+
 function refreshSerialOptions(row, focusSerialNumber = null) {
     const product = selectedProduct(row);
     const serialTextarea = row.querySelector('[name$="[serial_numbers]"]');
     const seriallessInput = row.querySelector('[name$="[serialless_quantity]"]');
+    const serialTrackCheckbox = row.querySelector('[data-serial-track-checkbox]');
     const serialOptions = row.querySelector('.serial-options');
     const serialBlock = row.querySelector('.item-serials');
     let focusButton = null;
@@ -1088,9 +1144,32 @@ function refreshSerialOptions(row, focusSerialNumber = null) {
     if (!serialTextarea || !serialOptions) return;
 
     serialOptions.innerHTML = '';
+    updateSeriallessStockBadge(row, product);
 
-    if (!product || !product.track_serials) {
+    if (!product) {
+        const isSerialLine = serialTrackCheckbox?.checked ?? true;
+        serialBlock?.classList.toggle('is-hidden', !isSerialLine);
+        if (serialTrackCheckbox) {
+            serialTrackCheckbox.disabled = false;
+            serialTrackCheckbox.checked = isSerialLine;
+        }
+        serialTextarea.disabled = !isSerialLine;
+        serialTextarea.placeholder = isSerialLine ? 'Type comma-separated serials for this new item' : 'Serial not tracked for this line';
+        if (seriallessInput) {
+            seriallessInput.disabled = !isSerialLine;
+            if (!isSerialLine) {
+                seriallessInput.value = '';
+            }
+        }
+        return;
+    }
+
+    if (!product.track_serials) {
         serialBlock?.classList.add('is-hidden');
+        if (serialTrackCheckbox) {
+            serialTrackCheckbox.checked = false;
+            serialTrackCheckbox.disabled = true;
+        }
         serialTextarea.disabled = true;
         serialTextarea.value = '';
         if (seriallessInput) {
@@ -1101,6 +1180,10 @@ function refreshSerialOptions(row, focusSerialNumber = null) {
     }
 
     serialBlock?.classList.remove('is-hidden');
+    if (serialTrackCheckbox) {
+        serialTrackCheckbox.checked = true;
+        serialTrackCheckbox.disabled = true;
+    }
     serialTextarea.disabled = false;
     if (seriallessInput) {
         seriallessInput.disabled = false;
@@ -1262,10 +1345,19 @@ function addItemRow() {
             <button type="button" class="btn light remove-item" aria-label="Remove item">X</button>
         </div>
         <div class="item-serials">
-            <label for="items_${itemIndex}_serial_numbers">Serial Numbers</label>
-            <textarea id="items_${itemIndex}_serial_numbers" name="items[${itemIndex}][serial_numbers]" rows="2" placeholder="Select a serial-tracked product first"></textarea>
-            <label for="items_${itemIndex}_serialless_quantity">Serial-less Qty</label>
-            <input id="items_${itemIndex}_serialless_quantity" type="number" name="items[${itemIndex}][serialless_quantity]" min="0" placeholder="Qty without serial">
+            <input type="hidden" name="items[${itemIndex}][track_serial_numbers]" value="0" data-serial-track-hidden>
+            <label class="checkbox-line" style="display:inline-flex;margin-bottom:8px">
+                <input type="checkbox" name="items[${itemIndex}][track_serial_numbers]" value="1" data-serial-track-checkbox checked>
+                Serial item
+            </label>
+            <div class="serial-inline-controls">
+                <div class="serial-controls-head">
+                    <label for="items_${itemIndex}_serial_numbers">Serial Numbers</label>
+                    <input id="items_${itemIndex}_serialless_quantity" type="number" name="items[${itemIndex}][serialless_quantity]" min="0" placeholder="Serial-less Qty">
+                    <span class="badge serialless-stock-badge" hidden>Serial-less Stock: 0</span>
+                </div>
+                <textarea id="items_${itemIndex}_serial_numbers" name="items[${itemIndex}][serial_numbers]" rows="1" placeholder="Click serials below, or type comma-separated serials"></textarea>
+            </div>
             <div class="serial-options"></div>
             <span class="field-note">For serial-tracked products, serial count plus serial-less quantity must match total quantity.</span>
         </div>
@@ -1403,6 +1495,17 @@ document.addEventListener('input', function(e) {
         return;
     }
 
+    if (e.target.matches('[data-serial-track-checkbox]')) {
+        const row = e.target.closest('.item-row');
+        if (!e.target.checked) {
+            row.querySelector('[name$="[serial_numbers]"]').value = '';
+            row.querySelector('[name$="[serialless_quantity]"]').value = '';
+        }
+        refreshSerialOptions(row);
+        syncQuantityToSerials(row);
+        return;
+    }
+
     if (e.target.classList.contains('quantity') || e.target.classList.contains('unit-price') || ['discount', 'vat', 'discountType', 'vatType'].includes(e.target.id)) {
         const row = e.target.closest('.item-row');
         if (row) {
@@ -1499,6 +1602,8 @@ function reindexItemRows() {
         const total = row.querySelector('.total');
         const serialNumbers = row.querySelector('[name$="[serial_numbers]"]');
         const seriallessQuantity = row.querySelector('[name$="[serialless_quantity]"]');
+        const serialTrackHidden = row.querySelector('[data-serial-track-hidden]');
+        const serialTrackCheckbox = row.querySelector('[data-serial-track-checkbox]');
         const orderButton = row.querySelector('.item-order');
 
         if (orderButton) {
@@ -1544,6 +1649,14 @@ function reindexItemRows() {
             seriallessQuantity.id = `items_${index}_serialless_quantity`;
             seriallessQuantity.name = `items[${index}][serialless_quantity]`;
             row.querySelector('label[for$="_serialless_quantity"]')?.setAttribute('for', seriallessQuantity.id);
+        }
+
+        if (serialTrackHidden) {
+            serialTrackHidden.name = `items[${index}][track_serial_numbers]`;
+        }
+
+        if (serialTrackCheckbox) {
+            serialTrackCheckbox.name = `items[${index}][track_serial_numbers]`;
         }
     });
 

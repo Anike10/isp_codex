@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Permission;
 use App\Models\Product;
 use App\Models\ProductSerial;
+use App\Models\PurchaseBill;
 use App\Models\StockMovement;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -183,6 +184,87 @@ class WarehouseInventoryTest extends TestCase
         ])->assertRedirect(route('warehouse-transfers.create'))->assertSessionHasErrors('items');
 
         $this->assertSame($beforeRouterStock, $router->warehouseStocks()->where('warehouse_id', $main->id)->value('quantity'));
+    }
+
+    public function test_warehouse_movement_references_link_to_purchase_bills(): void
+    {
+        $user = $this->inventoryUser();
+        $warehouse = Warehouse::where('is_default', true)->firstOrFail();
+        $product = $this->product(['sku' => 'WH-PB-LINK']);
+        $purchaseBill = PurchaseBill::create([
+            'party_id' => null,
+            'bill_no' => 'PB-WH-LINK-001',
+            'purchase_date' => now()->toDateString(),
+            'subtotal' => 100,
+            'discount' => 0,
+            'tax' => 0,
+            'total' => 100,
+            'paid_amount' => 0,
+            'due_amount' => 100,
+            'payment_status' => 'due',
+        ]);
+
+        StockMovement::create([
+            'product_id' => $product->id,
+            'warehouse_id' => $warehouse->id,
+            'type' => 'in',
+            'quantity' => 1,
+            'balance_before' => 0,
+            'balance_after' => 1,
+            'reference_no' => $purchaseBill->bill_no,
+            'reason' => 'Purchase bill '.$purchaseBill->bill_no,
+        ]);
+
+        $this->actingAs($user)->get(route('warehouses.show', $warehouse))
+            ->assertOk()
+            ->assertSee(route('purchase-bills.show', $purchaseBill), false)
+            ->assertSee($purchaseBill->bill_no);
+
+        $this->actingAs($user)->get(route('warehouse-movements.index', ['warehouse_id' => $warehouse->id]))
+            ->assertOk()
+            ->assertSee(route('purchase-bills.show', $purchaseBill), false)
+            ->assertSee($purchaseBill->bill_no);
+    }
+
+    public function test_warehouse_stock_page_can_search_by_in_stock_serial_number(): void
+    {
+        $user = $this->inventoryUser();
+        $warehouse = Warehouse::where('is_default', true)->firstOrFail();
+        $matchedProduct = $this->product([
+            'name' => 'Warehouse Search ONU',
+            'sku' => 'WH-SERIAL-SEARCH',
+            'track_serial_numbers' => true,
+            'product_type' => 'serial_stock',
+            'stock_quantity' => 1,
+        ]);
+        $otherProduct = $this->product([
+            'name' => 'Warehouse Other Router',
+            'sku' => 'WH-SERIAL-OTHER',
+            'stock_quantity' => 1,
+        ]);
+
+        $matchedProduct->warehouseStocks()->updateOrCreate([
+            'warehouse_id' => $warehouse->id,
+        ], [
+            'quantity' => 1,
+        ]);
+        $otherProduct->warehouseStocks()->updateOrCreate([
+            'warehouse_id' => $warehouse->id,
+        ], [
+            'quantity' => 1,
+        ]);
+        ProductSerial::create([
+            'product_id' => $matchedProduct->id,
+            'warehouse_id' => $warehouse->id,
+            'serial_number' => 'WH-SERIAL-FIND-001',
+            'status' => 'in_stock',
+        ]);
+
+        $this->actingAs($user)->get(route('warehouses.show', [$warehouse, 'search' => 'WH-SERIAL-FIND-001']))
+            ->assertOk()
+            ->assertSee('Warehouse Search ONU')
+            ->assertSee('WH-SERIAL-FIND-001')
+            ->assertDontSee('Warehouse Other Router');
     }
 
     private function inventoryUser(): User

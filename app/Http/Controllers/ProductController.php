@@ -2,19 +2,27 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Invoice;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\ProductSerial;
+use App\Models\PurchaseBill;
+use App\Models\SaleReturn;
+use App\Models\StockMovement;
 use App\Models\Warehouse;
 use App\Services\InventoryService;
 use App\Support\SerialNumberParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 
 class ProductController extends Controller
 {
     public function index(Request $request)
     {
+        $serialSearch = trim((string) $request->query('serial_search', ''));
+
         $query = Product::query()
             ->when($request->filled('brand'), fn ($query) => $query->where('brand', $request->query('brand')))
             ->when($request->filled('product_category_id'), function ($query) use ($request): void {
@@ -25,6 +33,7 @@ class ProductController extends Controller
             ->when($request->query('stock_state') === 'out', fn ($query) => $query->where('stock_quantity', '<=', 0)->where('track_inventory', true))
             ->when($request->query('stock_state') === 'tracked', fn ($query) => $query->where('track_inventory', true))
             ->when($request->query('stock_state') === 'serial', fn ($query) => $query->where('track_serial_numbers', true))
+            ->when($serialSearch !== '', fn ($query) => $query->whereHas('serials', fn ($query) => $query->where('serial_number', 'like', "%{$serialSearch}%")))
             ->when($request->filled('search'), function ($query) use ($request): void {
                 $search = trim((string) $request->query('search'));
                 $query->where(function ($query) use ($search): void {
@@ -36,6 +45,9 @@ class ProductController extends Controller
                         ->orWhere('subcategory', 'like', "%{$search}%");
                 });
             });
+        $serialTraceSerials = $this->serialTraceSerials($serialSearch);
+        $serialTraceMovements = $this->serialTraceMovements($serialSearch, $serialTraceSerials->pluck('product_id')->unique()->values()->all());
+        $serialTraceReferenceLinks = $this->stockReferenceLinks($serialTraceMovements->pluck('reference_no')->filter()->unique()->values()->all());
 
         return view('products.index', [
             'products' => $query->with(['warehouseStocks', 'serials' => fn ($query) => $query
@@ -47,12 +59,26 @@ class ProductController extends Controller
             ...$this->productTaxonomyOptions(),
             'warehouses' => Warehouse::query()->where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get(),
             'defaultWarehouse' => Warehouse::query()->where('is_default', true)->firstOrFail(),
+            'serialSearch' => $serialSearch,
+            'serialTraceSerials' => $serialTraceSerials,
+            'serialTraceMovements' => $serialTraceMovements,
+            'serialTraceReferenceLinks' => $serialTraceReferenceLinks,
         ]);
     }
 
     public function create()
     {
         return view('products.create', $this->productTaxonomyOptions());
+    }
+
+    public function edit(Product $product)
+    {
+        $product->load('productCategory.parent.parent.parent');
+
+        return view('products.create', [
+            'product' => $product,
+            ...$this->productTaxonomyOptions(),
+        ]);
     }
 
     public function show(Request $request, Product $product)
@@ -62,6 +88,7 @@ class ProductController extends Controller
             ->latest()
             ->paginate($this->perPage($request))
             ->appends($request->query());
+        $referenceLinks = $this->stockReferenceLinks($stockMovements->getCollection()->pluck('reference_no')->filter()->unique()->values()->all());
         $serials = $product->serials()
             ->with(['purchaseBill', 'customer', 'warehouse'])
             ->latest()
@@ -71,57 +98,19 @@ class ProductController extends Controller
             ->selectRaw('status, count(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status');
+        $seriallessInStock = $product->track_serial_numbers
+            ? max(0, (int) $product->stock_quantity - (int) ($serialGroups['in_stock'] ?? 0))
+            : 0;
 
         $warehouses = Warehouse::query()->where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get();
         $warehouseStocks = $product->warehouseStocks()->with('warehouse')->get();
 
-        return view('products.show', compact('product', 'stockMovements', 'serials', 'serialGroups', 'warehouses', 'warehouseStocks'));
+        return view('products.show', compact('product', 'stockMovements', 'serials', 'serialGroups', 'seriallessInStock', 'warehouses', 'warehouseStocks', 'referenceLinks'));
     }
 
     public function store(Request $request, InventoryService $inventoryService)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'sku' => ['required', 'string', 'max:100', 'unique:products,sku'],
-            'barcode' => ['nullable', 'string', 'max:100', 'unique:products,barcode'],
-            'brand' => ['nullable', 'string', 'max:100'],
-            'product_category_id' => ['nullable', 'exists:product_categories,id'],
-            'product_type' => ['nullable', 'in:stock,serial_stock,consumable,service,warranty'],
-            'track_inventory' => ['nullable', 'boolean'],
-            'track_serial_numbers' => ['nullable', 'boolean'],
-            'warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
-            'service_guarantee_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
-            'purchase_price' => ['required', 'numeric', 'min:0'],
-            'sale_price' => ['required', 'numeric', 'min:0'],
-            'stock_quantity' => ['nullable', 'integer', 'min:0'],
-            'low_stock_alert' => ['nullable', 'integer', 'min:0'],
-        ]);
-
-        $data['product_type'] = $data['product_type'] ?? 'stock';
-        $data['track_inventory'] = in_array($data['product_type'], ['stock', 'serial_stock', 'consumable'], true)
-            && ($request->has('track_inventory') ? $request->boolean('track_inventory') : true);
-        $data['track_serial_numbers'] = $data['product_type'] === 'serial_stock'
-            || ($data['track_inventory'] && $request->boolean('track_serial_numbers'));
-        if ($data['track_serial_numbers']) {
-            $data['product_type'] = 'serial_stock';
-        }
-        $data['warranty_days'] = isset($data['warranty_days']) && $data['warranty_days'] !== ''
-            ? (int) $data['warranty_days']
-            : null;
-        $data['service_guarantee_days'] = isset($data['service_guarantee_days']) && $data['service_guarantee_days'] !== ''
-            ? (int) $data['service_guarantee_days']
-            : null;
-
-        if (! $data['track_inventory']) {
-            $data['stock_quantity'] = 0;
-            $data['low_stock_alert'] = 0;
-            $data['track_serial_numbers'] = false;
-        } else {
-            $data['stock_quantity'] = (int) ($data['stock_quantity'] ?? 0);
-            $data['low_stock_alert'] = (int) ($data['low_stock_alert'] ?? 5);
-        }
-
-        $data = $this->syncCategoryLabels($data);
+        $data = $this->validatedProductData($request);
 
         $openingStock = (int) ($data['stock_quantity'] ?? 0);
         $data['stock_quantity'] = 0;
@@ -132,6 +121,56 @@ class ProductController extends Controller
         }
 
         return redirect()->route('products.index')->with('success', 'Product created successfully.');
+    }
+
+    public function update(Request $request, Product $product)
+    {
+        $data = $this->validatedProductData($request, $product);
+        unset($data['stock_quantity']);
+        unset($data['serial_conversion_serial_numbers'], $data['serial_conversion_serialless_quantity']);
+        $isConvertingToSerial = ! $product->track_serial_numbers && $data['track_serial_numbers'];
+
+        if (! $data['track_inventory'] && ((int) $product->stock_quantity > 0 || $product->stockMovements()->exists())) {
+            return back()->withInput()->withErrors([
+                'track_inventory' => 'Inventory tracking cannot be disabled while this product has stock or movement history.',
+            ]);
+        }
+
+        if (! $data['track_serial_numbers'] && $product->serials()->exists()) {
+            return back()->withInput()->withErrors([
+                'track_serial_numbers' => 'Serial tracking cannot be disabled after serial numbers have been recorded.',
+            ]);
+        }
+
+        try {
+            $conversionSerials = $this->validatedSerialConversionData($request, $product, $isConvertingToSerial);
+
+            DB::transaction(function () use ($product, $data, $isConvertingToSerial, $conversionSerials): void {
+                $product->update($data);
+
+                if (! $isConvertingToSerial || $conversionSerials === []) {
+                    return;
+                }
+
+                $defaultWarehouseId = Warehouse::query()->where('is_default', true)->value('id');
+
+                foreach ($conversionSerials as $serialNumber) {
+                    ProductSerial::create([
+                        'product_id' => $product->id,
+                        'warehouse_id' => $defaultWarehouseId,
+                        'serial_number' => $serialNumber,
+                        'status' => 'in_stock',
+                        'note' => 'Added when product was converted to serial-tracked.',
+                    ]);
+                }
+            });
+        } catch (InvalidArgumentException $exception) {
+            return back()->withInput()->withErrors([
+                'serial_conversion' => $exception->getMessage(),
+            ]);
+        }
+
+        return redirect()->route('products.show', $product)->with('success', 'Product updated successfully.');
     }
 
     public function moveStock(Request $request, Product $product, InventoryService $inventoryService)
@@ -225,6 +264,93 @@ class ProductController extends Controller
         ];
     }
 
+    private function validatedProductData(Request $request, ?Product $product = null): array
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'sku' => ['required', 'string', 'max:100', Rule::unique('products', 'sku')->ignore($product)],
+            'barcode' => ['nullable', 'string', 'max:100', Rule::unique('products', 'barcode')->ignore($product)],
+            'brand' => ['nullable', 'string', 'max:100'],
+            'product_category_id' => ['nullable', 'exists:product_categories,id'],
+            'product_type' => ['nullable', 'in:stock,serial_stock,consumable,service,warranty'],
+            'track_inventory' => ['nullable', 'boolean'],
+            'track_serial_numbers' => ['nullable', 'boolean'],
+            'warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'service_guarantee_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'purchase_price' => ['required', 'numeric', 'min:0'],
+            'sale_price' => ['required', 'numeric', 'min:0'],
+            'stock_quantity' => ['nullable', 'integer', 'min:0'],
+            'low_stock_alert' => ['nullable', 'integer', 'min:0'],
+            'serial_conversion_serial_numbers' => ['nullable', 'string'],
+            'serial_conversion_serialless_quantity' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $data['product_type'] = $data['product_type'] ?? 'stock';
+        $data['track_inventory'] = in_array($data['product_type'], ['stock', 'serial_stock', 'consumable'], true)
+            && ($request->has('track_inventory') ? $request->boolean('track_inventory') : true);
+        $data['track_serial_numbers'] = $data['product_type'] === 'serial_stock'
+            || ($data['track_inventory'] && $request->boolean('track_serial_numbers'));
+        if ($data['track_serial_numbers']) {
+            $data['product_type'] = 'serial_stock';
+        }
+        $data['warranty_days'] = isset($data['warranty_days']) && $data['warranty_days'] !== ''
+            ? (int) $data['warranty_days']
+            : null;
+        $data['service_guarantee_days'] = isset($data['service_guarantee_days']) && $data['service_guarantee_days'] !== ''
+            ? (int) $data['service_guarantee_days']
+            : null;
+
+        if (! $data['track_inventory']) {
+            $data['stock_quantity'] = 0;
+            $data['low_stock_alert'] = 0;
+            $data['track_serial_numbers'] = false;
+        } else {
+            $data['stock_quantity'] = (int) ($data['stock_quantity'] ?? $product?->stock_quantity ?? 0);
+            $data['low_stock_alert'] = (int) ($data['low_stock_alert'] ?? 5);
+        }
+
+        return $this->syncCategoryLabels($data);
+    }
+
+    private function validatedSerialConversionData(Request $request, Product $product, bool $isConvertingToSerial): array
+    {
+        if (! $isConvertingToSerial) {
+            return [];
+        }
+
+        $stockQuantity = (int) $product->stock_quantity;
+        $serialNumbers = app(SerialNumberParser::class)->parse($request->input('serial_conversion_serial_numbers', ''));
+        $seriallessQuantity = (int) $request->input('serial_conversion_serialless_quantity', 0);
+
+        if ($stockQuantity <= 0) {
+            if ($serialNumbers !== [] || $seriallessQuantity > 0) {
+                throw new InvalidArgumentException('This product has no current stock. Add new serial stock through Purchase Bill or Move Stock.');
+            }
+
+            return [];
+        }
+
+        if (count($serialNumbers) + $seriallessQuantity !== $stockQuantity) {
+            throw new InvalidArgumentException('This product has '.$stockQuantity.' existing stock. Before making it serial-tracked, enter serials plus serial-less quantity for all '.$stockQuantity.' unit(s). Current count: '.count($serialNumbers).' serial(s) + '.$seriallessQuantity.' serial-less.');
+        }
+
+        if ($serialNumbers === []) {
+            return [];
+        }
+
+        $existingSerials = ProductSerial::query()
+            ->where('product_id', $product->id)
+            ->whereIn('serial_number', $serialNumbers)
+            ->pluck('serial_number')
+            ->all();
+
+        if ($existingSerials !== []) {
+            throw new InvalidArgumentException('These serials already exist for this product: '.implode(', ', $existingSerials));
+        }
+
+        return $serialNumbers;
+    }
+
     private function syncCategoryLabels(array $data): array
     {
         $data['category'] = null;
@@ -253,5 +379,63 @@ class ProductController extends Controller
         }
 
         return array_values(array_unique($ids));
+    }
+
+    private function stockReferenceLinks(array $references): array
+    {
+        if ($references === []) {
+            return [];
+        }
+
+        $links = [];
+
+        foreach (PurchaseBill::query()
+            ->whereIn('bill_no', $references)
+            ->get(['id', 'bill_no']) as $purchaseBill) {
+            $links[$purchaseBill->bill_no] = route('purchase-bills.show', $purchaseBill);
+        }
+
+        foreach (Invoice::query()
+            ->whereIn('invoice_no', $references)
+            ->get(['id', 'invoice_no']) as $invoice) {
+            $links[$invoice->invoice_no] = route('invoices.show', $invoice);
+        }
+
+        foreach (SaleReturn::query()
+            ->whereIn('return_no', $references)
+            ->get(['id', 'return_no']) as $saleReturn) {
+            $links[$saleReturn->return_no] = route('sale-returns.show', $saleReturn);
+        }
+
+        return $links;
+    }
+
+    private function serialTraceSerials(string $serialSearch)
+    {
+        if ($serialSearch === '') {
+            return collect();
+        }
+
+        return ProductSerial::query()
+            ->with(['product', 'warehouse', 'purchaseBill.party', 'customer', 'invoice.customer', 'invoiceItem.saleReturnItems.saleReturn'])
+            ->where('serial_number', 'like', "%{$serialSearch}%")
+            ->orderBy('serial_number')
+            ->limit(50)
+            ->get();
+    }
+
+    private function serialTraceMovements(string $serialSearch, array $productIds)
+    {
+        if ($serialSearch === '' || $productIds === []) {
+            return collect();
+        }
+
+        return StockMovement::query()
+            ->with(['product', 'warehouse', 'relatedWarehouse'])
+            ->whereIn('product_id', $productIds)
+            ->where('serial_numbers', 'like', "%{$serialSearch}%")
+            ->oldest()
+            ->limit(100)
+            ->get();
     }
 }

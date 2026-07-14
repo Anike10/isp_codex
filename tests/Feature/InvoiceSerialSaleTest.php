@@ -101,6 +101,62 @@ class InvoiceSerialSaleTest extends TestCase
             ->assertSee('ONU-SN-001 to ONU-SN-002');
     }
 
+    public function test_invoice_index_can_search_by_sold_serial_number(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Serial Customer',
+            'phone' => '01711111111',
+            'connection_id' => 'SC-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => false,
+        ]);
+        $product = Product::create([
+            'name' => 'Searchable ONU',
+            'sku' => 'INV-SERIAL-PRODUCT',
+            'brand' => 'BDCOM',
+            'track_inventory' => true,
+            'track_serial_numbers' => true,
+            'purchase_price' => 900,
+            'sale_price' => 1200,
+            'stock_quantity' => 1,
+            'low_stock_alert' => 1,
+        ]);
+        ProductSerial::create([
+            'product_id' => $product->id,
+            'serial_number' => 'INV-SERIAL-FIND-001',
+            'status' => 'in_stock',
+        ]);
+
+        $this->actingAs($user)->post(route('invoices.store'), [
+            'customer_id' => $customer->id,
+            'billing_month' => '2026-07',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'quantity' => 1,
+                    'unit_price' => 1200,
+                    'serial_numbers' => 'INV-SERIAL-FIND-001',
+                ],
+            ],
+            'discount_type' => 'amount',
+            'discount' => 0,
+            'vat_type' => 'amount',
+            'vat' => 0,
+        ])->assertRedirect();
+
+        $invoice = Invoice::where('customer_id', $customer->id)->firstOrFail();
+
+        $this->actingAs($user)->get(route('invoices.index', ['search' => 'INV-SERIAL-FIND-001']))
+            ->assertOk()
+            ->assertSee($invoice->invoice_no)
+            ->assertSee('Serial Customer');
+    }
+
     public function test_invoice_sale_updates_quantity_from_serial_range_count(): void
     {
         $user = User::factory()->create();
@@ -170,6 +226,73 @@ class InvoiceSerialSaleTest extends TestCase
                 'status' => 'sold',
             ]);
         }
+    }
+
+    public function test_invoice_create_page_shows_serialless_stock_count_for_serial_products(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $product = Product::create([
+            'name' => 'Monitor',
+            'sku' => 'MON-SERIALLESS-STOCK',
+            'brand' => 'HP',
+            'track_inventory' => true,
+            'track_serial_numbers' => true,
+            'purchase_price' => 700,
+            'sale_price' => 1000,
+            'stock_quantity' => 4,
+            'low_stock_alert' => 1,
+        ]);
+
+        foreach (['101', '102', '103'] as $serialNumber) {
+            ProductSerial::create([
+                'product_id' => $product->id,
+                'serial_number' => $serialNumber,
+                'status' => 'in_stock',
+            ]);
+        }
+
+        $this->actingAs($user)->get(route('invoices.create'))
+            ->assertOk()
+            ->assertSee('"serialless_stock":1', false)
+            ->assertSee('Serial-less Stock: 0');
+    }
+
+    public function test_invoice_serial_options_are_ordered_by_earliest_warranty(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $product = Product::create([
+            'name' => 'Monitor',
+            'sku' => 'MON-WARRANTY-ORDER',
+            'brand' => 'HP',
+            'track_inventory' => true,
+            'track_serial_numbers' => true,
+            'purchase_price' => 700,
+            'sale_price' => 1000,
+            'stock_quantity' => 3,
+            'low_stock_alert' => 1,
+        ]);
+
+        foreach ([
+            ['serial_number' => 'LATE-WARRANTY', 'warranty_until' => '2027-07-14'],
+            ['serial_number' => 'EARLY-WARRANTY', 'warranty_until' => '2027-01-14'],
+            ['serial_number' => 'NO-WARRANTY', 'warranty_until' => null],
+        ] as $row) {
+            ProductSerial::create([
+                'product_id' => $product->id,
+                'serial_number' => $row['serial_number'],
+                'warranty_until' => $row['warranty_until'],
+                'status' => 'in_stock',
+            ]);
+        }
+
+        $response = $this->actingAs($user)->get(route('invoices.create'))
+            ->assertOk();
+
+        $content = $response->getContent();
+        $this->assertLessThan(strpos($content, 'LATE-WARRANTY'), strpos($content, 'EARLY-WARRANTY'));
+        $this->assertLessThan(strpos($content, 'NO-WARRANTY'), strpos($content, 'LATE-WARRANTY'));
     }
 
     public function test_invoice_sale_records_serialless_quantity_on_details_but_not_print(): void
@@ -300,9 +423,53 @@ class InvoiceSerialSaleTest extends TestCase
             'discount' => 0,
             'vat_type' => 'amount',
             'vat' => 0,
-        ])->assertSessionHasErrors('items');
+        ])->assertSessionHasErrors([
+            'items' => 'ONU Device is serial-tracked. Select serials or enter Serial-less Qty for all 3 unit(s). Current count: 1 serial(s) + 1 serial-less.',
+        ]);
 
         $this->assertSame(3, $product->refresh()->stock_quantity);
+    }
+
+    public function test_invoice_text_item_can_store_serials_when_serial_checkbox_is_enabled(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Retail Customer',
+            'phone' => '01711111111',
+            'connection_id' => 'RC-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => false,
+        ]);
+
+        $this->actingAs($user)->post(route('invoices.store'), [
+            'customer_id' => $customer->id,
+            'billing_month' => '2026-07',
+            'items' => [
+                [
+                    'product_name' => 'Typed ONU',
+                    'quantity' => 2,
+                    'unit_price' => 1200,
+                    'track_serial_numbers' => '1',
+                    'serial_numbers' => 'TYPED-ONU-001',
+                    'serialless_quantity' => 1,
+                ],
+            ],
+            'discount_type' => 'amount',
+            'discount' => 0,
+            'vat_type' => 'amount',
+            'vat' => 0,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('invoice_items', [
+            'product_id' => null,
+            'product_name' => 'Typed ONU',
+            'quantity' => 2,
+            'serial_numbers' => 'TYPED-ONU-001',
+            'serialless_quantity' => 1,
+        ]);
     }
 
     public function test_invoice_update_recalculates_percentage_vat_after_item_removal(): void

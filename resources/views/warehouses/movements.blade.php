@@ -16,6 +16,6 @@
     <div class="actions"><button class="btn secondary" type="submit">Filter</button><a class="btn light" href="{{ route('warehouse-movements.index') }}">Reset</a></div>
 </form>
 
-@include('warehouses.partials.movement_table', ['movements' => $movements])
+@include('warehouses.partials.movement_table', ['movements' => $movements, 'referenceLinks' => $referenceLinks])
 <div style="margin-top:16px">{{ $movements->links() }}</div>
 @endsection
