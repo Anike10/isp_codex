@@ -130,8 +130,8 @@
     <main class="page">
         <section class="brand-bar">
             <div class="company">
-                <h1>Ultimate Solution</h1>
-                <p>your ultimate IT partner<br>44/1 K Khan Road, Kushtia<br>Mobile - 01812707070, 01798987928<br>us.com.bd | info@us.com.bd</p>
+                <h1>Kushtia Municipality</h1>
+                <p>Kushtia<br>Mobile - +8801722323870</p>
             </div>
             <div class="doc-title">
                 <h2>DELIVERY CHALLAN</h2>
@@ -203,7 +203,7 @@
             <div class="signature-line">Received By</div>
         </section>
         <div class="no-sign-note">Computer-generated delivery challan<br>No signature required</div>
-        <div class="footer">This is a computer-generated delivery challan. Thank you for choosing Ultimate Solution.</div>
+        <div class="footer">Powered by Ultimate Solution</div>
     </main>
 
     <script>

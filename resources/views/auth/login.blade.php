@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login - Ultimate Solution</title>
+    <title>Login - Kushtia Municipality</title>
     <style>
         :root { --ink:#172033; --muted:#667085; --line:#d8dee9; --bg:#f4f7fb; --brand:#116149; --danger:#b42318; }
         * { box-sizing:border-box; }
@@ -17,12 +17,13 @@
         .check input { width:auto; margin:0; }
         .btn { width:100%; border:0; border-radius:6px; background:var(--brand); color:white; padding:11px 14px; font-weight:700; cursor:pointer; }
         .error { background:#fff0f0; color:var(--danger); border-radius:6px; padding:10px 12px; margin-bottom:14px; }
+        .powered-by { margin-top:18px; color:var(--muted); font-size:13px; text-align:center; }
     </style>
 </head>
 <body>
     <form method="post" action="{{ route('login.store') }}" class="login">
         @csrf
-        <h1>Ultimate Solution</h1>
+        <h1>Kushtia Municipality</h1>
         <div class="muted">Sign in to manage your ISP system</div>
 
         @if ($errors->any())
@@ -45,6 +46,7 @@
         </label>
 
         <button class="btn" type="submit">Login</button>
+        <div class="powered-by">Powered by Ultimate Solution</div>
     </form>
 </body>
 </html>

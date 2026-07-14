@@ -554,12 +554,10 @@
         <section class="brand-bar">
             <div class="company">
                 <div>
-                    <h1>Ultimate Solution</h1>
+                    <h1>Kushtia Municipality</h1>
                     <p>
-                        your ultimate IT partner<br>
-                        44/1 K Khan Road, Kushtia<br>
-                        Mobile - 01812707070, 01798987928<br>
-                        us.com.bd | info@us.com.bd
+                        Kushtia<br>
+                        Mobile - +8801722323870
                     </p>
                 </div>
             </div>
@@ -668,7 +666,7 @@
         </div>
 
         <div class="footer">
-            This is a computer-generated bill. Thank you for choosing Ultimate Solution.
+            Powered by Ultimate Solution
         </div>
     </main>
 
