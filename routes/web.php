@@ -9,6 +9,9 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\FleetController;
+use App\Http\Controllers\FleetOperationController;
+use App\Http\Controllers\FleetReportController;
 use App\Http\Controllers\InHouseUseController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MikrotikRouterController;
@@ -106,6 +109,16 @@ Route::middleware('auth')->group(function () {
         Route::resource('employees', EmployeeController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
         Route::get('expenses/{expense}/voucher', [ExpenseController::class, 'voucher'])->name('expenses.voucher');
         Route::resource('expenses', ExpenseController::class)->only(['index', 'create', 'store', 'show']);
+    });
+
+    Route::middleware('permission:manage_fleet')->group(function () {
+        Route::get('fleet/reports', [FleetReportController::class, 'index'])->name('fleet.reports');
+        Route::post('fleet/{vehicle}/maintenance-items', [FleetOperationController::class, 'storeMaintenanceItem'])->name('fleet.maintenance-items.store');
+        Route::post('fleet/{vehicle}/maintenance-logs', [FleetOperationController::class, 'storeMaintenanceLog'])->name('fleet.maintenance-logs.store');
+        Route::post('fleet/{vehicle}/assignments', [FleetOperationController::class, 'storeAssignment'])->name('fleet.assignments.store');
+        Route::patch('fleet/assignments/{assignment}/end', [FleetOperationController::class, 'endAssignment'])->name('fleet.assignments.end');
+        Route::post('fleet/{vehicle}/expenses', [FleetOperationController::class, 'storeExpense'])->name('fleet.expenses.store');
+        Route::resource('fleet', FleetController::class)->parameters(['fleet' => 'vehicle'])->only(['index', 'store', 'show', 'update']);
     });
 
     Route::middleware('permission:manage_mikrotik_routers')->group(function () {

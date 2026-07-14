@@ -23,6 +23,7 @@ A Laravel 12 application for an ISP and computer service business.
 - Support ticket management
 - Multi-warehouse product inventory with an invoice-style multi-item `Inventory > In-house Use` entry page (writable product lookup, quantity, editable unit value, line total, serials, note, and private approval scan/PDF), separate employee/value/used-stock/history reports, partial returns, and isolated returned-used stock
 - Purchase bills support a private vendor bill/invoice image or PDF; draft edits can preserve the current copy or securely replace it
+- Vehicle & Fleet Management with vehicle status/mileage, Driver/Helper/Supervisor duty history, date/mileage maintenance schedules, itemized trip expenses, and filtered fleet reports (see `FLEET_MANAGEMENT.md`)
 - Role and permission based admin access
 
 ## Local Setup

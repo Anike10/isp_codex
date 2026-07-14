@@ -13,6 +13,7 @@ class Employee extends Model
     protected $fillable = [
         'name',
         'designation',
+        'fleet_role',
         'phone',
         'join_date',
         'current_salary',
@@ -46,5 +47,15 @@ class Employee extends Model
     public function assetAssignments(): HasMany
     {
         return $this->hasMany(EmployeeAssetAssignment::class);
+    }
+
+    public function vehicleAssignments(): HasMany
+    {
+        return $this->hasMany(VehicleAssignmentHistory::class);
+    }
+
+    public function vehicleExpenses(): HasMany
+    {
+        return $this->hasMany(VehicleExpense::class);
     }
 }

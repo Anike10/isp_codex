@@ -56,7 +56,7 @@
                         <div class="muted">{{ $employee->phone }}</div>
                     @endif
                 </td>
-                <td>{{ $employee->designation ?? 'N/A' }}</td>
+                <td>{{ $employee->designation ?? 'N/A' }}@if($employee->fleet_role)<div class="muted">Fleet: {{ ucfirst($employee->fleet_role) }}</div>@endif</td>
                 <td>{{ number_format($employee->current_salary, 2) }}</td>
                 @php
                     $salaryPaid = (float) ($employee->selected_month_salary_paid ?? 0);

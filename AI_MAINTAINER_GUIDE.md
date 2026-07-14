@@ -717,6 +717,14 @@ Stock movement behavior:
 - Purchase bills add stock and create a stock movement using the purchase bill number as the reference.
 - Purchase bills accept one optional vendor bill/invoice copy (PDF/JPG/PNG/WEBP, max 10 MB), stored on the private `local` disk under `purchase-bill-documents/YYYY/MM` and served through `GET /purchase-bills/{purchaseBill}/document` behind `manage_products`.
 - Draft purchase-bill edits preserve the existing document when no file is submitted. A successful replacement deletes the old file; a failed database operation deletes the newly uploaded file so private storage does not accumulate orphan replacements.
+
+### Vehicle and fleet management
+
+- `manage_fleet` protects the Fleet menu and every `/fleet` route. The module schema and operator workflow are documented in `FLEET_MANAGEMENT.md`.
+- `vehicle_assignments_history` is the only source of truth for current and former Driver/Helper/Supervisor duty. Current means `end_date IS NULL`; never replace a row to change staff. Use `FleetService::assignEmployee()` so the previous active assignment is locked and closed transactionally.
+- Maintenance due state is true when either `next_due_date <= today` or current vehicle mileage reaches `next_due_mileage`. `FleetService::logMaintenance()` recalculates both schedules from the saved service event.
+- Fleet expenses are separate from payroll/general `expenses`: they require a vehicle, preserve the creator user, may identify the responsible driver/employee, and support daily/trip metadata.
+- Fleet report date ranges are inclusive. Duty filters use interval overlap, while expenses and maintenance use their actual event dates. Totals are SQL aggregates and detail tables paginate independently.
 - Purchase bill item serial numbers are stored in `product_serials`; warranty end date is calculated from purchase date plus warranty months.
 - Vendor/wholesale shops are stored in the existing `customers` table as parties with `is_vendor=true`.
 

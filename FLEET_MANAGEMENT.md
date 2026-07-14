@@ -1,0 +1,53 @@
+# Vehicle & Fleet Management
+
+## Operator pages
+
+- `/fleet`: vehicle dashboard, status/mileage filters, current Driver/Helper/Supervisor, due-service count, and vehicle creation.
+- `/fleet/{vehicle}`: vehicle edit, maintenance schedules/logs, staff assignment and duty closing, itemized expenses, and recent history.
+- `/fleet/reports`: custom date, vehicle, employee, expense-category, and duty-role filters with vehicle totals, itemized expenses, maintenance logs, and staff duty history.
+- Access is controlled by `manage_fleet`; menu visibility and direct routes both enforce the permission.
+
+## Database schema
+
+### `vehicles`
+
+Vehicle master data: unique registration/chassis/engine identifiers, name/type/make/model/year/fuel, `active|maintenance|inactive` status, current mileage, and notes.
+
+### `vehicle_maintenance_items`
+
+One schedule per vehicle and item name. `maintenance_type` is `routine_check` or `replacement`. Date scheduling uses `interval_days`/`next_due_date`; mileage scheduling uses `interval_mileage`/`next_due_mileage`. The row also preserves last check/change date and last service mileage.
+
+### `vehicle_maintenance_logs`
+
+Append-only operational records for `checked`, `changed`, `serviced`, and `repaired` actions, including date, mileage, cost, vendor, details, and creator. Saving a log recalculates the item's next date/mileage and advances vehicle mileage when appropriate.
+
+### `vehicle_assignments_history`
+
+The historical source of truth for vehicle staffing. Each row links vehicle and employee with `driver`, `helper`, or `supervisor`, plus start/end dates, note, and assigning user. There is no separate overwrite-only current-assignment table: current duty is the row with `end_date IS NULL`.
+
+When a new person is assigned to a vehicle/role, the service transaction locks and closes the previous active row on the day before the new start date. It also prevents one employee from remaining active in the same role on two vehicles. Manual duty ending validates that the end is not before the start.
+
+### `vehicle_expenses`
+
+Itemized operating expenses linked to vehicle, optional responsible driver/employee, and creator user. Categories are Diesel, Octane, CNG, Engine Oil, Spare Parts, Toll/Bridge, and Miscellaneous. Date, amount, optional quantity/unit, mileage, trip reference, vendor, and description are retained.
+
+### `employees.fleet_role`
+
+Optional employee classification: `driver`, `helper`, or `supervisor`. It can be managed from Employee create/edit and is synchronized when a duty assignment is made.
+
+## Backend structure
+
+- Models: `Vehicle`, `VehicleMaintenanceItem`, `VehicleMaintenanceLog`, `VehicleAssignmentHistory`, `VehicleExpense`.
+- `FleetService`: transactional assignment rollover, duty closing, and maintenance schedule recalculation.
+- `FleetController`: vehicle dashboard/master data.
+- `FleetOperationController`: schedule/log, assignment, and expense writes.
+- `FleetReportController`: database aggregates and independently paginated report details.
+
+All write actions validate foreign keys, allowed status/category/action values, dates, mileage, and monetary inputs. Assignment replacement and maintenance updates run in database transactions.
+
+## Reporting rules
+
+- Date range is inclusive.
+- Expense totals are calculated in SQL from the filtered `vehicle_expenses` rows, not from the current page.
+- Duty history uses overlap semantics: a duty is included when it was active at any point inside the requested date range.
+- Detail sections use independent paginator names so navigating expense pages does not reset maintenance or duty-history paging.

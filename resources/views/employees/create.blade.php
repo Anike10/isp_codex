@@ -13,6 +13,7 @@
     @csrf
     <div><label>Name</label><input name="name" value="{{ old('name') }}" required></div>
     <div><label>Designation</label><input name="designation" value="{{ old('designation') }}" placeholder="Technician, Manager"></div>
+    <div><label>Fleet Role</label><select name="fleet_role"><option value="">Not fleet staff</option><option value="driver" @selected(old('fleet_role') === 'driver')>Driver</option><option value="helper" @selected(old('fleet_role') === 'helper')>Helper</option><option value="supervisor" @selected(old('fleet_role') === 'supervisor')>Supervisor</option></select></div>
     <div><label>Phone</label><input name="phone" value="{{ old('phone') }}"></div>
     <div><label>Join Date</label><input type="date" name="join_date" value="{{ old('join_date') }}"></div>
     <div><label>Current Salary</label><input type="number" step="0.01" min="0" name="current_salary" value="{{ old('current_salary', 0) }}" required></div>

@@ -207,6 +207,7 @@
                     || auth()->user()?->hasPermission('manage_products');
                 $canManageAdmin = auth()->user()?->hasPermission('manage_users')
                     || auth()->user()?->hasPermission('download_backup');
+                $canManageFleet = auth()->user()?->hasPermission('manage_fleet');
             @endphp
             @if (auth()->user()?->hasPermission('view_dashboard'))
                 <a href="{{ route('dashboard') }}">Dashboard</a>
@@ -298,6 +299,15 @@
             @endif
             @if (auth()->user()?->hasPermission('manage_expenses'))
                 <a href="{{ route('expenses.index') }}">Expenses</a>
+            @endif
+            @if ($canManageFleet)
+                <details>
+                    <summary>Fleet</summary>
+                    <div class="nav-menu">
+                        <a href="{{ route('fleet.index') }}">Vehicles</a>
+                        <a href="{{ route('fleet.reports') }}">Fleet Reports</a>
+                    </div>
+                </details>
             @endif
 
             @if ($canManageAdmin)

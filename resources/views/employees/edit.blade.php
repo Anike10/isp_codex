@@ -14,6 +14,7 @@
     @method('PUT')
     <div><label>Name</label><input name="name" value="{{ old('name', $employee->name) }}" required></div>
     <div><label>Designation</label><input name="designation" value="{{ old('designation', $employee->designation) }}"></div>
+    <div><label>Fleet Role</label><select name="fleet_role"><option value="">Not fleet staff</option><option value="driver" @selected(old('fleet_role', $employee->fleet_role) === 'driver')>Driver</option><option value="helper" @selected(old('fleet_role', $employee->fleet_role) === 'helper')>Helper</option><option value="supervisor" @selected(old('fleet_role', $employee->fleet_role) === 'supervisor')>Supervisor</option></select></div>
     <div><label>Phone</label><input name="phone" value="{{ old('phone', $employee->phone) }}"></div>
     <div><label>Join Date</label><input type="date" name="join_date" value="{{ old('join_date', $employee->join_date?->format('Y-m-d')) }}"></div>
     <div><label>Yearly Bonus Count</label><input type="number" min="0" max="12" name="yearly_bonus_count" value="{{ old('yearly_bonus_count', $employee->yearly_bonus_count) }}" required></div>

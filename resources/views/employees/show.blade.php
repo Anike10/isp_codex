@@ -4,7 +4,7 @@
 <div class="topbar">
     <div>
         <h1>{{ $employee->name }}</h1>
-        <div class="muted">{{ $employee->designation ?? 'No designation' }} | {{ ucfirst($employee->status) }}</div>
+        <div class="muted">{{ $employee->designation ?? 'No designation' }} | {{ ucfirst($employee->status) }}{{ $employee->fleet_role ? ' | Fleet: '.ucfirst($employee->fleet_role) : '' }}</div>
     </div>
     <div class="actions">
         @if (auth()->user()?->hasPermission('manage_products'))
@@ -97,6 +97,7 @@
         <h2>Employee Details</h2>
         <p><strong>Phone:</strong> {{ $employee->phone ?? 'N/A' }}</p>
         <p><strong>Join Date:</strong> {{ $employee->join_date?->format('Y-m-d') ?? 'N/A' }}</p>
+        <p><strong>Fleet Role:</strong> {{ $employee->fleet_role ? ucfirst($employee->fleet_role) : 'Not fleet staff' }}</p>
         <p><strong>Bonus Estimate:</strong> {{ number_format($yearlyBonusEntitlement, 2) }} / year</p>
         <p><strong>Note:</strong> {{ $employee->note ?: 'No note added.' }}</p>
     </div>

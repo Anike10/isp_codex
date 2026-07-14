@@ -83,6 +83,7 @@ class EmployeeController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'designation' => ['nullable', 'string', 'max:255'],
+            'fleet_role' => ['nullable', 'in:driver,helper,supervisor'],
             'phone' => ['nullable', 'string', 'max:100'],
             'join_date' => ['nullable', 'date'],
             'current_salary' => ['required', 'numeric', 'min:0'],
@@ -225,6 +226,7 @@ class EmployeeController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'designation' => ['nullable', 'string', 'max:255'],
+            'fleet_role' => ['nullable', 'in:driver,helper,supervisor'],
             'phone' => ['nullable', 'string', 'max:100'],
             'join_date' => ['nullable', 'date'],
             'yearly_bonus_count' => ['required', 'integer', 'min:0', 'max:12'],
