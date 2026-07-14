@@ -301,7 +301,7 @@
                 <a href="{{ route('expenses.index') }}">Expenses</a>
             @endif
             @if ($canManageFleet)
-                <details>
+                <details class="nav-group">
                     <summary>Fleet</summary>
                     <div class="nav-menu">
                         <a href="{{ route('fleet.index') }}">Vehicles</a>

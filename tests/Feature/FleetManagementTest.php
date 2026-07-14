@@ -23,6 +23,8 @@ class FleetManagementTest extends TestCase
         $this->actingAs($user)->get(route('fleet.index'))
             ->assertOk()
             ->assertSee('Vehicle & Fleet Management', false)
+            ->assertSee('<details class="nav-group">', false)
+            ->assertSee(route('fleet.reports'), false)
             ->assertSee($vehicle->registration_no);
 
         $this->actingAs($user)->get(route('fleet.show', $vehicle))
