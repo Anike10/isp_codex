@@ -121,7 +121,7 @@ Route::middleware('auth')->group(function () {
         Route::post('fleet/{vehicle}/assignments', [FleetOperationController::class, 'storeAssignment'])->name('fleet.assignments.store');
         Route::patch('fleet/assignments/{assignment}/end', [FleetOperationController::class, 'endAssignment'])->name('fleet.assignments.end');
         Route::post('fleet/{vehicle}/expenses', [FleetOperationController::class, 'storeExpense'])->name('fleet.expenses.store');
-        Route::resource('fleet', FleetController::class)->parameters(['fleet' => 'vehicle'])->only(['index', 'store', 'show', 'update']);
+        Route::resource('fleet', FleetController::class)->parameters(['fleet' => 'vehicle'])->only(['index', 'create', 'store', 'show', 'update']);
     });
 
     Route::middleware('permission:manage_mikrotik_routers')->group(function () {

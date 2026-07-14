@@ -28,7 +28,14 @@ class FleetManagementTest extends TestCase
             ->assertSee(route('fleet.reports.expenses'), false)
             ->assertSee(route('fleet.reports.maintenance'), false)
             ->assertSee(route('fleet.reports.duty-history'), false)
+            ->assertSee(route('fleet.create'), false)
+            ->assertSee('Add Vehicle')
             ->assertSee($vehicle->registration_no);
+
+        $this->actingAs($user)->get(route('fleet.create'))
+            ->assertOk()
+            ->assertSee('Vehicle Type')
+            ->assertSee('Save Vehicle');
 
         $this->actingAs($user)->get(route('fleet.reports'))
             ->assertOk()

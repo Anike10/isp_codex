@@ -2,7 +2,8 @@
 
 ## Operator pages
 
-- `/fleet`: vehicle dashboard, status/mileage filters, current Driver/Helper/Supervisor, due-service count, and vehicle creation.
+- `/fleet`: vehicle dashboard, status/mileage filters, current Driver/Helper/Supervisor, due-service count, and a visible Add Vehicle button.
+- `/fleet/create`: dedicated vehicle entry form for cars, pickups, trucks, motorcycles, vans, and other vehicle types.
 - `/fleet/{vehicle}`: vehicle edit, maintenance schedules/logs, staff assignment and duty closing, itemized expenses, and recent history.
 - `/fleet/reports`: report selection hub.
 - `/fleet/reports/expenses`: vehicle totals and itemized expense report with date, vehicle, employee, and category filters.

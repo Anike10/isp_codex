@@ -45,6 +45,11 @@ class FleetController extends Controller
         return redirect()->route('fleet.index')->with('success', 'Vehicle added successfully.');
     }
 
+    public function create()
+    {
+        return view('fleet.create');
+    }
+
     public function show(Vehicle $vehicle)
     {
         $vehicle->load([
