@@ -3,7 +3,7 @@
 @section('content')
 <div class="topbar">
     <div><h1>{{ $vehicle->registration_no }} — {{ $vehicle->name }}</h1><div class="muted">{{ $vehicle->vehicle_type ?? 'Vehicle' }} | {{ number_format($vehicle->current_mileage) }} km | {{ \App\Models\Vehicle::STATUSES[$vehicle->status] }}</div></div>
-    <div class="actions"><a class="btn secondary" href="{{ route('fleet.reports', ['vehicle_id' => $vehicle->id]) }}">Reports</a><a class="btn light" href="{{ route('fleet.index') }}">Back</a></div>
+    <div class="actions"><a class="btn secondary" href="{{ route('fleet.reports.expenses', ['vehicle_id' => $vehicle->id]) }}">Expenses</a><a class="btn secondary" href="{{ route('fleet.reports.maintenance', ['vehicle_id' => $vehicle->id]) }}">Maintenance</a><a class="btn secondary" href="{{ route('fleet.reports.duty-history', ['vehicle_id' => $vehicle->id]) }}">Duty History</a><a class="btn light" href="{{ route('fleet.index') }}">Back</a></div>
 </div>
 
 <div class="grid stats" style="margin-bottom:16px">

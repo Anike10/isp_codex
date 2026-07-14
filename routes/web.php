@@ -113,6 +113,9 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('permission:manage_fleet')->group(function () {
         Route::get('fleet/reports', [FleetReportController::class, 'index'])->name('fleet.reports');
+        Route::get('fleet/reports/expenses', [FleetReportController::class, 'expenses'])->name('fleet.reports.expenses');
+        Route::get('fleet/reports/maintenance', [FleetReportController::class, 'maintenance'])->name('fleet.reports.maintenance');
+        Route::get('fleet/reports/duty-history', [FleetReportController::class, 'dutyHistory'])->name('fleet.reports.duty-history');
         Route::post('fleet/{vehicle}/maintenance-items', [FleetOperationController::class, 'storeMaintenanceItem'])->name('fleet.maintenance-items.store');
         Route::post('fleet/{vehicle}/maintenance-logs', [FleetOperationController::class, 'storeMaintenanceLog'])->name('fleet.maintenance-logs.store');
         Route::post('fleet/{vehicle}/assignments', [FleetOperationController::class, 'storeAssignment'])->name('fleet.assignments.store');

@@ -25,7 +25,16 @@ class FleetManagementTest extends TestCase
             ->assertSee('Vehicle & Fleet Management', false)
             ->assertSee('<details class="nav-group">', false)
             ->assertSee(route('fleet.reports'), false)
+            ->assertSee(route('fleet.reports.expenses'), false)
+            ->assertSee(route('fleet.reports.maintenance'), false)
+            ->assertSee(route('fleet.reports.duty-history'), false)
             ->assertSee($vehicle->registration_no);
+
+        $this->actingAs($user)->get(route('fleet.reports'))
+            ->assertOk()
+            ->assertSee('Vehicle Expense Report')
+            ->assertSee('Maintenance Report')
+            ->assertSee('Staff Duty History Report');
 
         $this->actingAs($user)->get(route('fleet.show', $vehicle))
             ->assertOk()
@@ -54,7 +63,7 @@ class FleetManagementTest extends TestCase
         $this->assertNull($secondAssignment->end_date);
         $this->assertSame('driver', $secondDriver->refresh()->fleet_role);
 
-        $this->actingAs($user)->get(route('fleet.reports', ['from' => '2026-07-05', 'to' => '2026-07-12']))
+        $this->actingAs($user)->get(route('fleet.reports.duty-history', ['from' => '2026-07-05', 'to' => '2026-07-12']))
             ->assertOk()->assertSee('First Driver')->assertSee('Second Driver');
     }
 
@@ -77,6 +86,8 @@ class FleetManagementTest extends TestCase
         $this->assertSame(17500, $item->next_due_mileage);
         $this->assertSame(12500, $vehicle->refresh()->current_mileage);
         $this->assertDatabaseHas('vehicle_maintenance_logs', ['maintenance_item_id' => $item->id, 'cost' => '3500.00']);
+        $this->actingAs($user)->get(route('fleet.reports.maintenance', ['from' => '2026-07-01', 'to' => '2026-07-31']))
+            ->assertOk()->assertSee('Workshop A')->assertSee('3,500.00');
     }
 
     public function test_itemized_expense_is_linked_and_reported_with_date_filter(): void
@@ -90,9 +101,9 @@ class FleetManagementTest extends TestCase
         ])->assertRedirect();
 
         $this->assertDatabaseHas('vehicle_expenses', ['vehicle_id' => $vehicle->id, 'employee_id' => $driver->id, 'created_by' => $user->id, 'category' => 'fuel_diesel', 'amount' => '4200.00']);
-        $this->actingAs($user)->get(route('fleet.reports', ['from' => '2026-07-01', 'to' => '2026-07-31']))
+        $this->actingAs($user)->get(route('fleet.reports.expenses', ['from' => '2026-07-01', 'to' => '2026-07-31']))
             ->assertOk()->assertSee('TRIP-101')->assertSee('4,200.00')->assertSee('Expense Driver');
-        $this->actingAs($user)->get(route('fleet.reports', ['from' => '2026-08-01', 'to' => '2026-08-31']))
+        $this->actingAs($user)->get(route('fleet.reports.expenses', ['from' => '2026-08-01', 'to' => '2026-08-31']))
             ->assertOk()->assertDontSee('TRIP-101');
     }
 

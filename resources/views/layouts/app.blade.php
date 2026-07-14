@@ -305,7 +305,10 @@
                     <summary>Fleet</summary>
                     <div class="nav-menu">
                         <a href="{{ route('fleet.index') }}">Vehicles</a>
-                        <a href="{{ route('fleet.reports') }}">Fleet Reports</a>
+                        <a href="{{ route('fleet.reports') }}">All Fleet Reports</a>
+                        <a href="{{ route('fleet.reports.expenses') }}">Vehicle Expense Report</a>
+                        <a href="{{ route('fleet.reports.maintenance') }}">Maintenance Report</a>
+                        <a href="{{ route('fleet.reports.duty-history') }}">Staff Duty History</a>
                     </div>
                 </details>
             @endif

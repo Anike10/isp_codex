@@ -4,7 +4,10 @@
 
 - `/fleet`: vehicle dashboard, status/mileage filters, current Driver/Helper/Supervisor, due-service count, and vehicle creation.
 - `/fleet/{vehicle}`: vehicle edit, maintenance schedules/logs, staff assignment and duty closing, itemized expenses, and recent history.
-- `/fleet/reports`: custom date, vehicle, employee, expense-category, and duty-role filters with vehicle totals, itemized expenses, maintenance logs, and staff duty history.
+- `/fleet/reports`: report selection hub.
+- `/fleet/reports/expenses`: vehicle totals and itemized expense report with date, vehicle, employee, and category filters.
+- `/fleet/reports/maintenance`: maintenance log report with date, vehicle, and action filters.
+- `/fleet/reports/duty-history`: staff duty history with overlap-aware date, vehicle, employee, role, and current/ended filters.
 - Access is controlled by `manage_fleet`; menu visibility and direct routes both enforce the permission.
 
 ## Database schema
