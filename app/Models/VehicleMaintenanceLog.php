@@ -9,7 +9,7 @@ class VehicleMaintenanceLog extends Model
 {
     public const ACTIONS = ['checked' => 'Checked', 'changed' => 'Changed / Replaced', 'serviced' => 'Serviced', 'repaired' => 'Repaired'];
 
-    protected $fillable = ['vehicle_id', 'maintenance_item_id', 'action', 'service_date', 'mileage', 'cost', 'vendor', 'details', 'created_by'];
+    protected $fillable = ['vehicle_id', 'maintenance_item_id', 'work_name', 'action', 'service_date', 'mileage', 'cost', 'vendor', 'details', 'created_by'];
 
     protected function casts(): array
     {

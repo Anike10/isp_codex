@@ -52,7 +52,7 @@
     <div class="muted" style="margin-bottom:10px">Returned items will enter separate Used Stock and will not be mixed with new/saleable stock.</div>
     <form method="post" action="{{ route('in-house-use.returns.store', $assignment) }}" class="form-grid" id="assetReturnForm">
         @csrf
-        <div><label>Return Date</label><input type="date" name="returned_at" value="{{ old('returned_at', now()->toDateString()) }}" required></div>
+        <div><label>Return Date</label><input type="date" min="{{ $assignment->assigned_at->toDateString() }}" name="returned_at" value="{{ old('returned_at', now()->toDateString()) }}" required></div>
         <div><label>Return to Warehouse</label><select name="warehouse_id" required>@foreach($warehouses as $warehouse)<option value="{{ $warehouse->id }}" @selected((string)old('warehouse_id') === (string)$warehouse->id || (!old('warehouse_id') && $warehouse->is_default))>{{ $warehouse->name }}</option>@endforeach</select></div>
         <div><label>Return Quantity</label><input type="number" name="quantity" id="returnQuantity" min="1" max="{{ $assignment->outstandingQuantity() }}" value="{{ old('quantity') }}" required></div>
         @if ($assignment->product->track_serial_numbers)

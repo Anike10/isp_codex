@@ -13,14 +13,15 @@
 <form method="post" action="{{ route('fleet.maintenance.logs.store') }}" class="card form-grid">
     @csrf
     <input type="hidden" name="vehicle_id" value="{{ $selectedVehicle->id }}">
-    <div><label>Maintenance Item</label><select name="maintenance_item_id" required><option value="">Select scheduled item</option>@foreach($maintenanceItems as $item)<option value="{{ $item->id }}" @selected((int)old('maintenance_item_id',request('maintenance_item_id'))===$item->id)>{{ $item->name }} — {{ ucfirst($item->dueStatus($selectedVehicle->current_mileage)) }}</option>@endforeach</select>@if($maintenanceItems->isEmpty())<span class="muted">No schedule exists. Add a maintenance schedule first.</span>@endif</div>
+    <div><label>Scheduled Item (Optional)</label><select name="maintenance_item_id"><option value="">General / unscheduled repair</option>@foreach($maintenanceItems as $item)<option value="{{ $item->id }}" @selected((int)old('maintenance_item_id',request('maintenance_item_id'))===$item->id)>{{ $item->name }} — {{ ucfirst($item->dueStatus($selectedVehicle->current_mileage)) }}</option>@endforeach</select></div>
+    <div><label>Work / Repair Name</label><input name="work_name" value="{{ old('work_name') }}" placeholder="Clutch repair, body work, electrical repair"></div>
     <div><label>Work Type</label><select name="action">@foreach(\App\Models\VehicleMaintenanceLog::ACTIONS as $key=>$label)<option value="{{ $key }}" @selected(old('action')===$key)>{{ $label }}</option>@endforeach</select></div>
     <div><label>Work Date</label><input type="date" name="service_date" value="{{ old('service_date',now()->toDateString()) }}" required></div>
     <div><label>Mileage When Done</label><input type="number" min="0" name="mileage" value="{{ old('mileage',$selectedVehicle->current_mileage) }}"></div>
     <div><label>Cost</label><input type="number" min="0" step="0.01" name="cost" value="{{ old('cost',0) }}" required></div>
     <div><label>Workshop / Vendor</label><input name="vendor" value="{{ old('vendor') }}"></div>
     <div class="full"><label>What Was Done</label><textarea name="details" rows="3" placeholder="Parts changed, condition found, repair details">{{ old('details') }}</textarea></div>
-    <div class="full"><button class="btn" @disabled($maintenanceItems->isEmpty())>Save Work & Recalculate Next Due</button></div>
+    <div class="full"><button class="btn">Save Work / Maintenance</button></div>
 </form>
 @endif
 @endsection

@@ -30,11 +30,13 @@ class FleetOperationController extends Controller
     public function storeMaintenanceLog(Request $request, Vehicle $vehicle, FleetService $fleetService)
     {
         $data = $request->validate([
-            'maintenance_item_id' => ['required', Rule::exists('vehicle_maintenance_items', 'id')->where('vehicle_id', $vehicle->id)],
+            'maintenance_item_id' => ['nullable', Rule::exists('vehicle_maintenance_items', 'id')->where('vehicle_id', $vehicle->id)],
+            'work_name' => ['required_without:maintenance_item_id', 'nullable', 'string', 'max:255'],
             'action' => ['required', Rule::in(array_keys(VehicleMaintenanceLog::ACTIONS))], 'service_date' => ['required', 'date'],
             'mileage' => ['nullable', 'integer', 'min:0'], 'cost' => ['required', 'numeric', 'min:0'], 'vendor' => ['nullable', 'string', 'max:255'], 'details' => ['nullable', 'string', 'max:3000'],
         ]);
-        $fleetService->logMaintenance($vehicle, VehicleMaintenanceItem::findOrFail($data['maintenance_item_id']), $data, $request->user()?->id);
+        $item = filled($data['maintenance_item_id'] ?? null) ? VehicleMaintenanceItem::findOrFail($data['maintenance_item_id']) : null;
+        $fleetService->logMaintenance($vehicle, $item, $data, $request->user()?->id);
 
         return back()->with('success', 'Maintenance log saved and next due schedule updated.');
     }

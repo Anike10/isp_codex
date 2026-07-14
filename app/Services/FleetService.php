@@ -21,7 +21,7 @@ class FleetService
                 ->whereNull('end_date')
                 ->where(function ($query) use ($vehicle, $employee, $data): void {
                     $query->where(fn ($query) => $query->where('vehicle_id', $vehicle->id)->where('duty_role', $data['duty_role']))
-                        ->orWhere(fn ($query) => $query->where('employee_id', $employee->id)->where('duty_role', $data['duty_role']));
+                        ->orWhere('employee_id', $employee->id);
                 })
                 ->lockForUpdate()
                 ->get();
@@ -59,30 +59,32 @@ class FleetService
         $assignment->update(['end_date' => $date]);
     }
 
-    public function logMaintenance(Vehicle $vehicle, VehicleMaintenanceItem $item, array $data, ?int $userId): VehicleMaintenanceLog
+    public function logMaintenance(Vehicle $vehicle, ?VehicleMaintenanceItem $item, array $data, ?int $userId): VehicleMaintenanceLog
     {
-        if ($item->vehicle_id !== $vehicle->id) {
+        if ($item && $item->vehicle_id !== $vehicle->id) {
             throw new InvalidArgumentException('The maintenance item does not belong to this vehicle.');
         }
 
         return DB::transaction(function () use ($vehicle, $item, $data, $userId): VehicleMaintenanceLog {
-            $log = VehicleMaintenanceLog::create([...$data, 'vehicle_id' => $vehicle->id, 'maintenance_item_id' => $item->id, 'created_by' => $userId]);
+            $log = VehicleMaintenanceLog::create([...$data, 'vehicle_id' => $vehicle->id, 'maintenance_item_id' => $item?->id, 'created_by' => $userId]);
             $serviceDate = Carbon::parse($data['service_date']);
             $mileage = isset($data['mileage']) ? (int) $data['mileage'] : null;
-            $updates = [
-                'last_service_mileage' => $mileage,
-                'next_due_date' => $item->interval_days ? $serviceDate->copy()->addDays($item->interval_days) : null,
-                'next_due_mileage' => $item->interval_mileage && $mileage !== null ? $mileage + $item->interval_mileage : null,
-            ];
+            if ($item) {
+                $updates = [
+                    'last_service_mileage' => $mileage,
+                    'next_due_date' => $item->interval_days ? $serviceDate->copy()->addDays($item->interval_days) : null,
+                    'next_due_mileage' => $item->interval_mileage && $mileage !== null ? $mileage + $item->interval_mileage : null,
+                ];
 
-            if ($data['action'] === 'checked') {
-                $updates['last_checked_at'] = $serviceDate;
-            } else {
-                $updates['last_changed_at'] = $serviceDate;
-                $updates['last_checked_at'] = $serviceDate;
+                if ($data['action'] === 'checked') {
+                    $updates['last_checked_at'] = $serviceDate;
+                } else {
+                    $updates['last_changed_at'] = $serviceDate;
+                    $updates['last_checked_at'] = $serviceDate;
+                }
+
+                $item->update($updates);
             }
-
-            $item->update($updates);
             if ($mileage !== null && $mileage > $vehicle->current_mileage) {
                 $vehicle->update(['current_mileage' => $mileage]);
             }

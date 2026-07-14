@@ -5,7 +5,7 @@
 - `/fleet`: vehicle dashboard, status/mileage filters, current Driver/Helper/Supervisor, due-service count, and a visible Add Vehicle button.
 - `/fleet/create`: dedicated vehicle entry form for cars, pickups, trucks, motorcycles, vans, and other vehicle types.
 - `/fleet/maintenance/schedules`: central periodic-maintenance entry and status page showing days/km remaining, due, overdue, upcoming, and unscheduled items across every vehicle.
-- `/fleet/maintenance/logs/create`: central repair/check/change/service entry. Selecting a vehicle loads its scheduled items; saving work recalculates the next due date and mileage.
+- `/fleet/maintenance/logs/create`: central repair/check/change/service entry. A periodic item is optional, so one-off clutch/body/electrical repairs can be logged directly; scheduled work recalculates the next due date and mileage.
 - `/fleet/{vehicle}`: vehicle edit, maintenance schedules/logs, staff assignment and duty closing, itemized expenses, and recent history.
 - `/fleet/reports`: report selection hub.
 - `/fleet/reports/expenses`: vehicle totals and itemized expense report with date, vehicle, employee, and category filters.
@@ -26,13 +26,13 @@ One schedule per vehicle and item name. `maintenance_type` is `routine_check` or
 
 ### `vehicle_maintenance_logs`
 
-Append-only operational records for `checked`, `changed`, `serviced`, and `repaired` actions, including date, mileage, cost, vendor, details, and creator. Saving a log recalculates the item's next date/mileage and advances vehicle mileage when appropriate.
+Append-only operational records for `checked`, `changed`, `serviced`, and `repaired` actions, including an optional schedule link, standalone `work_name`, date, mileage, cost, vendor, details, and creator. Saving scheduled work recalculates the item's next date/mileage; every log advances vehicle mileage when appropriate.
 
 ### `vehicle_assignments_history`
 
 The historical source of truth for vehicle staffing. Each row links vehicle and employee with `driver`, `helper`, or `supervisor`, plus start/end dates, note, and assigning user. There is no separate overwrite-only current-assignment table: current duty is the row with `end_date IS NULL`.
 
-When a new person is assigned to a vehicle/role, the service transaction locks and closes the previous active row on the day before the new start date. It also prevents one employee from remaining active in the same role on two vehicles. Manual duty ending validates that the end is not before the start.
+When a new person is assigned to a vehicle/role, the service transaction locks and closes the previous active vehicle/role row on the day before the new start date. It also closes that employee's other active duty regardless of role, preventing one employee from remaining active on two vehicles. Manual duty ending validates that the end is not before the start.
 
 ### `vehicle_expenses`
 

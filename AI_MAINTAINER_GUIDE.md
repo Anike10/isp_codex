@@ -705,6 +705,7 @@ Stock movement behavior:
 - Returned used stock is deliberately separate from `products.stock_quantity` and `product_warehouse_stocks`, so invoice/new-stock flows cannot accidentally sell it as new. It can be selected as `Returned Used Stock` and reissued through the same employee workflow.
 - Core write/detail routes are `GET/POST /in-house-use`, `GET /in-house-use/{assignment}`, `GET /in-house-use/{assignment}/approval-document`, and `POST /in-house-use/{assignment}/returns`; all create, document, and report routes use `manage_products`.
 - Approval files are stored on the private `local` disk under `in-house-approvals/YYYY/MM`; never expose those paths with a public symlink. Serve them only through the permission-protected controller route.
+- Asset return dates must be on or after the assignment date. Returned quantities go only to `used_product_warehouse_stocks`; they must never increase new/saleable stock.
 - Every stock movement belongs to a warehouse and records the warehouse balance before and after the movement.
 - Movement history preserves serial-number snapshots, reference, reason, related warehouse, and entry operator for audit use.
 - Out and own-use movements fail if quantity exceeds the selected warehouse stock, even when total product stock is higher.
@@ -722,12 +723,19 @@ Stock movement behavior:
 ### Vehicle and fleet management
 
 - `manage_fleet` protects the Fleet menu and every `/fleet` route. The module schema and operator workflow are documented in `FLEET_MANAGEMENT.md`.
-- `vehicle_assignments_history` is the only source of truth for current and former Driver/Helper/Supervisor duty. Current means `end_date IS NULL`; never replace a row to change staff. Use `FleetService::assignEmployee()` so the previous active assignment is locked and closed transactionally.
+- `vehicle_assignments_history` is the only source of truth for current and former Driver/Helper/Supervisor duty. Current means `end_date IS NULL`; never replace a row to change staff. Use `FleetService::assignEmployee()` so the previous vehicle/role occupant and the employee's other active duty (regardless of role) are locked and closed transactionally.
 - Maintenance due state is true when either `next_due_date <= today` or current vehicle mileage reaches `next_due_mileage`. `FleetService::logMaintenance()` recalculates both schedules from the saved service event.
 - Fleet expenses are separate from payroll/general `expenses`: they require a vehicle, preserve the creator user, may identify the responsible driver/employee, and support daily/trip metadata.
 - Fleet report date ranges are inclusive. Duty filters use interval overlap, while expenses and maintenance use their actual event dates. Totals are SQL aggregates and detail tables paginate independently.
 - Keep fleet reports as separate operator pages: `/fleet/reports` is only the selection hub; expenses, maintenance, and staff duty history live at `/fleet/reports/expenses`, `/fleet/reports/maintenance`, and `/fleet/reports/duty-history` with their own relevant filters and pagination.
 - Fleet periodic-maintenance entry is centralized at `/fleet/maintenance/schedules`, repair/service logging at `/fleet/maintenance/logs/create`, and the read-only date/mileage due report at `/fleet/reports/maintenance-due`. Status is overdue if either date or mileage has passed, due if either equals the current date/mileage, upcoming otherwise, and unscheduled when both next-due fields are empty.
+- `vehicle_maintenance_logs.maintenance_item_id` is optional. Use `work_name` for one-off repairs; only logs linked to a periodic item recalculate that schedule.
+
+### Sale returns and invoice settlement
+
+- `sale_returns.subtotal` is the gross value of returned item rows. `credit_total` is the actual proportional invoice credit after invoice-level discount and VAT; `invoice_credit_amount + advance_credit_amount` must equal `credit_total`.
+- Invoice due is always `max(0, total - paid_amount - SUM(sale_returns.credit_total))`. Use `Invoice::recalculateSettlement()` after cash or advance allocation; do not restore returned credit by calculating only `total - paid_amount`.
+- An invoice with sale-return rows cannot be edited because its item IDs, restored stock, and credit history are already linked.
 - Purchase bill item serial numbers are stored in `product_serials`; warranty end date is calculated from purchase date plus warranty months.
 - Vendor/wholesale shops are stored in the existing `customers` table as parties with `is_vendor=true`.
 

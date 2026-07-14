@@ -96,6 +96,7 @@ class SaleReturnController extends Controller
                     'return_no' => $data['return_no'],
                     'return_date' => $data['return_date'],
                     'subtotal' => 0,
+                    'credit_total' => 0,
                     'invoice_credit_amount' => 0,
                     'advance_credit_amount' => 0,
                     'note' => $data['note'] ?? null,
@@ -149,8 +150,12 @@ class SaleReturnController extends Controller
                     throw new InvalidArgumentException('Enter at least one return quantity.');
                 }
 
-                $saleReturn->update(['subtotal' => $subtotal]);
-                $this->applyReturnCredit($invoice, $saleReturn, $subtotal, $data['return_date']);
+                $creditTotal = $this->calculateReturnCredit($invoice, $saleReturn, $subtotal);
+                $saleReturn->update([
+                    'subtotal' => $subtotal,
+                    'credit_total' => $creditTotal,
+                ]);
+                $this->applyReturnCredit($invoice, $saleReturn, $creditTotal, $data['return_date']);
 
                 return $saleReturn;
             });
@@ -282,24 +287,18 @@ class SaleReturnController extends Controller
             return;
         }
 
-        $invoiceDue = max(0, (float) $invoice->due_amount);
+        $previousReturnCredit = (float) $invoice->saleReturns()
+            ->whereKeyNot($saleReturn->id)
+            ->sum('credit_total');
+        $invoiceDue = round(max(0, (float) $invoice->total - (float) $invoice->paid_amount - $previousReturnCredit), 2);
         $invoiceCredit = round(min($amount, $invoiceDue), 2);
         $advanceCredit = round(max(0, $amount - $invoiceCredit), 2);
-
-        if ($invoiceCredit > 0) {
-            $newDue = round(max(0, $invoiceDue - $invoiceCredit), 2);
-            $invoice->update([
-                'due_amount' => $newDue,
-                'status' => $newDue <= 0
-                    ? ((float) $invoice->paid_amount > 0 ? 'paid' : 'returned')
-                    : 'partial',
-            ]);
-        }
 
         $saleReturn->update([
             'invoice_credit_amount' => $invoiceCredit,
             'advance_credit_amount' => $advanceCredit,
         ]);
+        $invoice->recalculateSettlement();
 
         if ($advanceCredit <= 0) {
             return;
@@ -322,5 +321,24 @@ class SaleReturnController extends Controller
         ]);
 
         $customer->update(['account_balance' => $balanceAfter]);
+    }
+
+    private function calculateReturnCredit(Invoice $invoice, SaleReturn $saleReturn, float $grossReturn): float
+    {
+        $previousReturns = $invoice->saleReturns()->whereKeyNot($saleReturn->id);
+        $previousGross = (float) (clone $previousReturns)->sum('subtotal');
+        $previousCredit = (float) (clone $previousReturns)->sum('credit_total');
+        $remainingCredit = round(max(0, (float) $invoice->total - $previousCredit), 2);
+        $invoiceGross = (float) $invoice->subtotal;
+
+        if ($remainingCredit <= 0 || $grossReturn <= 0) {
+            return 0;
+        }
+
+        if ($invoiceGross <= 0 || $previousGross + $grossReturn >= $invoiceGross - 0.005) {
+            return $remainingCredit;
+        }
+
+        return round(min($remainingCredit, $grossReturn * (float) $invoice->total / $invoiceGross), 2);
     }
 }

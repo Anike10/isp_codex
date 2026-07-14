@@ -102,6 +102,23 @@ class Invoice extends Model
         return $this->hasMany(SaleReturn::class);
     }
 
+    public function saleReturnCreditTotal(): float
+    {
+        return round((float) $this->saleReturns()->sum('credit_total'), 2);
+    }
+
+    public function recalculateSettlement(): void
+    {
+        $returnCredit = $this->saleReturnCreditTotal();
+        $due = round(max(0, (float) $this->total - (float) $this->paid_amount - $returnCredit), 2);
+
+        $this->due_amount = $due;
+        $this->status = $due > 0
+            ? (((float) $this->paid_amount > 0 || $returnCredit > 0) ? 'partial' : 'unpaid')
+            : (($returnCredit >= (float) $this->total && (float) $this->paid_amount <= 0) ? 'returned' : 'paid');
+        $this->save();
+    }
+
     public function versions(): MorphMany
     {
         return $this->morphMany(RecordVersion::class, 'versionable')->latest('id');

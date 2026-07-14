@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\SaleReturn;
 use App\Models\User;
+use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -117,6 +118,7 @@ class SaleReturnTest extends TestCase
         ]);
         $this->assertDatabaseHas('sale_returns', [
             'id' => $saleReturn->id,
+            'credit_total' => 2400,
             'invoice_credit_amount' => 2400,
             'advance_credit_amount' => 0,
         ]);
@@ -142,6 +144,10 @@ class SaleReturnTest extends TestCase
             ->assertSee('Sale Returns')
             ->assertSee('SR-TEST-001')
             ->assertSee('returned');
+
+        $this->actingAs($user)->get(route('invoices.edit', $invoice))
+            ->assertRedirect(route('invoices.show', $invoice))
+            ->assertSessionHasErrors('invoice');
     }
 
     public function test_sale_return_cannot_return_more_than_remaining_sold_quantity(): void
@@ -234,9 +240,70 @@ class SaleReturnTest extends TestCase
         ])->assertRedirect();
 
         $this->assertEquals(1525, (float) $customer->refresh()->account_balance);
-        $this->assertDatabaseHas('sale_returns', ['return_no' => 'SR-PAID-001', 'invoice_credit_amount' => 0, 'advance_credit_amount' => 1500]);
+        $this->assertDatabaseHas('sale_returns', ['return_no' => 'SR-PAID-001', 'credit_total' => 1500, 'invoice_credit_amount' => 0, 'advance_credit_amount' => 1500]);
         $this->assertDatabaseHas('customer_balance_transactions', [
             'customer_id' => $customer->id, 'payment_method' => 'sale_return', 'direction' => 'credit', 'amount' => 1500,
         ]);
+    }
+
+    public function test_return_credit_respects_invoice_discount_and_vat(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Discount Return Customer', 'phone' => '01700000001', 'connection_id' => 'DISC-RET-1',
+            'address' => '', 'status' => 'active', 'is_customer' => true, 'is_vendor' => false,
+        ]);
+        $product = Product::create([
+            'name' => 'Discounted Router', 'sku' => 'DISC-ROUTER-1', 'track_inventory' => true,
+            'track_serial_numbers' => false, 'purchase_price' => 500, 'sale_price' => 1000,
+            'stock_quantity' => 2, 'low_stock_alert' => 1,
+        ]);
+
+        $this->actingAs($user)->post(route('invoices.store'), [
+            'customer_id' => $customer->id, 'billing_month' => '2026-07',
+            'items' => [['product_id' => $product->id, 'product_name' => $product->name, 'quantity' => 2, 'unit_price' => 1000]],
+            'discount_type' => 'amount', 'discount' => 200, 'vat_type' => 'amount', 'vat' => 180,
+        ])->assertRedirect();
+        $invoice = Invoice::where('customer_id', $customer->id)->firstOrFail();
+        $item = $invoice->items()->firstOrFail();
+
+        $this->actingAs($user)->post(route('sale-returns.store'), [
+            'invoice_id' => $invoice->id, 'return_no' => 'SR-DISC-001', 'return_date' => '2026-07-15',
+            'items' => [['invoice_item_id' => $item->id, 'quantity' => 1]],
+        ])->assertRedirect();
+
+        $this->assertEquals(1980, (float) $invoice->total);
+        $this->assertEquals(990, (float) $invoice->refresh()->due_amount);
+        $this->assertDatabaseHas('sale_returns', [
+            'return_no' => 'SR-DISC-001', 'subtotal' => 1000, 'credit_total' => 990,
+            'invoice_credit_amount' => 990, 'advance_credit_amount' => 0,
+        ]);
+    }
+
+    public function test_payment_after_partial_return_keeps_return_credit_in_due_calculation(): void
+    {
+        $customer = Customer::create([
+            'name' => 'Payment Return Customer', 'phone' => '01700000002', 'connection_id' => 'PAY-RET-1',
+            'address' => '', 'status' => 'active', 'account_balance' => 0, 'is_customer' => true, 'is_vendor' => false,
+        ]);
+        $invoice = Invoice::create([
+            'customer_id' => $customer->id, 'invoice_no' => 'INV-PAY-RET-1', 'billing_month' => '2026-07',
+            'invoice_type' => 'product', 'subtotal' => 3000, 'discount' => 0, 'vat' => 0,
+            'total' => 3000, 'paid_amount' => 0, 'due_amount' => 2000, 'status' => 'partial',
+        ]);
+        SaleReturn::create([
+            'invoice_id' => $invoice->id, 'customer_id' => $customer->id, 'return_no' => 'SR-PAY-001',
+            'return_date' => '2026-07-15', 'subtotal' => 1000, 'credit_total' => 1000,
+            'invoice_credit_amount' => 1000, 'advance_credit_amount' => 0,
+        ]);
+
+        app(PaymentService::class)->recordPayment($invoice, [
+            'amount' => 500, 'payment_method' => 'cash', 'payment_date' => '2026-07-15',
+        ]);
+
+        $this->assertEquals(500, (float) $invoice->refresh()->paid_amount);
+        $this->assertEquals(1500, (float) $invoice->due_amount);
+        $this->assertSame('partial', $invoice->status);
     }
 }

@@ -14,9 +14,7 @@ use Throwable;
 
 class PaymentService
 {
-    public function __construct(private readonly MikrotikCustomerSyncService $mikrotikSyncService)
-    {
-    }
+    public function __construct(private readonly MikrotikCustomerSyncService $mikrotikSyncService) {}
 
     public function recordPayment(Invoice $invoice, array $data): Payment
     {
@@ -106,9 +104,7 @@ class PaymentService
                 }
 
                 $dueInvoice->paid_amount += $paidAgainstInvoice;
-                $dueInvoice->due_amount = max(0, (float) $dueInvoice->total - (float) $dueInvoice->paid_amount);
-                $dueInvoice->status = $dueInvoice->due_amount <= 0 ? 'paid' : 'partial';
-                $dueInvoice->save();
+                $dueInvoice->recalculateSettlement();
             }
 
             $advanceUsed = $oldAdvanceBalance - $advanceRemaining;
@@ -239,9 +235,7 @@ class PaymentService
                 ]);
 
                 $invoice->paid_amount += $amount;
-                $invoice->due_amount = 0;
-                $invoice->status = 'paid';
-                $invoice->save();
+                $invoice->recalculateSettlement();
             }
 
             $remainingDue = Invoice::where('customer_id', $customer->id)->where('due_amount', '>', 0)->sum('due_amount');
@@ -355,9 +349,7 @@ class PaymentService
             ]);
 
             $invoice->paid_amount += $amount;
-            $invoice->due_amount = max(0, (float) $invoice->total - (float) $invoice->paid_amount);
-            $invoice->status = $invoice->due_amount <= 0 ? 'paid' : 'partial';
-            $invoice->save();
+            $invoice->recalculateSettlement();
 
             $balanceAfter = max(0, $currentBalance - $amount);
 

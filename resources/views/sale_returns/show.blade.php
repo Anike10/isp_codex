@@ -14,7 +14,8 @@
     <div class="card stat"><span class="muted">Invoice</span><strong style="font-size:18px">{{ $saleReturn->invoice->invoice_no }}</strong></div>
     <div class="card stat"><span class="muted">Party</span><strong style="font-size:18px">{{ $saleReturn->customer->name }}</strong></div>
     <div class="card stat"><span class="muted">Items</span><strong>{{ $saleReturn->items->count() }}</strong></div>
-    <div class="card stat"><span class="muted">Total Return Credit</span><strong>{{ number_format($saleReturn->subtotal, 2) }}</strong></div>
+    <div class="card stat"><span class="muted">Returned Goods Value</span><strong>{{ number_format($saleReturn->subtotal, 2) }}</strong></div>
+    <div class="card stat"><span class="muted">Total Return Credit</span><strong>{{ number_format($saleReturn->credit_total, 2) }}</strong></div>
     <div class="card stat"><span class="muted">Applied to Invoice</span><strong>{{ number_format($saleReturn->invoice_credit_amount, 2) }}</strong></div>
     <div class="card stat"><span class="muted">Added to Advance</span><strong>{{ number_format($saleReturn->advance_credit_amount, 2) }}</strong></div>
 </div>

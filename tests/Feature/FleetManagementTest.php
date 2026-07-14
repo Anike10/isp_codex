@@ -79,6 +79,33 @@ class FleetManagementTest extends TestCase
             ->assertOk()->assertSee('First Driver')->assertSee('Second Driver');
     }
 
+    public function test_employee_cannot_remain_active_on_two_vehicles_under_different_roles(): void
+    {
+        [$user, $firstVehicle] = $this->fixture();
+        $secondVehicle = Vehicle::create([
+            'registration_no' => 'DHAKA-METRO-22-5678', 'name' => 'Service Van',
+            'vehicle_type' => 'Van', 'status' => 'active', 'current_mileage' => 5000,
+        ]);
+        $employee = Employee::create(['name' => 'Moving Staff', 'status' => 'active']);
+
+        $this->actingAs($user)->post(route('fleet.assignments.store', $firstVehicle), [
+            'employee_id' => $employee->id, 'duty_role' => 'helper', 'start_date' => '2026-07-01',
+        ])->assertRedirect();
+        $this->actingAs($user)->post(route('fleet.assignments.store', $secondVehicle), [
+            'employee_id' => $employee->id, 'duty_role' => 'driver', 'start_date' => '2026-07-10',
+        ])->assertRedirect();
+
+        $endedAssignment = VehicleAssignmentHistory::where('vehicle_id', $firstVehicle->id)
+            ->where('employee_id', $employee->id)->firstOrFail();
+        $this->assertSame('helper', $endedAssignment->duty_role);
+        $this->assertSame('2026-07-09', $endedAssignment->end_date->format('Y-m-d'));
+        $this->assertDatabaseHas('vehicle_assignments_history', [
+            'vehicle_id' => $secondVehicle->id, 'employee_id' => $employee->id,
+            'duty_role' => 'driver', 'end_date' => null,
+        ]);
+        $this->assertSame(1, VehicleAssignmentHistory::where('employee_id', $employee->id)->whereNull('end_date')->count());
+    }
+
     public function test_maintenance_log_updates_date_and_mileage_schedule(): void
     {
         [$user, $vehicle] = $this->fixture();
@@ -131,7 +158,7 @@ class FleetManagementTest extends TestCase
             ->assertOk()->assertSee('Brake Check')->assertDontSee('Air Filter');
 
         $this->actingAs($user)->get(route('fleet.maintenance.logs.create', ['vehicle_id' => $vehicle->id, 'maintenance_item_id' => $brakeCheck->id]))
-            ->assertOk()->assertSee('Brake Check')->assertSee('Save Work & Recalculate Next Due', false);
+            ->assertOk()->assertSee('Brake Check')->assertSee('Save Work / Maintenance', false);
         $this->actingAs($user)->post(route('fleet.maintenance.logs.store'), [
             'vehicle_id' => $vehicle->id,
             'maintenance_item_id' => $brakeCheck->id,
@@ -147,6 +174,29 @@ class FleetManagementTest extends TestCase
         $this->assertSame(12100, $brakeCheck->next_due_mileage);
         $this->actingAs($user)->get(route('fleet.reports.maintenance'))
             ->assertOk()->assertSee('Central Workshop')->assertSee('Brake cleaned and adjusted.');
+    }
+
+    public function test_unscheduled_repair_can_be_logged_without_a_periodic_schedule(): void
+    {
+        [$user, $vehicle] = $this->fixture();
+
+        $this->actingAs($user)->post(route('fleet.maintenance.logs.store'), [
+            'vehicle_id' => $vehicle->id,
+            'work_name' => 'Clutch plate repair',
+            'action' => 'repaired',
+            'service_date' => '2026-07-15',
+            'mileage' => 10500,
+            'cost' => 6500,
+            'vendor' => 'General Workshop',
+            'details' => 'Clutch plate and release bearing replaced.',
+        ])->assertRedirect(route('fleet.maintenance.logs.create', ['vehicle_id' => $vehicle->id]));
+
+        $this->assertDatabaseHas('vehicle_maintenance_logs', [
+            'vehicle_id' => $vehicle->id, 'maintenance_item_id' => null,
+            'work_name' => 'Clutch plate repair', 'action' => 'repaired', 'cost' => '6500.00',
+        ]);
+        $this->actingAs($user)->get(route('fleet.reports.maintenance'))
+            ->assertOk()->assertSee('Clutch plate repair')->assertSee('6,500.00');
     }
 
     public function test_itemized_expense_is_linked_and_reported_with_date_filter(): void

@@ -56,7 +56,8 @@ class FleetMaintenanceController extends Controller
     {
         $data = $request->validate([
             'vehicle_id' => ['required', 'exists:vehicles,id'],
-            'maintenance_item_id' => ['required', Rule::exists('vehicle_maintenance_items', 'id')->where('vehicle_id', $request->integer('vehicle_id'))],
+            'maintenance_item_id' => ['nullable', Rule::exists('vehicle_maintenance_items', 'id')->where('vehicle_id', $request->integer('vehicle_id'))],
+            'work_name' => ['required_without:maintenance_item_id', 'nullable', 'string', 'max:255'],
             'action' => ['required', Rule::in(array_keys(VehicleMaintenanceLog::ACTIONS))],
             'service_date' => ['required', 'date'],
             'mileage' => ['nullable', 'integer', 'min:0'],
@@ -65,7 +66,8 @@ class FleetMaintenanceController extends Controller
             'details' => ['nullable', 'string', 'max:3000'],
         ]);
         $vehicle = Vehicle::findOrFail($data['vehicle_id']);
-        $fleetService->logMaintenance($vehicle, VehicleMaintenanceItem::findOrFail($data['maintenance_item_id']), $data, $request->user()?->id);
+        $item = filled($data['maintenance_item_id'] ?? null) ? VehicleMaintenanceItem::findOrFail($data['maintenance_item_id']) : null;
+        $fleetService->logMaintenance($vehicle, $item, $data, $request->user()?->id);
 
         return redirect()->route('fleet.maintenance.logs.create', ['vehicle_id' => $vehicle->id])->with('success', 'Repair / maintenance entry saved and next due schedule recalculated.');
     }

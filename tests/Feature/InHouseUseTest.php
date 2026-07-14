@@ -312,6 +312,27 @@ class InHouseUseTest extends TestCase
         $this->assertDatabaseHas('used_product_warehouse_stocks', ['product_id' => $product->id, 'quantity' => 1]);
     }
 
+    public function test_asset_return_date_cannot_be_before_issue_date(): void
+    {
+        [$user, $employee, $product, $warehouse] = $this->inventoryFixture();
+        $this->actingAs($user)->post(route('in-house-use.store'), [
+            'employee_id' => $employee->id, 'product_id' => $product->id,
+            'warehouse_id' => $warehouse->id, 'source_condition' => 'new',
+            'quantity' => 1, 'serial_numbers' => 'SER-001', 'serialless_quantity' => 0,
+            'assigned_at' => '2026-07-15',
+        ]);
+        $assignment = EmployeeAssetAssignment::firstOrFail();
+
+        $this->actingAs($user)->post(route('in-house-use.returns.store', $assignment), [
+            'warehouse_id' => $warehouse->id, 'quantity' => 1,
+            'serial_numbers' => 'SER-001', 'serialless_quantity' => 0,
+            'returned_at' => '2026-07-14',
+        ])->assertSessionHasErrors('returned_at');
+
+        $this->assertDatabaseCount('employee_asset_returns', 0);
+        $this->assertDatabaseCount('used_product_warehouse_stocks', 0);
+    }
+
     private function inventoryFixture(): array
     {
         $user = User::factory()->create();

@@ -193,7 +193,7 @@ class InHouseUseController extends Controller
             'quantity' => ['required', 'integer', 'min:1'],
             'serial_numbers' => ['nullable', 'string'],
             'serialless_quantity' => ['nullable', 'integer', 'min:0'],
-            'returned_at' => ['required', 'date'],
+            'returned_at' => ['required', 'date', 'after_or_equal:'.$inHouseUse->assigned_at->toDateString()],
             'note' => ['nullable', 'string', 'max:2000'],
         ]);
 

@@ -74,7 +74,8 @@
         <h2>Log Check / Change / Service</h2>
         <form method="post" action="{{ route('fleet.maintenance-logs.store',$vehicle) }}" class="form-grid">
             @csrf
-            <div><label>Scheduled Item</label><select name="maintenance_item_id" required><option value="">Select</option>@foreach($vehicle->maintenanceItems as $item)<option value="{{ $item->id }}">{{ $item->name }}</option>@endforeach</select></div>
+            <div><label>Scheduled Item (Optional)</label><select name="maintenance_item_id"><option value="">General / unscheduled repair</option>@foreach($vehicle->maintenanceItems as $item)<option value="{{ $item->id }}">{{ $item->name }}</option>@endforeach</select></div>
+            <div><label>Work / Repair Name</label><input name="work_name" placeholder="Clutch repair, body work, electrical repair"></div>
             <div><label>Action</label><select name="action">@foreach(\App\Models\VehicleMaintenanceLog::ACTIONS as $key=>$label)<option value="{{ $key }}">{{ $label }}</option>@endforeach</select></div>
             <div><label>Date</label><input type="date" name="service_date" value="{{ now()->toDateString() }}" required></div>
             <div><label>Mileage</label><input type="number" min="0" name="mileage" value="{{ $vehicle->current_mileage }}"></div>
@@ -108,7 +109,7 @@
 @empty<tr><td colspan="6">No assignment history.</td></tr>@endforelse</tbody></table></section>
 
 <section class="card" style="margin-bottom:16px"><h2>Recent Maintenance</h2><table><thead><tr><th>Date</th><th>Item</th><th>Action</th><th>Mileage</th><th>Cost</th><th>Details</th></tr></thead><tbody>
-@forelse($vehicle->maintenanceLogs as $log)<tr><td>{{ $log->service_date->format('Y-m-d') }}</td><td>{{ $log->item?->name ?? 'General' }}</td><td>{{ ucfirst($log->action) }}</td><td>{{ $log->mileage ? number_format($log->mileage) : 'N/A' }}</td><td>{{ number_format((float)$log->cost,2) }}</td><td>{{ $log->details ?? 'N/A' }}</td></tr>@empty<tr><td colspan="6">No maintenance logs.</td></tr>@endforelse</tbody></table></section>
+@forelse($vehicle->maintenanceLogs as $log)<tr><td>{{ $log->service_date->format('Y-m-d') }}</td><td>{{ $log->item?->name ?? $log->work_name ?? 'General' }}</td><td>{{ ucfirst($log->action) }}</td><td>{{ $log->mileage ? number_format($log->mileage) : 'N/A' }}</td><td>{{ number_format((float)$log->cost,2) }}</td><td>{{ $log->details ?? 'N/A' }}</td></tr>@empty<tr><td colspan="6">No maintenance logs.</td></tr>@endforelse</tbody></table></section>
 
 <section class="card"><h2>Recent Expenses</h2><table><thead><tr><th>Date</th><th>Category</th><th>Driver</th><th>Trip</th><th>Amount</th><th>Description</th></tr></thead><tbody>
 @forelse($vehicle->expenses as $expense)<tr><td>{{ $expense->expense_date->format('Y-m-d') }}</td><td>{{ \App\Models\VehicleExpense::CATEGORIES[$expense->category] }}</td><td>{{ $expense->employee?->name ?? 'N/A' }}</td><td>{{ $expense->trip_reference ?? 'N/A' }}</td><td>{{ number_format((float)$expense->amount,2) }}</td><td>{{ $expense->description ?? 'N/A' }}</td></tr>@empty<tr><td colspan="6">No vehicle expenses.</td></tr>@endforelse</tbody></table></section>

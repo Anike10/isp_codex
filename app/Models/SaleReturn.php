@@ -19,6 +19,7 @@ class SaleReturn extends Model
         'return_no',
         'return_date',
         'subtotal',
+        'credit_total',
         'invoice_credit_amount',
         'advance_credit_amount',
         'note',
@@ -29,6 +30,7 @@ class SaleReturn extends Model
         return [
             'return_date' => 'date',
             'subtotal' => 'decimal:2',
+            'credit_total' => 'decimal:2',
             'invoice_credit_amount' => 'decimal:2',
             'advance_credit_amount' => 'decimal:2',
         ];

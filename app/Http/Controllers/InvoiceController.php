@@ -190,6 +190,12 @@ class InvoiceController extends Controller
             ]);
         }
 
+        if ($invoice->saleReturns()->exists()) {
+            return redirect()->route('invoices.show', $invoice)->withErrors([
+                'invoice' => 'Invoices with sale returns cannot be edited because returned stock and credit history are already linked to their items.',
+            ]);
+        }
+
         $invoice->load(['customer', 'items']);
         $customers = Customer::where('status', 'active')->orderBy('name')->get();
 
@@ -211,15 +217,22 @@ class InvoiceController extends Controller
 
         $data = $this->validateInvoiceData($request);
         $becameFinalized = false;
+        $becameReturnLocked = false;
 
         try {
             [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
 
-            DB::transaction(function () use (&$invoice, $data, $customerId, $itemsData, $subtotal, $total, $inventoryService, $recordVersionService, &$becameFinalized): void {
+            DB::transaction(function () use (&$invoice, $data, $customerId, $itemsData, $subtotal, $total, $inventoryService, $recordVersionService, &$becameFinalized, &$becameReturnLocked): void {
                 $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
                 if ($invoice->isFinalized()) {
                     $becameFinalized = true;
+
+                    return;
+                }
+
+                if ($invoice->saleReturns()->exists()) {
+                    $becameReturnLocked = true;
 
                     return;
                 }
@@ -270,6 +283,12 @@ class InvoiceController extends Controller
         if ($becameFinalized) {
             return redirect()->route('invoices.show', $invoice)->withErrors([
                 'invoice' => 'Finalized invoices cannot be edited.',
+            ]);
+        }
+
+        if ($becameReturnLocked) {
+            return redirect()->route('invoices.show', $invoice)->withErrors([
+                'invoice' => 'Invoices with sale returns cannot be edited because returned stock and credit history are already linked to their items.',
             ]);
         }
 
