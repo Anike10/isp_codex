@@ -11,9 +11,14 @@
         <strong>{{ $expenseCount }} entries →</strong>
     </a>
     <a class="card" href="{{ route('fleet.reports.maintenance') }}">
-        <h2>Maintenance Report</h2>
+        <h2>Repair & Maintenance History</h2>
         <p class="muted">Check, change, service and repair history with mileage, cost and vendor details.</p>
         <strong>{{ $maintenanceCount }} logs | {{ $dueCount }} due →</strong>
+    </a>
+    <a class="card" href="{{ route('fleet.reports.maintenance-due') }}">
+        <h2>Maintenance Due & Overdue</h2>
+        <p class="muted">Periodic schedules with days/km remaining, due-today and overdue status.</p>
+        <strong>{{ $dueCount }} currently due/overdue →</strong>
     </a>
     <a class="card" href="{{ route('fleet.reports.duty-history') }}">
         <h2>Staff Duty History Report</h2>

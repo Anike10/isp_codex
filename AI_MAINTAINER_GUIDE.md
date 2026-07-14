@@ -726,6 +726,7 @@ Stock movement behavior:
 - Fleet expenses are separate from payroll/general `expenses`: they require a vehicle, preserve the creator user, may identify the responsible driver/employee, and support daily/trip metadata.
 - Fleet report date ranges are inclusive. Duty filters use interval overlap, while expenses and maintenance use their actual event dates. Totals are SQL aggregates and detail tables paginate independently.
 - Keep fleet reports as separate operator pages: `/fleet/reports` is only the selection hub; expenses, maintenance, and staff duty history live at `/fleet/reports/expenses`, `/fleet/reports/maintenance`, and `/fleet/reports/duty-history` with their own relevant filters and pagination.
+- Fleet periodic-maintenance entry is centralized at `/fleet/maintenance/schedules`, repair/service logging at `/fleet/maintenance/logs/create`, and the read-only date/mileage due report at `/fleet/reports/maintenance-due`. Status is overdue if either date or mileage has passed, due if either equals the current date/mileage, upcoming otherwise, and unscheduled when both next-due fields are empty.
 - Purchase bill item serial numbers are stored in `product_serials`; warranty end date is calculated from purchase date plus warranty months.
 - Vendor/wholesale shops are stored in the existing `customers` table as parties with `is_vendor=true`.
 

@@ -9,6 +9,7 @@ use App\Models\Vehicle;
 use App\Models\VehicleAssignmentHistory;
 use App\Models\VehicleMaintenanceItem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class FleetManagementTest extends TestCase
@@ -28,6 +29,9 @@ class FleetManagementTest extends TestCase
             ->assertSee(route('fleet.reports.expenses'), false)
             ->assertSee(route('fleet.reports.maintenance'), false)
             ->assertSee(route('fleet.reports.duty-history'), false)
+            ->assertSee(route('fleet.maintenance.schedules'), false)
+            ->assertSee(route('fleet.maintenance.logs.create'), false)
+            ->assertSee(route('fleet.reports.maintenance-due'), false)
             ->assertSee(route('fleet.create'), false)
             ->assertSee('Add Vehicle')
             ->assertSeeInOrder([route('fleet.index'), route('fleet.create'), route('fleet.reports')], false)
@@ -96,6 +100,53 @@ class FleetManagementTest extends TestCase
         $this->assertDatabaseHas('vehicle_maintenance_logs', ['maintenance_item_id' => $item->id, 'cost' => '3500.00']);
         $this->actingAs($user)->get(route('fleet.reports.maintenance', ['from' => '2026-07-01', 'to' => '2026-07-31']))
             ->assertOk()->assertSee('Workshop A')->assertSee('3,500.00');
+    }
+
+    public function test_periodic_schedule_entry_and_due_overdue_reports_work(): void
+    {
+        $this->travelTo(Carbon::parse('2026-07-15 10:00:00'));
+        [$user, $vehicle] = $this->fixture();
+
+        $this->actingAs($user)->post(route('fleet.maintenance.schedules.store'), [
+            'vehicle_id' => $vehicle->id,
+            'name' => 'Brake Check',
+            'maintenance_type' => 'routine_check',
+            'interval_days' => 30,
+            'interval_mileage' => 2000,
+            'next_due_date' => '2026-07-10',
+            'next_due_mileage' => 9500,
+        ])->assertRedirect(route('fleet.maintenance.schedules', ['vehicle_id' => $vehicle->id]));
+        $this->actingAs($user)->post(route('fleet.maintenance.schedules.store'), [
+            'vehicle_id' => $vehicle->id,
+            'name' => 'Air Filter',
+            'maintenance_type' => 'replacement',
+            'interval_days' => 90,
+            'next_due_date' => '2026-07-20',
+        ])->assertRedirect();
+
+        $brakeCheck = VehicleMaintenanceItem::where('name', 'Brake Check')->firstOrFail();
+        $this->actingAs($user)->get(route('fleet.maintenance.schedules'))
+            ->assertOk()->assertSee('5 days overdue')->assertSee('500 km overdue')->assertSee('5 days left');
+        $this->actingAs($user)->get(route('fleet.reports.maintenance-due', ['status' => 'overdue']))
+            ->assertOk()->assertSee('Brake Check')->assertDontSee('Air Filter');
+
+        $this->actingAs($user)->get(route('fleet.maintenance.logs.create', ['vehicle_id' => $vehicle->id, 'maintenance_item_id' => $brakeCheck->id]))
+            ->assertOk()->assertSee('Brake Check')->assertSee('Save Work & Recalculate Next Due', false);
+        $this->actingAs($user)->post(route('fleet.maintenance.logs.store'), [
+            'vehicle_id' => $vehicle->id,
+            'maintenance_item_id' => $brakeCheck->id,
+            'action' => 'serviced',
+            'service_date' => '2026-07-15',
+            'mileage' => 10100,
+            'cost' => 500,
+            'vendor' => 'Central Workshop',
+            'details' => 'Brake cleaned and adjusted.',
+        ])->assertRedirect(route('fleet.maintenance.logs.create', ['vehicle_id' => $vehicle->id]));
+
+        $this->assertSame('2026-08-14', $brakeCheck->refresh()->next_due_date->format('Y-m-d'));
+        $this->assertSame(12100, $brakeCheck->next_due_mileage);
+        $this->actingAs($user)->get(route('fleet.reports.maintenance'))
+            ->assertOk()->assertSee('Central Workshop')->assertSee('Brake cleaned and adjusted.');
     }
 
     public function test_itemized_expense_is_linked_and_reported_with_date_filter(): void

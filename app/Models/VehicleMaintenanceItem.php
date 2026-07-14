@@ -29,7 +29,34 @@ class VehicleMaintenanceItem extends Model
 
     public function isDue(?int $mileage = null): bool
     {
-        return ($this->next_due_date && $this->next_due_date->lte(today()))
-            || ($this->next_due_mileage !== null && ($mileage ?? $this->vehicle?->current_mileage ?? 0) >= $this->next_due_mileage);
+        return in_array($this->dueStatus($mileage), ['due', 'overdue'], true);
+    }
+
+    public function daysRemaining(): ?int
+    {
+        return $this->next_due_date ? (int) today()->diffInDays($this->next_due_date, false) : null;
+    }
+
+    public function mileageRemaining(?int $mileage = null): ?int
+    {
+        return $this->next_due_mileage !== null
+            ? $this->next_due_mileage - ($mileage ?? $this->vehicle?->current_mileage ?? 0)
+            : null;
+    }
+
+    public function dueStatus(?int $mileage = null): string
+    {
+        $days = $this->daysRemaining();
+        $kilometres = $this->mileageRemaining($mileage);
+
+        if (($days !== null && $days < 0) || ($kilometres !== null && $kilometres < 0)) {
+            return 'overdue';
+        }
+
+        if (($days !== null && $days === 0) || ($kilometres !== null && $kilometres === 0)) {
+            return 'due';
+        }
+
+        return $days === null && $kilometres === null ? 'unscheduled' : 'upcoming';
     }
 }

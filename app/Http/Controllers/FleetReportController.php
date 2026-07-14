@@ -66,6 +66,47 @@ class FleetReportController extends Controller
         ]);
     }
 
+    public function maintenanceDue(Request $request)
+    {
+        $query = VehicleMaintenanceItem::query()
+            ->select('vehicle_maintenance_items.*')
+            ->join('vehicles', 'vehicles.id', '=', 'vehicle_maintenance_items.vehicle_id')
+            ->with('vehicle')
+            ->where('vehicle_maintenance_items.is_active', true)
+            ->when($request->filled('vehicle_id'), fn ($query) => $query->where('vehicle_maintenance_items.vehicle_id', $request->integer('vehicle_id')))
+            ->when($request->filled('type'), fn ($query) => $query->where('maintenance_type', $request->query('type')))
+            ->when($request->filled('search'), fn ($query) => $query->where('vehicle_maintenance_items.name', 'like', '%'.trim((string) $request->query('search')).'%'));
+
+        $status = (string) $request->query('status');
+        if ($status === 'overdue') {
+            $query->where(fn ($query) => $query->whereDate('next_due_date', '<', today())->orWhereColumn('next_due_mileage', '<', 'vehicles.current_mileage'));
+        } elseif ($status === 'due') {
+            $query->where(fn ($query) => $query->whereDate('next_due_date', today())->orWhereColumn('next_due_mileage', 'vehicles.current_mileage'))
+                ->where(fn ($query) => $query->whereNull('next_due_date')->orWhereDate('next_due_date', '>=', today()))
+                ->where(fn ($query) => $query->whereNull('next_due_mileage')->orWhereColumn('next_due_mileage', '>=', 'vehicles.current_mileage'));
+        } elseif ($status === 'upcoming') {
+            $query->where(fn ($query) => $query->whereNotNull('next_due_date')->orWhereNotNull('next_due_mileage'))
+                ->where(fn ($query) => $query->whereNull('next_due_date')->orWhereDate('next_due_date', '>', today()))
+                ->where(fn ($query) => $query->whereNull('next_due_mileage')->orWhereColumn('next_due_mileage', '>', 'vehicles.current_mileage'));
+        } elseif ($status === 'unscheduled') {
+            $query->whereNull('next_due_date')->whereNull('next_due_mileage');
+        }
+
+        $allItems = VehicleMaintenanceItem::query()->with('vehicle')->where('is_active', true)->get();
+
+        return view('fleet.reports.maintenance_due', [
+            ...$this->filterOptions(),
+            'statusCounts' => $allItems->countBy(fn (VehicleMaintenanceItem $item) => $item->dueStatus($item->vehicle->current_mileage)),
+            'schedules' => $query->orderByRaw('CASE
+                WHEN next_due_date < ? OR next_due_mileage < vehicles.current_mileage THEN 0
+                WHEN next_due_date = ? OR next_due_mileage = vehicles.current_mileage THEN 1
+                WHEN next_due_date IS NULL AND next_due_mileage IS NULL THEN 3
+                ELSE 2 END', [today()->toDateString(), today()->toDateString()])
+                ->orderBy('next_due_date')->orderBy('next_due_mileage')
+                ->paginate($this->perPage($request))->withQueryString(),
+        ]);
+    }
+
     public function dutyHistory(Request $request)
     {
         $query = VehicleAssignmentHistory::query()

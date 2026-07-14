@@ -4,10 +4,13 @@
 
 - `/fleet`: vehicle dashboard, status/mileage filters, current Driver/Helper/Supervisor, due-service count, and a visible Add Vehicle button.
 - `/fleet/create`: dedicated vehicle entry form for cars, pickups, trucks, motorcycles, vans, and other vehicle types.
+- `/fleet/maintenance/schedules`: central periodic-maintenance entry and status page showing days/km remaining, due, overdue, upcoming, and unscheduled items across every vehicle.
+- `/fleet/maintenance/logs/create`: central repair/check/change/service entry. Selecting a vehicle loads its scheduled items; saving work recalculates the next due date and mileage.
 - `/fleet/{vehicle}`: vehicle edit, maintenance schedules/logs, staff assignment and duty closing, itemized expenses, and recent history.
 - `/fleet/reports`: report selection hub.
 - `/fleet/reports/expenses`: vehicle totals and itemized expense report with date, vehicle, employee, and category filters.
 - `/fleet/reports/maintenance`: maintenance log report with date, vehicle, and action filters.
+- `/fleet/reports/maintenance-due`: read-only periodic due/overdue report with date and mileage remaining.
 - `/fleet/reports/duty-history`: staff duty history with overlap-aware date, vehicle, employee, role, and current/ended filters.
 - Access is controlled by `manage_fleet`; menu visibility and direct routes both enforce the permission.
 

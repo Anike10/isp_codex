@@ -18,7 +18,7 @@ class FleetOperationController extends Controller
     public function storeMaintenanceItem(Request $request, Vehicle $vehicle)
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'], 'maintenance_type' => ['required', Rule::in(array_keys(VehicleMaintenanceItem::TYPES))],
+            'name' => ['required', 'string', 'max:255', Rule::unique('vehicle_maintenance_items', 'name')->where('vehicle_id', $vehicle->id)], 'maintenance_type' => ['required', Rule::in(array_keys(VehicleMaintenanceItem::TYPES))],
             'interval_days' => ['nullable', 'integer', 'min:1'], 'interval_mileage' => ['nullable', 'integer', 'min:1'],
             'next_due_date' => ['nullable', 'date'], 'next_due_mileage' => ['nullable', 'integer', 'min:0'], 'note' => ['nullable', 'string', 'max:2000'],
         ]);
