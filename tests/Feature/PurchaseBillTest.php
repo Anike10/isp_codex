@@ -3,12 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\Employee;
 use App\Models\Permission;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductSerial;
 use App\Models\PurchaseBill;
 use App\Models\User;
+use App\Models\Warehouse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -472,19 +474,27 @@ class PurchaseBillTest extends TestCase
             'stock_quantity' => 5,
             'low_stock_alert' => 1,
         ]);
+        $employee = Employee::create(['name' => 'Office Technician', 'status' => 'active']);
+        $warehouse = Warehouse::query()->where('is_default', true)->firstOrFail();
 
-        $this->actingAs($user)->post(route('products.stock', $product), [
-            'type' => 'use',
-            'quantity' => 2,
-            'reason' => 'Used in office setup',
-        ])->assertRedirect(route('products.index'));
+        $this->actingAs($user)->post(route('in-house-use.store'), [
+            'employee_id' => $employee->id,
+            'assigned_at' => '2026-07-15',
+            'purpose' => 'Used in office setup',
+            'items' => [[
+                'product_id' => $product->id,
+                'warehouse_id' => $warehouse->id,
+                'source_condition' => 'new',
+                'quantity' => 2,
+            ]],
+        ])->assertRedirect();
 
         $this->assertSame(3, $product->refresh()->stock_quantity);
         $this->assertDatabaseHas('stock_movements', [
             'product_id' => $product->id,
             'type' => 'use',
             'quantity' => 2,
-            'reason' => 'Used in office setup',
+            'reason' => 'Assigned to employee Office Technician - Used in office setup',
         ]);
     }
 

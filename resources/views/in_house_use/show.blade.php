@@ -10,7 +10,7 @@
 @endphp
 <div class="topbar">
     <div><h1>Employee Asset #{{ $assignment->id }}</h1><div class="muted">Issue details, outstanding quantity, and return history</div></div>
-    <a class="btn light" href="{{ route('in-house-use.index', ['employee_id' => $assignment->employee_id]) }}">Back to In-house Use</a>
+    <div class="actions"><a class="btn" href="{{ route('in-house-use.index', ['employee_id' => $assignment->employee_id]) }}">New Issue</a><a class="btn light" href="{{ route('in-house-use.report.history', ['employee_id' => $assignment->employee_id]) }}">Back to History</a></div>
 </div>
 
 <div class="grid stats" style="margin-bottom:16px">

@@ -8,7 +8,7 @@
     </div>
     <div class="actions">
         @if (auth()->user()?->hasPermission('manage_products'))
-            <a class="btn secondary" href="{{ route('in-house-use.index', ['employee_id' => $employee->id]) }}">In-house Assets</a>
+            <a class="btn secondary" href="{{ route('in-house-use.report.employees', ['employee_id' => $employee->id]) }}">In-house Assets</a>
         @endif
         <a class="btn secondary" href="{{ route('expenses.create', ['employee_id' => $employee->id]) }}">Pay Salary</a>
         <a class="btn secondary" href="{{ route('expenses.create', ['expense_type' => 'other', 'category' => 'bonus', 'employee_id' => $employee->id]) }}">Pay Bonus</a>
@@ -41,7 +41,7 @@
     <section class="card" style="margin-bottom:16px">
         <div class="topbar">
             <div><h2>In-house Assets</h2><div class="muted">Issued {{ $assetIssued }} | Returned {{ $assetReturned }} | Currently holding {{ max(0, $assetIssued - $assetReturned) }}</div></div>
-            <a class="btn secondary" href="{{ route('in-house-use.index', ['employee_id' => $employee->id]) }}">Issue / View All</a>
+            <div class="actions"><a class="btn secondary" href="{{ route('in-house-use.index', ['employee_id' => $employee->id]) }}">Issue Product</a><a class="btn light" href="{{ route('in-house-use.report.employees', ['employee_id' => $employee->id]) }}">View All</a></div>
         </div>
         <table>
             <thead><tr><th>Product</th><th>Issued</th><th>Returned</th><th>Holding</th><th>Purpose</th><th>Action</th></tr></thead>

@@ -22,9 +22,13 @@ class InHouseUseTest extends TestCase
 
         $this->actingAs($user)->get(route('in-house-use.index'))
             ->assertOk()
-            ->assertSee('Issue Product to Employee')
-            ->assertSee('Employee Asset Summary')
-            ->assertSee('Returned Used Stock')
+            ->assertSee('Create In-house Issue')
+            ->assertSee('Employee & Handover', false)
+            ->assertSee('Issue Items')
+            ->assertSee('Add Item')
+            ->assertSee(route('in-house-use.report.employees'), false)
+            ->assertSee(route('in-house-use.report.used-stock'), false)
+            ->assertSee(route('in-house-use.report.history'), false)
             ->assertSee($employee->name)
             ->assertSee($product->name)
             ->assertSee('SER-001');
@@ -120,10 +124,63 @@ class InHouseUseTest extends TestCase
             'quantity' => 3,
         ]);
         $this->assertSame(0, $assignment->fresh()->outstandingQuantity());
-        $this->actingAs($user)->get(route('in-house-use.index', ['status' => 'returned']))
+        $this->actingAs($user)->get(route('in-house-use.report.used-stock'))
             ->assertOk()
-            ->assertSee($employee->name)
-            ->assertSee('Used Qty Available');
+            ->assertSee('Returned Used Stock Report')
+            ->assertSee($product->name)
+            ->assertSee('SER-001 to SER-002');
+    }
+
+    public function test_multiple_products_can_be_issued_from_one_invoice_style_form(): void
+    {
+        [$user, $employee, $product, $warehouse] = $this->inventoryFixture();
+        $cable = Product::create([
+            'name' => 'Office Cable',
+            'sku' => 'OFFICE-CABLE-001',
+            'track_inventory' => true,
+            'track_serial_numbers' => false,
+            'product_type' => 'consumable',
+            'purchase_price' => 10,
+            'sale_price' => 15,
+            'stock_quantity' => 10,
+            'low_stock_alert' => 2,
+        ]);
+
+        $this->actingAs($user)->post(route('in-house-use.store'), [
+            'employee_id' => $employee->id,
+            'assigned_at' => '2026-07-15',
+            'purpose' => 'New branch setup',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'warehouse_id' => $warehouse->id,
+                    'source_condition' => 'new',
+                    'quantity' => 1,
+                    'serial_numbers' => 'SER-001',
+                    'serialless_quantity' => 0,
+                ],
+                [
+                    'product_id' => $cable->id,
+                    'warehouse_id' => $warehouse->id,
+                    'source_condition' => 'new',
+                    'quantity' => 3,
+                ],
+            ],
+        ])->assertRedirect(route('in-house-use.report.employees', ['employee_id' => $employee->id]));
+
+        $this->assertDatabaseCount('employee_asset_assignments', 2);
+        $this->assertSame(2, $product->refresh()->stock_quantity);
+        $this->assertSame(7, $cable->refresh()->stock_quantity);
+
+        $this->actingAs($user)->get(route('in-house-use.report.employees', ['employee_id' => $employee->id]))
+            ->assertOk()
+            ->assertSee('Employee Asset Report')
+            ->assertSee('Office ONU')
+            ->assertSee('Office Cable');
+        $this->actingAs($user)->get(route('in-house-use.report.history'))
+            ->assertOk()
+            ->assertSee('In-house Issue / Return History')
+            ->assertSee('New branch setup');
     }
 
     public function test_returned_used_stock_can_be_reissued_to_another_employee(): void

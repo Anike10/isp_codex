@@ -9,12 +9,50 @@ use App\Models\UsedProductWarehouseStock;
 use App\Models\Warehouse;
 use App\Services\EmployeeAssetService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 
 class InHouseUseController extends Controller
 {
     public function index(Request $request)
+    {
+        return view('in_house_use.index', $this->formData($request));
+    }
+
+    public function employeeReport(Request $request)
+    {
+        $employees = Employee::query()
+            ->whereHas('assetAssignments')
+            ->with(['assetAssignments.employee', 'assetAssignments.product', 'assetAssignments.returns'])
+            ->when($request->filled('employee_id'), fn ($query) => $query->whereKey($request->integer('employee_id')))
+            ->orderBy('name')
+            ->get();
+        $employeeOptions = Employee::query()->orderBy('name')->get();
+
+        return view('in_house_use.reports.employees', compact('employees', 'employeeOptions'));
+    }
+
+    public function usedStockReport(Request $request)
+    {
+        $usedStocks = UsedProductWarehouseStock::query()
+            ->where('quantity', '>', 0)
+            ->with(['product.serials' => fn ($query) => $query->where('status', 'used_in_stock')->orderBy('serial_number'), 'warehouse'])
+            ->when($request->filled('search'), function ($query) use ($request): void {
+                $search = trim((string) $request->query('search'));
+                $query->whereHas('product', fn ($query) => $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('sku', 'like', "%{$search}%"));
+            })
+            ->when($request->filled('warehouse_id'), fn ($query) => $query->where('warehouse_id', $request->integer('warehouse_id')))
+            ->orderByDesc('quantity')
+            ->get();
+        $warehouses = Warehouse::query()->where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get();
+
+        return view('in_house_use.reports.used_stock', compact('usedStocks', 'warehouses'));
+    }
+
+    public function historyReport(Request $request)
     {
         $assignments = EmployeeAssetAssignment::query()
             ->with(['employee', 'product', 'warehouse', 'issuedBy'])
@@ -36,79 +74,65 @@ class InHouseUseController extends Controller
             ->latest('id')
             ->paginate($this->perPage($request))
             ->appends($request->query());
-
         $employees = Employee::query()->orderByRaw("status = 'active' desc")->orderBy('name')->get();
-        $employeeSummaries = Employee::query()
-            ->whereHas('assetAssignments')
-            ->with(['assetAssignments.product', 'assetAssignments.returns'])
-            ->orderBy('name')
-            ->get();
-        $warehouses = Warehouse::query()->where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get();
-        $products = Product::query()
-            ->where('track_inventory', true)
-            ->where(fn ($query) => $query->where('stock_quantity', '>', 0)->orWhereHas('usedWarehouseStocks', fn ($query) => $query->where('quantity', '>', 0)))
-            ->with([
-                'warehouseStocks',
-                'usedWarehouseStocks',
-                'serials' => fn ($query) => $query->whereIn('status', ['in_stock', 'used_in_stock'])->orderBy('serial_number'),
-            ])
-            ->orderBy('name')
-            ->get();
-        $productOptions = $products->map(fn (Product $product): array => [
-            'id' => $product->id,
-            'name' => $product->name,
-            'sku' => $product->sku,
-            'track_serials' => (bool) $product->track_serial_numbers,
-            'new_stocks' => $product->warehouseStocks->pluck('quantity', 'warehouse_id'),
-            'used_stocks' => $product->usedWarehouseStocks->pluck('quantity', 'warehouse_id'),
-            'new_serials' => $product->serials->where('status', 'in_stock')->groupBy('warehouse_id')->map->pluck('serial_number'),
-            'used_serials' => $product->serials->where('status', 'used_in_stock')->groupBy('warehouse_id')->map->pluck('serial_number'),
-        ])->values();
-        $usedStocks = UsedProductWarehouseStock::query()
-            ->where('quantity', '>', 0)
-            ->with(['product', 'warehouse'])
-            ->orderByDesc('quantity')
-            ->get();
 
-        return view('in_house_use.index', compact(
-            'assignments',
-            'employees',
-            'employeeSummaries',
-            'warehouses',
-            'products',
-            'productOptions',
-            'usedStocks',
-        ));
+        return view('in_house_use.reports.history', compact('assignments', 'employees'));
     }
 
     public function store(Request $request, EmployeeAssetService $employeeAssetService)
     {
+        if (! $request->has('items')) {
+            $request->merge(['items' => [[
+                'product_id' => $request->input('product_id'),
+                'warehouse_id' => $request->input('warehouse_id'),
+                'source_condition' => $request->input('source_condition'),
+                'quantity' => $request->input('quantity'),
+                'serial_numbers' => $request->input('serial_numbers'),
+                'serialless_quantity' => $request->input('serialless_quantity'),
+            ]]]);
+        }
+
         $data = $request->validate([
             'employee_id' => ['required', Rule::exists('employees', 'id')->where('status', 'active')],
-            'product_id' => ['required', 'exists:products,id'],
-            'warehouse_id' => ['required', Rule::exists('warehouses', 'id')->where('is_active', true)],
-            'source_condition' => ['required', 'in:new,used'],
-            'quantity' => ['required', 'integer', 'min:1'],
-            'serial_numbers' => ['nullable', 'string'],
-            'serialless_quantity' => ['nullable', 'integer', 'min:0'],
             'assigned_at' => ['required', 'date'],
             'purpose' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string', 'max:2000'],
+            'items' => ['required', 'array', 'min:1', 'max:50'],
+            'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.warehouse_id' => ['required', Rule::exists('warehouses', 'id')->where('is_active', true)],
+            'items.*.source_condition' => ['required', 'in:new,used'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.serial_numbers' => ['nullable', 'string'],
+            'items.*.serialless_quantity' => ['nullable', 'integer', 'min:0'],
         ]);
 
         try {
-            $assignment = $employeeAssetService->assign(
-                Employee::findOrFail($data['employee_id']),
-                Product::findOrFail($data['product_id']),
-                Warehouse::findOrFail($data['warehouse_id']),
-                $data,
-                $request->user()?->id,
-            );
+            $assignments = DB::transaction(function () use ($data, $employeeAssetService, $request): array {
+                $employee = Employee::findOrFail($data['employee_id']);
+                $assignments = [];
+
+                foreach ($data['items'] as $item) {
+                    $assignments[] = $employeeAssetService->assign(
+                        $employee,
+                        Product::findOrFail($item['product_id']),
+                        Warehouse::findOrFail($item['warehouse_id']),
+                        [...$item, 'assigned_at' => $data['assigned_at'], 'purpose' => $data['purpose'] ?? null, 'note' => $data['note'] ?? null],
+                        $request->user()?->id,
+                    );
+                }
+
+                return $assignments;
+            });
         } catch (InvalidArgumentException $exception) {
-            return back()->withInput()->withErrors(['quantity' => $exception->getMessage()]);
+            return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
         }
 
-        return redirect()->route('in-house-use.show', $assignment)->with('success', 'Product assigned to employee successfully.');
+        if (count($assignments) === 1) {
+            return redirect()->route('in-house-use.show', $assignments[0])->with('success', 'Product assigned to employee successfully.');
+        }
+
+        return redirect()->route('in-house-use.report.employees', ['employee_id' => $data['employee_id']])
+            ->with('success', count($assignments).' products assigned to employee successfully.');
     }
 
     public function show(EmployeeAssetAssignment $inHouseUse)
@@ -143,5 +167,33 @@ class InHouseUseController extends Controller
         }
 
         return redirect()->route('in-house-use.show', $inHouseUse)->with('success', 'Returned product added to used stock successfully.');
+    }
+
+    private function formData(Request $request): array
+    {
+        $employees = Employee::query()->where('status', 'active')->orderBy('name')->get();
+        $warehouses = Warehouse::query()->where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get();
+        $products = Product::query()
+            ->where('track_inventory', true)
+            ->where(fn ($query) => $query->where('stock_quantity', '>', 0)->orWhereHas('usedWarehouseStocks', fn ($query) => $query->where('quantity', '>', 0)))
+            ->with([
+                'warehouseStocks',
+                'usedWarehouseStocks',
+                'serials' => fn ($query) => $query->whereIn('status', ['in_stock', 'used_in_stock'])->orderBy('serial_number'),
+            ])
+            ->orderBy('name')
+            ->get();
+        $productOptions = $products->map(fn (Product $product): array => [
+            'id' => $product->id,
+            'name' => $product->name,
+            'sku' => $product->sku,
+            'track_serials' => (bool) $product->track_serial_numbers,
+            'new_stocks' => $product->warehouseStocks->pluck('quantity', 'warehouse_id'),
+            'used_stocks' => $product->usedWarehouseStocks->pluck('quantity', 'warehouse_id'),
+            'new_serials' => $product->serials->where('status', 'in_stock')->groupBy('warehouse_id')->map->pluck('serial_number'),
+            'used_serials' => $product->serials->where('status', 'used_in_stock')->groupBy('warehouse_id')->map->pluck('serial_number'),
+        ])->values();
+
+        return compact('employees', 'warehouses', 'products', 'productOptions');
     }
 }

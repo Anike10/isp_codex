@@ -21,7 +21,7 @@ A Laravel 12 application for an ISP and computer service business.
 - Edit history/audit snapshots for invoices, quotations, parties, payments, roles, permissions, and other tracked operator-editable records through the shared `record_versions` table, including invoice finalization changes
 - Payment accounts for cash, bKash, Nagad, and bank
 - Support ticket management
-- Multi-warehouse product inventory with employee-wise `Inventory > In-house Use` issue/partial-return history, isolated returned-used stock that can be reissued without becoming saleable new stock, atomic transfers, serial location tracking, purchase bills, and warranty tracking
+- Multi-warehouse product inventory with an invoice-style multi-item `Inventory > In-house Use` entry page, separate employee/used-stock/history reports, partial returns, and isolated returned-used stock that can be reissued without becoming saleable new stock
 - Role and permission based admin access
 
 ## Local Setup

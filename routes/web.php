@@ -144,6 +144,9 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_products')->group(function () {
+        Route::get('in-house-use/reports/employees', [InHouseUseController::class, 'employeeReport'])->name('in-house-use.report.employees');
+        Route::get('in-house-use/reports/used-stock', [InHouseUseController::class, 'usedStockReport'])->name('in-house-use.report.used-stock');
+        Route::get('in-house-use/reports/history', [InHouseUseController::class, 'historyReport'])->name('in-house-use.report.history');
         Route::post('in-house-use/{inHouseUse}/returns', [InHouseUseController::class, 'storeReturn'])->name('in-house-use.returns.store');
         Route::resource('in-house-use', InHouseUseController::class)->only(['index', 'store', 'show'])->parameters(['in-house-use' => 'inHouseUse']);
         Route::get('warehouse-movements', [WarehouseController::class, 'movements'])->name('warehouse-movements.index');
