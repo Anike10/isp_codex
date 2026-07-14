@@ -696,6 +696,11 @@ Stock movement behavior:
 - `in` increases stock.
 - `out` decreases stock.
 - `use` decreases stock for items used inside the business.
+- Operators use `Inventory > In-house Use` (`/in-house-use`) to assign each internal-use product or serial to a named active employee. The page shows employee-wise issued, returned, and currently-held totals plus per-assignment history.
+- New-stock assignment creates the normal `use` stock movement and marks selected serials `used`. Generic product stock forms do not expose internal use; they link to the employee assignment workflow.
+- Partial or full employee returns are stored in `employee_asset_returns`. Returned quantity goes to `used_product_warehouse_stocks`, and returned serials become `used_in_stock`.
+- Returned used stock is deliberately separate from `products.stock_quantity` and `product_warehouse_stocks`, so invoice/new-stock flows cannot accidentally sell it as new. It can be selected as `Returned Used Stock` and reissued through the same employee workflow.
+- Core routes are `GET/POST /in-house-use`, `GET /in-house-use/{assignment}`, and `POST /in-house-use/{assignment}/returns`; all use `manage_products`.
 - Every stock movement belongs to a warehouse and records the warehouse balance before and after the movement.
 - Movement history preserves serial-number snapshots, reference, reason, related warehouse, and entry operator for audit use.
 - Out and own-use movements fail if quantity exceeds the selected warehouse stock, even when total product stock is higher.

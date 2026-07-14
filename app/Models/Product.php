@@ -4,8 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
@@ -64,6 +64,16 @@ class Product extends Model
     public function warehouseStocks(): HasMany
     {
         return $this->hasMany(ProductWarehouseStock::class);
+    }
+
+    public function usedWarehouseStocks(): HasMany
+    {
+        return $this->hasMany(UsedProductWarehouseStock::class);
+    }
+
+    public function employeeAssetAssignments(): HasMany
+    {
+        return $this->hasMany(EmployeeAssetAssignment::class);
     }
 
     public function productCategory(): BelongsTo

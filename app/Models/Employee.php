@@ -42,4 +42,9 @@ class Employee extends Model
     {
         return $this->hasMany(Expense::class);
     }
+
+    public function assetAssignments(): HasMany
+    {
+        return $this->hasMany(EmployeeAssetAssignment::class);
+    }
 }

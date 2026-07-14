@@ -7,6 +7,9 @@
         <div class="muted">{{ $employee->designation ?? 'No designation' }} | {{ ucfirst($employee->status) }}</div>
     </div>
     <div class="actions">
+        @if (auth()->user()?->hasPermission('manage_products'))
+            <a class="btn secondary" href="{{ route('in-house-use.index', ['employee_id' => $employee->id]) }}">In-house Assets</a>
+        @endif
         <a class="btn secondary" href="{{ route('expenses.create', ['employee_id' => $employee->id]) }}">Pay Salary</a>
         <a class="btn secondary" href="{{ route('expenses.create', ['expense_type' => 'other', 'category' => 'bonus', 'employee_id' => $employee->id]) }}">Pay Bonus</a>
         <a class="btn" href="{{ route('employees.balance-sheet', $employee) }}">Balance Sheet</a>
@@ -29,6 +32,29 @@
     <button class="btn secondary" type="submit">Check Status</button>
     <a class="btn light" href="{{ route('employees.show', $employee) }}">Reset</a>
 </form>
+
+@if (auth()->user()?->hasPermission('manage_products'))
+    @php
+        $assetIssued = (int) $employee->assetAssignments->sum('quantity');
+        $assetReturned = (int) $employee->assetAssignments->flatMap->returns->sum('quantity');
+    @endphp
+    <section class="card" style="margin-bottom:16px">
+        <div class="topbar">
+            <div><h2>In-house Assets</h2><div class="muted">Issued {{ $assetIssued }} | Returned {{ $assetReturned }} | Currently holding {{ max(0, $assetIssued - $assetReturned) }}</div></div>
+            <a class="btn secondary" href="{{ route('in-house-use.index', ['employee_id' => $employee->id]) }}">Issue / View All</a>
+        </div>
+        <table>
+            <thead><tr><th>Product</th><th>Issued</th><th>Returned</th><th>Holding</th><th>Purpose</th><th>Action</th></tr></thead>
+            <tbody>
+            @forelse($employee->assetAssignments->take(10) as $assignment)
+                <tr><td>{{ $assignment->product->name }}</td><td>{{ $assignment->quantity }}</td><td>{{ $assignment->returnedQuantity() }}</td><td>{{ $assignment->outstandingQuantity() }}</td><td>{{ $assignment->purpose ?? 'N/A' }}</td><td><a class="btn light" href="{{ route('in-house-use.show', $assignment) }}">View / Return</a></td></tr>
+            @empty
+                <tr><td colspan="6">No in-house asset assigned.</td></tr>
+            @endforelse
+            </tbody>
+        </table>
+    </section>
+@endif
 
 <div class="grid two" style="margin-bottom:16px">
     <div class="card">

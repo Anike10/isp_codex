@@ -270,6 +270,7 @@
                     <summary>Inventory</summary>
                     <div class="nav-menu">
                         <a href="{{ route('products.index') }}">Products</a>
+                        <a href="{{ route('in-house-use.index') }}">In-house Use</a>
                         <a href="{{ route('warehouses.index') }}">Warehouses</a>
                         <a href="{{ route('warehouse-transfers.create') }}">Stock Transfer</a>
                         <a href="{{ route('warehouse-movements.index') }}">Stock History</a>

@@ -373,7 +373,7 @@ class ProductControllerTest extends TestCase
             ->assertSee('Serial-less: 3');
     }
 
-    public function test_serial_tracked_product_marks_own_use_serials(): void
+    public function test_own_use_must_go_through_employee_assignment_workflow(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
@@ -403,6 +403,8 @@ class ProductControllerTest extends TestCase
 
         $this->actingAs($user)->get(route('products.index'))
             ->assertOk()
+            ->assertSee(route('in-house-use.index'), false)
+            ->assertSee('Assign Employee')
             ->assertSee('Serials / range')
             ->assertSee('Serial-less Qty')
             ->assertSee('In-stock serials (3)')
@@ -417,26 +419,15 @@ class ProductControllerTest extends TestCase
             'quantity' => 2,
             'serial_numbers' => 'ONU001-ONU002',
             'reason' => 'Customer installation',
-        ])->assertRedirect(route('products.index'));
+        ])->assertSessionHasErrors('type');
 
-        $this->assertSame(1, $product->refresh()->stock_quantity);
+        $this->assertSame(3, $product->refresh()->stock_quantity);
         $this->assertDatabaseHas('product_serials', [
             'product_id' => $product->id,
             'serial_number' => 'ONU001',
-            'status' => 'used',
-            'note' => 'Customer installation',
-        ]);
-        $this->assertDatabaseHas('product_serials', [
-            'product_id' => $product->id,
-            'serial_number' => 'ONU003',
             'status' => 'in_stock',
         ]);
-
-        $this->actingAs($user)->get(route('products.show', $product))
-            ->assertOk()
-            ->assertSee('In House: 1')
-            ->assertSee('Own Use: 2')
-            ->assertSee('Customer installation');
+        $this->assertDatabaseCount('employee_asset_assignments', 0);
     }
 
     public function test_serial_tracked_stock_movement_can_record_serialless_quantity(): void
@@ -461,20 +452,20 @@ class ProductControllerTest extends TestCase
         ]);
 
         $this->actingAs($user)->post(route('products.stock', $product), [
-            'type' => 'use',
+            'type' => 'out',
             'quantity' => 3,
             'serial_numbers' => 'ONU001',
             'serialless_quantity' => 2,
-            'reason' => 'Office install',
+            'reason' => 'Damaged stock out',
         ])->assertRedirect(route('products.index'));
 
         $this->assertSame(0, $product->refresh()->stock_quantity);
         $this->assertDatabaseHas('stock_movements', [
             'product_id' => $product->id,
-            'type' => 'use',
+            'type' => 'out',
             'quantity' => 3,
             'serialless_quantity' => 2,
-            'reason' => 'Office install',
+            'reason' => 'Damaged stock out',
         ]);
 
         $this->actingAs($user)->get(route('products.show', $product))
@@ -505,11 +496,11 @@ class ProductControllerTest extends TestCase
         ]);
 
         $this->actingAs($user)->post(route('products.stock', $product), [
-            'type' => 'use',
+            'type' => 'out',
             'quantity' => 3,
             'serial_numbers' => 'ONU001',
             'serialless_quantity' => 1,
-            'reason' => 'Office install',
+            'reason' => 'Damaged stock out',
         ])->assertSessionHasErrors('quantity');
 
         $this->assertSame(3, $product->refresh()->stock_quantity);

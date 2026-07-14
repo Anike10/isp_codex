@@ -1,0 +1,71 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class EmployeeAssetAssignment extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'employee_id',
+        'product_id',
+        'warehouse_id',
+        'issued_by_user_id',
+        'source_condition',
+        'quantity',
+        'serialless_quantity',
+        'serial_numbers',
+        'assigned_at',
+        'purpose',
+        'note',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'quantity' => 'integer',
+            'serialless_quantity' => 'integer',
+            'assigned_at' => 'date',
+        ];
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
+
+    public function issuedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'issued_by_user_id');
+    }
+
+    public function returns(): HasMany
+    {
+        return $this->hasMany(EmployeeAssetReturn::class);
+    }
+
+    public function returnedQuantity(): int
+    {
+        return (int) ($this->returns_sum_quantity ?? $this->returns()->sum('quantity'));
+    }
+
+    public function outstandingQuantity(): int
+    {
+        return max(0, $this->quantity - $this->returnedQuantity());
+    }
+}

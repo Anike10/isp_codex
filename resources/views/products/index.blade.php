@@ -44,7 +44,10 @@
 
 <div class="topbar">
     <div><h1>Inventory</h1><div class="muted">Routers, cable, computer parts and accessories</div></div>
-    <a class="btn" href="{{ route('products.create') }}">Add Product</a>
+    <div class="actions">
+        <a class="btn secondary" href="{{ route('in-house-use.index') }}">In-house Use</a>
+        <a class="btn" href="{{ route('products.create') }}">Add Product</a>
+    </div>
 </div>
 
 <form method="get" class="card form-grid" style="margin-bottom:16px">
@@ -213,7 +216,7 @@
                 @if ($product->track_inventory)
                     <form method="post" action="{{ route('products.stock', $product) }}" class="actions product-stock-form" data-current-stock="{{ $product->stock_quantity }}" data-track-serials="{{ $product->track_serial_numbers ? '1' : '0' }}">
                         @csrf
-                        <select name="type" class="movement-type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
+                        <select name="type" class="movement-type" style="width:auto"><option value="in">In</option><option value="out">Out</option></select>
                         <select name="warehouse_id" class="movement-warehouse" aria-label="Warehouse" style="width:150px" required>
                             @foreach($warehouses as $warehouse)
                                 @php($warehouseQty = (int) ($product->warehouseStocks->firstWhere('warehouse_id', $warehouse->id)?->quantity ?? 0))
@@ -234,6 +237,7 @@
                         <span class="stock-before muted" hidden></span>
                         <input name="reason" placeholder="Reason" style="width:150px">
                         <button class="btn secondary" type="submit">Update</button>
+                        <a class="btn light" href="{{ route('in-house-use.index', ['product_id' => $product->id]) }}">Assign Employee</a>
                     </form>
                 @else
                     <span class="muted">N/A</span>

@@ -7,6 +7,9 @@
         <div class="muted">{{ $product->sku }}{{ $product->barcode ? ' - Barcode: '.$product->barcode : '' }} - {{ $product->brand ?? 'No brand' }} - {{ $product->category ?? 'No category' }}{{ $product->subcategory ? ' / '.$product->subcategory : '' }}</div>
     </div>
     <div class="actions">
+        @if ($product->track_inventory)
+            <a class="btn" href="{{ route('in-house-use.index', ['product_id' => $product->id]) }}">Assign to Employee</a>
+        @endif
         <a class="btn secondary" href="{{ route('products.edit', $product) }}">Edit</a>
         <a class="btn light" href="{{ route('products.index') }}">Back</a>
     </div>
@@ -27,7 +30,7 @@
         <h2>Move Stock</h2>
         <form method="post" action="{{ route('products.stock', $product) }}" class="actions">
             @csrf
-            <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option><option value="use">Own Use</option></select>
+            <select name="type" style="width:auto"><option value="in">In</option><option value="out">Out</option></select>
             <select name="warehouse_id" style="width:180px" required>
                 @foreach($warehouses as $warehouse)
                     <option value="{{ $warehouse->id }}">{{ $warehouse->name }}</option>
@@ -70,6 +73,7 @@
             <span class="badge">In House: {{ $serialGroups['in_stock'] ?? 0 }}</span>
             <span class="badge">Serial-less: {{ $seriallessInStock }}</span>
             <span class="badge">Own Use: {{ $serialGroups['used'] ?? 0 }}</span>
+            <span class="badge">Used Stock: {{ $serialGroups['used_in_stock'] ?? 0 }}</span>
             <span class="badge">Out: {{ $serialGroups['out'] ?? 0 }}</span>
         </div>
     @endif

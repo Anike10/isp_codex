@@ -180,7 +180,7 @@ class ProductController extends Controller
         }
 
         $data = $request->validate([
-            'type' => ['required', 'in:in,out,use'],
+            'type' => ['required', 'in:in,out'],
             'quantity' => ['required', 'integer', 'min:1'],
             'reason' => ['nullable', 'string', 'max:255'],
             'serial_numbers' => ['nullable', 'string'],

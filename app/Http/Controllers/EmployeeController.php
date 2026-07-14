@@ -123,6 +123,7 @@ class EmployeeController extends Controller
         $employee->load([
             'salaryRevisions' => fn ($query) => $query->latest('effective_from')->latest(),
             'expenses' => fn ($query) => $query->latest('expense_date')->limit(20),
+            'assetAssignments' => fn ($query) => $query->with(['product', 'returns'])->latest('assigned_at')->latest(),
         ]);
 
         return view('employees.show', [
