@@ -17,7 +17,7 @@
     </div>
     <div class="full">
         <label>bKash SMS</label>
-        <textarea name="message" required placeholder="You have received Tk 10.00 from 01812707070. Ref test_ref. Fee Tk 0.00. Balance Tk 20,218.58. TrxID DE67UJKH01 at 06/05/2026 09:40">{{ old('message') }}</textarea>
+        <textarea name="message" required placeholder="You have received Tk 10.00 from 01900000000. Ref test_ref. Fee Tk 0.00. Balance Tk 20,218.58. TrxID DE67UJKH01 at 06/05/2026 09:40">{{ old('message') }}</textarea>
     </div>
     <div class="full">
         <button class="btn" type="submit">Parse and Save SMS</button>

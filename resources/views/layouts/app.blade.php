@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
-    <title>{{ $title ?? 'Ultimate Solution' }}</title>
+    <title>{{ $title ?? 'Kushtia Municipality' }}</title>
     <style>
         :root { color-scheme: light; --ink:#172033; --muted:#667085; --line:#d8dee9; --bg:#f4f7fb; --panel:#fff; --brand:#116149; --accent:#1d76c9; --warn:#b45309; --danger:#b42318; --zebra:#edf4f8; --zebra-soft:#f7fafc; }
         * { box-sizing: border-box; }
@@ -102,6 +102,7 @@
         .router-connection, .router-ping { min-width:104px; text-align:center; }
         .router-checked-at { min-height:17px; white-space:nowrap; }
         .page-timing { position:fixed; right:12px; bottom:10px; z-index:120; padding:6px 9px; border-radius:6px; background:rgba(20,33,61,.9); color:white; font-size:12px; box-shadow:0 8px 20px rgba(15,23,42,.18); }
+        .app-footer { max-width:1440px; margin:0 auto; padding:0 20px 18px; color:var(--muted); font-size:13px; text-align:center; }
         .per-page-form { justify-content:flex-end; margin:0 0 12px; }
         .per-page-label { margin:0; display:flex; align-items:center; gap:8px; font-weight:700; }
         .per-page-select { width:auto; min-width:90px; }
@@ -189,7 +190,7 @@
 <div class="shell">
     <header class="app-header">
     <div class="header-inner">
-        <div class="brand">Ultimate Solution</div>
+        <div class="brand">Kushtia Municipality</div>
         <button class="nav-toggle" type="button" aria-label="Open menu" aria-controls="app-nav" aria-expanded="false">
             <span class="nav-toggle-lines"></span>
         </button>
@@ -340,6 +341,7 @@
 
         @yield('content')
     </main>
+    <footer class="app-footer">Powered by Ultimate Solution</footer>
 </div>
 @php
     $serverRenderMs = defined('LARAVEL_START') ? round((microtime(true) - LARAVEL_START) * 1000) : null;

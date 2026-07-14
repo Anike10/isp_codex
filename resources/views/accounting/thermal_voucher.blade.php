@@ -32,6 +32,7 @@
         .section { padding:6px 0; border-bottom:1px dashed var(--line); }
         .note { padding-top:6px; line-height:1.4; }
         .note-title { font-weight:800; margin-bottom:2px; }
+        .powered-by { margin-top:8px; padding-top:6px; border-top:1px dashed var(--line); text-align:center; color:var(--muted); }
         .allocation-row { display:grid; grid-template-columns:minmax(0, 1fr) 21mm; gap:4px; padding:3px 0; line-height:1.35; }
         .allocation-row .amount-value { text-align:right; font-weight:700; }
         body.paper-58 .receipt { padding-left:2.4mm; padding-right:2.4mm; font-size:11px; }
@@ -69,8 +70,8 @@
 <main class="preview-shell">
     <section class="receipt">
         <header class="brand">
-            <h1>Ultimate Solution</h1>
-            <p>{{ now()->format('Y-m-d H:i') }}</p>
+            <h1>Kushtia Municipality</h1>
+            <p>Kushtia<br>Mobile - +8801722323870<br>{{ now()->format('Y-m-d H:i') }}</p>
         </header>
 
         <div class="title">{{ $voucher['title'] }}</div>
@@ -106,6 +107,8 @@
             <div class="note-title">Note</div>
             <div>{{ $voucher['note'] }}</div>
         </div>
+
+        <div class="powered-by">Powered by Ultimate Solution</div>
 
     </section>
 </main>

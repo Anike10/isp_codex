@@ -64,8 +64,8 @@
 <main class="page">
     <div class="brand-bar">
         <div class="company">
-            <h1>Ultimate Solution</h1>
-            <p>ISP Manager<br>Generated: {{ now()->format('Y-m-d H:i') }}</p>
+            <h1>Kushtia Municipality</h1>
+            <p>Kushtia<br>Mobile - +8801722323870<br>Generated: {{ now()->format('Y-m-d H:i') }}</p>
         </div>
         <div class="voucher-title">
             <h2>{{ $voucher['title'] }}</h2>
@@ -111,7 +111,7 @@
         <section class="box">
             <h3>Prepared By</h3>
             <div class="box-body">
-                <div class="kv"><span class="muted">System</span><span class="strong">Ultimate Solution</span></div>
+                <div class="kv"><span class="muted">System</span><span class="strong">Kushtia Municipality</span></div>
                 <div class="kv"><span class="muted">Printed</span><span class="strong">{{ now()->format('Y-m-d H:i') }}</span></div>
             </div>
         </section>
