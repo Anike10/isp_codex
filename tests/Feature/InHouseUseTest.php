@@ -26,6 +26,9 @@ class InHouseUseTest extends TestCase
             ->assertSee('Employee & Handover', false)
             ->assertSee('Issue Items')
             ->assertSee('Add Item')
+            ->assertSee('item-product-search')
+            ->assertSee('Unit Price')
+            ->assertSee('Total Asset Value')
             ->assertSee(route('in-house-use.report.employees'), false)
             ->assertSee(route('in-house-use.report.used-stock'), false)
             ->assertSee(route('in-house-use.report.history'), false)
@@ -39,6 +42,7 @@ class InHouseUseTest extends TestCase
             'warehouse_id' => $warehouse->id,
             'source_condition' => 'new',
             'quantity' => 2,
+            'unit_price' => 850,
             'serial_numbers' => 'SER-001',
             'serialless_quantity' => 1,
             'assigned_at' => '2026-07-15',
@@ -53,6 +57,8 @@ class InHouseUseTest extends TestCase
             'product_id' => $product->id,
             'source_condition' => 'new',
             'quantity' => 2,
+            'unit_price' => '850.00',
+            'total' => '1700.00',
             'serialless_quantity' => 1,
             'serial_numbers' => 'SER-001',
         ]);
@@ -66,6 +72,8 @@ class InHouseUseTest extends TestCase
             'quantity' => 2,
             'reference_no' => 'IHA-'.$assignment->id,
         ]);
+        $this->assertSame(1700.0, (float) $assignment->total);
+        $this->assertSame(1700.0, $assignment->outstandingValue());
 
         $this->actingAs($user)->get(route('in-house-use.show', $assignment))
             ->assertOk()
@@ -108,6 +116,8 @@ class InHouseUseTest extends TestCase
             'warehouse_id' => $warehouse->id,
         ]);
         $this->assertSame(2, $assignment->fresh()->outstandingQuantity());
+        $this->assertSame(800.0, $assignment->fresh()->returnedValue());
+        $this->assertSame(1600.0, $assignment->fresh()->outstandingValue());
         $this->assertSame(0, $product->refresh()->stock_quantity, 'Returned used stock must not become new/saleable stock.');
 
         $this->actingAs($user)->post(route('in-house-use.returns.store', $assignment), [
@@ -156,6 +166,7 @@ class InHouseUseTest extends TestCase
                     'warehouse_id' => $warehouse->id,
                     'source_condition' => 'new',
                     'quantity' => 1,
+                    'unit_price' => 825,
                     'serial_numbers' => 'SER-001',
                     'serialless_quantity' => 0,
                 ],
@@ -164,6 +175,7 @@ class InHouseUseTest extends TestCase
                     'warehouse_id' => $warehouse->id,
                     'source_condition' => 'new',
                     'quantity' => 3,
+                    'unit_price' => 12.50,
                 ],
             ],
         ])->assertRedirect(route('in-house-use.report.employees', ['employee_id' => $employee->id]));
@@ -171,12 +183,15 @@ class InHouseUseTest extends TestCase
         $this->assertDatabaseCount('employee_asset_assignments', 2);
         $this->assertSame(2, $product->refresh()->stock_quantity);
         $this->assertSame(7, $cable->refresh()->stock_quantity);
+        $this->assertDatabaseHas('employee_asset_assignments', ['product_id' => $product->id, 'unit_price' => '825.00', 'total' => '825.00']);
+        $this->assertDatabaseHas('employee_asset_assignments', ['product_id' => $cable->id, 'unit_price' => '12.50', 'total' => '37.50']);
 
         $this->actingAs($user)->get(route('in-house-use.report.employees', ['employee_id' => $employee->id]))
             ->assertOk()
             ->assertSee('Employee Asset Report')
             ->assertSee('Office ONU')
-            ->assertSee('Office Cable');
+            ->assertSee('Office Cable')
+            ->assertSee('862.50');
         $this->actingAs($user)->get(route('in-house-use.report.history'))
             ->assertOk()
             ->assertSee('In-house Issue / Return History')

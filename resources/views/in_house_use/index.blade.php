@@ -8,6 +8,7 @@
         'source_condition' => request('source_condition', 'new'),
         'warehouse_id' => $defaultWarehouseId,
         'quantity' => '',
+        'unit_price' => '',
         'serial_numbers' => '',
         'serialless_quantity' => 0,
     ]]);
@@ -26,7 +27,13 @@
     .issue-items { display:grid; gap:12px; }
     .issue-item { padding:16px; border:1px solid #e1e7ef; border-radius:8px; background:#fff; }
     .issue-item-top { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
-    .issue-item-grid { display:grid; grid-template-columns:minmax(180px,1.5fr) 150px 170px 100px 120px; gap:12px; align-items:start; }
+    .issue-item-grid { display:grid; grid-template-columns:minmax(210px,1.6fr) 135px 155px 85px 110px 120px; gap:12px; align-items:start; }
+    .product-picker { position:relative; }
+    .product-suggestions { display:none; position:absolute; z-index:30; top:calc(100% + 4px); left:0; right:0; max-height:280px; overflow:auto; border:1px solid #d8dee9; border-radius:8px; background:#fff; box-shadow:0 14px 30px rgba(15,23,42,.16); }
+    .product-suggestion { display:block; width:100%; padding:10px 12px; border:0; border-bottom:1px solid #edf0f4; background:#fff; text-align:left; cursor:pointer; }
+    .product-suggestion:hover,.product-suggestion.is-active { background:#eef6f3; }
+    .product-suggestion strong,.product-suggestion span { display:block; }
+    .product-suggestion span { margin-top:3px; color:#667085; font-size:12px; }
     .issue-item-serials { margin-top:12px; }
     .asset-serial-options { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
     .asset-serial-option { border:1px solid var(--line); border-radius:6px; background:#fff; padding:5px 8px; cursor:pointer; }
@@ -59,7 +66,7 @@
                     <div><label>Employee</label><select name="employee_id" id="issueEmployee" required><option value="">Select employee</option>@foreach($employees as $employee)<option value="{{ $employee->id }}" @selected((string)old('employee_id', request('employee_id')) === (string)$employee->id)>{{ $employee->name }}{{ $employee->designation ? ' - '.$employee->designation : '' }}</option>@endforeach</select></div>
                     <div><label>Issue Date</label><input type="date" name="assigned_at" value="{{ old('assigned_at', now()->toDateString()) }}" required></div>
                     <div><label>Purpose / Location</label><input name="purpose" value="{{ old('purpose') }}" placeholder="Office desk, field team, POP, etc."></div>
-                    <div><label>Handover Note</label><input name="note" value="{{ old('note') }}" placeholder="Optional common note"></div>
+                    <div><label>Handover Note</label><textarea name="note" rows="3" placeholder="Invoice note-এর মতো বিস্তারিত handover note">{{ old('note') }}</textarea></div>
                 </div>
             </section>
 
@@ -80,6 +87,7 @@
                 <div class="summary-row"><span class="muted">Employee</span><strong id="summaryEmployee">Not selected</strong></div>
                 <div class="summary-row"><span class="muted">Product Rows</span><strong id="summaryRows">1</strong></div>
                 <div class="summary-row"><span class="muted">Total Units</span><strong id="summaryUnits">0</strong></div>
+                <div class="summary-row"><span class="muted">Total Asset Value</span><strong>BDT <span id="summaryValue">0.00</span></strong></div>
                 <button class="btn" type="submit" style="width:100%">Save In-house Issue</button>
                 <div>
                     <strong>Reports</strong>
@@ -116,8 +124,12 @@ function expandedSerials(value) {
     }))];
 }
 
-function productOptionsHtml(selected = '') {
-    return '<option value="">Select product</option>' + assetProducts.map(product => `<option value="${product.id}" ${String(product.id) === String(selected) ? 'selected' : ''}>${escapeHtml(product.name)} (${escapeHtml(product.sku)})</option>`).join('');
+function productSearchText(product) {
+    return [product.name, product.sku, product.barcode, product.brand].filter(Boolean).join(' ').toLowerCase();
+}
+
+function productLabel(product) {
+    return [product.sku, product.barcode, product.brand, `Cost ${Number(product.purchase_price || 0).toFixed(2)}`, product.track_serials ? 'Serial tracked' : 'No serial'].filter(Boolean).join(' - ');
 }
 
 function warehouseOptionsHtml(selected = '') {
@@ -125,15 +137,20 @@ function warehouseOptionsHtml(selected = '') {
 }
 
 function addIssueRow(values = {}) {
+    const initialProduct = assetProducts.find(product => String(product.id) === String(values.product_id));
+    const initialProductName = values.product_name || initialProduct?.name || '';
+    const initialUnitPrice = values.unit_price !== undefined && values.unit_price !== '' ? values.unit_price : (initialProduct?.purchase_price ?? '');
     const row = document.createElement('div');
     row.className = 'issue-item';
     row.innerHTML = `
         <div class="issue-item-top"><strong class="item-number">Item</strong><button type="button" class="btn light remove-issue-item">Remove</button></div>
         <div class="issue-item-grid">
-            <div><label>Product</label><select class="item-product" required>${productOptionsHtml(values.product_id)}</select></div>
+            <div><label>Product Name</label><div class="product-picker"><input type="hidden" class="item-product-id" value="${escapeHtml(values.product_id)}"><input type="text" class="item-product-search" value="${escapeHtml(initialProductName)}" placeholder="Type product name, SKU, barcode or brand" autocomplete="off" required><div class="product-suggestions"></div></div></div>
             <div><label>Stock Type</label><select class="item-condition" required><option value="new" ${values.source_condition !== 'used' ? 'selected' : ''}>New Stock</option><option value="used" ${values.source_condition === 'used' ? 'selected' : ''}>Returned Used</option></select></div>
             <div><label>Warehouse</label><select class="item-warehouse" required>${warehouseOptionsHtml(values.warehouse_id)}</select><span class="stock-note item-availability">Select product</span></div>
             <div><label>Quantity</label><input type="number" class="item-quantity" min="1" value="${escapeHtml(values.quantity)}" required></div>
+            <div><label>Unit Price</label><input type="number" class="item-unit-price" min="0" step="0.01" value="${escapeHtml(initialUnitPrice)}" required></div>
+            <div><label>Total</label><input type="number" class="item-total" min="0" step="0.01" readonly tabindex="-1"></div>
             <div class="item-serialless-wrap" hidden><label>Serial-less Qty</label><input type="number" class="item-serialless" min="0" value="${escapeHtml(values.serialless_quantity ?? 0)}"></div>
         </div>
         <div class="issue-item-serials" hidden><label>Serial Numbers</label><textarea class="item-serials" rows="2" placeholder="Click serial below or enter 1001-1010, 1020">${escapeHtml(values.serial_numbers)}</textarea><div class="asset-serial-options"></div></div>`;
@@ -145,7 +162,39 @@ function addIssueRow(values = {}) {
 }
 
 function selectedProduct(row) {
-    return assetProducts.find(product => String(product.id) === row.querySelector('.item-product').value);
+    return assetProducts.find(product => String(product.id) === row.querySelector('.item-product-id').value);
+}
+
+function hideProductSuggestions(row) {
+    const suggestions = row.querySelector('.product-suggestions');
+    suggestions.style.display = 'none';
+    suggestions.innerHTML = '';
+}
+
+function renderProductSuggestions(row) {
+    const input = row.querySelector('.item-product-search');
+    const suggestions = row.querySelector('.product-suggestions');
+    const query = input.value.trim().toLowerCase();
+    const matches = assetProducts.filter(product => !query || productSearchText(product).includes(query)).slice(0, 10);
+    suggestions.innerHTML = '';
+    matches.forEach(product => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'product-suggestion';
+        button.innerHTML = `<strong>${escapeHtml(product.name)}</strong><span>${escapeHtml(productLabel(product))}</span>`;
+        button.addEventListener('click', () => selectProduct(row, product));
+        suggestions.appendChild(button);
+    });
+    if (matches.length === 0) suggestions.innerHTML = '<div class="product-suggestion"><strong>No inventory product found</strong><span>Select an inventory product to issue stock.</span></div>';
+    suggestions.style.display = 'block';
+}
+
+function selectProduct(row, product) {
+    row.querySelector('.item-product-id').value = product.id;
+    row.querySelector('.item-product-search').value = product.name;
+    row.querySelector('.item-unit-price').value = Number(product.purchase_price || 0).toFixed(2);
+    hideProductSuggestions(row);
+    syncIssueRow(row, true);
 }
 
 function syncIssueRow(row, clearSerials = false) {
@@ -170,22 +219,28 @@ function syncIssueRow(row, clearSerials = false) {
         });
         quantityInput.value = selected.length + (parseInt(seriallessInput.value || '0', 10) || 0) || '';
     }
+    row.querySelector('.item-total').value = ((parseFloat(quantityInput.value || '0') || 0) * (parseFloat(row.querySelector('.item-unit-price').value || '0') || 0)).toFixed(2);
     syncIssueSummary();
 }
 
 function bindIssueRow(row) {
-    ['.item-product','.item-condition','.item-warehouse'].forEach(selector => row.querySelector(selector).addEventListener('change', () => syncIssueRow(row, true)));
-    ['.item-serials','.item-serialless','.item-quantity'].forEach(selector => row.querySelector(selector).addEventListener('input', () => syncIssueRow(row)));
+    ['.item-condition','.item-warehouse'].forEach(selector => row.querySelector(selector).addEventListener('change', () => syncIssueRow(row, true)));
+    ['.item-serials','.item-serialless','.item-quantity','.item-unit-price'].forEach(selector => row.querySelector(selector).addEventListener('input', () => syncIssueRow(row)));
+    row.querySelector('.item-product-search').addEventListener('input', () => { row.querySelector('.item-product-id').value = ''; syncIssueRow(row, true); renderProductSuggestions(row); });
+    row.querySelector('.item-product-search').addEventListener('focus', () => renderProductSuggestions(row));
     row.querySelector('.remove-issue-item').addEventListener('click', () => { if (itemsContainer.children.length > 1) row.remove(); reindexIssueRows(); });
 }
 
 function reindexIssueRows() {
     [...itemsContainer.children].forEach((row, index) => {
         row.querySelector('.item-number').textContent = `Item ${index + 1}`;
-        row.querySelector('.item-product').name = `items[${index}][product_id]`;
+        row.querySelector('.item-product-id').name = `items[${index}][product_id]`;
+        row.querySelector('.item-product-search').name = `items[${index}][product_name]`;
         row.querySelector('.item-condition').name = `items[${index}][source_condition]`;
         row.querySelector('.item-warehouse').name = `items[${index}][warehouse_id]`;
         row.querySelector('.item-quantity').name = `items[${index}][quantity]`;
+        row.querySelector('.item-unit-price').name = `items[${index}][unit_price]`;
+        row.querySelector('.item-total').name = `items[${index}][total]`;
         row.querySelector('.item-serials').name = `items[${index}][serial_numbers]`;
         row.querySelector('.item-serialless').name = `items[${index}][serialless_quantity]`;
         row.querySelector('.remove-issue-item').hidden = itemsContainer.children.length === 1;
@@ -196,12 +251,14 @@ function reindexIssueRows() {
 function syncIssueSummary() {
     document.getElementById('summaryRows').textContent = itemsContainer.children.length;
     document.getElementById('summaryUnits').textContent = [...itemsContainer.querySelectorAll('.item-quantity')].reduce((sum,input)=>sum+(parseInt(input.value||'0',10)||0),0);
+    document.getElementById('summaryValue').textContent = [...itemsContainer.querySelectorAll('.item-total')].reduce((sum,input)=>sum+(parseFloat(input.value||'0')||0),0).toFixed(2);
     document.getElementById('summaryEmployee').textContent = document.getElementById('issueEmployee').selectedOptions[0]?.textContent || 'Not selected';
 }
 
 document.getElementById('addIssueItem').addEventListener('click', () => { const count = Math.min(20, Math.max(1, parseInt(document.getElementById('addItemCount').value || '1', 10))); for (let i=0;i<count;i++) addIssueRow({warehouse_id:defaultWarehouseId,source_condition:'new',serialless_quantity:0}); });
 document.getElementById('issueEmployee').addEventListener('change', syncIssueSummary);
 document.getElementById('assetIssueForm').addEventListener('submit', reindexIssueRows);
+document.addEventListener('click', event => { if (!event.target.closest('.product-picker')) document.querySelectorAll('.issue-item').forEach(hideProductSuggestions); });
 initialIssueItems.forEach(item => addIssueRow(item));
 </script>
 @endsection

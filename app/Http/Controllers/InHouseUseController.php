@@ -87,10 +87,19 @@ class InHouseUseController extends Controller
                 'warehouse_id' => $request->input('warehouse_id'),
                 'source_condition' => $request->input('source_condition'),
                 'quantity' => $request->input('quantity'),
+                'unit_price' => $request->input('unit_price', Product::query()->whereKey($request->input('product_id'))->value('purchase_price') ?? 0),
                 'serial_numbers' => $request->input('serial_numbers'),
                 'serialless_quantity' => $request->input('serialless_quantity'),
             ]]]);
         }
+
+        $request->merge(['items' => collect($request->input('items', []))->map(function (array $item): array {
+            if (! array_key_exists('unit_price', $item) || $item['unit_price'] === '' || $item['unit_price'] === null) {
+                $item['unit_price'] = Product::query()->whereKey($item['product_id'] ?? null)->value('purchase_price') ?? 0;
+            }
+
+            return $item;
+        })->all()]);
 
         $data = $request->validate([
             'employee_id' => ['required', Rule::exists('employees', 'id')->where('status', 'active')],
@@ -102,6 +111,7 @@ class InHouseUseController extends Controller
             'items.*.warehouse_id' => ['required', Rule::exists('warehouses', 'id')->where('is_active', true)],
             'items.*.source_condition' => ['required', 'in:new,used'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.unit_price' => ['required', 'numeric', 'min:0', 'max:9999999999.99'],
             'items.*.serial_numbers' => ['nullable', 'string'],
             'items.*.serialless_quantity' => ['nullable', 'integer', 'min:0'],
         ]);
@@ -187,6 +197,10 @@ class InHouseUseController extends Controller
             'id' => $product->id,
             'name' => $product->name,
             'sku' => $product->sku,
+            'barcode' => $product->barcode,
+            'brand' => $product->brand,
+            'purchase_price' => (float) $product->purchase_price,
+            'sale_price' => (float) $product->sale_price,
             'track_serials' => (bool) $product->track_serial_numbers,
             'new_stocks' => $product->warehouseStocks->pluck('quantity', 'warehouse_id'),
             'used_stocks' => $product->usedWarehouseStocks->pluck('quantity', 'warehouse_id'),

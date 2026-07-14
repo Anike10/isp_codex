@@ -29,12 +29,13 @@ class EmployeeAssetService
 
         $sourceCondition = $data['source_condition'];
         $quantity = (int) $data['quantity'];
+        $unitPrice = round((float) $data['unit_price'], 2);
         $serialNumbers = $this->serialNumberParser->parse($data['serial_numbers'] ?? '');
         $seriallessQuantity = $product->track_serial_numbers ? (int) ($data['serialless_quantity'] ?? 0) : $quantity;
 
         $this->validateQuantitySplit($product, $quantity, $serialNumbers, $seriallessQuantity);
 
-        return DB::transaction(function () use ($employee, $product, $warehouse, $data, $userId, $sourceCondition, $quantity, $serialNumbers, $seriallessQuantity): EmployeeAssetAssignment {
+        return DB::transaction(function () use ($employee, $product, $warehouse, $data, $userId, $sourceCondition, $quantity, $unitPrice, $serialNumbers, $seriallessQuantity): EmployeeAssetAssignment {
             $assignment = EmployeeAssetAssignment::create([
                 'employee_id' => $employee->id,
                 'product_id' => $product->id,
@@ -42,6 +43,8 @@ class EmployeeAssetService
                 'issued_by_user_id' => $userId,
                 'source_condition' => $sourceCondition,
                 'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'total' => round($quantity * $unitPrice, 2),
                 'serialless_quantity' => $seriallessQuantity,
                 'serial_numbers' => $this->formatSerialNumbers($serialNumbers),
                 'assigned_at' => $data['assigned_at'],

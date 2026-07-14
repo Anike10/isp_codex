@@ -18,6 +18,8 @@ class EmployeeAssetAssignment extends Model
         'issued_by_user_id',
         'source_condition',
         'quantity',
+        'unit_price',
+        'total',
         'serialless_quantity',
         'serial_numbers',
         'assigned_at',
@@ -29,6 +31,8 @@ class EmployeeAssetAssignment extends Model
     {
         return [
             'quantity' => 'integer',
+            'unit_price' => 'decimal:2',
+            'total' => 'decimal:2',
             'serialless_quantity' => 'integer',
             'assigned_at' => 'date',
         ];
@@ -67,5 +71,15 @@ class EmployeeAssetAssignment extends Model
     public function outstandingQuantity(): int
     {
         return max(0, $this->quantity - $this->returnedQuantity());
+    }
+
+    public function returnedValue(): float
+    {
+        return round($this->returnedQuantity() * (float) $this->unit_price, 2);
+    }
+
+    public function outstandingValue(): float
+    {
+        return round($this->outstandingQuantity() * (float) $this->unit_price, 2);
     }
 }

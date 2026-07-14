@@ -19,6 +19,9 @@
     <div class="card stat"><span class="muted">Issued</span><strong>{{ $assignment->quantity }}</strong></div>
     <div class="card stat"><span class="muted">Returned</span><strong>{{ $assignment->returnedQuantity() }}</strong></div>
     <div class="card stat"><span class="muted">Currently Holding</span><strong>{{ $assignment->outstandingQuantity() }}</strong></div>
+    <div class="card stat"><span class="muted">Unit Value</span><strong>{{ number_format((float)$assignment->unit_price, 2) }}</strong></div>
+    <div class="card stat"><span class="muted">Issued Value</span><strong>{{ number_format((float)$assignment->total, 2) }}</strong></div>
+    <div class="card stat"><span class="muted">Holding Value</span><strong>{{ number_format($assignment->outstandingValue(), 2) }}</strong></div>
     <div class="card stat"><span class="muted">Source</span><strong>{{ $assignment->source_condition === 'used' ? 'Used Stock' : 'New Stock' }}</strong></div>
 </div>
 
@@ -65,12 +68,12 @@
 <section class="card">
     <h2>Return History</h2>
     <table>
-        <thead><tr><th>Date</th><th>Warehouse</th><th>Quantity</th><th>Serials</th><th>Serial-less</th><th>Note</th><th>Received By</th></tr></thead>
+        <thead><tr><th>Date</th><th>Warehouse</th><th>Quantity</th><th>Return Value</th><th>Serials</th><th>Serial-less</th><th>Note</th><th>Received By</th></tr></thead>
         <tbody>
         @forelse ($assignment->returns->sortByDesc('returned_at') as $return)
-            <tr><td>{{ $return->returned_at->format('Y-m-d') }}</td><td>{{ $return->warehouse->name }}</td><td>{{ $return->quantity }}</td><td>{{ $return->serial_numbers ?: 'N/A' }}</td><td>{{ $return->serialless_quantity }}</td><td>{{ $return->note ?? 'N/A' }}</td><td>{{ $return->receivedBy?->name ?? 'N/A' }}</td></tr>
+            <tr><td>{{ $return->returned_at->format('Y-m-d') }}</td><td>{{ $return->warehouse->name }}</td><td>{{ $return->quantity }}</td><td>{{ number_format($return->quantity * (float)$assignment->unit_price, 2) }}</td><td>{{ $return->serial_numbers ?: 'N/A' }}</td><td>{{ $return->serialless_quantity }}</td><td>{{ $return->note ?? 'N/A' }}</td><td>{{ $return->receivedBy?->name ?? 'N/A' }}</td></tr>
         @empty
-            <tr><td colspan="7">No return recorded yet.</td></tr>
+            <tr><td colspan="8">No return recorded yet.</td></tr>
         @endforelse
         </tbody>
     </table>

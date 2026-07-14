@@ -37,19 +37,21 @@
     @php
         $assetIssued = (int) $employee->assetAssignments->sum('quantity');
         $assetReturned = (int) $employee->assetAssignments->flatMap->returns->sum('quantity');
+        $assetIssuedValue = (float) $employee->assetAssignments->sum(fn($assignment) => (float)$assignment->total);
+        $assetReturnedValue = (float) $employee->assetAssignments->sum(fn($assignment) => $assignment->returnedValue());
     @endphp
     <section class="card" style="margin-bottom:16px">
         <div class="topbar">
-            <div><h2>In-house Assets</h2><div class="muted">Issued {{ $assetIssued }} | Returned {{ $assetReturned }} | Currently holding {{ max(0, $assetIssued - $assetReturned) }}</div></div>
+            <div><h2>In-house Assets</h2><div class="muted">Issued {{ $assetIssued }} | Returned {{ $assetReturned }} | Holding {{ max(0, $assetIssued - $assetReturned) }} | Holding Value {{ number_format(max(0, $assetIssuedValue - $assetReturnedValue), 2) }}</div></div>
             <div class="actions"><a class="btn secondary" href="{{ route('in-house-use.index', ['employee_id' => $employee->id]) }}">Issue Product</a><a class="btn light" href="{{ route('in-house-use.report.employees', ['employee_id' => $employee->id]) }}">View All</a></div>
         </div>
         <table>
-            <thead><tr><th>Product</th><th>Issued</th><th>Returned</th><th>Holding</th><th>Purpose</th><th>Action</th></tr></thead>
+            <thead><tr><th>Product</th><th>Issued</th><th>Returned</th><th>Holding</th><th>Unit Value</th><th>Holding Value</th><th>Purpose</th><th>Action</th></tr></thead>
             <tbody>
             @forelse($employee->assetAssignments->take(10) as $assignment)
-                <tr><td>{{ $assignment->product->name }}</td><td>{{ $assignment->quantity }}</td><td>{{ $assignment->returnedQuantity() }}</td><td>{{ $assignment->outstandingQuantity() }}</td><td>{{ $assignment->purpose ?? 'N/A' }}</td><td><a class="btn light" href="{{ route('in-house-use.show', $assignment) }}">View / Return</a></td></tr>
+                <tr><td>{{ $assignment->product->name }}</td><td>{{ $assignment->quantity }}</td><td>{{ $assignment->returnedQuantity() }}</td><td>{{ $assignment->outstandingQuantity() }}</td><td>{{ number_format((float)$assignment->unit_price, 2) }}</td><td>{{ number_format($assignment->outstandingValue(), 2) }}</td><td>{{ $assignment->purpose ?? 'N/A' }}</td><td><a class="btn light" href="{{ route('in-house-use.show', $assignment) }}">View / Return</a></td></tr>
             @empty
-                <tr><td colspan="6">No in-house asset assigned.</td></tr>
+                <tr><td colspan="8">No in-house asset assigned.</td></tr>
             @endforelse
             </tbody>
         </table>
