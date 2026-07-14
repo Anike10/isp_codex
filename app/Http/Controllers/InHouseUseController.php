@@ -9,9 +9,12 @@ use App\Models\UsedProductWarehouseStock;
 use App\Models\Warehouse;
 use App\Services\EmployeeAssetService;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
+use Throwable;
 
 class InHouseUseController extends Controller
 {
@@ -106,6 +109,7 @@ class InHouseUseController extends Controller
             'assigned_at' => ['required', 'date'],
             'purpose' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string', 'max:2000'],
+            'approval_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
             'items' => ['required', 'array', 'min:1', 'max:50'],
             'items.*.product_id' => ['required', 'exists:products,id'],
             'items.*.warehouse_id' => ['required', Rule::exists('warehouses', 'id')->where('is_active', true)],
@@ -116,8 +120,10 @@ class InHouseUseController extends Controller
             'items.*.serialless_quantity' => ['nullable', 'integer', 'min:0'],
         ]);
 
+        $approvalDocument = $this->storeApprovalDocument($data['approval_document'] ?? null);
+
         try {
-            $assignments = DB::transaction(function () use ($data, $employeeAssetService, $request): array {
+            $assignments = DB::transaction(function () use ($data, $employeeAssetService, $request, $approvalDocument): array {
                 $employee = Employee::findOrFail($data['employee_id']);
                 $assignments = [];
 
@@ -126,7 +132,15 @@ class InHouseUseController extends Controller
                         $employee,
                         Product::findOrFail($item['product_id']),
                         Warehouse::findOrFail($item['warehouse_id']),
-                        [...$item, 'assigned_at' => $data['assigned_at'], 'purpose' => $data['purpose'] ?? null, 'note' => $data['note'] ?? null],
+                        [
+                            ...$item,
+                            'assigned_at' => $data['assigned_at'],
+                            'purpose' => $data['purpose'] ?? null,
+                            'note' => $data['note'] ?? null,
+                            'approval_document_path' => $approvalDocument['path'] ?? null,
+                            'approval_document_name' => $approvalDocument['name'] ?? null,
+                            'approval_document_mime' => $approvalDocument['mime'] ?? null,
+                        ],
                         $request->user()?->id,
                     );
                 }
@@ -134,7 +148,13 @@ class InHouseUseController extends Controller
                 return $assignments;
             });
         } catch (InvalidArgumentException $exception) {
+            $this->deleteApprovalDocument($approvalDocument['path'] ?? null);
+
             return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
+        } catch (Throwable $exception) {
+            $this->deleteApprovalDocument($approvalDocument['path'] ?? null);
+
+            throw $exception;
         }
 
         if (count($assignments) === 1) {
@@ -152,6 +172,18 @@ class InHouseUseController extends Controller
         $warehouses = Warehouse::query()->where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get();
 
         return view('in_house_use.show', ['assignment' => $inHouseUse, 'warehouses' => $warehouses]);
+    }
+
+    public function approvalDocument(EmployeeAssetAssignment $inHouseUse)
+    {
+        abort_unless($inHouseUse->approval_document_path && Storage::disk('local')->exists($inHouseUse->approval_document_path), 404);
+
+        return Storage::disk('local')->response(
+            $inHouseUse->approval_document_path,
+            $inHouseUse->approval_document_name ?: basename($inHouseUse->approval_document_path),
+            ['Cache-Control' => 'private, no-store'],
+            'inline',
+        );
     }
 
     public function storeReturn(Request $request, EmployeeAssetAssignment $inHouseUse, EmployeeAssetService $employeeAssetService)
@@ -209,5 +241,25 @@ class InHouseUseController extends Controller
         ])->values();
 
         return compact('employees', 'warehouses', 'products', 'productOptions');
+    }
+
+    private function storeApprovalDocument(?UploadedFile $file): ?array
+    {
+        if (! $file) {
+            return null;
+        }
+
+        return [
+            'path' => $file->store('in-house-approvals/'.now()->format('Y/m'), 'local'),
+            'name' => basename($file->getClientOriginalName()),
+            'mime' => $file->getMimeType(),
+        ];
+    }
+
+    private function deleteApprovalDocument(?string $path): void
+    {
+        if ($path) {
+            Storage::disk('local')->delete($path);
+        }
     }
 }

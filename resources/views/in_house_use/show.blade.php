@@ -34,6 +34,14 @@
         <div><span class="muted">Serial-less Qty</span><strong>{{ $assignment->serialless_quantity }}</strong></div>
         <div><span class="muted">Purpose / Location</span><strong>{{ $assignment->purpose ?? 'N/A' }}</strong></div>
         <div><span class="muted">Issued By</span><strong>{{ $assignment->issuedBy?->name ?? 'N/A' }}</strong></div>
+        <div>
+            <span class="muted">Approval Copy</span>
+            @if ($assignment->approval_document_path)
+                <div><a class="btn light" target="_blank" rel="noopener" href="{{ route('in-house-use.approval-document', $assignment) }}">View {{ $assignment->approval_document_name ?: 'Document' }}</a></div>
+            @else
+                <strong>N/A</strong>
+            @endif
+        </div>
         <div class="full"><span class="muted">Note</span><div>{{ $assignment->note ?? 'N/A' }}</div></div>
     </div>
 </section>

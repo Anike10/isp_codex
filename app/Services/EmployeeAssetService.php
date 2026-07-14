@@ -50,6 +50,9 @@ class EmployeeAssetService
                 'assigned_at' => $data['assigned_at'],
                 'purpose' => $data['purpose'] ?? null,
                 'note' => $data['note'] ?? null,
+                'approval_document_path' => $data['approval_document_path'] ?? null,
+                'approval_document_name' => $data['approval_document_name'] ?? null,
+                'approval_document_mime' => $data['approval_document_mime'] ?? null,
             ]);
 
             if ($sourceCondition === 'new') {

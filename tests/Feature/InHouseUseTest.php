@@ -10,11 +10,41 @@ use App\Models\ProductSerial;
 use App\Models\User;
 use App\Models\Warehouse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class InHouseUseTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_approval_document_is_stored_privately_and_can_be_viewed_by_authorized_user(): void
+    {
+        Storage::fake('local');
+        [$user, $employee, $product, $warehouse] = $this->inventoryFixture();
+
+        $this->actingAs($user)->post(route('in-house-use.store'), [
+            'employee_id' => $employee->id,
+            'product_id' => $product->id,
+            'warehouse_id' => $warehouse->id,
+            'source_condition' => 'new',
+            'quantity' => 1,
+            'unit_price' => 800,
+            'serial_numbers' => 'SER-001',
+            'serialless_quantity' => 0,
+            'assigned_at' => '2026-07-15',
+            'approval_document' => UploadedFile::fake()->create('manager-approval.pdf', 120, 'application/pdf'),
+        ])->assertRedirect();
+
+        $assignment = EmployeeAssetAssignment::firstOrFail();
+        $this->assertSame('manager-approval.pdf', $assignment->approval_document_name);
+        Storage::disk('local')->assertExists($assignment->approval_document_path);
+
+        $this->actingAs($user)->get(route('in-house-use.show', $assignment))
+            ->assertOk()
+            ->assertSee('manager-approval.pdf');
+        $this->actingAs($user)->get(route('in-house-use.approval-document', $assignment))->assertOk();
+    }
 
     public function test_product_can_be_issued_to_employee_from_new_stock_with_serials(): void
     {

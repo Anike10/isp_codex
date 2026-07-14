@@ -21,6 +21,9 @@
                 <button class="btn" type="submit">Final</button>
             </form>
         @endif
+        @if ($purchaseBill->document_path)
+            <a class="btn light" target="_blank" rel="noopener" href="{{ route('purchase-bills.document', $purchaseBill) }}">View Bill / Invoice Copy</a>
+        @endif
         <a class="btn light" href="{{ route('purchase-bills.index') }}">Back</a>
     </div>
 </div>
@@ -31,6 +34,7 @@
     <div class="card stat"><span class="muted">Total</span><strong>{{ number_format($purchaseBill->subtotal, 2) }}</strong></div>
     <div class="card stat"><span class="muted">Date</span><strong style="font-size:18px">{{ $purchaseBill->purchase_date->format('Y-m-d') }}</strong></div>
     <div class="card stat"><span class="muted">Finalized</span><strong style="font-size:18px">{{ $purchaseBill->finalized_at?->format('Y-m-d H:i') ?? 'Not finalized' }}</strong></div>
+    <div class="card stat"><span class="muted">Bill / Invoice Copy</span><strong style="font-size:16px">{{ $purchaseBill->document_name ?? 'Not attached' }}</strong></div>
 </div>
 
 @if ($purchaseBill->note)

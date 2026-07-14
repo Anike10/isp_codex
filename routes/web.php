@@ -147,6 +147,7 @@ Route::middleware('auth')->group(function () {
         Route::get('in-house-use/reports/employees', [InHouseUseController::class, 'employeeReport'])->name('in-house-use.report.employees');
         Route::get('in-house-use/reports/used-stock', [InHouseUseController::class, 'usedStockReport'])->name('in-house-use.report.used-stock');
         Route::get('in-house-use/reports/history', [InHouseUseController::class, 'historyReport'])->name('in-house-use.report.history');
+        Route::get('in-house-use/{inHouseUse}/approval-document', [InHouseUseController::class, 'approvalDocument'])->name('in-house-use.approval-document');
         Route::post('in-house-use/{inHouseUse}/returns', [InHouseUseController::class, 'storeReturn'])->name('in-house-use.returns.store');
         Route::resource('in-house-use', InHouseUseController::class)->only(['index', 'store', 'show'])->parameters(['in-house-use' => 'inHouseUse']);
         Route::get('warehouse-movements', [WarehouseController::class, 'movements'])->name('warehouse-movements.index');
@@ -155,6 +156,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('warehouses', WarehouseController::class)->only(['index', 'store', 'show']);
         Route::resource('product-categories', ProductCategoryController::class)->only(['index', 'store']);
         Route::post('purchase-bills/{purchaseBill}/finalize', [PurchaseBillController::class, 'finalize'])->name('purchase-bills.finalize');
+        Route::get('purchase-bills/{purchaseBill}/document', [PurchaseBillController::class, 'document'])->name('purchase-bills.document');
         Route::resource('purchase-bills', PurchaseBillController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
         Route::resource('products', ProductController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
         Route::post('products/{product}/stock', [ProductController::class, 'moveStock'])->name('products.stock');

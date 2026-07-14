@@ -22,7 +22,7 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Bill</th><th>Vendor Party</th><th>Date</th><th>Total</th><th>Note</th></tr></thead>
+    <thead><tr><th>Bill</th><th>Vendor Party</th><th>Date</th><th>Total</th><th>Copy</th><th>Note</th></tr></thead>
     <tbody>
     @forelse ($purchaseBills as $purchaseBill)
         <tr data-href="{{ route('purchase-bills.show', $purchaseBill) }}">
@@ -40,10 +40,11 @@
             </td>
             <td>{{ $purchaseBill->purchase_date->format('Y-m-d') }}</td>
             <td>{{ number_format($purchaseBill->subtotal, 2) }}</td>
+            <td>@if($purchaseBill->document_path)<a class="btn light" target="_blank" rel="noopener" href="{{ route('purchase-bills.document', $purchaseBill) }}">View</a>@else N/A @endif</td>
             <td>{{ $purchaseBill->note ?? 'N/A' }}</td>
         </tr>
     @empty
-        <tr><td colspan="5">No purchase bills found.</td></tr>
+        <tr><td colspan="6">No purchase bills found.</td></tr>
     @endforelse
     </tbody>
 </table>

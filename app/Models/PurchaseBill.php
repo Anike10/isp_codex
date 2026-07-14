@@ -18,6 +18,9 @@ class PurchaseBill extends Model
         'purchase_date',
         'subtotal',
         'note',
+        'document_path',
+        'document_name',
+        'document_mime',
         'finalized_at',
     ];
 

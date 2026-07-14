@@ -25,6 +25,9 @@ class EmployeeAssetAssignment extends Model
         'assigned_at',
         'purpose',
         'note',
+        'approval_document_path',
+        'approval_document_name',
+        'approval_document_mime',
     ];
 
     protected function casts(): array

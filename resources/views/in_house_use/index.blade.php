@@ -48,7 +48,7 @@
     @media (max-width:650px) { .issue-hero,.issue-header-grid,.issue-item-grid { grid-template-columns:1fr; } }
 </style>
 
-<form method="post" action="{{ route('in-house-use.store') }}" id="assetIssueForm" class="issue-page">
+<form method="post" action="{{ route('in-house-use.store') }}" id="assetIssueForm" class="issue-page" enctype="multipart/form-data">
     @csrf
     <div class="issue-hero">
         <div>
@@ -67,6 +67,11 @@
                     <div><label>Issue Date</label><input type="date" name="assigned_at" value="{{ old('assigned_at', now()->toDateString()) }}" required></div>
                     <div><label>Purpose / Location</label><input name="purpose" value="{{ old('purpose') }}" placeholder="Office desk, field team, POP, etc."></div>
                     <div><label>Handover Note</label><textarea name="note" rows="3" placeholder="Invoice note-এর মতো বিস্তারিত handover note">{{ old('note') }}</textarea></div>
+                    <div class="full">
+                        <label>Approval Scan / PDF</label>
+                        <input type="file" name="approval_document" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                        <span class="muted">অনুমোদনের scan copy দিন। PDF/JPG/PNG/WEBP, সর্বোচ্চ 10 MB।</span>
+                    </div>
                 </div>
             </section>
 

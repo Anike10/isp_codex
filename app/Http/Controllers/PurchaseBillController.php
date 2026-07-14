@@ -13,9 +13,12 @@ use App\Services\RecordVersionService;
 use App\Support\SerialNumberParser;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
+use Throwable;
 
 class PurchaseBillController extends Controller
 {
@@ -62,23 +65,35 @@ class PurchaseBillController extends Controller
 
     public function store(Request $request, InventoryService $inventoryService)
     {
+        $document = null;
+
         try {
             $data = $this->validatePurchaseBillData($request);
+            $document = $this->storeDocument($data['document'] ?? null);
 
-            DB::transaction(function () use ($data, $inventoryService): void {
+            DB::transaction(function () use ($data, $inventoryService, $document): void {
                 $purchaseBill = PurchaseBill::create([
                     'party_id' => $this->resolveVendorPartyId($data),
                     'bill_no' => $data['bill_no'],
                     'purchase_date' => $data['purchase_date'],
                     'subtotal' => 0,
                     'note' => $data['note'] ?? null,
+                    'document_path' => $document['path'] ?? null,
+                    'document_name' => $document['name'] ?? null,
+                    'document_mime' => $document['mime'] ?? null,
                 ]);
 
                 $subtotal = $this->applyPurchaseItems($purchaseBill, $data, $inventoryService);
                 RecordVersionObserver::withoutRecording(fn () => $purchaseBill->update(['subtotal' => $subtotal]));
             });
         } catch (InvalidArgumentException $exception) {
+            $this->deleteDocument($document['path'] ?? null);
+
             return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
+        } catch (Throwable $exception) {
+            $this->deleteDocument($document['path'] ?? null);
+
+            throw $exception;
         }
 
         return redirect()->route('purchase-bills.index')->with('success', 'Purchase bill saved and stock updated.');
@@ -110,11 +125,14 @@ class PurchaseBillController extends Controller
         }
 
         $becameFinalized = false;
+        $newDocument = null;
+        $oldDocumentPath = $purchaseBill->document_path;
 
         try {
             $data = $this->validatePurchaseBillData($request, $purchaseBill);
+            $newDocument = $this->storeDocument($data['document'] ?? null);
 
-            DB::transaction(function () use (&$purchaseBill, $data, $inventoryService, $recordVersionService, &$becameFinalized): void {
+            DB::transaction(function () use (&$purchaseBill, $data, $inventoryService, $recordVersionService, &$becameFinalized, $newDocument): void {
                 $purchaseBill = PurchaseBill::query()
                     ->with(['items.product', 'items.serials'])
                     ->whereKey($purchaseBill->id)
@@ -130,13 +148,23 @@ class PurchaseBillController extends Controller
                 $oldSnapshot = $recordVersionService->snapshot($purchaseBill, ['party', 'items.product', 'items.serials']);
                 $this->restorePurchaseInventory($purchaseBill, $inventoryService);
 
-                RecordVersionObserver::withoutRecording(fn () => $purchaseBill->update([
+                $updates = [
                     'party_id' => $this->resolveVendorPartyId($data),
                     'bill_no' => $data['bill_no'],
                     'purchase_date' => $data['purchase_date'],
                     'subtotal' => 0,
                     'note' => $data['note'] ?? null,
-                ]));
+                ];
+
+                if ($newDocument) {
+                    $updates += [
+                        'document_path' => $newDocument['path'],
+                        'document_name' => $newDocument['name'],
+                        'document_mime' => $newDocument['mime'],
+                    ];
+                }
+
+                RecordVersionObserver::withoutRecording(fn () => $purchaseBill->update($updates));
 
                 $purchaseBill->items()->delete();
                 $subtotal = $this->applyPurchaseItems($purchaseBill, $data, $inventoryService);
@@ -149,13 +177,25 @@ class PurchaseBillController extends Controller
                 ]);
             });
         } catch (InvalidArgumentException $exception) {
+            $this->deleteDocument($newDocument['path'] ?? null);
+
             return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
+        } catch (Throwable $exception) {
+            $this->deleteDocument($newDocument['path'] ?? null);
+
+            throw $exception;
         }
 
         if ($becameFinalized) {
+            $this->deleteDocument($newDocument['path'] ?? null);
+
             return redirect()->route('purchase-bills.show', $purchaseBill)->withErrors([
                 'purchase_bill' => 'Finalized purchase bills cannot be edited.',
             ]);
+        }
+
+        if ($newDocument && $oldDocumentPath && $oldDocumentPath !== $newDocument['path']) {
+            $this->deleteDocument($oldDocumentPath);
         }
 
         return redirect()->route('purchase-bills.show', $purchaseBill)->with('success', 'Draft purchase bill updated successfully.');
@@ -190,6 +230,18 @@ class PurchaseBillController extends Controller
         return view('purchase_bills.show', compact('purchaseBill', 'versions'));
     }
 
+    public function document(PurchaseBill $purchaseBill)
+    {
+        abort_unless($purchaseBill->document_path && Storage::disk('local')->exists($purchaseBill->document_path), 404);
+
+        return Storage::disk('local')->response(
+            $purchaseBill->document_path,
+            $purchaseBill->document_name ?: basename($purchaseBill->document_path),
+            ['Cache-Control' => 'private, no-store'],
+            'inline',
+        );
+    }
+
     private function validatePurchaseBillData(Request $request, ?PurchaseBill $purchaseBill = null): array
     {
         $data = $request->validate([
@@ -203,6 +255,7 @@ class PurchaseBillController extends Controller
             ],
             'purchase_date' => ['required', 'date'],
             'note' => ['nullable', 'string'],
+            'document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['nullable', 'exists:products,id'],
             'items.*.product_name' => ['required_without:items.*.product_id', 'nullable', 'string', 'max:255'],
@@ -457,5 +510,25 @@ class PurchaseBillController extends Controller
         $count = PurchaseBill::query()->where('bill_no', 'like', $prefix.'%')->count() + 1;
 
         return $prefix.str_pad((string) $count, 5, '0', STR_PAD_LEFT);
+    }
+
+    private function storeDocument(?UploadedFile $file): ?array
+    {
+        if (! $file) {
+            return null;
+        }
+
+        return [
+            'path' => $file->store('purchase-bill-documents/'.now()->format('Y/m'), 'local'),
+            'name' => basename($file->getClientOriginalName()),
+            'mime' => $file->getMimeType(),
+        ];
+    }
+
+    private function deleteDocument(?string $path): void
+    {
+        if ($path) {
+            Storage::disk('local')->delete($path);
+        }
     }
 }

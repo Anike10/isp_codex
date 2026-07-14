@@ -10,7 +10,7 @@
     <a class="btn light" href="{{ $isEditing ? route('purchase-bills.show', $purchaseBill) : route('purchase-bills.index') }}">Back</a>
 </div>
 
-<form method="post" action="{{ $formAction }}" class="card" id="purchaseBillForm">
+<form method="post" action="{{ $formAction }}" class="card" id="purchaseBillForm" enctype="multipart/form-data">
     @csrf
     @if ($isEditing)
         @method('put')
@@ -35,6 +35,15 @@
         </div>
         <div><label>Bill No</label><input name="bill_no" value="{{ old('bill_no', $defaultBillNo) }}" required></div>
         <div><label>Purchase Date</label><input type="date" name="purchase_date" value="{{ old('purchase_date', isset($purchaseBill) ? $purchaseBill->purchase_date->format('Y-m-d') : now()->toDateString()) }}" required></div>
+        <div>
+            <label>Bill / Invoice Copy</label>
+            <input type="file" name="document" accept=".pdf,.jpg,.jpeg,.png,.webp">
+            <span class="muted">PDF/JPG/PNG/WEBP, সর্বোচ্চ 10 MB।</span>
+            @if ($isEditing && $purchaseBill->document_path)
+                <div style="margin-top:6px"><a target="_blank" rel="noopener" href="{{ route('purchase-bills.document', $purchaseBill) }}">বর্তমান কপি দেখুন: {{ $purchaseBill->document_name ?: 'Document' }}</a></div>
+                <span class="muted">নতুন file দিলে বর্তমান কপি replace হবে; ফাঁকা রাখলে বর্তমান কপিই থাকবে।</span>
+            @endif
+        </div>
         <div class="full"><label>Note</label><textarea name="note" rows="2">{{ old('note', $purchaseBill->note ?? '') }}</textarea></div>
     </div>
 

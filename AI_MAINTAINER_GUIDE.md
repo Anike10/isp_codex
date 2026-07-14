@@ -696,14 +696,15 @@ Stock movement behavior:
 - `in` increases stock.
 - `out` decreases stock.
 - `use` decreases stock for items used inside the business.
-- Operators use `Inventory > In-house Use` (`/in-house-use`) as an invoice-style create-only screen: employee/date/purpose are the shared header and one submission can atomically issue multiple product/serial rows.
+- Operators use `Inventory > In-house Use` (`/in-house-use`) as an invoice-style create-only screen: employee/date/purpose are the shared header and one submission can atomically issue multiple product/serial rows. The shared header also accepts one optional approval scan/PDF (PDF/JPG/PNG/WEBP, max 10 MB), whose private-storage metadata is copied to every assignment created by that submission.
 - In-house product rows use the invoice lookup pattern: writable name/SKU/barcode/brand search with a hidden required `product_id`, quantity, serial/serial-less controls, editable `unit_price`, calculated line `total`, and a calculated total asset value. Unit value defaults to product purchase price because this is internal asset cost, not a customer sale.
 - Reports are intentionally separate pages: `/in-house-use/reports/employees` for employee issued/returned/holding details, `/in-house-use/reports/used-stock` for reusable returned stock, and `/in-house-use/reports/history` for assignment lifecycle history.
 - Employee and history reports calculate issued, returned, and outstanding values from the assignment's saved unit price, so later product-price changes do not rewrite old employee asset values.
 - New-stock assignment creates the normal `use` stock movement and marks selected serials `used`. Generic product stock forms do not expose internal use; they link to the employee assignment workflow.
 - Partial or full employee returns are stored in `employee_asset_returns`. Returned quantity goes to `used_product_warehouse_stocks`, and returned serials become `used_in_stock`.
 - Returned used stock is deliberately separate from `products.stock_quantity` and `product_warehouse_stocks`, so invoice/new-stock flows cannot accidentally sell it as new. It can be selected as `Returned Used Stock` and reissued through the same employee workflow.
-- Core write/detail routes are `GET/POST /in-house-use`, `GET /in-house-use/{assignment}`, and `POST /in-house-use/{assignment}/returns`; all create and report routes use `manage_products`.
+- Core write/detail routes are `GET/POST /in-house-use`, `GET /in-house-use/{assignment}`, `GET /in-house-use/{assignment}/approval-document`, and `POST /in-house-use/{assignment}/returns`; all create, document, and report routes use `manage_products`.
+- Approval files are stored on the private `local` disk under `in-house-approvals/YYYY/MM`; never expose those paths with a public symlink. Serve them only through the permission-protected controller route.
 - Every stock movement belongs to a warehouse and records the warehouse balance before and after the movement.
 - Movement history preserves serial-number snapshots, reference, reason, related warehouse, and entry operator for audit use.
 - Out and own-use movements fail if quantity exceeds the selected warehouse stock, even when total product stock is higher.
@@ -714,6 +715,8 @@ Stock movement behavior:
 - Existing stock and in-stock serials are assigned to the seeded `Main Warehouse` by the warehouse migration.
 - Purchase bills and invoices use the default warehouse unless a future workflow explicitly captures another warehouse.
 - Purchase bills add stock and create a stock movement using the purchase bill number as the reference.
+- Purchase bills accept one optional vendor bill/invoice copy (PDF/JPG/PNG/WEBP, max 10 MB), stored on the private `local` disk under `purchase-bill-documents/YYYY/MM` and served through `GET /purchase-bills/{purchaseBill}/document` behind `manage_products`.
+- Draft purchase-bill edits preserve the existing document when no file is submitted. A successful replacement deletes the old file; a failed database operation deletes the newly uploaded file so private storage does not accumulate orphan replacements.
 - Purchase bill item serial numbers are stored in `product_serials`; warranty end date is calculated from purchase date plus warranty months.
 - Vendor/wholesale shops are stored in the existing `customers` table as parties with `is_vendor=true`.
 

@@ -12,11 +12,63 @@ use App\Models\PurchaseBill;
 use App\Models\User;
 use App\Models\Warehouse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class PurchaseBillTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_purchase_bill_document_can_be_uploaded_viewed_and_replaced(): void
+    {
+        Storage::fake('local');
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        $product = Product::create([
+            'name' => 'Document Test Cable',
+            'sku' => 'DOC-CABLE-001',
+            'track_inventory' => true,
+            'track_serial_numbers' => false,
+            'purchase_price' => 10,
+            'sale_price' => 15,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 1,
+        ]);
+        $items = [[
+            'product_id' => $product->id,
+            'quantity' => 2,
+            'unit_price' => 10,
+        ]];
+
+        $this->actingAs($user)->post(route('purchase-bills.store'), [
+            'bill_no' => 'PB-DOCUMENT-001',
+            'purchase_date' => '2026-07-15',
+            'document' => UploadedFile::fake()->create('vendor-bill.pdf', 120, 'application/pdf'),
+            'items' => $items,
+        ])->assertRedirect(route('purchase-bills.index'));
+
+        $purchaseBill = PurchaseBill::where('bill_no', 'PB-DOCUMENT-001')->firstOrFail();
+        $oldPath = $purchaseBill->document_path;
+        $this->assertSame('vendor-bill.pdf', $purchaseBill->document_name);
+        Storage::disk('local')->assertExists($oldPath);
+        $this->actingAs($user)->get(route('purchase-bills.document', $purchaseBill))->assertOk();
+
+        $this->actingAs($user)->put(route('purchase-bills.update', $purchaseBill), [
+            'bill_no' => 'PB-DOCUMENT-001',
+            'purchase_date' => '2026-07-15',
+            'document' => UploadedFile::fake()->create('replacement-invoice.pdf', 140, 'application/pdf'),
+            'items' => $items,
+        ])->assertRedirect(route('purchase-bills.show', $purchaseBill));
+
+        $purchaseBill->refresh();
+        $this->assertSame('replacement-invoice.pdf', $purchaseBill->document_name);
+        Storage::disk('local')->assertMissing($oldPath);
+        Storage::disk('local')->assertExists($purchaseBill->document_path);
+        $this->actingAs($user)->get(route('purchase-bills.show', $purchaseBill))
+            ->assertOk()
+            ->assertSee('replacement-invoice.pdf');
+    }
 
     public function test_purchase_bill_create_page_renders_with_category_filters(): void
     {
