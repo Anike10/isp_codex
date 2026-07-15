@@ -47,7 +47,9 @@
             @csrf
             <button class="btn light" type="submit">Copy for Next Month</button>
         </form>
-        <a class="btn light" href="{{ route('sale-returns.create', ['invoice_id' => $invoice->id]) }}">Sale Return</a>
+        @if (Route::has('sale-returns.create'))
+            <a class="btn light" href="{{ route('sale-returns.create', ['invoice_id' => $invoice->id]) }}">Sale Return</a>
+        @endif
         <a class="btn light" href="{{ route('invoices.index') }}">Back</a>
     </div>
 </div>
@@ -193,7 +195,9 @@
 @endif
 
 @php
-    $saleReturnItems = $invoice->items->flatMap->saleReturnItems;
+    $saleReturnItems = method_exists(\App\Models\InvoiceItem::class, 'saleReturnItems')
+        ? $invoice->items->flatMap->saleReturnItems
+        : collect();
 @endphp
 @if ($saleReturnItems->isNotEmpty())
 <section class="card" style="margin-top:16px">
@@ -204,7 +208,13 @@
         @foreach ($saleReturnItems as $returnItem)
             <tr>
                 <td>{{ $returnItem->saleReturn->return_date->format('Y-m-d') }}</td>
-                <td><a href="{{ route('sale-returns.show', $returnItem->saleReturn) }}">{{ $returnItem->saleReturn->return_no }}</a></td>
+                <td>
+                    @if (Route::has('sale-returns.show'))
+                        <a href="{{ route('sale-returns.show', $returnItem->saleReturn) }}">{{ $returnItem->saleReturn->return_no }}</a>
+                    @else
+                        {{ $returnItem->saleReturn->return_no }}
+                    @endif
+                </td>
                 <td>{{ $returnItem->product_name }}</td>
                 <td>{{ $returnItem->quantity }}</td>
                 <td>{{ $returnItem->serialless_quantity ?: 'N/A' }}</td>

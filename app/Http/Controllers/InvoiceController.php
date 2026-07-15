@@ -815,7 +815,13 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice)
     {
-        $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items.saleReturnItems.saleReturn', 'printLogs.organization', 'printLogs.user']);
+        $relations = ['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items', 'printLogs.organization', 'printLogs.user'];
+
+        if (method_exists(InvoiceItem::class, 'saleReturnItems')) {
+            $relations[] = 'items.saleReturnItems.saleReturn';
+        }
+
+        $invoice->load($relations);
         $versions = $invoice->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
         $paymentAccounts = collect();
