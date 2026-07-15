@@ -209,7 +209,8 @@
                     || auth()->user()?->hasPermission('manage_products');
                 $canManageAdmin = auth()->user()?->hasPermission('manage_users')
                     || auth()->user()?->hasPermission('download_backup');
-                $canManageFleet = auth()->user()?->hasPermission('manage_fleet');
+                $canManageFleet = auth()->user()?->hasPermission('manage_fleet')
+                    && Route::has('fleet.index');
             @endphp
             @if (auth()->user()?->hasPermission('view_dashboard'))
                 <a href="{{ route('dashboard') }}">Dashboard</a>
@@ -244,7 +245,9 @@
                         @if (auth()->user()?->hasPermission('manage_invoices'))
                             <a href="{{ route('invoices.index') }}">Invoices</a>
                             <a href="{{ route('invoices.create') }}">Create Invoice</a>
-                            <a href="{{ route('sale-returns.index') }}">Sale Returns</a>
+                            @if (Route::has('sale-returns.index'))
+                                <a href="{{ route('sale-returns.index') }}">Sale Returns</a>
+                            @endif
                             <a href="{{ route('quotations.index') }}">Quotations</a>
                             <a href="{{ route('quotations.create') }}">Create Quotation</a>
                             <a href="{{ route('invoices.payment-note-default.edit') }}">Payment Note Default</a>
@@ -275,10 +278,12 @@
                     <summary>Inventory</summary>
                     <div class="nav-menu">
                         <a href="{{ route('products.index') }}">Products</a>
-                        <a href="{{ route('in-house-use.index') }}">In-house Use</a>
-                        <a href="{{ route('in-house-use.report.employees') }}">Employee Asset Report</a>
-                        <a href="{{ route('in-house-use.report.used-stock') }}">Returned Used Stock</a>
-                        <a href="{{ route('in-house-use.report.history') }}">In-house History</a>
+                        @if (Route::has('in-house-use.index'))
+                            <a href="{{ route('in-house-use.index') }}">In-house Use</a>
+                            <a href="{{ route('in-house-use.report.employees') }}">Employee Asset Report</a>
+                            <a href="{{ route('in-house-use.report.used-stock') }}">Returned Used Stock</a>
+                            <a href="{{ route('in-house-use.report.history') }}">In-house History</a>
+                        @endif
                         <a href="{{ route('warehouses.index') }}">Warehouses</a>
                         <a href="{{ route('warehouse-transfers.create') }}">Stock Transfer</a>
                         <a href="{{ route('warehouse-movements.index') }}">Stock History</a>
