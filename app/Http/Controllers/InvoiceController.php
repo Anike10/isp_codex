@@ -191,7 +191,7 @@ class InvoiceController extends Controller
             ]);
         }
 
-        if ($invoice->saleReturns()->exists()) {
+        if (class_exists(\App\Models\SaleReturn::class) && $invoice->saleReturns()->exists()) {
             return redirect()->route('invoices.show', $invoice)->withErrors([
                 'invoice' => 'Invoices with sale returns cannot be edited because returned stock and credit history are already linked to their items.',
             ]);
@@ -232,7 +232,7 @@ class InvoiceController extends Controller
                     return;
                 }
 
-                if ($invoice->saleReturns()->exists()) {
+                if (class_exists(\App\Models\SaleReturn::class) && $invoice->saleReturns()->exists()) {
                     $becameReturnLocked = true;
 
                     return;
