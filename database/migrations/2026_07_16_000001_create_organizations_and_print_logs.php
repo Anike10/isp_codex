@@ -26,9 +26,9 @@ return new class extends Migration
         });
 
         DB::table('organizations')->insert([
-            'name' => 'Kushtia Municipality',
-            'address' => 'Kushtia',
-            'mobile' => '+8801722323870',
+            'name' => (string) config('app.name', 'Ultimate Solution'),
+            'address' => null,
+            'mobile' => null,
             'is_default' => true,
             'is_active' => true,
             'created_at' => now(),
