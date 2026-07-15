@@ -290,6 +290,8 @@
 
         body.no-signature .signatures { display: none; }
         body.no-signature .no-sign-note { display: block; }
+        .bank-information { display: none; }
+        body.show-bank-information .bank-information { display: block; }
 
         body.bw-print {
             --ink: #111;
@@ -483,7 +485,7 @@
         }
     </style>
 </head>
-<body class="bw-print {{ $selectedOrganization->default_without_signature ? 'no-signature' : '' }} {{ $invoice->items->count() >= 30 ? 'compact-print dense-print' : ($invoice->items->count() >= 25 ? 'compact-print' : '') }}">
+<body class="bw-print {{ $selectedOrganization->default_without_signature ? 'no-signature' : '' }} {{ $selectedOrganization->show_bank_info_on_invoice ? 'show-bank-information' : '' }} {{ $invoice->items->count() >= 30 ? 'compact-print dense-print' : ($invoice->items->count() >= 25 ? 'compact-print' : '') }}">
     @php
         $serialFormatter = app(\App\Support\SerialNumberParser::class);
         $numberToWords = function (int $number) use (&$numberToWords): string {
@@ -545,6 +547,12 @@
             <input type="checkbox" id="noSignatureOption" @checked($selectedOrganization->default_without_signature)>
             Print without signature
         </label>
+        @if(filled($selectedOrganization->bank_account_number))
+            <label class="print-option">
+                <input type="checkbox" id="showBankInformationOption" @checked($selectedOrganization->show_bank_info_on_invoice)>
+                Show bank information
+            </label>
+        @endif
         @include('partials.organization_print_selector')
         <button onclick="recordPrint('invoice', {{ $invoice->id }})" class="btn">Print Bill</button>
         <a href="{{ route('invoices.delivery-challan', ['invoice' => $invoice, 'organization_id' => $selectedOrganization->id]) }}" target="_blank" class="btn secondary">Challan</a>
@@ -640,15 +648,17 @@
                     <p class="strong" style="margin-top:8px;">Invoice Note</p>
                     <p style="white-space:pre-line">{{ $invoice->public_note }}</p>
                 @endif
-                @if($selectedOrganization->show_bank_info_on_invoice && filled($selectedOrganization->bank_account_number))
-                    <p class="strong" style="margin-top:8px">Bank Account</p>
-                    <p>
-                        @if($selectedOrganization->bank_name)Bank: {{ $selectedOrganization->bank_name }}<br>@endif
-                        @if($selectedOrganization->bank_account_name)Account Name: {{ $selectedOrganization->bank_account_name }}<br>@endif
-                        Account No: {{ $selectedOrganization->bank_account_number }}
-                        @if($selectedOrganization->bank_branch)<br>Branch: {{ $selectedOrganization->bank_branch }}@endif
-                        @if($selectedOrganization->bank_routing_number)<br>Routing No: {{ $selectedOrganization->bank_routing_number }}@endif
-                    </p>
+                @if(filled($selectedOrganization->bank_account_number))
+                    <div class="bank-information">
+                        <p class="strong" style="margin-top:8px">Bank Account</p>
+                        <p>
+                            @if($selectedOrganization->bank_name)Bank: {{ $selectedOrganization->bank_name }}<br>@endif
+                            @if($selectedOrganization->bank_account_name)Account Name: {{ $selectedOrganization->bank_account_name }}<br>@endif
+                            Account No: {{ $selectedOrganization->bank_account_number }}
+                            @if($selectedOrganization->bank_branch)<br>Branch: {{ $selectedOrganization->bank_branch }}@endif
+                            @if($selectedOrganization->bank_routing_number)<br>Routing No: {{ $selectedOrganization->bank_routing_number }}@endif
+                        </p>
+                    </div>
                 @endif
             </div>
 
@@ -692,6 +702,11 @@
 
         noSignatureOption.addEventListener('change', function () {
             document.body.classList.toggle('no-signature', this.checked);
+        });
+
+        const showBankInformationOption = document.getElementById('showBankInformationOption');
+        showBankInformationOption?.addEventListener('change', function () {
+            document.body.classList.toggle('show-bank-information', this.checked);
         });
 
         document.querySelectorAll('input[name="print_mode"]').forEach((input) => {

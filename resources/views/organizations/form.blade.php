@@ -12,7 +12,8 @@
 <div class="full"><label>Address</label><textarea name="address">{{ old('address', $organization->address) }}</textarea></div>
 <div class="full"><label>Print Footer Note</label><textarea name="footer_note">{{ old('footer_note', $organization->footer_note) }}</textarea></div>
 <div class="full"><h2 style="margin-top:8px">Print Preferences</h2></div>
-<div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="default_without_signature" value="1" style="width:auto" @checked(old('default_without_signature', $organization->default_without_signature))> Print without signature selected by default</label></div>
+<div class="full muted">These settings control which options start selected on the print page. The operator can still change them before printing.</div>
+<div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="default_without_signature" value="1" style="width:auto" @checked(old('default_without_signature', $organization->default_without_signature))> Default: Print without signature</label></div>
 <div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="show_organization_selector" value="1" style="width:auto" @checked(old('show_organization_selector', $organization->exists ? $organization->show_organization_selector : true))> Show Organization selector on print pages</label></div>
 <div class="full"><h2 style="margin-top:8px">Bank Account Information</h2></div>
 <div><label>Bank Name</label><input name="bank_name" value="{{ old('bank_name', $organization->bank_name) }}"></div>
@@ -20,7 +21,7 @@
 <div><label>Account Number</label><input name="bank_account_number" value="{{ old('bank_account_number', $organization->bank_account_number) }}"></div>
 <div><label>Branch</label><input name="bank_branch" value="{{ old('bank_branch', $organization->bank_branch) }}"></div>
 <div><label>Routing Number</label><input name="bank_routing_number" value="{{ old('bank_routing_number', $organization->bank_routing_number) }}"></div>
-<div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="show_bank_info_on_invoice" value="1" style="width:auto" @checked(old('show_bank_info_on_invoice', $organization->show_bank_info_on_invoice))> Show bank information on Invoice</label></div>
+<div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="show_bank_info_on_invoice" value="1" style="width:auto" @checked(old('show_bank_info_on_invoice', $organization->show_bank_info_on_invoice))> Default: Show bank information on Invoice print</label><span class="muted">Requires an Account Number. This option can be changed again on the Invoice print page.</span></div>
 <div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="is_default" value="1" style="width:auto" @checked(old('is_default', $organization->is_default))> Default organization</label></div>
 <div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="is_active" value="1" style="width:auto" @checked(old('is_active', $organization->exists ? $organization->is_active : true))> Active for printing</label></div>
 <div class="full"><button class="btn" type="submit">Save Organization</button></div></form>

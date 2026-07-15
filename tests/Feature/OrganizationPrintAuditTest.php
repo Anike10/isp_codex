@@ -35,6 +35,8 @@ class OrganizationPrintAuditTest extends TestCase
             ->assertSee('class="bw-print no-signature', false)
             ->assertSee('id="noSignatureOption" checked', false)
             ->assertDontSee('id="printOrganization"', false)
+            ->assertSee('id="showBankInformationOption" checked', false)
+            ->assertSee('show-bank-information')
             ->assertSee('Test Bank')->assertSee('123456789')->assertSee('987654');
 
         $this->actingAs($user)->postJson(route('print-logs.store'), ['organization_id' => $organization->id, 'document_type' => 'invoice', 'printable_id' => $invoice->id])->assertOk();
