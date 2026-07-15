@@ -123,4 +123,9 @@ class Invoice extends Model
     {
         return $this->morphMany(RecordVersion::class, 'versionable')->latest('id');
     }
+
+    public function printLogs(): MorphMany
+    {
+        return $this->morphMany(PrintLog::class, 'printable')->latest('printed_at');
+    }
 }

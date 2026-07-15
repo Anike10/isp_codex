@@ -6,6 +6,7 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentAccount;
 use App\Services\PaymentService;
+use App\Services\PrintContextService;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
 
@@ -60,18 +61,20 @@ class PaymentController extends Controller
         return view('payments.show', compact('payment', 'versions'));
     }
 
-    public function voucher(Payment $payment)
+    public function voucher(Request $request, Payment $payment, PrintContextService $printContext)
     {
-        return view('accounting.voucher', [
+        return view('accounting.voucher', array_merge([
             'voucher' => $this->paymentVoucherData($payment),
-        ]);
+            'printable' => $payment, 'documentType' => 'payment_voucher',
+        ], $printContext->for($request)));
     }
 
-    public function thermalVoucher(Payment $payment)
+    public function thermalVoucher(Request $request, Payment $payment, PrintContextService $printContext)
     {
-        return view('accounting.thermal_voucher', [
+        return view('accounting.thermal_voucher', array_merge([
             'voucher' => $this->paymentVoucherData($payment),
-        ]);
+            'printable' => $payment, 'documentType' => 'payment_thermal_voucher',
+        ], $printContext->for($request)));
     }
 
     public function store(Request $request, PaymentService $paymentService)

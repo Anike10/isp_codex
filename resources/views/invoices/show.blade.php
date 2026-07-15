@@ -92,6 +92,23 @@
 </section>
 @endif
 
+<section class="card" style="margin-top:16px">
+    <div class="topbar" style="margin-bottom:12px">
+        <div><h2 style="margin:0">Print History</h2><div class="muted">Organization and user recorded when Print was pressed.</div></div>
+        <a class="btn light" href="{{ route('print-logs.index') }}">All Print History</a>
+    </div>
+    <table>
+        <thead><tr><th>Printed</th><th>Document</th><th>Organization</th><th>Printed By</th><th>IP</th></tr></thead>
+        <tbody>
+        @forelse($invoice->printLogs as $printLog)
+            <tr><td>{{ $printLog->printed_at->format('Y-m-d H:i:s') }}</td><td>{{ ucwords(str_replace('_', ' ', $printLog->document_type)) }}</td><td>{{ $printLog->organization->name }}</td><td>{{ $printLog->user?->name ?: $printLog->user_name ?: 'Unknown' }}</td><td>{{ $printLog->ip_address ?: 'N/A' }}</td></tr>
+        @empty
+            <tr><td colspan="5">This invoice has not been printed yet.</td></tr>
+        @endforelse
+        </tbody>
+    </table>
+</section>
+
 @if ($canRecordPayment)
 <section class="card" id="record-payment" style="margin-top:16px">
     <h2>Record Payment</h2>

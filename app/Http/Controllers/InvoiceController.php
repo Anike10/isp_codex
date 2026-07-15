@@ -14,6 +14,7 @@ use App\Models\Subscription;
 use App\Observers\RecordVersionObserver;
 use App\Services\BillingService;
 use App\Services\InventoryService;
+use App\Services\PrintContextService;
 use App\Services\PaymentService;
 use App\Services\RecordVersionService;
 use App\Support\SerialNumberParser;
@@ -814,7 +815,7 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice)
     {
-        $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items.saleReturnItems.saleReturn']);
+        $invoice->load(['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items.saleReturnItems.saleReturn', 'printLogs.organization', 'printLogs.user']);
         $versions = $invoice->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
         $paymentAccounts = collect();
@@ -829,26 +830,26 @@ class InvoiceController extends Controller
         return view('invoices.show', compact('invoice', 'paymentAccounts', 'versions'));
     }
 
-    public function challan(Invoice $invoice)
+    public function challan(Request $request, Invoice $invoice, PrintContextService $printContext)
     {
         $invoice->load(['customer', 'items']);
         $paymentNote = $this->paymentNoteForInvoice($invoice);
 
-        return view('invoices.challan', compact('invoice', 'paymentNote'));
+        return view('invoices.challan', array_merge(compact('invoice', 'paymentNote'), $printContext->for($request)));
     }
 
-    public function quotation(Invoice $invoice)
+    public function quotation(Request $request, Invoice $invoice, PrintContextService $printContext)
     {
         $invoice->load(['customer', 'items']);
 
-        return view('invoices.quotation', compact('invoice'));
+        return view('invoices.quotation', array_merge(compact('invoice'), $printContext->for($request)));
     }
 
-    public function deliveryChallan(Invoice $invoice)
+    public function deliveryChallan(Request $request, Invoice $invoice, PrintContextService $printContext)
     {
         $invoice->load(['customer', 'items']);
 
-        return view('invoices.delivery_challan', compact('invoice'));
+        return view('invoices.delivery_challan', array_merge(compact('invoice'), $printContext->for($request)));
     }
 
     public function generate(Request $request, BillingService $billingService)

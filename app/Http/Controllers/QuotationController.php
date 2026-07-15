@@ -9,6 +9,7 @@ use App\Models\Quotation;
 use App\Observers\RecordVersionObserver;
 use App\Services\InventoryService;
 use App\Services\RecordVersionService;
+use App\Services\PrintContextService;
 use App\Support\SerialNumberParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -148,11 +149,11 @@ class QuotationController extends Controller
         return redirect()->route('quotations.show', $quotation)->with('success', 'Quotation updated successfully.');
     }
 
-    public function print(Quotation $quotation)
+    public function print(Request $request, Quotation $quotation, PrintContextService $printContext)
     {
         $quotation->load(['customer', 'items']);
 
-        return view('invoices.quotation', ['invoice' => $quotation]);
+        return view('invoices.quotation', array_merge(['invoice' => $quotation], $printContext->for($request)));
     }
 
     private function validateData(Request $request): array

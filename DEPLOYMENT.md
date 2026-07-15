@@ -419,6 +419,15 @@ When future deployment or operational details change, update this file and cross
 
 Also update Markdown docs in the same task whenever a code change adds or changes routes, permissions, migrations, artisan commands, `.env` keys, production operations, or business rules. Do not store real passwords, API keys, database credentials, SMS tokens, or private keys in documentation.
 
+## Organization-based printing and audit history
+
+- Migration `2026_07_16_000001_create_organizations_and_print_logs.php` creates the organization master list and immutable print-event records.
+- Billing > Organizations manages multiple print identities and the default organization.
+- Each organization can control whether `Print without signature` starts selected, whether the Organization selector is visible on print previews, and whether its saved bank account details appear on invoices.
+- Every supported print preview lets the operator select an active organization. The audit row is created only when the preview's Print button is pressed, before the browser print dialog opens.
+- Billing > Print History shows all document, organization, operator, time, and IP records. Each invoice detail page also shows its own print history.
+- Production deployment must run `php artisan migrate --force` and `php artisan optimize:clear` before verifying invoice, quotation, challan, payment voucher, thermal voucher, and expense voucher printing.
+
 OLT production note:
 
 - OLT polling is read-only. Live data commands should only be `show`/`display` commands.

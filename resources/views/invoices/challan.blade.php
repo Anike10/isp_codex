@@ -483,7 +483,7 @@
         }
     </style>
 </head>
-<body class="bw-print {{ $invoice->items->count() >= 30 ? 'compact-print dense-print' : ($invoice->items->count() >= 25 ? 'compact-print' : '') }}">
+<body class="bw-print {{ $selectedOrganization->default_without_signature ? 'no-signature' : '' }} {{ $invoice->items->count() >= 30 ? 'compact-print dense-print' : ($invoice->items->count() >= 25 ? 'compact-print' : '') }}">
     @php
         $serialFormatter = app(\App\Support\SerialNumberParser::class);
         $numberToWords = function (int $number) use (&$numberToWords): string {
@@ -542,11 +542,12 @@
             <label><input type="radio" name="print_mode" value="color"> Color</label>
         </div>
         <label class="print-option">
-            <input type="checkbox" id="noSignatureOption">
+            <input type="checkbox" id="noSignatureOption" @checked($selectedOrganization->default_without_signature)>
             Print without signature
         </label>
-        <button onclick="window.print()" class="btn">Print Bill</button>
-        <a href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank" class="btn secondary">Challan</a>
+        @include('partials.organization_print_selector')
+        <button onclick="recordPrint('invoice', {{ $invoice->id }})" class="btn">Print Bill</button>
+        <a href="{{ route('invoices.delivery-challan', ['invoice' => $invoice, 'organization_id' => $selectedOrganization->id]) }}" target="_blank" class="btn secondary">Challan</a>
         <a href="{{ route('invoices.show', $invoice) }}" class="btn light">Back to Invoice</a>
     </div>
 
@@ -554,10 +555,15 @@
         <section class="brand-bar">
             <div class="company">
                 <div>
-                    <h1>Kushtia Municipality</h1>
+                    @if($selectedOrganization->logo_url)<img src="{{ $selectedOrganization->logo_url }}" alt="{{ $selectedOrganization->name }} logo" style="max-width:90px;max-height:52px;margin-bottom:6px">@endif
+                    <h1>{{ $selectedOrganization->name }}</h1>
                     <p>
-                        Kushtia<br>
-                        Mobile - +8801722323870
+                        {!! nl2br(e($selectedOrganization->address ?: '')) !!}
+                        @if($selectedOrganization->mobile)<br>Mobile - {{ $selectedOrganization->mobile }}@endif
+                        @if($selectedOrganization->phone)<br>Phone - {{ $selectedOrganization->phone }}@endif
+                        @if($selectedOrganization->email)<br>{{ $selectedOrganization->email }}@endif
+                        @if($selectedOrganization->website)<br>{{ $selectedOrganization->website }}@endif
+                        @if($selectedOrganization->tax_id)<br>Tax/BIN - {{ $selectedOrganization->tax_id }}@endif
                     </p>
                 </div>
             </div>
@@ -634,6 +640,16 @@
                     <p class="strong" style="margin-top:8px;">Invoice Note</p>
                     <p style="white-space:pre-line">{{ $invoice->public_note }}</p>
                 @endif
+                @if($selectedOrganization->show_bank_info_on_invoice && filled($selectedOrganization->bank_account_number))
+                    <p class="strong" style="margin-top:8px">Bank Account</p>
+                    <p>
+                        @if($selectedOrganization->bank_name)Bank: {{ $selectedOrganization->bank_name }}<br>@endif
+                        @if($selectedOrganization->bank_account_name)Account Name: {{ $selectedOrganization->bank_account_name }}<br>@endif
+                        Account No: {{ $selectedOrganization->bank_account_number }}
+                        @if($selectedOrganization->bank_branch)<br>Branch: {{ $selectedOrganization->bank_branch }}@endif
+                        @if($selectedOrganization->bank_routing_number)<br>Routing No: {{ $selectedOrganization->bank_routing_number }}@endif
+                    </p>
+                @endif
             </div>
 
             <div class="totals">
@@ -666,6 +682,7 @@
         </div>
 
         <div class="footer">
+            @if($selectedOrganization->footer_note)<div style="white-space:pre-line">{{ $selectedOrganization->footer_note }}</div>@endif
             Powered by Ultimate Solution
         </div>
     </main>
@@ -683,5 +700,6 @@
             });
         });
     </script>
+    @include('partials.print_audit_script')
 </body>
 </html>

@@ -1,0 +1,7 @@
+@extends('layouts.app')
+@section('content')
+<div class="topbar"><div><h1>Organizations</h1><div class="muted">Select any active organization from a print preview.</div></div><div class="actions"><a class="btn" href="{{ route('organizations.create') }}">Add Organization</a><a class="btn light" href="{{ route('print-logs.index') }}">Print History</a></div></div>
+<table><thead><tr><th>Name</th><th>Contact</th><th>Address</th><th>Status</th><th></th></tr></thead><tbody>
+@forelse($organizations as $organization)<tr><td><strong>{{ $organization->name }}</strong>@if($organization->is_default)<br><span class="badge active">Default</span>@endif</td><td>{{ $organization->mobile ?: 'N/A' }}@if($organization->phone)<br>{{ $organization->phone }}@endif @if($organization->email)<br>{{ $organization->email }}@endif</td><td style="white-space:pre-line">{{ $organization->address ?: 'N/A' }}</td><td><span class="badge {{ $organization->is_active ? 'active' : 'inactive' }}">{{ $organization->is_active ? 'Active' : 'Inactive' }}</span></td><td><a class="btn light" href="{{ route('organizations.edit', $organization) }}">Edit</a></td></tr>@empty<tr><td colspan="5">No organization saved.</td></tr>@endforelse
+</tbody></table>
+@endsection

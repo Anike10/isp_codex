@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
-    <title>{{ $title ?? 'Kushtia Municipality' }}</title>
+    <title>{{ $title ?? ($appOrganization?->name ?? config('app.name')) }}</title>
     <style>
         :root { color-scheme: light; --ink:#172033; --muted:#667085; --line:#d8dee9; --bg:#f4f7fb; --panel:#fff; --brand:#116149; --accent:#1d76c9; --warn:#b45309; --danger:#b42318; --zebra:#edf4f8; --zebra-soft:#f7fafc; }
         * { box-sizing: border-box; }
@@ -191,7 +191,7 @@
 <div class="shell">
     <header class="app-header">
     <div class="header-inner">
-        <div class="brand">Kushtia Municipality</div>
+        <div class="brand">{{ $appOrganization?->name ?? config('app.name') }}</div>
         <button class="nav-toggle" type="button" aria-label="Open menu" aria-controls="app-nav" aria-expanded="false">
             <span class="nav-toggle-lines"></span>
         </button>
@@ -248,6 +248,8 @@
                             <a href="{{ route('quotations.index') }}">Quotations</a>
                             <a href="{{ route('quotations.create') }}">Create Quotation</a>
                             <a href="{{ route('invoices.payment-note-default.edit') }}">Payment Note Default</a>
+                            <a href="{{ route('organizations.index') }}">Organizations</a>
+                            <a href="{{ route('print-logs.index') }}">Print History</a>
                         @endif
                         @if (auth()->user()?->hasPermission('manage_payments'))
                             <a href="{{ route('payments.index') }}">Payments</a>

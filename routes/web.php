@@ -21,6 +21,8 @@ use App\Http\Controllers\OltOnuController;
 use App\Http\Controllers\PackageController;
 use App\Http\Controllers\PaymentAccountController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\PrintLogController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseBillController;
@@ -58,6 +60,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_invoices')->group(function () {
+        Route::resource('organizations', OrganizationController::class)->only(['index', 'create', 'store', 'edit', 'update']);
         Route::get('quotations/{quotation}/print', [QuotationController::class, 'print'])->name('quotations.print');
         Route::post('quotations/{quotation}/make-invoice', [InvoiceController::class, 'makeFromQuotation'])->name('quotations.make-invoice');
         Route::resource('quotations', QuotationController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
@@ -72,6 +75,11 @@ Route::middleware('auth')->group(function () {
         Route::get('invoices/{invoice}/quotation', [InvoiceController::class, 'quotation'])->name('invoices.quotation');
         Route::get('invoices/{invoice}/delivery-challan', [InvoiceController::class, 'deliveryChallan'])->name('invoices.delivery-challan');
         Route::resource('sale-returns', SaleReturnController::class)->only(['index', 'create', 'store', 'show']);
+    });
+
+    Route::middleware('permission:manage_invoices,manage_payments,manage_expenses')->group(function () {
+        Route::get('print-history', [PrintLogController::class, 'index'])->name('print-logs.index');
+        Route::post('print-history', [PrintLogController::class, 'store'])->name('print-logs.store');
     });
 
     Route::post('invoices/{invoice}/finalize', [InvoiceController::class, 'finalize'])

@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login - Kushtia Municipality</title>
+    <title>Login - {{ $appOrganization?->name ?? config('app.name') }}</title>
     <style>
         :root { --ink:#172033; --muted:#667085; --line:#d8dee9; --bg:#f4f7fb; --brand:#116149; --danger:#b42318; }
         * { box-sizing:border-box; }
@@ -23,7 +23,7 @@
 <body>
     <form method="post" action="{{ route('login.store') }}" class="login">
         @csrf
-        <h1>Kushtia Municipality</h1>
+        <h1>{{ $appOrganization?->name ?? config('app.name') }}</h1>
         <div class="muted">Sign in to manage your ISP system</div>
 
         @if ($errors->any())

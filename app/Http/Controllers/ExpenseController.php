@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\PaymentAccount;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use App\Services\PrintContextService;
 
 class ExpenseController extends Controller
 {
@@ -141,7 +142,7 @@ class ExpenseController extends Controller
         ]);
     }
 
-    public function voucher(Expense $expense)
+    public function voucher(Request $request, Expense $expense, PrintContextService $printContext)
     {
         $expense->load(['account', 'employee']);
         $typeLabel = $expense->category === 'bonus'
@@ -150,7 +151,7 @@ class ExpenseController extends Controller
         $party = $expense->employee_name
             ?: (Expense::CATEGORIES[$expense->category] ?? ucfirst($expense->category));
 
-        return view('accounting.voucher', [
+        return view('accounting.voucher', array_merge([
             'voucher' => [
                 'title' => 'Expense Voucher',
                 'voucher_no' => 'EXP-'.$expense->id,
@@ -167,6 +168,7 @@ class ExpenseController extends Controller
                 'note' => $expense->note ?: 'No note added.',
                 'back_url' => route('expenses.show', $expense),
             ],
-        ]);
+            'printable' => $expense, 'documentType' => 'expense_voucher',
+        ], $printContext->for($request)));
     }
 }

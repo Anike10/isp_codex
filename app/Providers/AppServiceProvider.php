@@ -15,6 +15,7 @@ use App\Models\InvoiceItem;
 use App\Models\MikrotikRouter;
 use App\Models\OltDevice;
 use App\Models\OltOnu;
+use App\Models\Organization;
 use App\Models\Payment;
 use App\Models\PaymentAccount;
 use App\Models\PaymentAllocation;
@@ -38,6 +39,8 @@ use App\Observers\EntryByObserver;
 use App\Observers\RecordVersionObserver;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\View;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -56,6 +59,10 @@ class AppServiceProvider extends ServiceProvider
     {
         Paginator::defaultView('vendor.pagination.app');
         Paginator::defaultSimpleView('vendor.pagination.app');
+
+        View::composer(['layouts.app', 'auth.login'], function ($view) {
+            $view->with('appOrganization', Schema::hasTable('organizations') ? Organization::defaultOrganization() : null);
+        });
 
         foreach ([
             BkashSmsPayment::class,

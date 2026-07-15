@@ -63,15 +63,17 @@
         <button class="paper-option" type="button" data-paper="72">72mm</button>
         <button class="paper-option" type="button" data-paper="80">80mm</button>
     </div>
-    <button class="btn" type="button" onclick="window.print()">Print Thermal</button>
+    @include('partials.organization_print_selector')
+    <button class="btn" type="button" onclick="recordPrint('{{ $documentType }}', {{ $printable->id }})">Print Thermal</button>
     <a class="btn light" href="{{ $voucher['back_url'] }}">Back</a>
 </div>
 
 <main class="preview-shell">
     <section class="receipt">
         <header class="brand">
-            <h1>Kushtia Municipality</h1>
-            <p>Kushtia<br>Mobile - +8801722323870<br>{{ now()->format('Y-m-d H:i') }}</p>
+            @if($selectedOrganization->logo_url)<img src="{{ $selectedOrganization->logo_url }}" alt="{{ $selectedOrganization->name }} logo" style="max-width:28mm;max-height:14mm;margin-bottom:2mm">@endif
+            <h1>{{ $selectedOrganization->name }}</h1>
+            <p>{!! nl2br(e($selectedOrganization->address ?: '')) !!}@if($selectedOrganization->mobile)<br>Mobile - {{ $selectedOrganization->mobile }}@endif @if($selectedOrganization->phone)<br>Phone - {{ $selectedOrganization->phone }}@endif @if($selectedOrganization->email)<br>{{ $selectedOrganization->email }}@endif @if($selectedOrganization->tax_id)<br>Tax/BIN - {{ $selectedOrganization->tax_id }}@endif<br>{{ now()->format('Y-m-d H:i') }}</p>
         </header>
 
         <div class="title">{{ $voucher['title'] }}</div>
@@ -132,5 +134,6 @@
 
     setPaperWidth(localStorage.getItem(storageKey) || '80');
 </script>
+@include('partials.print_audit_script')
 </body>
 </html>
