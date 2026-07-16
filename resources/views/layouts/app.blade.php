@@ -23,7 +23,7 @@
         .nav-toggle[aria-expanded="true"] .nav-toggle-lines { transform:rotate(45deg); }
         .nav-toggle[aria-expanded="true"] .nav-toggle-lines::before { transform:translateY(6px) rotate(90deg); }
         .nav-toggle[aria-expanded="true"] .nav-toggle-lines::after { opacity:0; }
-        .nav { display:flex; gap:6px; align-items:center; flex-wrap:wrap; flex:1; padding:2px 0; }
+        .nav { grid-column:3; display:flex; gap:6px; align-items:center; flex-wrap:wrap; flex:1; padding:2px 0; }
         .nav a, .nav summary { color:#dbe7ff; padding:9px 11px; border-radius:6px; white-space:nowrap; font-size:14px; cursor:pointer; }
         .nav a:hover, .nav summary:hover, .nav details[open] summary { background:rgba(255,255,255,.1); color:white; }
         .nav summary { list-style:none; user-select:none; }
@@ -35,6 +35,10 @@
         .nav details[open] .nav-menu { display:grid; gap:2px; }
         .nav-menu a { color:var(--ink); display:block; padding:9px 10px; border-radius:6px; }
         .nav-menu a:hover { background:#eef4fb; color:var(--ink); }
+        .user-session { grid-column:4; display:flex; align-items:center; gap:8px; min-width:0; }
+        .current-user { display:flex; flex-direction:column; min-width:0; padding:6px 9px; border:1px solid rgba(255,255,255,.16); border-radius:6px; background:rgba(255,255,255,.08); line-height:1.15; }
+        .current-user-label { color:#aebfdd; font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+        .current-user-name { max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:white; font-size:13px; }
         .logout-form { margin:0; }
         .logout-form .btn { min-height:34px; padding:8px 12px; white-space:nowrap; }
         .main { max-width:1440px; margin:0 auto; padding:24px 20px 34px; }
@@ -119,7 +123,7 @@
             .header-inner { grid-template-columns:minmax(0, 1fr) auto auto; gap:8px; padding:10px 12px; }
             .brand { font-size:18px; min-width:0; overflow:hidden; text-overflow:ellipsis; }
             .nav-toggle { display:inline-flex; grid-column:3; grid-row:1; }
-            .logout-form { grid-column:2; grid-row:1; }
+            .user-session { grid-column:2; grid-row:1; }
             .nav { display:none; grid-column:1 / -1; grid-row:2; width:100%; padding:8px; gap:6px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); border-radius:8px; box-shadow:inset 0 1px 0 rgba(255,255,255,.08); }
             .nav.is-open { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); align-items:stretch; }
             .nav a, .nav summary { display:flex; align-items:center; justify-content:space-between; min-height:42px; white-space:normal; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.08); line-height:1.2; }
@@ -154,7 +158,11 @@
             .nav details[open] .nav-menu { grid-template-columns:1fr; }
             .nav-menu a { border-radius:6px; font-size:13px; min-height:38px; color:var(--ink); }
             .btn { width:100%; justify-content:center; }
-            .logout-form { margin-left:auto; }
+            .user-session { margin-left:auto; gap:5px; }
+            .current-user { padding:5px 7px; }
+            .current-user-label { display:none; }
+            .current-user-name { max-width:90px; font-size:12px; }
+            .logout-form { margin:0; }
             .logout-form .btn { width:auto; min-height:32px; padding:7px 10px; font-size:12px; }
             input, select, textarea { font-size:16px; }
             .main { padding:12px 10px 24px; }
@@ -341,10 +349,16 @@
                 </details>
             @endif
         </nav>
-        <form class="logout-form" method="post" action="{{ route('logout') }}">
-            @csrf
-            <button class="btn light" type="submit">Logout</button>
-        </form>
+        <div class="user-session">
+            <div class="current-user" title="Logged in as {{ auth()->user()?->name }}">
+                <span class="current-user-label">Logged in user</span>
+                <strong class="current-user-name">{{ auth()->user()?->name }}</strong>
+            </div>
+            <form class="logout-form" method="post" action="{{ route('logout') }}">
+                @csrf
+                <button class="btn light" type="submit">Logout</button>
+            </form>
+        </div>
     </div>
     </header>
     <main class="main">

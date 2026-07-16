@@ -33,6 +33,8 @@ class FleetManagementTest extends TestCase
             ->assertSee(route('fleet.maintenance.logs.create'), false)
             ->assertSee(route('fleet.reports.maintenance-due'), false)
             ->assertSee(route('fleet.create'), false)
+            ->assertSee('Logged in user')
+            ->assertSee($user->name)
             ->assertSee('Add Vehicle')
             ->assertSeeInOrder([route('fleet.index'), route('fleet.create'), route('fleet.reports')], false)
             ->assertSee($vehicle->registration_no);
