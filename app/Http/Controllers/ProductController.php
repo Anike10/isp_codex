@@ -68,7 +68,10 @@ class ProductController extends Controller
 
     public function create()
     {
-        return view('products.create', $this->productTaxonomyOptions());
+        return view('products.create', [
+            'suggestedSku' => $this->nextSku(),
+            ...$this->productTaxonomyOptions(),
+        ]);
     }
 
     public function edit(Product $product)
@@ -262,6 +265,25 @@ class ProductController extends Controller
             'categoryTree' => ProductCategory::query()->with('children.children.children.children')->whereNull('parent_id')->orderBy('name')->get(),
             'categoryOptions' => ProductCategory::query()->with('parent.parent.parent')->orderBy('name')->get(),
         ];
+    }
+
+    private function nextSku(): string
+    {
+        $nextSequence = Product::query()
+            ->where('sku', 'like', 'SKU-%')
+            ->pluck('sku')
+            ->reduce(function (int $maximum, string $sku): int {
+                return preg_match('/^SKU-(\d+)$/', $sku, $matches)
+                    ? max($maximum, (int) $matches[1])
+                    : $maximum;
+            }, 0) + 1;
+
+        do {
+            $sku = 'SKU-'.str_pad((string) $nextSequence, 6, '0', STR_PAD_LEFT);
+            $nextSequence++;
+        } while (Product::query()->where('sku', $sku)->exists());
+
+        return $sku;
     }
 
     private function validatedProductData(Request $request, ?Product $product = null): array

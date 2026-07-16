@@ -17,6 +17,30 @@ class ProductControllerTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_product_create_page_suggests_next_editable_sku(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_products')->firstOrFail());
+        Product::create([
+            'name' => 'Existing Product',
+            'sku' => 'SKU-000009',
+            'purchase_price' => 100,
+            'sale_price' => 120,
+            'stock_quantity' => 0,
+            'low_stock_alert' => 5,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('products.create'))->assertOk();
+
+        preg_match('/<input[^>]*name="sku"[^>]*>/', $response->getContent(), $skuInput);
+
+        $this->assertNotEmpty($skuInput);
+        $this->assertStringContainsString('value="SKU-000010"', $skuInput[0]);
+        $this->assertStringNotContainsString('readonly', $skuInput[0]);
+        $this->assertStringNotContainsString('disabled', $skuInput[0]);
+        $response->assertSee('Generated automatically. You can edit it before saving.');
+    }
+
     public function test_product_can_be_created_with_brand_category_and_subcategory(): void
     {
         $user = User::factory()->create();

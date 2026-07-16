@@ -44,7 +44,11 @@
         @method('PUT')
     @endif
     <div><label>Name</label><input name="name" value="{{ old('name', $product->name ?? '') }}" required></div>
-    <div><label>SKU</label><input name="sku" value="{{ old('sku', $product->sku ?? '') }}" required></div>
+    <div>
+        <label>SKU</label>
+        <input name="sku" value="{{ old('sku', $product->sku ?? $suggestedSku ?? '') }}" required>
+        @unless($isEditing)<span class="muted">Generated automatically. You can edit it before saving.</span>@endunless
+    </div>
     <div><label>Barcode</label><input name="barcode" value="{{ old('barcode', $product->barcode ?? '') }}" placeholder="Optional barcode"></div>
     <div>
         <label>Product Type</label>
