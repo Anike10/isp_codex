@@ -729,6 +729,7 @@ Stock movement behavior:
 - Fleet report date ranges are inclusive. Duty filters use interval overlap, while expenses and maintenance use their actual event dates. Totals are SQL aggregates and detail tables paginate independently.
 - Keep fleet reports as separate operator pages: `/fleet/reports` is only the selection hub; expenses, maintenance, and staff duty history live at `/fleet/reports/expenses`, `/fleet/reports/maintenance`, and `/fleet/reports/duty-history` with their own relevant filters and pagination.
 - Fleet periodic-maintenance entry is centralized at `/fleet/maintenance/schedules`, repair/service logging at `/fleet/maintenance/logs/create`, and the read-only date/mileage due report at `/fleet/reports/maintenance-due`. Status is overdue if either date or mileage has passed, due if either equals the current date/mileage, upcoming otherwise, and unscheduled when both next-due fields are empty.
+- Fleet maintenance and vehicle expense records stay editable only while `finalized_at` is null. Update/finalize actions must lock the row, store full snapshots through `RecordVersionService`, and show those versions on the detail page; once `Final & Lock` is used, never allow another edit.
 - `vehicle_maintenance_logs.maintenance_item_id` is optional. Use `work_name` for one-off repairs; only logs linked to a periodic item recalculate that schedule.
 
 ### Sale returns and invoice settlement

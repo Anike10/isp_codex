@@ -8,6 +8,8 @@
 - `/fleet/maintenance/logs/create`: central repair/check/change/service entry. A periodic item is optional, so one-off clutch/body/electrical repairs can be logged directly; scheduled work recalculates the next due date and mileage. Each work record can include up to 10 private expense/work photos and one YouTube video link.
 - `/fleet/settings`: Fleet-specific settings, including the maximum allowed size per uploaded maintenance image (1-50 MB, default 5 MB).
 - `/fleet/{vehicle}`: vehicle edit, maintenance schedules/logs, staff assignment and duty closing, itemized expenses, and recent history.
+- `/fleet/maintenance/logs/{log}` and `/fleet/expenses/{expense}`: complete detail pages opened by clicking any recent/report table row.
+- Maintenance and expense entries begin as editable drafts. Their detail pages provide `Edit Draft` and `Final & Lock`; finalization stores the responsible user/time and permanently blocks later edits.
 - `/fleet/reports`: report selection hub.
 - `/fleet/reports/expenses`: vehicle totals and itemized expense report with date, vehicle, employee, and category filters.
 - `/fleet/reports/maintenance`: maintenance log report with date, vehicle, and action filters.
@@ -28,6 +30,8 @@ One schedule per vehicle and item name. `maintenance_type` is `routine_check` or
 ### `vehicle_maintenance_logs`
 
 Append-only operational records for `checked`, `changed`, `serviced`, and `repaired` actions, including an optional schedule link, standalone `work_name`, date, mileage, cost, vendor, details, YouTube link, private photo attachments, and creator. Saving scheduled work recalculates the item's next date/mileage; every log advances vehicle mileage when appropriate. Photos use protected `manage_fleet` routes rather than public storage paths.
+
+Maintenance logs and vehicle expenses use `finalized_at` / `finalized_by` for draft locking. Every draft update and finalization saves a `record_versions` snapshot, including maintenance photo metadata, editor/finalizer identity, changed fields, and the old values shown in `Edit History`.
 
 ### `vehicle_assignments_history`
 

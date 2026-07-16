@@ -92,4 +92,41 @@ class FleetService
             return $log;
         });
     }
+
+    public function updateMaintenance(VehicleMaintenanceLog $log, ?VehicleMaintenanceItem $item, array $data): VehicleMaintenanceLog
+    {
+        if ($item && $item->vehicle_id !== $log->vehicle_id) {
+            throw new InvalidArgumentException('The maintenance item does not belong to this vehicle.');
+        }
+
+        return DB::transaction(function () use ($log, $item, $data): VehicleMaintenanceLog {
+            $oldItemId = $log->maintenance_item_id;
+            $log->update([...$data, 'maintenance_item_id' => $item?->id]);
+
+            foreach (array_unique(array_filter([$oldItemId, $item?->id])) as $itemId) {
+                $this->recalculateMaintenanceItem(VehicleMaintenanceItem::findOrFail($itemId));
+            }
+
+            $mileage = isset($data['mileage']) ? (int) $data['mileage'] : null;
+            if ($mileage !== null && $mileage > $log->vehicle->current_mileage) {
+                $log->vehicle->update(['current_mileage' => $mileage]);
+            }
+
+            return $log->refresh();
+        });
+    }
+
+    private function recalculateMaintenanceItem(VehicleMaintenanceItem $item): void
+    {
+        $latest = $item->logs()->latest('service_date')->latest('id')->first();
+        $latestChange = $item->logs()->where('action', '!=', 'checked')->latest('service_date')->latest('id')->first();
+
+        $item->update([
+            'last_checked_at' => $latest?->service_date,
+            'last_changed_at' => $latestChange?->service_date,
+            'last_service_mileage' => $latest?->mileage,
+            'next_due_date' => $latest && $item->interval_days ? $latest->service_date->copy()->addDays($item->interval_days) : null,
+            'next_due_mileage' => $latest && $item->interval_mileage && $latest->mileage !== null ? $latest->mileage + $item->interval_mileage : null,
+        ]);
+    }
 }

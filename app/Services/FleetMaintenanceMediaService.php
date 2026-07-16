@@ -48,8 +48,11 @@ class FleetMaintenanceMediaService
         };
     }
 
-    /** @param array<int, UploadedFile> $photos */
-    public function attachPhotos(VehicleMaintenanceLog $log, array $photos): void
+    /**
+     * @param  array<int, UploadedFile>  $photos
+     * @return array<int, string>
+     */
+    public function attachPhotos(VehicleMaintenanceLog $log, array $photos): array
     {
         $storedPaths = [];
 
@@ -68,5 +71,7 @@ class FleetMaintenanceMediaService
             Storage::disk('local')->delete($storedPaths);
             throw $exception;
         }
+
+        return $storedPaths;
     }
 }

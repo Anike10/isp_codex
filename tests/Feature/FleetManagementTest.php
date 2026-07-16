@@ -5,9 +5,11 @@ namespace Tests\Feature;
 use App\Models\AppSetting;
 use App\Models\Employee;
 use App\Models\Permission;
+use App\Models\RecordVersion;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleAssignmentHistory;
+use App\Models\VehicleExpense;
 use App\Models\VehicleMaintenanceItem;
 use App\Models\VehicleMaintenanceLog;
 use App\Services\FleetMaintenanceMediaService;
@@ -234,7 +236,48 @@ class FleetManagementTest extends TestCase
         $this->actingAs($user)->get(route('fleet.maintenance.photos.show', $log->photos->first()))->assertOk();
         $this->actingAs(User::factory()->create())->get(route('fleet.maintenance.photos.show', $log->photos->first()))->assertForbidden();
         $this->actingAs($user)->get(route('fleet.reports.maintenance'))
-            ->assertOk()->assertSee('Photo 1')->assertSee('Photo 2')->assertSee('YouTube Video');
+            ->assertOk()->assertSee('Photo 1')->assertSee('Photo 2')->assertSee('YouTube Video')
+            ->assertSee(route('fleet.maintenance-logs.show', $log), false)
+            ->assertSee('Click to view maintenance details');
+        $this->actingAs($user)->get(route('fleet.maintenance-logs.show', $log))
+            ->assertOk()->assertSee('Complete service and workshop information')
+            ->assertSee('Gearbox repair')->assertSee('8,500.00')
+            ->assertSee('parts-receipt.png')->assertSee('Open YouTube Video')
+            ->assertSee('Edit Draft')->assertSee('Final & Lock', false)->assertSee('Edit History');
+
+        $removedPhoto = $log->photos->first();
+        $this->actingAs($user)->put(route('fleet.maintenance-logs.update', $log), [
+            'work_name' => 'Gearbox repair',
+            'action' => 'repaired',
+            'service_date' => '2026-07-16',
+            'mileage' => 10600,
+            'cost' => 9000,
+            'vendor' => 'Updated Workshop',
+            'details' => 'Gearbox work updated before final.',
+            'youtube_url' => 'https://youtu.be/abc123xyz',
+            'remove_photo_ids' => [$removedPhoto->id],
+            'photos' => [$this->fakePng('final-receipt.png', 300)],
+        ])->assertRedirect(route('fleet.maintenance-logs.show', $log));
+
+        $log->refresh()->load('photos');
+        $this->assertSame('9000.00', $log->cost);
+        $this->assertSame('Updated Workshop', $log->vendor);
+        $this->assertCount(2, $log->photos);
+        Storage::disk('local')->assertMissing($removedPhoto->path);
+        $maintenanceEdit = RecordVersion::where('versionable_type', VehicleMaintenanceLog::class)->where('versionable_id', $log->id)->latest()->firstOrFail();
+        $this->assertSame('fleet_maintenance_edit', $maintenanceEdit->metadata['source']);
+        $this->assertSame(8500.0, (float) $maintenanceEdit->old_values['cost']);
+        $this->assertCount(2, $maintenanceEdit->old_values['photos']);
+
+        $this->actingAs($user)->post(route('fleet.maintenance-logs.finalize', $log))->assertRedirect(route('fleet.maintenance-logs.show', $log));
+        $this->assertNotNull($log->refresh()->finalized_at);
+        $this->assertSame($user->id, $log->finalized_by);
+        $this->assertSame('fleet_maintenance_finalize', RecordVersion::where('versionable_type', VehicleMaintenanceLog::class)->where('versionable_id', $log->id)->latest()->firstOrFail()->metadata['source']);
+        $this->actingAs($user)->get(route('fleet.maintenance-logs.edit', $log))->assertRedirect(route('fleet.maintenance-logs.show', $log));
+        $this->actingAs($user)->put(route('fleet.maintenance-logs.update', $log), ['cost' => 1])->assertRedirect(route('fleet.maintenance-logs.show', $log));
+        $this->assertSame('9000.00', $log->refresh()->cost);
+        $this->actingAs($user)->get(route('fleet.maintenance-logs.show', $log))
+            ->assertOk()->assertSee('Finalized and locked')->assertDontSee(route('fleet.maintenance-logs.edit', $log), false);
     }
 
     public function test_fleet_settings_control_each_image_maximum_size_and_youtube_must_be_valid(): void
@@ -281,6 +324,39 @@ class FleetManagementTest extends TestCase
         $this->assertDatabaseHas('vehicle_expenses', ['vehicle_id' => $vehicle->id, 'employee_id' => $driver->id, 'created_by' => $user->id, 'category' => 'fuel_diesel', 'amount' => '4200.00']);
         $this->actingAs($user)->get(route('fleet.reports.expenses', ['from' => '2026-07-01', 'to' => '2026-07-31']))
             ->assertOk()->assertSee('TRIP-101')->assertSee('4,200.00')->assertSee('Expense Driver');
+        $expense = VehicleExpense::where('trip_reference', 'TRIP-101')->firstOrFail();
+        $this->actingAs($user)->get(route('fleet.reports.expenses'))
+            ->assertOk()->assertSee(route('fleet.expenses.show', $expense), false)
+            ->assertSee('Click to view expense details');
+        $this->actingAs($user)->get(route('fleet.expenses.show', $expense))
+            ->assertOk()->assertSee('Complete payment and trip information')
+            ->assertSee('TRIP-101')->assertSee('Expense Driver')->assertSee('4,200.00')
+            ->assertSee('Edit Draft')->assertSee('Edit History');
+
+        $this->actingAs($user)->put(route('fleet.expenses.update', $expense), [
+            'employee_id' => $driver->id,
+            'category' => 'fuel_diesel',
+            'expense_date' => '2026-07-16',
+            'amount' => 4300,
+            'quantity' => 41,
+            'unit' => 'Liter',
+            'mileage' => 11100,
+            'trip_reference' => 'TRIP-101',
+            'vendor' => 'Updated Fuel Station',
+            'description' => 'Updated expense before final.',
+        ])->assertRedirect(route('fleet.expenses.show', $expense));
+        $this->assertSame('4300.00', $expense->refresh()->amount);
+        $expenseEdit = RecordVersion::where('versionable_type', VehicleExpense::class)->where('versionable_id', $expense->id)->latest()->firstOrFail();
+        $this->assertSame('fleet_expense_edit', $expenseEdit->metadata['source']);
+        $this->assertSame(4200.0, (float) $expenseEdit->old_values['amount']);
+
+        $this->actingAs($user)->post(route('fleet.expenses.finalize', $expense))->assertRedirect(route('fleet.expenses.show', $expense));
+        $this->assertNotNull($expense->refresh()->finalized_at);
+        $this->assertSame($user->id, $expense->finalized_by);
+        $this->assertSame('fleet_expense_finalize', RecordVersion::where('versionable_type', VehicleExpense::class)->where('versionable_id', $expense->id)->latest()->firstOrFail()->metadata['source']);
+        $this->actingAs($user)->get(route('fleet.expenses.edit', $expense))->assertRedirect(route('fleet.expenses.show', $expense));
+        $this->actingAs($user)->put(route('fleet.expenses.update', $expense), ['amount' => 1])->assertRedirect(route('fleet.expenses.show', $expense));
+        $this->assertSame('4300.00', $expense->refresh()->amount);
         $this->actingAs($user)->get(route('fleet.reports.expenses', ['from' => '2026-08-01', 'to' => '2026-08-31']))
             ->assertOk()->assertDontSee('TRIP-101');
     }

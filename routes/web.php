@@ -130,9 +130,17 @@ Route::middleware('auth')->group(function () {
         Route::post('fleet/maintenance/schedules', [FleetMaintenanceController::class, 'storeSchedule'])->name('fleet.maintenance.schedules.store');
         Route::get('fleet/maintenance/logs/create', [FleetMaintenanceController::class, 'createLog'])->name('fleet.maintenance.logs.create');
         Route::post('fleet/maintenance/logs', [FleetMaintenanceController::class, 'storeLog'])->name('fleet.maintenance.logs.store');
+        Route::get('fleet/maintenance/logs/{maintenanceLog}/edit', [FleetOperationController::class, 'editMaintenanceLog'])->name('fleet.maintenance-logs.edit');
+        Route::put('fleet/maintenance/logs/{maintenanceLog}', [FleetOperationController::class, 'updateMaintenanceLog'])->name('fleet.maintenance-logs.update');
+        Route::post('fleet/maintenance/logs/{maintenanceLog}/finalize', [FleetOperationController::class, 'finalizeMaintenanceLog'])->name('fleet.maintenance-logs.finalize');
+        Route::get('fleet/maintenance/logs/{maintenanceLog}', [FleetOperationController::class, 'showMaintenanceLog'])->name('fleet.maintenance-logs.show');
         Route::get('fleet/settings', [FleetMaintenanceController::class, 'settings'])->name('fleet.settings');
         Route::post('fleet/settings', [FleetMaintenanceController::class, 'updateSettings'])->name('fleet.settings.update');
         Route::get('fleet/maintenance/photos/{photo}', [FleetMaintenanceController::class, 'photo'])->name('fleet.maintenance.photos.show');
+        Route::get('fleet/expenses/{expense}/edit', [FleetOperationController::class, 'editExpense'])->name('fleet.expenses.edit');
+        Route::put('fleet/expenses/{expense}', [FleetOperationController::class, 'updateExpense'])->name('fleet.expenses.update');
+        Route::post('fleet/expenses/{expense}/finalize', [FleetOperationController::class, 'finalizeExpense'])->name('fleet.expenses.finalize');
+        Route::get('fleet/expenses/{expense}', [FleetOperationController::class, 'showExpense'])->name('fleet.expenses.show');
         Route::post('fleet/{vehicle}/maintenance-items', [FleetOperationController::class, 'storeMaintenanceItem'])->name('fleet.maintenance-items.store');
         Route::post('fleet/{vehicle}/maintenance-logs', [FleetOperationController::class, 'storeMaintenanceLog'])->name('fleet.maintenance-logs.store');
         Route::post('fleet/{vehicle}/assignments', [FleetOperationController::class, 'storeAssignment'])->name('fleet.assignments.store');
