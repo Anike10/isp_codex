@@ -42,7 +42,12 @@ class OrganizationPrintAuditTest extends TestCase
         $this->actingAs($user)->postJson(route('print-logs.store'), ['organization_id' => $organization->id, 'document_type' => 'invoice', 'printable_id' => $invoice->id])->assertOk();
 
         $this->assertDatabaseHas('print_logs', ['organization_id' => $organization->id, 'printable_type' => Invoice::class, 'printable_id' => $invoice->id, 'document_type' => 'invoice', 'document_no' => 'INV-PRINT-1', 'user_id' => $user->id, 'user_name' => 'Print Operator']);
-        $this->actingAs($user)->get(route('invoices.show', $invoice))->assertOk()->assertSee('Print History')->assertSee('Second Company')->assertSee('Print Operator');
+        $this->actingAs($user)->get(route('invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('Print History')
+            ->assertSee('Second Company')
+            ->assertSee('Print Operator')
+            ->assertSeeInOrder(['Payment Allocations', 'Print History']);
     }
 
     public function test_only_one_organization_is_default_after_update(): void
