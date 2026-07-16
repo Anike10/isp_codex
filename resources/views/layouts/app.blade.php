@@ -325,6 +325,7 @@
                         <a href="{{ route('fleet.create') }}">Add Vehicle</a>
                         <a href="{{ route('fleet.maintenance.schedules') }}">Maintenance Schedules</a>
                         <a href="{{ route('fleet.maintenance.logs.create') }}">Log Repair / Maintenance</a>
+                        <a href="{{ route('fleet.settings') }}">Fleet Settings</a>
                         <a href="{{ route('fleet.reports') }}">All Fleet Reports</a>
                         <a href="{{ route('fleet.reports.expenses') }}">Vehicle Expense Report</a>
                         <a href="{{ route('fleet.reports.maintenance') }}">Maintenance Report</a>

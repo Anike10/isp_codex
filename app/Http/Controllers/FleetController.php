@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Employee;
 use App\Models\Vehicle;
 use App\Models\VehicleMaintenanceItem;
+use App\Services\FleetMaintenanceMediaService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -54,13 +55,17 @@ class FleetController extends Controller
     {
         $vehicle->load([
             'maintenanceItems' => fn ($query) => $query->orderByDesc('is_active')->orderBy('name'),
-            'maintenanceLogs' => fn ($query) => $query->with(['item', 'creator'])->latest('service_date')->latest()->limit(30),
+            'maintenanceLogs' => fn ($query) => $query->with(['item', 'creator', 'photos'])->latest('service_date')->latest()->limit(30),
             'assignments' => fn ($query) => $query->with(['employee', 'assigner'])->latest('start_date')->latest()->limit(50),
             'expenses' => fn ($query) => $query->with(['employee', 'creator'])->latest('expense_date')->latest()->limit(30),
         ]);
         $employees = Employee::where('status', 'active')->orderBy('name')->get();
 
-        return view('fleet.show', compact('vehicle', 'employees'));
+        return view('fleet.show', [
+            'vehicle' => $vehicle,
+            'employees' => $employees,
+            'imageMaxMb' => app(FleetMaintenanceMediaService::class)->imageMaxMb(),
+        ]);
     }
 
     public function update(Request $request, Vehicle $vehicle)

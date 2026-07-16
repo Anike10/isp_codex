@@ -61,7 +61,7 @@ class FleetReportController extends Controller
             ...$this->filterOptions(),
             'maintenanceTotal' => (clone $query)->sum('cost'),
             'maintenanceCount' => (clone $query)->count(),
-            'maintenanceLogs' => (clone $query)->with(['vehicle', 'item', 'creator'])
+            'maintenanceLogs' => (clone $query)->with(['vehicle', 'item', 'creator', 'photos'])
                 ->latest('service_date')->latest()->paginate($this->perPage($request))->withQueryString(),
         ]);
     }

@@ -8,8 +8,10 @@ use App\Models\VehicleAssignmentHistory;
 use App\Models\VehicleExpense;
 use App\Models\VehicleMaintenanceItem;
 use App\Models\VehicleMaintenanceLog;
+use App\Services\FleetMaintenanceMediaService;
 use App\Services\FleetService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 
@@ -27,16 +29,23 @@ class FleetOperationController extends Controller
         return back()->with('success', 'Maintenance schedule added.');
     }
 
-    public function storeMaintenanceLog(Request $request, Vehicle $vehicle, FleetService $fleetService)
+    public function storeMaintenanceLog(Request $request, Vehicle $vehicle, FleetService $fleetService, FleetMaintenanceMediaService $mediaService)
     {
         $data = $request->validate([
             'maintenance_item_id' => ['nullable', Rule::exists('vehicle_maintenance_items', 'id')->where('vehicle_id', $vehicle->id)],
             'work_name' => ['required_without:maintenance_item_id', 'nullable', 'string', 'max:255'],
             'action' => ['required', Rule::in(array_keys(VehicleMaintenanceLog::ACTIONS))], 'service_date' => ['required', 'date'],
             'mileage' => ['nullable', 'integer', 'min:0'], 'cost' => ['required', 'numeric', 'min:0'], 'vendor' => ['nullable', 'string', 'max:255'], 'details' => ['nullable', 'string', 'max:3000'],
+            'youtube_url' => ['nullable', 'string', 'max:2048', $mediaService->youtubeUrlRule()],
+            ...$mediaService->imageRules(),
         ]);
         $item = filled($data['maintenance_item_id'] ?? null) ? VehicleMaintenanceItem::findOrFail($data['maintenance_item_id']) : null;
-        $fleetService->logMaintenance($vehicle, $item, $data, $request->user()?->id);
+        $photos = $data['photos'] ?? [];
+        unset($data['photos']);
+        DB::transaction(function () use ($fleetService, $mediaService, $vehicle, $item, $data, $photos, $request): void {
+            $log = $fleetService->logMaintenance($vehicle, $item, $data, $request->user()?->id);
+            $mediaService->attachPhotos($log, $photos);
+        });
 
         return back()->with('success', 'Maintenance log saved and next due schedule updated.');
     }

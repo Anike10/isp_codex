@@ -2,12 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppSetting;
 use App\Models\Vehicle;
 use App\Models\VehicleMaintenanceItem;
 use App\Models\VehicleMaintenanceLog;
+use App\Models\VehicleMaintenancePhoto;
+use App\Services\FleetMaintenanceMediaService;
 use App\Services\FleetService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class FleetMaintenanceController extends Controller
@@ -41,7 +46,7 @@ class FleetMaintenanceController extends Controller
         return redirect()->route('fleet.maintenance.schedules', ['vehicle_id' => $data['vehicle_id']])->with('success', 'Periodic maintenance schedule added.');
     }
 
-    public function createLog(Request $request)
+    public function createLog(Request $request, FleetMaintenanceMediaService $mediaService)
     {
         $selectedVehicle = $request->filled('vehicle_id') ? Vehicle::find($request->integer('vehicle_id')) : null;
 
@@ -49,10 +54,11 @@ class FleetMaintenanceController extends Controller
             'vehicles' => Vehicle::orderBy('registration_no')->get(),
             'selectedVehicle' => $selectedVehicle,
             'maintenanceItems' => $selectedVehicle?->maintenanceItems()->where('is_active', true)->orderBy('name')->get() ?? collect(),
+            'imageMaxMb' => $mediaService->imageMaxMb(),
         ]);
     }
 
-    public function storeLog(Request $request, FleetService $fleetService)
+    public function storeLog(Request $request, FleetService $fleetService, FleetMaintenanceMediaService $mediaService)
     {
         $data = $request->validate([
             'vehicle_id' => ['required', 'exists:vehicles,id'],
@@ -64,12 +70,39 @@ class FleetMaintenanceController extends Controller
             'cost' => ['required', 'numeric', 'min:0'],
             'vendor' => ['nullable', 'string', 'max:255'],
             'details' => ['nullable', 'string', 'max:3000'],
+            'youtube_url' => ['nullable', 'string', 'max:2048', $mediaService->youtubeUrlRule()],
+            ...$mediaService->imageRules(),
         ]);
         $vehicle = Vehicle::findOrFail($data['vehicle_id']);
         $item = filled($data['maintenance_item_id'] ?? null) ? VehicleMaintenanceItem::findOrFail($data['maintenance_item_id']) : null;
-        $fleetService->logMaintenance($vehicle, $item, $data, $request->user()?->id);
+        $photos = $data['photos'] ?? [];
+        unset($data['photos']);
+        DB::transaction(function () use ($fleetService, $mediaService, $vehicle, $item, $data, $photos, $request): void {
+            $log = $fleetService->logMaintenance($vehicle, $item, $data, $request->user()?->id);
+            $mediaService->attachPhotos($log, $photos);
+        });
 
         return redirect()->route('fleet.maintenance.logs.create', ['vehicle_id' => $vehicle->id])->with('success', 'Repair / maintenance entry saved and next due schedule recalculated.');
+    }
+
+    public function settings(FleetMaintenanceMediaService $mediaService)
+    {
+        return view('fleet.settings', ['imageMaxMb' => $mediaService->imageMaxMb()]);
+    }
+
+    public function updateSettings(Request $request)
+    {
+        $data = $request->validate(['image_max_mb' => ['required', 'integer', 'min:1', 'max:50']]);
+        AppSetting::setValue(FleetMaintenanceMediaService::IMAGE_MAX_MB_SETTING, (string) $data['image_max_mb']);
+
+        return back()->with('success', 'Fleet maintenance image size setting updated.');
+    }
+
+    public function photo(VehicleMaintenancePhoto $photo)
+    {
+        abort_unless(Storage::disk('local')->exists($photo->path), 404);
+
+        return Storage::disk('local')->response($photo->path, $photo->original_name, ['Content-Type' => $photo->mime_type]);
     }
 
     private function scheduleQuery(Request $request): Builder

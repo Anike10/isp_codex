@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="topbar"><div><h1>Log Repair / Maintenance</h1><div class="muted">Record what was checked, changed, serviced, or repaired on a vehicle</div></div><div class="actions"><a class="btn secondary" href="{{ route('fleet.maintenance.schedules') }}">Maintenance Schedules</a><a class="btn light" href="{{ route('fleet.index') }}">Vehicles</a></div></div>
+<div class="topbar"><div><h1>Log Repair / Maintenance</h1><div class="muted">Record what was checked, changed, serviced, or repaired on a vehicle</div></div><div class="actions"><a class="btn secondary" href="{{ route('fleet.settings') }}">Fleet Settings</a><a class="btn secondary" href="{{ route('fleet.maintenance.schedules') }}">Maintenance Schedules</a><a class="btn light" href="{{ route('fleet.index') }}">Vehicles</a></div></div>
 
 <form method="get" class="card form-grid" style="margin-bottom:16px">
     <div><label>Select Vehicle First</label><select name="vehicle_id" required onchange="this.form.submit()"><option value="">Select vehicle</option>@foreach($vehicles as $vehicle)<option value="{{ $vehicle->id }}" @selected($selectedVehicle?->id===$vehicle->id)>{{ $vehicle->registration_no }} — {{ $vehicle->name }}</option>@endforeach</select></div>
@@ -10,7 +10,7 @@
 
 @if($selectedVehicle)
 <div class="grid stats" style="margin-bottom:16px"><div class="card stat"><span class="muted">Vehicle</span><strong style="font-size:18px">{{ $selectedVehicle->registration_no }}</strong></div><div class="card stat"><span class="muted">Current Mileage</span><strong>{{ number_format($selectedVehicle->current_mileage) }} km</strong></div></div>
-<form method="post" action="{{ route('fleet.maintenance.logs.store') }}" class="card form-grid">
+<form method="post" action="{{ route('fleet.maintenance.logs.store') }}" enctype="multipart/form-data" class="card form-grid">
     @csrf
     <input type="hidden" name="vehicle_id" value="{{ $selectedVehicle->id }}">
     <div><label>Scheduled Item (Optional)</label><select name="maintenance_item_id"><option value="">General / unscheduled repair</option>@foreach($maintenanceItems as $item)<option value="{{ $item->id }}" @selected((int)old('maintenance_item_id',request('maintenance_item_id'))===$item->id)>{{ $item->name }} — {{ ucfirst($item->dueStatus($selectedVehicle->current_mileage)) }}</option>@endforeach</select></div>
@@ -21,6 +21,8 @@
     <div><label>Cost</label><input type="number" min="0" step="0.01" name="cost" value="{{ old('cost',0) }}" required></div>
     <div><label>Workshop / Vendor</label><input name="vendor" value="{{ old('vendor') }}"></div>
     <div class="full"><label>What Was Done</label><textarea name="details" rows="3" placeholder="Parts changed, condition found, repair details">{{ old('details') }}</textarea></div>
+    <div class="full"><label>Expense / Work Photos</label><input type="file" name="photos[]" accept="image/jpeg,image/png,image/webp" multiple><div class="muted" style="margin-top:6px">Up to {{ \App\Services\FleetMaintenanceMediaService::MAX_PHOTO_COUNT }} photos; maximum {{ $imageMaxMb }} MB per image.</div></div>
+    <div class="full"><label>YouTube Video Link</label><input type="url" name="youtube_url" value="{{ old('youtube_url') }}" placeholder="https://youtu.be/... or https://www.youtube.com/watch?v=..."><div class="muted" style="margin-top:6px">Upload the work video to YouTube, then paste its link here.</div></div>
     <div class="full"><button class="btn">Save Work / Maintenance</button></div>
 </form>
 @endif

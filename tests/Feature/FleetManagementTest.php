@@ -2,14 +2,19 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppSetting;
 use App\Models\Employee;
 use App\Models\Permission;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleAssignmentHistory;
 use App\Models\VehicleMaintenanceItem;
+use App\Models\VehicleMaintenanceLog;
+use App\Services\FleetMaintenanceMediaService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class FleetManagementTest extends TestCase
@@ -201,6 +206,68 @@ class FleetManagementTest extends TestCase
             ->assertOk()->assertSee('Clutch plate repair')->assertSee('6,500.00');
     }
 
+    public function test_maintenance_work_accepts_private_photos_and_a_youtube_link(): void
+    {
+        Storage::fake('local');
+        [$user, $vehicle] = $this->fixture();
+
+        $this->actingAs($user)->post(route('fleet.maintenance.logs.store'), [
+            'vehicle_id' => $vehicle->id,
+            'work_name' => 'Gearbox repair',
+            'action' => 'repaired',
+            'service_date' => '2026-07-16',
+            'cost' => 8500,
+            'youtube_url' => 'https://youtu.be/abc123xyz',
+            'photos' => [
+                $this->fakePng('parts-receipt.png', 500),
+                $this->fakePng('work-complete.png', 400),
+            ],
+        ])->assertRedirect(route('fleet.maintenance.logs.create', ['vehicle_id' => $vehicle->id]));
+
+        $log = VehicleMaintenanceLog::with('photos')->firstOrFail();
+        $this->assertSame('https://youtu.be/abc123xyz', $log->youtube_url);
+        $this->assertCount(2, $log->photos);
+        foreach ($log->photos as $photo) {
+            Storage::disk('local')->assertExists($photo->path);
+        }
+
+        $this->actingAs($user)->get(route('fleet.maintenance.photos.show', $log->photos->first()))->assertOk();
+        $this->actingAs(User::factory()->create())->get(route('fleet.maintenance.photos.show', $log->photos->first()))->assertForbidden();
+        $this->actingAs($user)->get(route('fleet.reports.maintenance'))
+            ->assertOk()->assertSee('Photo 1')->assertSee('Photo 2')->assertSee('YouTube Video');
+    }
+
+    public function test_fleet_settings_control_each_image_maximum_size_and_youtube_must_be_valid(): void
+    {
+        Storage::fake('local');
+        [$user, $vehicle] = $this->fixture();
+
+        $this->actingAs($user)->get(route('fleet.settings'))
+            ->assertOk()->assertSee('Maximum Size Per Image');
+        $this->actingAs($user)->post(route('fleet.settings.update'), ['image_max_mb' => 1])->assertRedirect();
+        $this->assertSame('1', AppSetting::value(FleetMaintenanceMediaService::IMAGE_MAX_MB_SETTING));
+
+        $payload = [
+            'vehicle_id' => $vehicle->id,
+            'work_name' => 'Body repair',
+            'action' => 'repaired',
+            'service_date' => '2026-07-16',
+            'cost' => 1000,
+        ];
+
+        $this->actingAs($user)->post(route('fleet.maintenance.logs.store'), [
+            ...$payload,
+            'photos' => [$this->fakePng('too-large.png', 1100)],
+        ])->assertSessionHasErrors('photos.0');
+
+        $this->actingAs($user)->post(route('fleet.maintenance.logs.store'), [
+            ...$payload,
+            'youtube_url' => 'https://example.com/not-youtube',
+        ])->assertSessionHasErrors('youtube_url');
+
+        $this->assertDatabaseCount('vehicle_maintenance_logs', 0);
+    }
+
     public function test_itemized_expense_is_linked_and_reported_with_date_filter(): void
     {
         [$user, $vehicle] = $this->fixture();
@@ -228,5 +295,12 @@ class FleetManagementTest extends TestCase
         ]);
 
         return [$user, $vehicle];
+    }
+
+    private function fakePng(string $name, int $kilobytes): UploadedFile
+    {
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', true);
+
+        return UploadedFile::fake()->createWithContent($name, $png.str_repeat("\0", max(0, ($kilobytes * 1024) - strlen($png))));
     }
 }

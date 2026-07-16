@@ -4,12 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class VehicleMaintenanceLog extends Model
 {
     public const ACTIONS = ['checked' => 'Checked', 'changed' => 'Changed / Replaced', 'serviced' => 'Serviced', 'repaired' => 'Repaired'];
 
-    protected $fillable = ['vehicle_id', 'maintenance_item_id', 'work_name', 'action', 'service_date', 'mileage', 'cost', 'vendor', 'details', 'created_by'];
+    protected $fillable = ['vehicle_id', 'maintenance_item_id', 'work_name', 'action', 'service_date', 'mileage', 'cost', 'vendor', 'details', 'youtube_url', 'created_by'];
 
     protected function casts(): array
     {
@@ -29,5 +30,10 @@ class VehicleMaintenanceLog extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function photos(): HasMany
+    {
+        return $this->hasMany(VehicleMaintenancePhoto::class);
     }
 }

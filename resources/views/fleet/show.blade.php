@@ -72,7 +72,7 @@
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr));margin-bottom:16px">
     <section class="card">
         <h2>Log Check / Change / Service</h2>
-        <form method="post" action="{{ route('fleet.maintenance-logs.store',$vehicle) }}" class="form-grid">
+        <form method="post" action="{{ route('fleet.maintenance-logs.store',$vehicle) }}" enctype="multipart/form-data" class="form-grid">
             @csrf
             <div><label>Scheduled Item (Optional)</label><select name="maintenance_item_id"><option value="">General / unscheduled repair</option>@foreach($vehicle->maintenanceItems as $item)<option value="{{ $item->id }}">{{ $item->name }}</option>@endforeach</select></div>
             <div><label>Work / Repair Name</label><input name="work_name" placeholder="Clutch repair, body work, electrical repair"></div>
@@ -82,6 +82,8 @@
             <div><label>Cost</label><input type="number" min="0" step="0.01" name="cost" value="0" required></div>
             <div><label>Vendor</label><input name="vendor"></div>
             <div class="full"><label>Details</label><textarea name="details" rows="2"></textarea></div>
+            <div class="full"><label>Expense / Work Photos</label><input type="file" name="photos[]" accept="image/jpeg,image/png,image/webp" multiple><div class="muted" style="margin-top:6px">Up to {{ \App\Services\FleetMaintenanceMediaService::MAX_PHOTO_COUNT }} photos; {{ $imageMaxMb }} MB per image.</div></div>
+            <div class="full"><label>YouTube Video Link</label><input type="url" name="youtube_url" placeholder="https://youtu.be/..."></div>
             <div class="full"><button class="btn">Save Maintenance Log</button></div>
         </form>
     </section>
@@ -108,8 +110,8 @@
 @forelse($vehicle->assignments as $assignment)<tr><td>{{ ucfirst($assignment->duty_role) }}</td><td>{{ $assignment->employee->name }}</td><td>{{ $assignment->start_date->format('Y-m-d') }}</td><td>{{ $assignment->end_date?->format('Y-m-d') ?? 'Current' }}</td><td>{{ $assignment->assigner?->name ?? 'N/A' }}</td><td>@if(!$assignment->end_date)<form method="post" action="{{ route('fleet.assignments.end',$assignment) }}" class="actions">@csrf @method('patch')<input type="date" name="end_date" value="{{ now()->toDateString() }}" required style="width:150px"><button class="btn light">End Duty</button></form>@else — @endif</td></tr>
 @empty<tr><td colspan="6">No assignment history.</td></tr>@endforelse</tbody></table></section>
 
-<section class="card" style="margin-bottom:16px"><h2>Recent Maintenance</h2><table><thead><tr><th>Date</th><th>Item</th><th>Action</th><th>Mileage</th><th>Cost</th><th>Details</th></tr></thead><tbody>
-@forelse($vehicle->maintenanceLogs as $log)<tr><td>{{ $log->service_date->format('Y-m-d') }}</td><td>{{ $log->item?->name ?? $log->work_name ?? 'General' }}</td><td>{{ ucfirst($log->action) }}</td><td>{{ $log->mileage ? number_format($log->mileage) : 'N/A' }}</td><td>{{ number_format((float)$log->cost,2) }}</td><td>{{ $log->details ?? 'N/A' }}</td></tr>@empty<tr><td colspan="6">No maintenance logs.</td></tr>@endforelse</tbody></table></section>
+<section class="card" style="margin-bottom:16px"><h2>Recent Maintenance</h2><table><thead><tr><th>Date</th><th>Item</th><th>Action</th><th>Mileage</th><th>Cost</th><th>Details</th><th>Photos / Video</th></tr></thead><tbody>
+@forelse($vehicle->maintenanceLogs as $log)<tr><td>{{ $log->service_date->format('Y-m-d') }}</td><td>{{ $log->item?->name ?? $log->work_name ?? 'General' }}</td><td>{{ ucfirst($log->action) }}</td><td>{{ $log->mileage ? number_format($log->mileage) : 'N/A' }}</td><td>{{ number_format((float)$log->cost,2) }}</td><td>{{ $log->details ?? 'N/A' }}</td><td><div class="actions">@foreach($log->photos as $index => $photo)<a href="{{ route('fleet.maintenance.photos.show', $photo) }}" target="_blank" rel="noopener">Photo {{ $index + 1 }}</a>@endforeach @if($log->youtube_url)<a href="{{ $log->youtube_url }}" target="_blank" rel="noopener">YouTube Video</a>@endif @if($log->photos->isEmpty() && !$log->youtube_url) N/A @endif</div></td></tr>@empty<tr><td colspan="7">No maintenance logs.</td></tr>@endforelse</tbody></table></section>
 
 <section class="card"><h2>Recent Expenses</h2><table><thead><tr><th>Date</th><th>Category</th><th>Driver</th><th>Trip</th><th>Amount</th><th>Description</th></tr></thead><tbody>
 @forelse($vehicle->expenses as $expense)<tr><td>{{ $expense->expense_date->format('Y-m-d') }}</td><td>{{ \App\Models\VehicleExpense::CATEGORIES[$expense->category] }}</td><td>{{ $expense->employee?->name ?? 'N/A' }}</td><td>{{ $expense->trip_reference ?? 'N/A' }}</td><td>{{ number_format((float)$expense->amount,2) }}</td><td>{{ $expense->description ?? 'N/A' }}</td></tr>@empty<tr><td colspan="6">No vehicle expenses.</td></tr>@endforelse</tbody></table></section>
