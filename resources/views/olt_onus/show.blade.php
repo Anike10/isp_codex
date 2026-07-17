@@ -37,7 +37,7 @@
             </div>
             <div class="summary-item">
                 <span class="muted">Name</span>
-                <strong>{{ $oltOnu->name ?: 'N/A' }}</strong>
+                <strong>{{ $oltOnu->displayName() ?: 'N/A' }}</strong>
             </div>
             <div class="summary-item">
                 <span class="muted">Serial / MAC</span>

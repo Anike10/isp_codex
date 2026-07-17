@@ -23,6 +23,12 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (TokenMismatchException $e, Request $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Your login session expired. Reload the page and sign in again.',
+                ], 419);
+            }
+
             return redirect()
                 ->route('login')
                 ->withErrors(['email' => 'Your login session expired. Please sign in again.'])
@@ -32,6 +38,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->respond(function (Response $response) {
             if ($response->getStatusCode() !== 419) {
                 return $response;
+            }
+
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'message' => 'Your login session expired. Reload the page and sign in again.',
+                ], 419);
             }
 
             return redirect()

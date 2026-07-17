@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class OltDevice extends Model
 {
@@ -69,5 +70,15 @@ class OltDevice extends Model
     public function onus(): HasMany
     {
         return $this->hasMany(OltOnu::class);
+    }
+
+    public function refreshRuns(): HasMany
+    {
+        return $this->hasMany(OltRefreshRun::class);
+    }
+
+    public function latestRefreshRun(): HasOne
+    {
+        return $this->hasOne(OltRefreshRun::class)->latestOfMany();
     }
 }

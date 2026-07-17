@@ -37,7 +37,7 @@ OUTPUT;
     {
         $output = <<<'OUTPUT'
 PON/ONU  Mac-Address        Status Auth Cfg Reg-time            ONU-Name     ONU-Desc
-1/1      00:8d:ff:02:2a:17 Online TRUE TRUE 2026/05/18 09:43:42 Access krishi bank 13-10-25 -25
+1/1      00:8d:ff:02:2a:17 Online TRUE TRUE 2026/05/18 09:43:42      Access krish 13-10-25 -25
 ----------------------------------------------------------------------------------------------------
 PON/ONU ONU-Name     Mac-address       Temperature  Voltage      Bias         Tx power     Rx power
 ----------------------------------------------------------------------------------------------------
@@ -52,8 +52,24 @@ OUTPUT;
         $this->assertSame('00:8d:ff:02:2a:17', $records[0]['mac_address']);
         $this->assertSame('online', $records[0]['status']);
         $this->assertSame('Access krishi bank', $records[0]['name']);
+        $this->assertSame('13-10-25 -25', $records[0]['description']);
         $this->assertSame('2026-05-18 09:43:42', $records[0]['last_registered_at']->format('Y-m-d H:i:s'));
         $this->assertSame(-28.2391, $records[0]['rx_power_dbm']);
+    }
+
+    public function test_it_parses_epon_name_and_description_fixed_width_columns_without_registration_time(): void
+    {
+        $output = <<<'OUTPUT'
+ PON/ONU     Mac-Address    Status   Auth  Cfg     Reg-time            ONU-Name     ONU-Desc
+ 1/14    70:a5:6a:0b:4d:ca Initial   TRUE  FALSE  -                        IBBL_Bank    2/9/24 https
+OUTPUT;
+
+        $records = (new OltLiveOutputParser())->parse($output);
+
+        $this->assertCount(1, $records);
+        $this->assertSame('IBBL_Bank', $records[0]['name']);
+        $this->assertSame('2/9/24 https', $records[0]['description']);
+        $this->assertArrayNotHasKey('last_registered_at', $records[0]);
     }
 
     public function test_it_ignores_invalid_utf8_terminal_bytes(): void
@@ -248,6 +264,7 @@ show service-port all
  10    41   PON01 3   1    --   --   --    --            --    Up    Enable  Auto    --     0
 show mac-address all
  SVP   MAC                 VLAN  Port    Ont  Gem   MAC-Type    ONT-Name
+ 9     80:af:ca:72:d3:d1   22    PON01   3    1     dynamic     Munna_Mamun
  10    80:af:ca:72:d3:d1   41    PON01   3    1     dynamic     Munna_Mamun
  39    80:af:ca:ba:ad:f3   21    PON02   3    1     dynamic     KPS_Prijom
 OUTPUT;
@@ -266,6 +283,38 @@ OUTPUT;
         $this->assertSame(2, $records[1]['pon_port']);
     }
 
+    public function test_gpon_learned_mac_name_fills_a_missing_ont_name(): void
+    {
+        $output = <<<'OUTPUT'
+show mac-address all
+ SVP   MAC                 VLAN  Port    Ont  Gem   MAC-Type    ONT-Name
+ 39    80:af:ca:ba:ad:f3   21    PON02   3    1     dynamic     KPS_Prijom
+OUTPUT;
+
+        $records = (new OltLiveOutputParser())->parse($output);
+
+        $this->assertCount(1, $records);
+        $this->assertSame(2, $records[0]['pon_port']);
+        $this->assertSame(3, $records[0]['onu_id']);
+        $this->assertSame('KPS_Prijom', $records[0]['name']);
+    }
+
+    public function test_gpon_duplicate_fdb_vlan_for_same_service_port_keeps_latest_vlan(): void
+    {
+        $output = <<<'OUTPUT'
+show mac-address port gpon 1
+ SVP   MAC                 VLAN  Port    Ont  Gem   MAC-Type    ONT-Name
+ 41    14:6b:9c:b5:4b:45   22    PON01   0    1     dynamic     tisha_Surovi 13.3
+ 41    14:6b:9c:b5:4b:45   41    PON01   0    1     dynamic     tisha_Surovi 13.3
+OUTPUT;
+
+        $records = (new OltLiveOutputParser())->parse($output);
+
+        $this->assertCount(1, $records);
+        $this->assertSame([41], array_column($records[0]['port_vlans'], 'vlan'));
+        $this->assertSame([41], array_column($records[0]['learned_macs'], 'vlan'));
+    }
+
     public function test_it_parses_hsgq_gpon_ont_detail_times(): void
     {
         $output = <<<'OUTPUT'
@@ -275,6 +324,7 @@ show ont-info 3
  ONU Name                      : Munna_Mamun
  SerialNumber                  : DF1Ba6f9799d
  Distance                      : 244
+ ISP ONU Type                  : HGU
  Last up Time                  : 2026/05/18 21:49:30
  Last down Time                : 2026/05/18 21:39:14
  Last down cause               : LOS
@@ -288,8 +338,25 @@ OUTPUT;
         $this->assertSame('Munna_Mamun', $records[0]['name']);
         $this->assertSame('DF1Ba6f9799d', $records[0]['mac_address']);
         $this->assertSame(244, $records[0]['distance_m']);
+        $this->assertSame('HGU', $records[0]['onu_type']);
         $this->assertSame('2026-05-18 21:49:30', $records[0]['last_registered_at']->format('Y-m-d H:i:s'));
         $this->assertSame('2026-05-18 21:39:14', $records[0]['last_deregistered_at']->format('Y-m-d H:i:s'));
         $this->assertSame('LOS', $records[0]['last_deregister_reason']);
+    }
+
+    public function test_it_parses_hsgq_gpon_ethernet_port_capability(): void
+    {
+        $output = <<<'OUTPUT'
+PON/ONU                       : 01/002
+Number of ETH ports           : 4
+Number of POTS ports          : 0
+OUTPUT;
+
+        $records = (new OltLiveOutputParser())->parse($output);
+
+        $this->assertCount(1, $records);
+        $this->assertSame(1, $records[0]['pon_port']);
+        $this->assertSame(2, $records[0]['onu_id']);
+        $this->assertSame(4, $records[0]['ethernet_port_count']);
     }
 }

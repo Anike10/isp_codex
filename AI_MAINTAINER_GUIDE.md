@@ -1430,6 +1430,8 @@ port-vlan {ethernet_port} mode tag {vlan} pri 0
 save
 ```
 
+- The deny-list also has a standalone `Delete` action. It removes only the blacklist MAC in the selected PON and saves; it must not bind, authorize, or create a cached ONU row.
+
 The live parser tries to extract:
 
 - PON port and ONU ID

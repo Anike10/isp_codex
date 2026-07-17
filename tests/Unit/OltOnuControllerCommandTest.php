@@ -11,6 +11,41 @@ use Tests\TestCase;
 
 class OltOnuControllerCommandTest extends TestCase
 {
+    public function test_gpon_ethernet_port_state_commands_use_selected_port_and_state(): void
+    {
+        $commands = $this->callPrivateCommandBuilder('ethernetPortStateCommands', [
+            new OltOnu(['pon_port' => 2, 'onu_id' => 7]),
+            new OltProtocolProfile([
+                'port_admin_context_command' => 'interface gpon {pon_port}',
+                'port_admin_command' => 'ont port attribute {onu_id} eth {port} admin-status {state}',
+                'save_config_command' => 'save',
+            ]),
+            3,
+            'disable',
+        ]);
+
+        $this->assertSame([
+            'interface gpon 2',
+            'ont port attribute 7 eth 3 admin-status disable',
+            'exit',
+            'save',
+        ], $commands);
+    }
+
+    public function test_hsgq_epon_ethernet_port_state_commands_use_shutdown_syntax(): void
+    {
+        $olt = new OltDevice(['protocol_profile' => 'hsgq_epon']);
+        $profile = new OltProtocolProfile(['save_config_command' => 'save']);
+        $onu = new OltOnu(['pon_port' => 8, 'onu_id' => 4]);
+        $onu->setRelation('oltDevice', $olt);
+
+        $disable = $this->callPrivateCommandBuilder('ethernetPortStateCommands', [$onu, $profile, 1, 'disable']);
+        $enable = $this->callPrivateCommandBuilder('ethernetPortStateCommands', [$onu, $profile, 1, 'enable']);
+
+        $this->assertSame(['interface onu 8/4', 'port-shutdown 1', 'exit', 'save'], $disable);
+        $this->assertSame(['interface onu 8/4', 'no port-shutdown 1', 'exit', 'save'], $enable);
+    }
+
     public function test_hsgq_gpon_authorize_commands_do_not_enter_ont_context(): void
     {
         $commands = $this->callPrivateCommandBuilder('authorizeOnuCommands', [
@@ -64,6 +99,22 @@ class OltOnuControllerCommandTest extends TestCase
             'exit',
             'interface onu 1/5',
             'port-vlan 1 mode tag 100 pri 0',
+            'exit',
+            'save',
+        ], $commands);
+    }
+
+    public function test_hsgq_epon_deny_delete_only_removes_blacklist_entry_and_saves(): void
+    {
+        $commands = $this->callPrivateCommandBuilder('denyListDeleteCommands', [
+            7,
+            '70:a8:e3:f3:75:47',
+            new OltProtocolProfile(['save_config_command' => 'save']),
+        ]);
+
+        $this->assertSame([
+            'interface epon 7',
+            'blacklist delete mac 70:a8:e3:f3:75:47',
             'exit',
             'save',
         ], $commands);
@@ -313,6 +364,86 @@ class OltOnuControllerCommandTest extends TestCase
             'show vlan all',
             'show mac address-table interface epon 7',
         ], $commands);
+    }
+
+    public function test_single_gpon_full_poll_includes_ethernet_capability_command(): void
+    {
+        $commands = $this->callPrivateCommandBuilder('singleOnuPollCommands', [
+            new OltDevice(['protocol_profile' => 'hsgq_gpon']),
+            new OltOnu(['pon_port' => 3, 'onu_id' => 5]),
+            'show ont-info all',
+            'show ont-optical all',
+            null,
+            null,
+            new OltProtocolProfile([
+                'pon_interface_command' => 'interface gpon {pon_port}',
+            ]),
+            true,
+        ]);
+
+        $this->assertContains('show ont-capability 5', $commands);
+        $this->assertSame([
+            'interface gpon 3',
+            'show ont-info 5',
+            'show ont-optical all',
+            'show ont-capability 5',
+            'exit',
+        ], $commands);
+    }
+
+    public function test_full_epon_vlan_refresh_includes_onus_with_cached_vlan_data(): void
+    {
+        $onuIds = $this->callPrivateCommandBuilder('onuIdsForVlanRefresh', [
+            [
+                ['pon_port' => 2, 'onu_id' => 3],
+                ['pon_port' => 2, 'onu_id' => 7],
+                ['pon_port' => 3, 'onu_id' => 1],
+            ],
+            new OltDevice(),
+            2,
+            true,
+        ]);
+
+        $this->assertSame([3, 7], $onuIds);
+    }
+
+    public function test_gpon_hgu_vlan_command_uses_veip_without_physical_port_number(): void
+    {
+        $command = $this->callPrivateCommandBuilder('fillOltCommandTemplate', [
+            'ont port native-vlan {onu_id} {port_path} vlan {vlan} {priority}',
+            new OltOnu(['pon_port' => 1, 'onu_id' => 2, 'onu_type' => 'HGU']),
+            41,
+            1,
+        ]);
+
+        $this->assertSame('ont port native-vlan 2 veip vlan 41 0', $command);
+    }
+
+    public function test_hsgq_epon_transparent_vlan_commands_restore_transparent_mode(): void
+    {
+        $commands = $this->callPrivateCommandBuilder('transparentVlanCommands', [
+            new OltOnu(['pon_port' => 2, 'onu_id' => 7]),
+            new OltProtocolProfile(['vlan_write_context_command' => 'interface onu {pon_port}/{onu_id}']),
+            [['port' => 1, 'mode' => 'tag', 'vlan' => 41]],
+        ]);
+
+        $this->assertSame([
+            'interface onu 2/7',
+            'port-vlan 1 mode transparent',
+            'exit',
+        ], $commands);
+    }
+
+    public function test_gpon_sfu_vlan_command_uses_selected_ethernet_port(): void
+    {
+        $command = $this->callPrivateCommandBuilder('fillOltCommandTemplate', [
+            'ont port native-vlan {onu_id} {port_path} vlan {vlan} {priority}',
+            new OltOnu(['pon_port' => 1, 'onu_id' => 2, 'onu_type' => 'SFU']),
+            41,
+            3,
+        ]);
+
+        $this->assertSame('ont port native-vlan 2 eth 3 vlan 41 0', $command);
     }
 
     private function callPrivateCommandBuilder(string $method, array $arguments): mixed

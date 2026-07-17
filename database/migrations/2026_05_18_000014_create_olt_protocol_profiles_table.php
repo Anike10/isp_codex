@@ -53,7 +53,7 @@ return new class extends Migration
                 'onu_context_command' => null,
                 'supports_vlan_polling' => false,
                 'supports_mac_polling' => false,
-                'default_read_context_commands' => 'config',
+                'default_read_context_commands' => "enable\nconfig",
                 'default_onu_status_command' => 'show ont-info all',
                 'default_onu_power_command' => 'show ont-optical all',
                 'default_onu_alarm_command' => null,

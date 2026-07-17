@@ -8,7 +8,13 @@ A Laravel 12 application for an ISP and computer service business.
 - Customer and internet package management
 - Product-only customers can be saved without an ISP Connection ID
 - MikroTik router management and PPPoE user sync
-- OLT ONU live polling with status and optical power inventory
+- OLT ONU/ONT live polling with status, optical power, profile-command mismatch repair, PON-wise cached counts, timestamped running-config backup downloads, non-destructive refresh-error clearing, and safe OLT deletion
+- Full Power/VLAN/MAC polling runs as a background process with stage-based percentage progress and duplicate-run protection; fast status refresh remains synchronous
+- ONU/ONT rows show power beside online/offline status with `Update Now`, plus a separate Ethernet-port column. The selected port is green when enabled, red when disabled, and uses one state-aware Enable/Disable toggle; the HSGQ GPON profile saves `ont port attribute {onu_id} eth {port} admin-status {state}` to the OLT configuration
+- HSGQ EPON VLAN editing supports both tagged VLAN and restoring `Transparent` mode. Transparent writes `port-vlan {port} mode transparent`, saves the OLT config, and clears the cached configured VLAN number without rewriting learned traffic MAC VLANs.
+- ONU Ethernet controls no longer assume eight ports. Full refresh reads GPON `show ont-capability` port counts, while EPON uses the physical ports returned by each ONU's `show port-vlan`; explicitly disabled ports remain red and all other admin-default ports are shown enabled.
+- HSGQ EPON Ethernet admin control uses the firmware-specific ONU-context commands `port-shutdown {port}` and `no port-shutdown {port}`. The row form submits with JSON, updates its button/state in place, and does not create a page flash message.
+- ONU note controls can append a timestamped cached laser reading to one row or every ONU/ONT row (`YYYY-MM-DD HH:MM:SS | Laser: -13.58 dBm`) while preserving existing note text. Name, description, and Ethernet-port form saves restore the OLT list scroll position; note, VLAN, and single-row refresh actions remain inline/AJAX.
 - FTTX network map with reciprocal equipment links, drag/list linking, Fiber/Copper media, custom colors, and parallel link rendering
 - Monthly invoice generation
 - Separate quotation workflow with invoice-style entry, no accounting impact, and one-click conversion to a draft invoice
@@ -454,13 +460,14 @@ EPON deny-list note:
 - The deny-list page scans all configured EPON ports in one OLT session for speed.
 - For this EPON firmware, SSH command entry can lose spaces (`bind-onu 0 mac ...` becomes `bind-onu 0mac...`), so EPON deny-list reads and ONU add/write commands use Telnet port `23`.
 - Adding from the deny-list first removes the MAC with `blacklist delete mac {mac}`, then binds the ONU and writes VLAN/name/description.
+- The deny-list `Delete` action only runs `blacklist delete mac {mac}` in the selected EPON PON context and saves the OLT config; it does not bind or authorize the ONU.
 
 EPON refresh speed note:
 
 - EPON `Refresh Live Data` uses a fast status-only path.
 - It reads `show onu-info all` for each configured PON and skips slower optical, alarm, VLAN-detail, and global MAC polling.
 - EPON `Full Power/VLAN Refresh` is intentionally separate from fast refresh. Use the PON selector beside the button when you need fresh optical power for a single PON; scanning all EPON ports must run one optical table per PON and can take tens of seconds on this firmware.
-- EPON full refresh skips per-ONU alarm polling. It updates power from the OLT optical table, reads the fast global `show mac-address epon all` table for learned MACs, and keeps VLAN data from the stored ONU port VLAN records unless a row is missing VLAN detail and needs the slower per-ONU `show port-vlan` read.
+- EPON full refresh skips per-ONU alarm polling. It updates power from the OLT optical table, reads the fast global `show mac-address epon all` table for learned MACs, and refreshes every ONU VLAN with `show port-vlan`. It reconnects between PONs to avoid the OLT/Windows long-session disconnect.
 - Refresh flash messages include elapsed OLT query time, e.g. `370 live ONU record(s) refreshed from US_EPON in 3.25 seconds`.
 - GPON `Refresh Live Data` reads global `show ont-info all` from config context. Full Power/VLAN refresh keeps optical and service-port polling but skips slow MAC polling; this keeps US_GPON Power/VLAN refresh under about one second while preserving the full ONT count.
 - GPON learned MAC refresh is a separate per-PON action. Use `MAC Refresh` with the PON selector; it runs `show mac-address port gpon {pon}` instead of the slow global `show mac-address all`.

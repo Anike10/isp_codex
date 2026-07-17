@@ -42,6 +42,7 @@
         .logout-form { margin:0; }
         .logout-form .btn { min-height:34px; padding:8px 12px; white-space:nowrap; }
         .main { max-width:1440px; margin:0 auto; padding:24px 20px 34px; }
+        .main.olt-onus-wide { max-width:none; margin-left:0; margin-right:0; padding-left:0; }
         .topbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:20px; }
         h1 { margin:0; font-size:28px; }
         h2 { margin:0 0 14px; font-size:20px; }
@@ -56,6 +57,7 @@
         .btn { border:0; border-radius:6px; background:var(--brand); color:white; padding:10px 14px; cursor:pointer; font-weight:700; display:inline-flex; align-items:center; min-height:38px; }
         .btn.secondary { background:var(--accent); }
         .btn.light { background:#e8eef7; color:var(--ink); }
+        .btn.danger { background:var(--danger); }
         .action-menu { position:relative; display:inline-block; }
         .action-menu summary { list-style:none; user-select:none; }
         .action-menu summary::-webkit-details-marker { display:none; }
@@ -99,6 +101,9 @@
         .badge.failed { background:#fff0f0; color:var(--danger); }
         .badge.online { background:#ecfdf3; color:#027a48; }
         .badge.offline { background:#fff0f0; color:var(--danger); }
+        .olt-progress-track { position:relative; height:14px; overflow:hidden; border-radius:999px; background:#dfe7f1; }
+        .olt-progress-fill { height:100%; min-width:2%; border-radius:999px; background:linear-gradient(90deg,var(--brand),#35a77b,var(--brand)); background-size:200% 100%; transition:width .5s ease; animation:oltProgressMove 1.2s linear infinite; }
+        @keyframes oltProgressMove { from { background-position:200% 0; } to { background-position:0 0; } }
         .badge.checking { background:#eef2ff; color:#175cd3; }
         .badge.inactive { background:#f2f4f7; color:#475467; }
         .badge.open, .badge.processing { background:#eff6ff; color:#175cd3; }
@@ -362,7 +367,7 @@
         </div>
     </div>
     </header>
-    <main class="main">
+    <main class="main @yield('main_class')">
         @if (session('success'))
             <div class="alert success">{{ session('success') }}</div>
         @endif

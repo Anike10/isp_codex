@@ -60,7 +60,16 @@
         <div>
             <label for="vlan_write_command">VLAN Write Command</label>
             <input id="vlan_write_command" name="vlan_write_command" value="{{ old('vlan_write_command', $profile->vlan_write_command) }}" placeholder="port-vlan {port} mode tag {vlan} pri {priority}">
-            <div class="muted">Placeholders: {pon_port}, {onu_id}, {port}, {vlan}, {priority}, {service_port}, {gemport}</div>
+            <div class="muted">Placeholders: {pon_port}, {onu_id}, {port}, {port_path}, {vlan}, {priority}, {service_port}, {gemport}. For GPON, {port_path} resolves to veip for HGU or eth {port} for SFU.</div>
+        </div>
+        <div>
+            <label for="port_admin_context_command">Port Admin Context Command</label>
+            <input id="port_admin_context_command" name="port_admin_context_command" value="{{ old('port_admin_context_command', $profile->port_admin_context_command) }}" placeholder="interface gpon {pon_port}">
+        </div>
+        <div>
+            <label for="port_admin_command">Ethernet Port Enable/Disable Command</label>
+            <input id="port_admin_command" name="port_admin_command" value="{{ old('port_admin_command', $profile->port_admin_command) }}" placeholder="ont port attribute {onu_id} eth {port} admin-status {state}">
+            <div class="muted">Placeholders: {pon_port}, {onu_id}, {port}, {state}. State is enable or disable.</div>
         </div>
         <div>
             <label for="save_config_command">Permanent Save Command</label>

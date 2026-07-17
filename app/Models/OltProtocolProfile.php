@@ -22,6 +22,8 @@ class OltProtocolProfile extends Model
         'default_onu_mac_command',
         'vlan_write_context_command',
         'vlan_write_command',
+        'port_admin_context_command',
+        'port_admin_command',
         'save_config_command',
     ];
 

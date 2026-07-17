@@ -84,6 +84,25 @@ class OltLiveOutputParser
                 continue;
             }
 
+            if (preg_match('/^PON\/ONU\s*:\s*0*(\d+)\s*\/\s*0*(\d+)/i', $line, $match)) {
+                $detailPonPort = (int) $match[1];
+                $onuId = (int) $match[2];
+
+                if (! $this->isValidPonOnu($detailPonPort, $onuId)) {
+                    $current = null;
+                    continue;
+                }
+
+                $current = $this->key($detailPonPort, $onuId);
+                $records[$current] ??= [
+                    'pon_port' => $detailPonPort,
+                    'onu_id' => $onuId,
+                ];
+                $records[$current]['raw_live_output'] = trim(($records[$current]['raw_live_output'] ?? '')."\n".$line);
+
+                continue;
+            }
+
             if ($this->isNoiseLine($line)) {
                 continue;
             }
@@ -213,6 +232,8 @@ class OltLiveOutputParser
         }
 
         return array_map(function (array $record): array {
+            $record = $this->preferConfiguredGponVlans($record);
+
             if (isset($record['port_vlans'])) {
                 $record['port_vlans'] = array_values($record['port_vlans']);
             }
@@ -223,6 +244,62 @@ class OltLiveOutputParser
 
             return $record;
         }, array_values($records));
+    }
+
+    /**
+     * A GPON learned-MAC table may retain an old dynamic VLAN briefly after
+     * the service-port VLAN is changed. The service-port table is the
+     * authoritative configuration, so do not present stale FDB VLANs as
+     * current ONU VLAN configuration or learned-MAC entries.
+     */
+    private function preferConfiguredGponVlans(array $record): array
+    {
+        $configuredVlans = [];
+
+        foreach ($record['port_vlans'] ?? [] as $portVlan) {
+            if (($portVlan['mode'] ?? null) === 'service-port' && isset($portVlan['vlan'])) {
+                $configuredVlans[] = (int) $portVlan['vlan'];
+            }
+        }
+
+        $configuredVlans = array_values(array_unique($configuredVlans));
+
+        if ($configuredVlans === []) {
+            $learnedVlans = [];
+
+            foreach ($record['learned_macs'] ?? [] as $learnedMac) {
+                if (isset($learnedMac['vlan'])) {
+                    $learnedVlans[] = (int) $learnedMac['vlan'];
+                }
+            }
+
+            $learnedVlans = array_values(array_unique($learnedVlans));
+
+            if ($learnedVlans !== [] && isset($record['port_vlans'])) {
+                $record['port_vlans'] = array_filter(
+                    $record['port_vlans'],
+                    fn (array $portVlan): bool => ($portVlan['mode'] ?? null) !== 'learned-mac'
+                        || (isset($portVlan['vlan']) && in_array((int) $portVlan['vlan'], $learnedVlans, true))
+                );
+            }
+
+            return $record;
+        }
+
+        $record['port_vlans'] = array_filter(
+            $record['port_vlans'] ?? [],
+            fn (array $portVlan): bool => ($portVlan['mode'] ?? null) === 'service-port'
+        );
+
+        if (isset($record['learned_macs'])) {
+            $record['learned_macs'] = array_filter(
+                $record['learned_macs'],
+                fn (array $learnedMac): bool => ! isset($learnedMac['vlan'])
+                    || in_array((int) $learnedMac['vlan'], $configuredVlans, true)
+            );
+        }
+
+        return $record;
     }
 
     private function parseHsgqOpticalInfoLine(string $line): ?array
@@ -246,7 +323,7 @@ class OltLiveOutputParser
 
     private function parseHsgqOnuInfoLine(string $line): ?array
     {
-        if (! preg_match('/^\s*(\d+)\/(\d+)\s+([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s+(\S+)\s+\S+\s+\S+\s+(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+(.+?)\s*$/i', $line, $match)) {
+        if (! preg_match('/^\s*(\d+)\/(\d+)\s+([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s+(\S+)\s+\S+\s+\S+\s+(?:(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})|-)\s+(.+?)\s*$/i', $line, $match)) {
             return null;
         }
 
@@ -254,14 +331,29 @@ class OltLiveOutputParser
             return null;
         }
 
-        return [
+        // HSGQ EPON renders ONU-Name as a fixed 12-character column and
+        // ONU-Desc immediately after it. Parsing the entire tail as Name
+        // caused every live description to disappear from the application.
+        $nameAndDescription = rtrim($match[6]);
+        $name = trim(substr($nameAndDescription, 0, 12));
+        $description = trim(substr($nameAndDescription, 12));
+        $record = [
             'pon_port' => (int) $match[1],
             'onu_id' => (int) $match[2],
             'mac_address' => strtolower($match[3]),
             'status' => strtolower($match[4]),
-            'last_registered_at' => $this->parseTimestamp($match[5]),
-            'name' => trim($match[6]),
+            'name' => $name,
         ];
+
+        if (($match[5] ?? '') !== '') {
+            $record['last_registered_at'] = $this->parseTimestamp($match[5]);
+        }
+
+        if ($description !== '') {
+            $record['description'] = $description;
+        }
+
+        return $record;
     }
 
     private function parseHsgqGponOntInfoLine(string $line): ?array
@@ -492,6 +584,10 @@ class OltLiveOutputParser
             $record['mac_address'] = $match[1];
         } elseif (preg_match('/^Distance\s*:\s*(\d+)/i', $line, $match)) {
             $record['distance_m'] = (int) $match[1];
+        } elseif (preg_match('/^ISP\s+ONU\s+Type\s*:\s*(\S+)/i', $line, $match)) {
+            $record['onu_type'] = strtoupper(trim($match[1]));
+        } elseif (preg_match('/^Number\s+of\s+ETH\s+ports\s*:\s*(\d+)/i', $line, $match)) {
+            $record['ethernet_port_count'] = (int) $match[1];
         } elseif (preg_match('/^Last\s+up\s+Time\s*:\s*(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})/i', $line, $match)) {
             $record['last_registered_at'] = $this->parseTimestamp($match[1]);
         } elseif (preg_match('/^Last\s+down\s+Time\s*:\s*(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})/i', $line, $match)) {
@@ -538,6 +634,17 @@ class OltLiveOutputParser
     {
         if (isset($incoming['learned_macs'])) {
             $incoming['learned_macs'] = $this->mergeLearnedMacs($existing['learned_macs'] ?? [], $incoming['learned_macs']);
+
+            if (trim((string) ($existing['name'] ?? $incoming['name'] ?? '')) === '') {
+                foreach ($incoming['learned_macs'] as $learnedMac) {
+                    $learnedName = trim((string) ($learnedMac['onu_name'] ?? ''));
+
+                    if ($learnedName !== '') {
+                        $incoming['name'] = $learnedName;
+                        break;
+                    }
+                }
+            }
         }
 
         if (isset($incoming['port_vlans'])) {
@@ -576,6 +683,10 @@ class OltLiveOutputParser
 
     private function learnedMacKey(array $entry): string
     {
+        if (isset($entry['service_port'], $entry['mac'])) {
+            return 'svp-'.(int) $entry['service_port'].'|'.strtolower((string) $entry['mac']);
+        }
+
         return strtolower((string) ($entry['mac'] ?? '')).'|'.(string) ($entry['vlan'] ?? '');
     }
 

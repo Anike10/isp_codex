@@ -65,9 +65,23 @@ class OltSshClient
             throw new RuntimeException('OLT SSH client is not connected.');
         }
 
-        foreach (str_split($command) as $character) {
-            $this->ssh->write($character);
-            usleep($character === ' ' ? 300000 : 20000);
+        $writeCharacters = function (string $value): void {
+            foreach (str_split($value) as $character) {
+                $this->ssh->write($character);
+                usleep($character === ' ' ? 50000 : 5000);
+            }
+        };
+
+        // Some HSGQ VTY builds consume the separator immediately before a
+        // trailing "all" while auto-completing commands such as "ont-info".
+        // Explicit TAB completion preserves the following argument separator.
+        if (preg_match('/^(.*?)\s+all$/i', $command, $match)) {
+            $writeCharacters($match[1]);
+            $this->ssh->write("\t");
+            usleep(300000);
+            $writeCharacters(' all');
+        } else {
+            $writeCharacters($command);
         }
 
         $this->ssh->write("\r");

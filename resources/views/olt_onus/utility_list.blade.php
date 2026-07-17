@@ -68,7 +68,7 @@
                 <th>Status</th>
                 <th>Raw</th>
                 @if (in_array($type, ['discovery', 'deny'], true))
-                    <th>Add</th>
+                    <th>{{ $type === 'deny' ? 'Actions' : 'Add' }}</th>
                 @endif
             </tr>
         </thead>
@@ -119,9 +119,19 @@
                                         Ethernet Port
                                         <input autocomplete="off" name="ethernet_port" type="number" min="1" max="8" value="1" required>
                                     </label>
-                                    <button class="btn secondary" type="submit">Add ONU</button>
+                                    <button class="btn secondary" type="submit">{{ $type === 'deny' ? 'Allow ONU' : 'Add ONU' }}</button>
                                 </div>
                             </form>
+                            @if ($type === 'deny' && ($row['olt_protocol_profile'] ?? null) === 'hsgq_epon')
+                                <form method="post" action="{{ route('olt-onus.deny-list.destroy') }}" onsubmit="return confirm('Delete deny entry {{ addslashes($row['serial']) }} from PON {{ $row['pon_port'] }}? This will not authorize the ONU.')" style="margin-top:8px">
+                                    @csrf
+                                    @method('delete')
+                                    <input type="hidden" name="olt_device_id" value="{{ $row['olt_device_id'] }}">
+                                    <input type="hidden" name="pon_port" value="{{ $row['pon_port'] }}">
+                                    <input type="hidden" name="serial" value="{{ $row['serial'] }}">
+                                    <button class="btn danger" type="submit">Delete</button>
+                                </form>
+                            @endif
                         </td>
                     @endif
                 </tr>

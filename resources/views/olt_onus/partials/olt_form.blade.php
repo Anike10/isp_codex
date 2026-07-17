@@ -20,6 +20,8 @@
                     <option value="{{ $value }}" @selected(old('protocol_profile', $oltDevice->protocol_profile ?: 'hsgq_epon') === $value)>{{ $label }}</option>
                 @endforeach
             </select>
+            <button class="btn light" id="load-profile-defaults" type="button" style="margin-top:8px">Load Profile Defaults</button>
+            <div class="muted" style="margin-top:6px">Use this after changing EPON/GPON profile so incompatible polling commands are replaced.</div>
         </div>
         <div>
             <label for="host">Host/IP</label>
@@ -163,17 +165,26 @@ document.getElementById('port').addEventListener('input', event => {
 const profileDefaults = @json($profileDefaults ?? []);
 
 document.getElementById('protocol_profile').addEventListener('change', event => {
-    const defaults = profileDefaults[event.target.value];
+    applyOltProfileDefaults(event.target.value);
+});
+
+document.getElementById('load-profile-defaults').addEventListener('click', () => {
+    applyOltProfileDefaults(document.getElementById('protocol_profile').value);
+});
+
+function applyOltProfileDefaults(profileKey) {
+    const defaults = profileDefaults[profileKey];
     if (!defaults) {
         return;
     }
 
-    document.getElementById('brand').value ||= defaults.brand || '';
-    document.getElementById('read_context_commands').value ||= defaults.read_context_commands || '';
-    document.getElementById('onu_status_command').value ||= defaults.onu_status_command || '';
-    document.getElementById('onu_power_command').value ||= defaults.onu_power_command || '';
-    document.getElementById('onu_alarm_command').value ||= defaults.onu_alarm_command || '';
-    document.getElementById('onu_vlan_command').value ||= defaults.onu_vlan_command || '';
-    document.getElementById('onu_mac_command').value ||= defaults.onu_mac_command || '';
-});
+    document.getElementById('brand').value = defaults.brand || '';
+    document.getElementById('read_context_commands').value = defaults.read_context_commands || '';
+    document.getElementById('pon_ports').value = defaults.pon_ports || '';
+    document.getElementById('onu_status_command').value = defaults.onu_status_command || '';
+    document.getElementById('onu_power_command').value = defaults.onu_power_command || '';
+    document.getElementById('onu_alarm_command').value = defaults.onu_alarm_command || '';
+    document.getElementById('onu_vlan_command').value = defaults.onu_vlan_command || '';
+    document.getElementById('onu_mac_command').value = defaults.onu_mac_command || '';
+}
 </script>

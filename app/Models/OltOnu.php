@@ -23,6 +23,8 @@ class OltOnu extends Model
         'note',
         'parent_splitter',
         'port_vlans',
+        'port_admin_states',
+        'ethernet_port_count',
         'learned_macs',
         'rx_power_dbm',
         'power_note',
@@ -43,6 +45,8 @@ class OltOnu extends Model
             'pon_port' => 'integer',
             'onu_id' => 'integer',
             'port_vlans' => 'array',
+            'port_admin_states' => 'array',
+            'ethernet_port_count' => 'integer',
             'learned_macs' => 'array',
             'rx_power_dbm' => 'decimal:2',
             'distance_m' => 'integer',
@@ -53,8 +57,54 @@ class OltOnu extends Model
         ];
     }
 
+    public function ethernetPortNumbers(): array
+    {
+        if ($this->ethernet_port_count !== null) {
+            return $this->ethernet_port_count > 0 ? range(1, $this->ethernet_port_count) : [];
+        }
+
+        if ($this->oltDevice?->protocol_profile === 'hsgq_gpon' && str_contains(strtoupper((string) $this->onu_type), 'HGU')) {
+            return [];
+        }
+
+        $ports = collect($this->port_vlans ?: [])
+            ->pluck('port')
+            ->merge(array_keys($this->port_admin_states ?: []))
+            ->map(fn ($port): int => (int) $port)
+            ->filter(fn (int $port): bool => $port >= 1 && $port <= 32);
+        $highestPort = (int) ($ports->max() ?: 1);
+
+        return range(1, $highestPort);
+    }
+
+    public function ethernetPortState(int $port): string
+    {
+        $state = strtolower((string) data_get($this->port_admin_states ?: [], (string) $port, 'enabled'));
+
+        return in_array($state, ['disable', 'disabled', 'down', 'inactive'], true) ? 'disabled' : 'enabled';
+    }
+
     public function oltDevice()
     {
         return $this->belongsTo(OltDevice::class);
+    }
+
+    public function displayName(): ?string
+    {
+        $name = trim((string) $this->name);
+
+        if ($name !== '') {
+            return $name;
+        }
+
+        foreach ($this->learned_macs ?: [] as $learnedMac) {
+            $learnedName = trim((string) ($learnedMac['onu_name'] ?? ''));
+
+            if ($learnedName !== '') {
+                return $learnedName;
+            }
+        }
+
+        return null;
     }
 }
