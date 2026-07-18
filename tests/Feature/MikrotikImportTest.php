@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppIpPool;
 use App\Models\Customer;
 use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
@@ -64,6 +65,74 @@ class MikrotikImportTest extends TestCase
             ->assertOk()
             ->assertSee('MikroTik live data is unavailable')
             ->assertSee('Live-dependent actions are temporarily disabled.');
+    }
+
+    public function test_bulk_ip_pool_import_saves_every_live_pool_to_the_app_and_returns_to_pool_section(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Pool Router', 'ip_address' => '10.0.0.4', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+
+        $service = $this->partialMock(MikrotikImportService::class);
+        $service->shouldReceive('liveRecords')
+            ->once()
+            ->withArgs(fn (MikrotikRouter $givenRouter, string $command) =>
+                $givenRouter->is($router) && $command === '/ip/pool/print')
+            ->andReturn([
+                ['.id' => '*1', 'name' => 'customers', 'ranges' => '10.10.0.2-10.10.0.254', 'next-pool' => 'overflow'],
+                ['.id' => '*2', 'name' => 'overflow', 'ranges' => '10.10.1.2-10.10.1.254', 'comment' => 'Backup pool'],
+            ]);
+
+        $this->actingAs($user)->post(route('mikrotik-routers.import.ip-pools', $router), [
+            'save_to_app' => '1',
+            'return_to_compare' => '1',
+        ])->assertRedirect(route('mikrotik-routers.compare', $router).'#ip-pools');
+
+        $this->assertDatabaseHas('app_ip_pools', [
+            'mikrotik_router_id' => $router->id,
+            'name' => 'customers',
+            'ranges' => '10.10.0.2-10.10.0.254',
+            'next_pool' => 'overflow',
+        ]);
+        $this->assertDatabaseHas('app_ip_pools', [
+            'mikrotik_router_id' => $router->id,
+            'name' => 'overflow',
+            'notes' => 'Backup pool',
+        ]);
+        $this->assertSame(2, AppIpPool::where('mikrotik_router_id', $router->id)->count());
+    }
+
+    public function test_single_ip_pool_import_returns_to_pool_section(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Pool Router', 'ip_address' => '10.0.0.5', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+
+        $service = $this->mock(MikrotikImportService::class);
+        $service->shouldReceive('liveRecords')
+            ->once()
+            ->withArgs(fn (MikrotikRouter $givenRouter, string $command) =>
+                $givenRouter->is($router) && $command === '/ip/pool/print')
+            ->andReturn([
+                ['.id' => '*A', 'name' => 'staff', 'ranges' => '172.16.1.2-172.16.1.100'],
+            ]);
+
+        $this->actingAs($user)->post(route('mikrotik-routers.pools.import-live', $router), [
+            'routeros_id' => '*A',
+        ])->assertRedirect(route('mikrotik-routers.compare', $router).'#ip-pools');
+
+        $this->assertDatabaseHas('app_ip_pools', [
+            'mikrotik_router_id' => $router->id,
+            'name' => 'staff',
+        ]);
     }
 
     public function test_router_edit_ignores_browser_login_autofill_fields(): void

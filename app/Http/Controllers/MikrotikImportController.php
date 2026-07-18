@@ -20,9 +20,19 @@ class MikrotikImportController extends Controller
         return back()->with('success', "Imported {$count} MikroTik PPP profiles. New profiles were added as zero-price packages.");
     }
 
-    public function importIpPools(MikrotikRouter $mikrotikRouter, MikrotikImportService $service)
+    public function importIpPools(Request $request, MikrotikRouter $mikrotikRouter, MikrotikImportService $service)
     {
-        $count = $service->importIpPools($mikrotikRouter);
+        $saveToApp = $request->boolean('save_to_app');
+        $count = $service->importIpPools($mikrotikRouter, $saveToApp);
+
+        if ($request->boolean('return_to_compare')) {
+            $message = $saveToApp
+                ? "Imported {$count} MikroTik IP pools to App IP Pools."
+                : "Refreshed {$count} MikroTik IP pools.";
+
+            return redirect()->to(route('mikrotik-routers.compare', $mikrotikRouter).'#ip-pools')
+                ->with('success', $message);
+        }
 
         return back()->with('success', "Imported {$count} MikroTik IP pools.");
     }

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AppIpPool;
 use App\Models\InternetPackage;
 use App\Models\MikrotikImportedIpPool;
 use App\Models\MikrotikImportedProfile;
@@ -66,9 +67,9 @@ class MikrotikImportService
         return count($records);
     }
 
-    public function importIpPools(MikrotikRouter $router): int
+    public function importIpPools(MikrotikRouter $router, bool $saveToApp = false): int
     {
-        $records = $this->read($router, '/ip/pool/print');
+        $records = $this->liveRecords($router, '/ip/pool/print');
 
         foreach ($records as $record) {
             if (empty($record['.id']) || blank($record['name'] ?? null)) {
@@ -85,6 +86,18 @@ class MikrotikImportService
                     'imported_at' => now(),
                 ]
             );
+
+            if ($saveToApp) {
+                AppIpPool::updateOrCreate(
+                    ['mikrotik_router_id' => $router->id, 'name' => $record['name']],
+                    [
+                        'ranges' => $record['ranges'] ?? '',
+                        'next_pool' => $record['next-pool'] ?? null,
+                        'notes' => $record['comment'] ?? null,
+                        'status' => 'active',
+                    ]
+                );
+            }
         }
 
         return count($records);

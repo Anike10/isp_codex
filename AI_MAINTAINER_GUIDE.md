@@ -177,6 +177,9 @@ At minimum, this project must always be approached with senior capability in:
   employee assets, and fleet operations;
 - authentication, authorization, secrets, privacy, backups, observability, and
   incident diagnosis.
+- operator workflow and browser-state UX, including idempotent bulk imports,
+  post-action redirect anchors/scroll retention, and clear separation between
+  RouterOS snapshots and App master records.
 
 ### Default Decision Order
 

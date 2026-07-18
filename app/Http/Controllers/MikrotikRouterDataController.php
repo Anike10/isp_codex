@@ -105,7 +105,8 @@ class MikrotikRouterDataController extends Controller
             ['ranges' => $pool['ranges'] ?? '', 'next_pool' => $pool['next-pool'] ?? null, 'notes' => $pool['comment'] ?? null, 'status' => 'active']
         );
 
-        return back()->with('success', "IP pool {$pool['name']} saved to App IP Pools.");
+        return redirect()->to(route('mikrotik-routers.compare', $mikrotikRouter).'#ip-pools')
+            ->with('success', "IP pool {$pool['name']} saved to App IP Pools.");
     }
 
     public function importLiveSecretAsParty(Request $request, MikrotikRouter $mikrotikRouter, MikrotikImportService $service)
