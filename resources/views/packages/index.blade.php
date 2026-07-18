@@ -7,7 +7,7 @@
 </div>
 
 <form method="get" class="card form-grid" style="margin-bottom:16px">
-    <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Package name, speed, MikroTik profile, description"></div>
+    <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Package name, speed, MikroTik profile, IP pool, description"></div>
     <div><label>Status</label><select name="status"><option value="">All statuses</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>
     <div><label>Min Price</label><input type="number" step="0.01" name="min_price" value="{{ request('min_price') }}"></div>
     <div><label>Max Price</label><input type="number" step="0.01" name="max_price" value="{{ request('max_price') }}"></div>
@@ -16,16 +16,47 @@
 
 @include('partials.per_page')
 
+<form id="package-bulk-delete-form" method="post" action="{{ route('packages.bulk-destroy') }}" class="card" style="margin-bottom:16px" onsubmit="return confirm('Delete the selected packages using the selected mode?')">
+    @csrf
+    @method('DELETE')
+    <div class="actions" style="align-items:center">
+        <button class="btn danger" type="submit">Delete Selected</button>
+        <label style="display:flex;align-items:center;gap:7px;margin:0">
+            <input id="package-force-delete" type="checkbox" name="force_delete" value="1" style="width:auto">
+            <strong>Force Delete</strong>
+        </label>
+        <div id="package-replacement-wrap" style="min-width:280px;display:none">
+            <label>Users will receive</label>
+            <select id="package-replacement" name="replacement_package_id" disabled>
+                <option value="">Select replacement package</option>
+                @foreach ($replacementPackages as $replacementPackage)
+                    <option value="{{ $replacementPackage->id }}">{{ $replacementPackage->name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <span class="muted">Normal delete assigned package মুছবে না। Force Delete সব subscription replacement package-এ move করবে।</span>
+    </div>
+</form>
+
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <div class="muted" style="margin:0 0 8px">নাম, স্পিড, MikroTik Profile, মাসিক মূল্য বা Status-এ double-click করে সরাসরি edit করুন। Enter/বাইরে click করলে save, Esc চাপলে বাতিল।</div>
 <table>
-    <thead><tr><th>Name</th><th>Speed</th><th>MikroTik Profile</th><th>Monthly Price</th><th>Status</th><th>Action</th></tr></thead>
+    <thead><tr><th><input id="package-select-all" type="checkbox" style="width:auto" aria-label="Select all packages on this page"></th><th>SL</th><th>Name</th><th>Speed</th><th>MikroTik Profile</th><th>IP Pool</th><th>Monthly Price</th><th>Status</th><th>Action</th></tr></thead>
     <tbody>
-    @forelse ($packages as $package)
+    @forelse ($packages as $packageIndex => $package)
         <tr>
+            <td><input class="package-select" type="checkbox" name="package_ids[]" value="{{ $package->id }}" form="package-bulk-delete-form" style="width:auto" aria-label="Select {{ $package->name }}"></td>
+            <td>{{ ($packages->firstItem() ?? 1) + $packageIndex }}</td>
             <td data-inline-field="name" data-inline-url="{{ route('packages.inline-update', $package) }}"><span data-inline-value>{{ $package->name }}</span></td>
             <td data-inline-field="speed" data-inline-url="{{ route('packages.inline-update', $package) }}"><span data-inline-value>{{ $package->speed }}</span></td>
             <td data-inline-field="mikrotik_profile" data-inline-url="{{ route('packages.inline-update', $package) }}"><span data-inline-value>{{ $package->mikrotik_profile }}</span></td>
+            <td>
+                @if ($package->default_ip_pool)
+                    <span class="badge active">{{ $package->default_ip_pool }}</span>
+                @else
+                    <span class="muted">RouterOS default / none</span>
+                @endif
+            </td>
             <td data-inline-field="monthly_price" data-inline-url="{{ route('packages.inline-update', $package) }}" data-input-type="number"><span data-inline-value>{{ number_format($package->monthly_price, 2) }}</span></td>
             <td data-inline-field="status" data-inline-url="{{ route('packages.inline-update', $package) }}" data-input-type="status"><span class="badge {{ $package->status }}" data-inline-value>{{ $package->status }}</span></td>
             <td>
@@ -41,7 +72,7 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="6">No packages found.</td></tr>
+        <tr><td colspan="9">No packages found.</td></tr>
     @endforelse
     </tbody>
 </table>
@@ -49,6 +80,21 @@
 
 <script>
 const packageCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
+const packageSelectAll = document.querySelector('#package-select-all');
+const packageSelections = Array.from(document.querySelectorAll('.package-select'));
+const packageForceDelete = document.querySelector('#package-force-delete');
+const packageReplacementWrap = document.querySelector('#package-replacement-wrap');
+const packageReplacement = document.querySelector('#package-replacement');
+
+packageSelectAll?.addEventListener('change', () => {
+    packageSelections.forEach(checkbox => checkbox.checked = packageSelectAll.checked);
+});
+
+packageForceDelete?.addEventListener('change', () => {
+    packageReplacementWrap.style.display = packageForceDelete.checked ? 'block' : 'none';
+    packageReplacement.disabled = ! packageForceDelete.checked;
+    packageReplacement.required = packageForceDelete.checked;
+});
 
 function editPackageCell(cell) {
     if (cell.querySelector('input, select')) return;

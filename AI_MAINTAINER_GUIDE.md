@@ -1383,6 +1383,14 @@ PPPoE sync:
   `remote-address` during customer sync and package export; sending an empty
   value can be parsed by RouterOS as an ambiguous pool prefix. A selected pool
   must match an exact live `/ip/pool` name before export.
+- `/packages` shows a pagination-aware serial number and the App-selected
+  `default_ip_pool`; a blank value is labelled `RouterOS default / none` and
+  package search includes the pool name.
+- Package list bulk delete is conservative by default: unassigned selections
+  are deleted, while assigned package names are reported and retained. Force
+  Delete requires a non-selected replacement package, moves every affected
+  subscription record inside the same database transaction, then deletes the
+  selected packages; scheduled MikroTik sync applies replacement profiles.
 
 ### OLT ONU Inventory
 

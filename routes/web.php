@@ -60,6 +60,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('permission:manage_packages')->group(function () {
         Route::patch('packages/{package}/inline', [PackageController::class, 'inlineUpdate'])->name('packages.inline-update');
+        Route::delete('packages/bulk-delete', [PackageController::class, 'bulkDestroy'])->name('packages.bulk-destroy');
         Route::resource('packages', PackageController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update', 'destroy']);
     });
 
