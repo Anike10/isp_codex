@@ -95,7 +95,7 @@ class MikrotikRouterController extends Controller
             );
 
             $apiOnline = true;
-            $apiMessage = "Connected: RouterOS accepted the saved username '{$mikrotikRouter->username}'.";
+            $apiMessage = "RouterOS accepted the saved username '{$mikrotikRouter->username}'.";
             $apiLatency = (int) round((microtime(true) - $startedAt) * 1000);
         } catch (Throwable $exception) {
             $apiException = $exception;
