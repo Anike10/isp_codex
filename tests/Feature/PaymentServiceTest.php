@@ -637,6 +637,35 @@ class PaymentServiceTest extends TestCase
         ]);
     }
 
+    public function test_paid_validity_deducts_consumed_grace_days_from_the_new_month(): void
+    {
+        $customer = $this->createCustomer();
+        $customer->update([
+            'grace_days' => 5,
+            'grace_until' => '2026-04-09',
+            'grace_used_at' => '2026-04-04 10:00:00',
+        ]);
+        $invoice = $this->createInvoice($customer, '2026-04', 1000, '2026-04-10');
+
+        $this->paymentService()->recordPayment($invoice, [
+            'amount' => 1000,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-04-10',
+            'note' => 'Paid after grace.',
+        ]);
+
+        $customer->refresh();
+
+        // 10 April to 9 May is 30 days; after 5 grace days, paid validity is 25 days.
+        $this->assertSame('2026-04-10', $customer->service_valid_from?->format('Y-m-d'));
+        $this->assertSame('2026-05-04', $customer->service_valid_until?->format('Y-m-d'));
+        $this->assertNull($customer->grace_days);
+        $this->assertNull($customer->grace_until);
+        $this->assertNull($customer->grace_used_at);
+        $this->assertStringContainsString('grace deducted 5 day(s)', $customer->service_validity_note);
+        $this->assertStringContainsString('Paid after grace.', $customer->notes);
+    }
+
     private function paymentService(): PaymentService
     {
         return new PaymentService($this->createMock(MikrotikCustomerSyncService::class));

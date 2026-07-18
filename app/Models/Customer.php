@@ -24,11 +24,15 @@ class Customer extends Model
         'mikrotik_password',
         'mikrotik_router_id',
         'address',
+        'notes',
         'status',
         'never_suspend',
         'grace_until',
         'grace_days',
         'grace_used_at',
+        'service_valid_from',
+        'service_valid_until',
+        'service_validity_note',
         'account_balance',
         'is_customer',
         'is_vendor',
@@ -45,6 +49,8 @@ class Customer extends Model
             'never_suspend' => 'boolean',
             'grace_until' => 'date',
             'grace_used_at' => 'datetime',
+            'service_valid_from' => 'date',
+            'service_valid_until' => 'date',
             'account_balance' => 'decimal:2',
             'is_customer' => 'boolean',
             'is_vendor' => 'boolean',
@@ -58,6 +64,10 @@ class Customer extends Model
 
     public function activeUntil(): ?Carbon
     {
+        if ($this->service_valid_until) {
+            return $this->service_valid_until->copy()->endOfDay();
+        }
+
         if ($this->hasActiveGracePeriod()) {
             return $this->grace_until->copy()->endOfDay();
         }

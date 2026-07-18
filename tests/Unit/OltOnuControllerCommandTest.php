@@ -139,7 +139,7 @@ class OltOnuControllerCommandTest extends TestCase
         ], $commands);
     }
 
-    public function test_hsgq_epon_write_access_uses_telnet_even_with_normalized_profile_key(): void
+    public function test_hsgq_epon_write_access_respects_the_configured_access_method(): void
     {
         $method = $this->callPrivateCommandBuilder('writeAccessMethod', [
             new OltDevice([
@@ -148,7 +148,7 @@ class OltOnuControllerCommandTest extends TestCase
             ]),
         ]);
 
-        $this->assertSame('telnet', $method);
+        $this->assertSame('ssh', $method);
     }
 
     public function test_hsgq_epon_name_commands_return_to_config_mode_for_save(): void

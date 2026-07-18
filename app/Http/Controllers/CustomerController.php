@@ -9,6 +9,7 @@ use App\Models\Subscription;
 use App\Observers\RecordVersionObserver;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\RecordVersionService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -72,6 +73,7 @@ class CustomerController extends Controller
             'email' => ['nullable', 'email', 'max:255'],
             'connection_id' => ['required_with:internet_package_id', 'nullable', 'string', 'max:100', 'unique:customers,connection_id'],
             'address' => ['required', 'string'],
+            'notes' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
             'is_customer' => ['nullable', 'boolean'],
             'is_vendor' => ['nullable', 'boolean'],
@@ -125,6 +127,7 @@ class CustomerController extends Controller
             'email' => ['nullable', 'email', 'max:255'],
             'connection_id' => ['required_with:internet_package_id', 'nullable', 'string', 'max:100', Rule::unique('customers', 'connection_id')->ignore($customer->id)],
             'address' => ['required', 'string'],
+            'notes' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
             'is_customer' => ['nullable', 'boolean'],
             'is_vendor' => ['nullable', 'boolean'],
@@ -238,6 +241,48 @@ class CustomerController extends Controller
 
         return back()
             ->with('success', 'Grace period added. MikroTik user '.$syncResult['status'].'.')
+            ->with('warning', $syncResult['warning']);
+    }
+
+    public function updateServiceValidity(Request $request, Customer $customer)
+    {
+        $data = $request->validate([
+            'service_valid_until' => ['required', 'date'],
+            'validity_note' => ['required', 'string', 'min:3', 'max:2000'],
+        ]);
+
+        $previous = $customer->service_valid_until?->format('Y-m-d') ?? 'not set';
+        $newUntil = $data['service_valid_until'];
+        $detail = sprintf(
+            '[%s] Manual validity override: %s → %s. Reason: %s',
+            now()->format('Y-m-d H:i'),
+            $previous,
+            $newUntil,
+            trim($data['validity_note'])
+        );
+
+        $expiresToday = Carbon::parse($newUntil)->lt(today());
+        $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
+
+        $customer->update([
+            'service_valid_until' => $newUntil,
+            'service_validity_note' => $detail,
+            'notes' => trim(implode("\n", array_filter([$customer->notes, $detail]))),
+            'status' => $expiresToday ? 'inactive' : 'active',
+        ]);
+
+        if ($subscription) {
+            $subscription->update([
+                'status' => $expiresToday ? 'inactive' : 'active',
+                'end_date' => $expiresToday ? $newUntil : null,
+            ]);
+        }
+
+        $syncResult = $this->syncMikrotikCustomer($customer);
+        $state = $expiresToday ? 'expired and moved to the inactive profile' : 'made active and synced to the service profile';
+
+        return back()
+            ->with('success', "Validity date updated. Party was {$state}; MikroTik user {$syncResult['status']}.")
             ->with('warning', $syncResult['warning']);
     }
 

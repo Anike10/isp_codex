@@ -118,6 +118,7 @@
         .per-page-select { width:auto; min-width:90px; }
         .pagination-wrap { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
         .pagination-summary { color:var(--muted); font-size:14px; }
+        .pagination-summary.pagination-summary-top { margin:16px 0 8px; font-weight:700; }
         .pagination-links { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
         .page-link { min-width:38px; min-height:38px; padding:9px 12px; border:1px solid var(--line); border-radius:6px; background:white; color:var(--ink); display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
         .page-link:hover { background:#eef4fb; }
@@ -238,6 +239,7 @@
                         @endif
                         @if (auth()->user()?->hasPermission('manage_mikrotik_routers'))
                             <a href="{{ route('mikrotik-routers.index') }}">MikroTik Routers</a>
+                            <a href="{{ route('ip-pools.index') }}">IP Pools</a>
                             <a href="{{ route('network-map.index') }}">FTTX Network Map</a>
                             <a href="{{ route('olt-onus.index') }}">OLT ONUs</a>
                             <a href="{{ route('olt-onus.deny-list') }}">ONU Deny List</a>
@@ -438,6 +440,25 @@ document.addEventListener('click', function (event) {
     if (row?.dataset.href) {
         window.location.href = row.dataset.href;
     }
+});
+
+// Keep the result-count text visible before and after every paginated table.
+// The bottom copy is server-rendered; this adds the matching top copy beside
+// the result table without changing each individual index page.
+document.querySelectorAll('[data-pagination-summary]').forEach(function (wrap) {
+    const summary = wrap.querySelector('.pagination-summary');
+    if (! summary) return;
+
+    const tablesBeforePagination = Array.from(document.querySelectorAll('table')).filter(function (table) {
+        return Boolean(table.compareDocumentPosition(wrap) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    const resultTable = tablesBeforePagination.at(-1);
+    if (! resultTable || resultTable.previousElementSibling?.classList.contains('pagination-summary-top')) return;
+
+    const topSummary = document.createElement('div');
+    topSummary.className = 'pagination-summary pagination-summary-top';
+    topSummary.textContent = summary.textContent.trim();
+    resultTable.insertAdjacentElement('beforebegin', topSummary);
 });
 </script>
 </body>

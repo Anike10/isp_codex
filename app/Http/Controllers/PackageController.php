@@ -67,6 +67,43 @@ class PackageController extends Controller
         return redirect()->route('packages.show', $package)->with('success', 'Package updated successfully.');
     }
 
+    public function inlineUpdate(Request $request, InternetPackage $package)
+    {
+        $field = $request->validate([
+            'field' => ['required', 'in:name,speed,mikrotik_profile,monthly_price,status'],
+            'value' => ['nullable'],
+        ])['field'];
+
+        $rules = [
+            'name' => ['required', 'string', 'max:255'],
+            'speed' => ['required', 'string', 'max:100'],
+            'mikrotik_profile' => ['nullable', 'string', 'max:255'],
+            'monthly_price' => ['required', 'numeric', 'min:0'],
+            'status' => ['required', 'in:active,inactive'],
+        ];
+        $value = validator(['value' => $request->input('value')], ['value' => $rules[$field]])->validate()['value'];
+
+        $package->update([$field => $value]);
+        $fresh = $package->fresh();
+
+        return response()->json([
+            'message' => 'Package updated.',
+            'value' => $field === 'monthly_price' ? number_format((float) $fresh->monthly_price, 2) : $fresh->{$field},
+            'status' => $fresh->status,
+        ]);
+    }
+
+    public function destroy(InternetPackage $package)
+    {
+        if ($package->subscriptions()->exists()) {
+            return back()->with('error', 'This package is assigned to customers, so it cannot be deleted. Mark it inactive instead.');
+        }
+
+        $package->delete();
+
+        return redirect()->route('packages.index')->with('success', 'Package deleted.');
+    }
+
     private function validatePackage(Request $request): array
     {
         return $request->validate([

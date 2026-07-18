@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MikrotikRouter extends Model
 {
@@ -55,5 +56,20 @@ class MikrotikRouter extends Model
             'api_status_since' => 'datetime',
             'ping_status_since' => 'datetime',
         ];
+    }
+
+    public function importedProfiles(): HasMany
+    {
+        return $this->hasMany(MikrotikImportedProfile::class);
+    }
+
+    public function importedIpPools(): HasMany
+    {
+        return $this->hasMany(MikrotikImportedIpPool::class);
+    }
+
+    public function importedSecrets(): HasMany
+    {
+        return $this->hasMany(MikrotikImportedSecret::class);
     }
 }

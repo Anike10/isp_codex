@@ -16,6 +16,8 @@ use App\Http\Controllers\FleetReportController;
 use App\Http\Controllers\InHouseUseController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MikrotikRouterController;
+use App\Http\Controllers\MikrotikImportController;
+use App\Http\Controllers\MikrotikRouterDataController;
 use App\Http\Controllers\NetworkMapController;
 use App\Http\Controllers\OltOnuController;
 use App\Http\Controllers\OrganizationController;
@@ -52,11 +54,13 @@ Route::middleware('auth')->group(function () {
         Route::post('customers/{customer}/advance-payments', [CustomerPaymentController::class, 'storeAdvance'])->name('customers.advance-payments.store');
         Route::post('customers/{customer}/advance-payments/apply', [CustomerPaymentController::class, 'applyAdvance'])->name('customers.advance-payments.apply');
         Route::post('customers/{customer}/grace-period', [CustomerController::class, 'grantGracePeriod'])->name('customers.grace-period');
+        Route::post('customers/{customer}/service-validity', [CustomerController::class, 'updateServiceValidity'])->name('customers.service-validity.update');
         Route::resource('customers', CustomerController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
     });
 
     Route::middleware('permission:manage_packages')->group(function () {
-        Route::resource('packages', PackageController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
+        Route::patch('packages/{package}/inline', [PackageController::class, 'inlineUpdate'])->name('packages.inline-update');
+        Route::resource('packages', PackageController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update', 'destroy']);
     });
 
     Route::middleware('permission:manage_invoices')->group(function () {
@@ -150,6 +154,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_mikrotik_routers')->group(function () {
+        Route::get('ip-pools', [MikrotikRouterDataController::class, 'globalPools'])->name('ip-pools.index');
         Route::get('network-map', [NetworkMapController::class, 'show'])->name('network-map.index');
         Route::get('network-map/features', [NetworkMapController::class, 'index'])->name('network-map.features.index');
         Route::post('network-map/features', [NetworkMapController::class, 'store'])->name('network-map.features.store');
@@ -186,7 +191,29 @@ Route::middleware('auth')->group(function () {
         Route::get('olt-onus/{oltOnu}', [OltOnuController::class, 'show'])->name('olt-onus.show');
         Route::get('olt-onus', [OltOnuController::class, 'index'])->name('olt-onus.index');
         Route::get('mikrotik-routers/{mikrotikRouter}/connection-status', [MikrotikRouterController::class, 'connectionStatus'])->name('mikrotik-routers.connection-status');
-        Route::resource('mikrotik-routers', MikrotikRouterController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
+        Route::post('mikrotik-routers/{mikrotikRouter}/import/profiles', [MikrotikImportController::class, 'importProfiles'])->name('mikrotik-routers.import.profiles');
+        Route::post('mikrotik-routers/{mikrotikRouter}/import/ip-pools', [MikrotikImportController::class, 'importIpPools'])->name('mikrotik-routers.import.ip-pools');
+        Route::post('mikrotik-routers/{mikrotikRouter}/import/secrets', [MikrotikImportController::class, 'importSecrets'])->name('mikrotik-routers.import.secrets');
+        Route::get('mikrotik-routers/{mikrotikRouter}/profiles', [MikrotikRouterDataController::class, 'profiles'])->name('mikrotik-routers.profiles.index');
+        Route::get('mikrotik-routers/{mikrotikRouter}/pools', [MikrotikRouterDataController::class, 'pools'])->name('mikrotik-routers.pools.index');
+        Route::post('mikrotik-routers/{mikrotikRouter}/pools', [MikrotikRouterDataController::class, 'createPool'])->name('mikrotik-routers.pools.store');
+        Route::get('mikrotik-routers/{mikrotikRouter}/pools/import-live', fn (\App\Models\MikrotikRouter $mikrotikRouter) => redirect()->route('mikrotik-routers.pools.index', $mikrotikRouter)->with('warning', 'Use Import to App beside the required MikroTik pool.'))->name('mikrotik-routers.pools.import-live.help');
+        Route::post('mikrotik-routers/{mikrotikRouter}/pools/import-live', [MikrotikRouterDataController::class, 'importLivePool'])->name('mikrotik-routers.pools.import-live');
+        Route::post('mikrotik-routers/{mikrotikRouter}/secrets/import-as-party', [MikrotikRouterDataController::class, 'importLiveSecretAsParty'])->name('mikrotik-routers.secrets.import-as-party');
+        Route::patch('mikrotik-routers/{mikrotikRouter}/pools/{appIpPool}', [MikrotikRouterDataController::class, 'updatePool'])->name('mikrotik-routers.pools.update');
+        Route::delete('mikrotik-routers/{mikrotikRouter}/pools/{appIpPool}', [MikrotikRouterDataController::class, 'deletePool'])->name('mikrotik-routers.pools.destroy');
+        Route::post('mikrotik-routers/{mikrotikRouter}/pools/{appIpPool}/export', [MikrotikRouterDataController::class, 'exportPool'])->name('mikrotik-routers.pools.export');
+        Route::post('mikrotik-routers/{mikrotikRouter}/imported-pools/{mikrotikImportedIpPool}/save-to-app', [MikrotikRouterDataController::class, 'saveImportedPool'])->name('mikrotik-routers.imported-pools.save-to-app');
+        Route::get('mikrotik-routers/{mikrotikRouter}/compare', [MikrotikRouterDataController::class, 'compare'])->name('mikrotik-routers.compare');
+        Route::patch('mikrotik-routers/{mikrotikRouter}/compare/inline', [MikrotikRouterDataController::class, 'inlineUpdate'])->name('mikrotik-routers.compare.inline-update');
+        Route::post('mikrotik-routers/{mikrotikRouter}/profiles/{package}/export', [MikrotikRouterDataController::class, 'exportProfile'])->name('mikrotik-routers.profiles.export');
+        Route::post('mikrotik-routers/{mikrotikRouter}/customers/{customer}/export', [MikrotikRouterDataController::class, 'exportCustomer'])->name('mikrotik-routers.customers.export');
+        Route::delete('mikrotik-routers/{mikrotikRouter}/router-extra', [MikrotikRouterDataController::class, 'deleteRouterExtra'])->name('mikrotik-routers.router-extra.destroy');
+        Route::get('mikrotik-routers/{mikrotikRouter}/imported-secrets', [MikrotikImportController::class, 'secrets'])->name('mikrotik-routers.imported-secrets.index');
+        Route::get('mikrotik-routers/{mikrotikRouter}/imported-secrets/create-parties', fn (\App\Models\MikrotikRouter $mikrotikRouter) => redirect()->route('mikrotik-routers.imported-secrets.index', $mikrotikRouter)->with('warning', 'Select PPPoE secrets from the list, then use Create Selected Parties.'))->name('mikrotik-routers.imported-secrets.create-parties.help');
+        Route::patch('mikrotik-routers/{mikrotikRouter}/imported-secrets/{mikrotikImportedSecret}', [MikrotikImportController::class, 'updateSecret'])->name('mikrotik-routers.imported-secrets.update');
+        Route::post('mikrotik-routers/{mikrotikRouter}/imported-secrets/create-parties', [MikrotikImportController::class, 'createParties'])->name('mikrotik-routers.imported-secrets.create-parties');
+        Route::resource('mikrotik-routers', MikrotikRouterController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update', 'destroy']);
     });
 
     Route::middleware('permission:manage_tickets')->group(function () {

@@ -145,6 +145,23 @@ class OltManagementTest extends TestCase
         $this->assertNull($olt->fresh()->last_raw_output);
     }
 
+    public function test_index_distinguishes_configured_active_from_a_failed_olt_connection(): void
+    {
+        $olt = $this->gponOltWithEponCommands();
+        $olt->update([
+            'status' => 'active',
+            'last_error' => 'Cannot connect to OLT 103.133.200.180:23. Connection refused',
+        ]);
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs(User::factory()->create())
+            ->get(route('olt-onus.index', ['olt_device_id' => $olt->id]))
+            ->assertOk()
+            ->assertSee('Configured Active')
+            ->assertSee('Connection failed')
+            ->assertSee('OLT could not be reached: Cannot connect to OLT 103.133.200.180:23. Connection refused');
+    }
+
     public function test_deleting_an_olt_also_deletes_its_cached_onus(): void
     {
         $olt = $this->gponOltWithEponCommands();

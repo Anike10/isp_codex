@@ -1,0 +1,56 @@
+@extends('layouts.app')
+@section('content')
+<div class="topbar"><div><h1>Compare & Sync · {{ $mikrotikRouter->name }}</h1><div class="muted">App ও live MikroTik তুলনা করুন। App-এ নেই হলে Export, MikroTik-এ বেশি থাকলে Import অথবা confirmation দিয়ে Delete করুন।</div></div><a class="btn light" href="{{ route('mikrotik-routers.show', $mikrotikRouter) }}">Back</a></div>
+
+<section class="card" style="margin-bottom:16px"><div class="actions" style="justify-content:space-between"><div><h2>PPP Profiles</h2><div class="muted">App package profile ↔ MikroTik PPP profile</div></div><form method="post" action="{{ route('mikrotik-routers.import.profiles',$mikrotikRouter) }}">@csrf<button class="btn secondary">Import all Profiles</button></form></div>
+<table><thead><tr><th>Item</th><th>Where it exists</th><th>Action</th></tr></thead><tbody>
+@foreach($packageProfiles as $package)@php($live=$liveProfiles->firstWhere('name',$package->mikrotik_profile))<tr><td data-inline="1" data-type="profile" data-field="name" data-app-id="{{ $package->id }}" data-routeros-id="{{ $live['.id'] ?? '' }}">{{ $package->mikrotik_profile }}</td><td>{{ $live ? 'App + MikroTik' : 'App only' }}</td><td>@unless($live)<form method="post" action="{{ route('mikrotik-routers.profiles.export',[$mikrotikRouter,$package]) }}">@csrf<button class="btn secondary">Export to MikroTik</button></form>@endunless</td></tr>@endforeach
+@foreach($liveProfiles->filter(fn($r)=>!$packageProfiles->contains('mikrotik_profile',$r['name'] ?? '')) as $item)<tr><td>{{ $item['name'] ?? '—' }}</td><td>MikroTik only</td><td><div class="actions"><form method="post" action="{{ route('mikrotik-routers.import.profiles',$mikrotikRouter) }}">@csrf<button class="btn light">Import to App</button></form><form method="post" action="{{ route('mikrotik-routers.router-extra.destroy',$mikrotikRouter) }}" onsubmit="return confirm('Delete this PPP profile from MikroTik?')">@csrf @method('DELETE')<input type="hidden" name="type" value="profile"><input type="hidden" name="routeros_id" value="{{ $item['.id'] }}"><button class="btn danger">Delete</button></form></div></td></tr>@endforeach
+</tbody></table></section>
+
+<section class="card" style="margin-bottom:16px"><div class="actions" style="justify-content:space-between"><div><h2>IP Pools</h2><div class="muted">Local IP pools ↔ MikroTik IP pools</div></div><form method="post" action="{{ route('mikrotik-routers.import.ip-pools',$mikrotikRouter) }}" data-preserve-scroll>@csrf<button class="btn secondary">Import all IP Pools</button></form></div>
+<table><thead><tr><th>Item</th><th>App IP range</th><th>MikroTik IP range</th><th>Where it exists</th><th>Action</th></tr></thead><tbody>
+@foreach($localPools as $pool)@php($live=$livePools->firstWhere('name',$pool->name))<tr><td data-inline="1" data-type="pool" data-field="name" data-app-id="{{ $pool->id }}" data-routeros-id="{{ $live['.id'] ?? '' }}">{{ $pool->name }}</td><td data-inline="1" data-type="pool" data-field="ranges" data-app-id="{{ $pool->id }}" data-routeros-id="{{ $live['.id'] ?? '' }}">{{ $pool->ranges ?: '—' }}</td><td data-inline="1" data-type="pool" data-field="ranges" data-app-id="{{ $pool->id }}" data-routeros-id="{{ $live['.id'] ?? '' }}">{{ $live['ranges'] ?? '—' }}</td><td>{{ $live ? 'App + MikroTik' : 'App only' }}</td><td>@unless($live)<form method="post" action="{{ route('mikrotik-routers.pools.export',[$mikrotikRouter,$pool]) }}">@csrf<button class="btn secondary">Export to MikroTik</button></form>@endunless</td></tr>@endforeach
+@foreach($livePools->filter(fn($r)=>!$localPools->contains('name',$r['name'] ?? '')) as $item)<tr><td>{{ $item['name'] ?? '—' }}</td><td>—</td><td>{{ $item['ranges'] ?? '—' }}</td><td>MikroTik only</td><td><div class="actions"><form method="post" action="{{ route('mikrotik-routers.pools.import-live',$mikrotikRouter) }}">@csrf<input type="hidden" name="routeros_id" value="{{ $item['.id'] }}"><button class="btn light">Import to App</button></form><form method="post" action="{{ route('mikrotik-routers.router-extra.destroy',$mikrotikRouter) }}" onsubmit="return confirm('Delete this IP pool from MikroTik?')">@csrf @method('DELETE')<input type="hidden" name="type" value="pool"><input type="hidden" name="routeros_id" value="{{ $item['.id'] }}"><button class="btn danger">Delete</button></form></div></td></tr>@endforeach
+</tbody></table></section>
+
+<section class="card"><div class="actions" style="justify-content:space-between"><div><h2>PPPoE Users</h2><div class="muted">App Party/Connection ID ↔ MikroTik PPPoE secret</div></div><form method="post" action="{{ route('mikrotik-routers.import.secrets',$mikrotikRouter) }}" data-preserve-scroll>@csrf<input type="hidden" name="return_to_compare" value="1"><button class="btn secondary">Import all PPPoE Users</button></form></div>
+<table><thead><tr><th>Item</th><th>Where it exists</th><th>Action</th></tr></thead><tbody>
+@foreach($customers as $customer)@php($live=$liveSecrets->firstWhere('name',$customer->connection_id))<tr><td data-inline="1" data-type="secret" data-field="name" data-app-id="{{ $customer->id }}" data-routeros-id="{{ $live['.id'] ?? '' }}">{{ $customer->connection_id }}</td><td>{{ $live ? 'App + MikroTik' : 'App only' }}</td><td>@unless($live)<form method="post" action="{{ route('mikrotik-routers.customers.export',[$mikrotikRouter,$customer]) }}">@csrf<button class="btn secondary">Export to MikroTik</button></form>@endunless</td></tr>@endforeach
+@foreach($liveSecrets->filter(fn($r)=>!$customers->contains('connection_id',$r['name'] ?? '')) as $item)<tr><td>{{ $item['name'] ?? '—' }}</td><td>MikroTik only</td><td><div class="actions"><form method="post" action="{{ route('mikrotik-routers.secrets.import-as-party',$mikrotikRouter) }}" data-preserve-scroll>@csrf<input type="hidden" name="routeros_id" value="{{ $item['.id'] }}"><button class="btn light">Import as Party</button></form><form method="post" action="{{ route('mikrotik-routers.router-extra.destroy',$mikrotikRouter) }}" onsubmit="return confirm('Delete this PPPoE user from MikroTik?')">@csrf @method('DELETE')<input type="hidden" name="type" value="secret"><input type="hidden" name="routeros_id" value="{{ $item['.id'] }}"><button class="btn danger">Delete</button></form></div></td></tr>@endforeach
+</tbody></table></section>
+<script>
+const compareToken = '{{ csrf_token() }}';
+document.querySelectorAll('[data-inline]').forEach(cell => cell.addEventListener('dblclick', () => {
+    if (cell.querySelector('input')) return;
+    const old = cell.textContent.trim();
+    const input = document.createElement('input');
+    input.value = old === '—' ? '' : old;
+    input.style.width = '100%'; cell.replaceChildren(input); input.focus(); input.select();
+    const save = async () => { try {
+        const response = await fetch('{{ route('mikrotik-routers.compare.inline-update', $mikrotikRouter) }}', {method:'PATCH', headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':compareToken}, body:JSON.stringify({type:cell.dataset.type,field:cell.dataset.field,value:input.value,app_id:cell.dataset.appId||null,routeros_id:cell.dataset.routerosId||null})});
+        if (!response.ok) throw new Error((await response.json()).message || 'Save failed'); window.location.reload();
+    } catch (error) { alert(error.message); cell.textContent=old; } };
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', event => { if(event.key==='Enter'){event.preventDefault();save()} if(event.key==='Escape'){cell.textContent=old} });
+}));
+</script>
+<script>
+// MikroTik-only rows carry the RouterOS id in their action form. Make their
+// visible name/range cells editable too.
+document.querySelectorAll('input[name="routeros_id"]').forEach(idInput => {
+    const row = idInput.closest('tr');
+    if (!row) return;
+    const typeInput = row.querySelector('input[name="type"]');
+    const type = typeInput ? typeInput.value : (row.closest('section')?.querySelector('h2')?.textContent.includes('IP Pools') ? 'pool' : 'secret');
+    const cells = row.querySelectorAll('td');
+    if (cells[0] && !cells[0].dataset.inline) Object.assign(cells[0].dataset, {inline:'1', type, field:'name', routerosId:idInput.value});
+    if (type === 'pool' && cells[2] && !cells[2].dataset.inline) Object.assign(cells[2].dataset, {inline:'1', type:'pool', field:'ranges', routerosId:idInput.value});
+});
+document.addEventListener('dblclick', event => {
+ const cell=event.target.closest('[data-inline]'); if(!cell||cell.querySelector('input'))return;
+ const old=cell.textContent.trim(),input=document.createElement('input'); input.value=old==='—'?'':old; input.style.width='100%';cell.replaceChildren(input);input.focus();input.select();
+ const save=async()=>{try{const r=await fetch('{{ route('mikrotik-routers.compare.inline-update', $mikrotikRouter) }}',{method:'PATCH',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':compareToken},body:JSON.stringify({type:cell.dataset.type,field:cell.dataset.field,value:input.value,app_id:cell.dataset.appId||null,routeros_id:cell.dataset.routerosId||null})});if(!r.ok)throw new Error((await r.json()).message||'Save failed');location.reload()}catch(e){alert(e.message);cell.textContent=old}};input.addEventListener('blur',save);input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save()}if(e.key==='Escape')cell.textContent=old});
+});
+</script>
+@endsection

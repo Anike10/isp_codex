@@ -34,6 +34,7 @@
         <span class="muted">Used only for ISP parties with a Connection ID.</span>
     </div>
     <div class="full"><label>Address</label><textarea name="address" required>{{ old('address') }}</textarea></div>
+    <div class="full"><label>Note</label><textarea name="notes">{{ old('notes') }}</textarea></div>
     <div>
         <label>Status</label>
         <select name="status" required>

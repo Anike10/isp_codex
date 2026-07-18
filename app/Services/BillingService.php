@@ -35,9 +35,14 @@ class BillingService
 
     public function generateCurrentServiceBillForCustomer(Customer $customer, ?string $billingMonth = null): ?Invoice
     {
-        $customer->loadMissing('activeSubscription.package');
+        $customer->loadMissing(['activeSubscription.package', 'subscriptions.package']);
 
-        if (! $customer->activeSubscription || $customer->activeSubscription->status !== 'active') {
+        // Keep the most recent package on an expired Party. A payment can then
+        // create the renewal bill and restore that same MikroTik profile.
+        $subscription = $customer->activeSubscription
+            ?: $customer->subscriptions->sortByDesc('id')->first();
+
+        if (! $subscription || ! $subscription->package) {
             return null;
         }
 
@@ -45,7 +50,42 @@ class BillingService
             ? Carbon::createFromFormat('Y-m', $billingMonth)->startOfMonth()
             : now()->startOfMonth();
 
-        return $this->createServiceInvoice($customer->activeSubscription, $month);
+        return $this->createServiceInvoice($subscription, $month);
+    }
+
+    /**
+     * Create the next unpaid renewal for the Party's remembered package.
+     * If the current billing month is already paid, the next month is used.
+     */
+    public function generateNextRenewalServiceBillForCustomer(Customer $customer, string $paymentDate): ?Invoice
+    {
+        $customer->loadMissing(['activeSubscription.package', 'subscriptions.package']);
+        $subscription = $customer->activeSubscription
+            ?: $customer->subscriptions->sortByDesc('id')->first();
+
+        if (! $subscription || ! $subscription->package) {
+            return null;
+        }
+
+        $month = Carbon::parse($paymentDate)->startOfMonth();
+
+        // A paid July bill means another July payment renews August, not the
+        // already-settled July invoice.
+        for ($attempt = 0; $attempt < 24; $attempt++) {
+            $existing = Invoice::query()
+                ->where('customer_id', $customer->id)
+                ->where('billing_month', $month->format('Y-m'))
+                ->where('invoice_type', 'service')
+                ->first();
+
+            if (! $existing || (float) $existing->due_amount > 0) {
+                return $existing ?: $this->createServiceInvoice($subscription, $month);
+            }
+
+            $month->addMonthNoOverflow();
+        }
+
+        return null;
     }
 
     private function createServiceInvoice(Subscription $subscription, Carbon $month): Invoice

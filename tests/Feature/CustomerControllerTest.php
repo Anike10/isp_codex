@@ -167,4 +167,73 @@ class CustomerControllerTest extends TestCase
             Carbon::setTestNow();
         }
     }
+
+    public function test_manual_validity_change_requires_and_records_a_reason(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Validity Customer',
+            'phone' => '01755555555',
+            'connection_id' => 'VALID-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'service_valid_until' => '2026-06-30',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('customers.service-validity.update', $customer), ['service_valid_until' => '2026-07-15'])
+            ->assertSessionHasErrors('validity_note');
+
+        $this->actingAs($user)
+            ->post(route('customers.service-validity.update', $customer), [
+                'service_valid_until' => '2026-07-15',
+                'validity_note' => 'Customer paid late; manager approved extension.',
+            ])
+            ->assertRedirect();
+
+        $customer->refresh();
+        $this->assertSame('2026-07-15', $customer->service_valid_until?->format('Y-m-d'));
+        $this->assertStringContainsString('2026-06-30 → 2026-07-15', $customer->service_validity_note);
+        $this->assertStringContainsString('manager approved extension', $customer->notes);
+    }
+
+    public function test_manual_past_validity_date_expires_subscription_for_mikrotik_sync(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $package = InternetPackage::create(['name' => 'Expired Plan', 'speed' => '10 Mbps', 'monthly_price' => 500, 'status' => 'active']);
+        $customer = Customer::create(['name' => 'Expiry Customer', 'phone' => '01766666666', 'connection_id' => 'EXPIRE-001', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true]);
+        $subscription = Subscription::create(['customer_id' => $customer->id, 'internet_package_id' => $package->id, 'start_date' => '2026-06-01', 'status' => 'active']);
+
+        $this->actingAs($user)->post(route('customers.service-validity.update', $customer), [
+            'service_valid_until' => now()->subDay()->toDateString(),
+            'validity_note' => 'Payment period is over.',
+        ])->assertRedirect();
+
+        $this->assertSame('inactive', $customer->refresh()->status);
+        $this->assertSame('inactive', $subscription->refresh()->status);
+        $this->assertSame(now()->subDay()->toDateString(), $subscription->end_date?->format('Y-m-d'));
+    }
+
+    public function test_expired_party_payment_renews_the_remembered_package(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $package = InternetPackage::create(['name' => 'Remembered 30 MB', 'speed' => '30 Mbps', 'mikrotik_profile' => 'Remembered 30 MB', 'monthly_price' => 1000, 'status' => 'active']);
+        $customer = Customer::create(['name' => 'Renew Customer', 'phone' => '01777777777', 'connection_id' => 'RENEW-001', 'address' => 'Kushtia', 'status' => 'inactive', 'is_customer' => true]);
+        $subscription = Subscription::create(['customer_id' => $customer->id, 'internet_package_id' => $package->id, 'start_date' => '2026-06-01', 'end_date' => '2026-07-01', 'status' => 'inactive']);
+
+        $this->actingAs($user)->post(route('customers.payments.store', $customer), [
+            'amount' => 1000,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-07-18',
+        ])->assertRedirect(route('customers.show', $customer));
+
+        $this->assertSame('active', $customer->refresh()->status);
+        $this->assertSame('active', $subscription->refresh()->status);
+        $this->assertNull($subscription->end_date);
+        $this->assertDatabaseHas('invoices', ['customer_id' => $customer->id, 'billing_month' => '2026-07', 'due_amount' => 0]);
+    }
 }

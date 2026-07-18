@@ -37,7 +37,11 @@
     </div>
     <div>
         <label>Username</label>
-        <input name="username" value="{{ old('username', $mikrotikRouter->username) }}" required>
+        <div class="actions" style="gap:6px">
+            <input id="router-username" name="username" value="{{ old('username', $mikrotikRouter->username) }}" autocomplete="off" readonly required>
+            <button class="btn light" type="button" id="unlock-router-username">Change Username</button>
+        </div>
+        <span class="muted">Locked by default so browser autofill cannot change it accidentally.</span>
     </div>
     <div>
         <label>New Password</label>
@@ -59,4 +63,13 @@
         <button class="btn" type="submit">Update Router</button>
     </div>
 </form>
+<script>
+document.getElementById('unlock-router-username')?.addEventListener('click', function () {
+    const input = document.getElementById('router-username');
+    input.readOnly = false;
+    input.focus();
+    input.select();
+    this.textContent = 'Username Editable';
+});
+</script>
 @endsection

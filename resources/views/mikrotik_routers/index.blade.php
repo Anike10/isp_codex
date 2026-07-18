@@ -56,8 +56,13 @@
                 <td class="router-last-offline">{{ $router->last_offline_at?->format('Y-m-d H:i:s') ?? 'Never' }}</td>
                 <td>
                     <div class="actions">
-                        <a class="btn light" href="{{ route('mikrotik-routers.show', $router) }}">View</a>
                         <a class="btn secondary" href="{{ route('mikrotik-routers.edit', $router) }}">Edit</a>
+                        <a class="btn light" href="{{ route('mikrotik-routers.compare', $router) }}">Compare</a>
+                        <form method="post" action="{{ route('mikrotik-routers.destroy', $router) }}" onsubmit="return confirm('Delete MikroTik router {{ addslashes($router->name) }}? Imported data will be removed and linked party targets will be cleared.')">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn danger" type="submit">Delete</button>
+                        </form>
                     </div>
                 </td>
             </tr>

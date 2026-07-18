@@ -2208,19 +2208,11 @@ class OltOnuController extends Controller
 
     private function utilityAccessMethod(OltDevice $oltDevice): string
     {
-        if ($oltDevice->access_method === 'ssh' && $this->usesHsgqEpon($oltDevice)) {
-            return 'telnet';
-        }
-
         return $oltDevice->access_method;
     }
 
     private function readAccessMethod(OltDevice $oltDevice): string
     {
-        if ($oltDevice->access_method === 'ssh' && $this->usesHsgqEpon($oltDevice)) {
-            return 'telnet';
-        }
-
         return $oltDevice->access_method;
     }
 
@@ -3002,10 +2994,6 @@ class OltOnuController extends Controller
 
     private function writeAccessMethod(OltDevice $oltDevice): string
     {
-        if ($oltDevice->access_method === 'ssh' && $this->usesHsgqEpon($oltDevice)) {
-            return 'telnet';
-        }
-
         return $oltDevice->access_method;
     }
 

@@ -26,22 +26,34 @@
                 @php
                     $ponSummary = $oltPonSummaries->get($oltDevice->id, collect());
                     $commandWarnings = $oltCommandWarnings[$oltDevice->id] ?? [];
+                    if ($oltDevice->status !== 'active') {
+                        $connectionBadge = 'Polling disabled';
+                        $connectionBadgeClass = 'inactive';
+                        $connectionMessage = 'This OLT is configured inactive, so no connection attempt will run.';
+                    } elseif ($oltDevice->last_error) {
+                        $connectionBadge = 'Connection failed';
+                        $connectionBadgeClass = 'failed';
+                        $connectionMessage = 'OLT could not be reached: '.$oltDevice->last_error;
+                    } elseif ($oltDevice->last_polled_at) {
+                        $connectionBadge = 'Connected';
+                        $connectionBadgeClass = 'active';
+                        $connectionMessage = 'Last live OLT connection succeeded.';
+                    } else {
+                        $connectionBadge = 'Not connected';
+                        $connectionBadgeClass = 'pending';
+                        $connectionMessage = 'No successful OLT connection has been completed yet.';
+                    }
                 @endphp
                 <div style="border-bottom:1px solid var(--line); padding:12px 0">
                     <div class="actions" style="justify-content:space-between; align-items:flex-start">
-                        <div>
-                        <strong>{{ $oltDevice->name }}</strong>
-                        <div class="muted">
-                            {{ $oltDevice->host }}:{{ $oltDevice->port }}
+                        <div style="min-width:0">
+                        <div class="muted" style="white-space:nowrap; overflow-x:auto; padding-bottom:2px">
+                            <strong>{{ $oltDevice->name }}</strong>
+                            | {{ $oltDevice->host }}:{{ $oltDevice->port }}
                             | {{ $oltDevice->brand ?: 'Unknown Brand' }}
                             | {{ $protocolProfiles[$oltDevice->protocol_profile] ?? $oltDevice->protocol_profile ?? 'Unknown Profile' }}
                             | Last: {{ $oltDevice->last_polled_at?->format('Y-m-d H:i:s') ?? 'Never' }}
-                            @if ($oltDevice->last_error)
-                                | Error: {{ $oltDevice->last_error }}
-                            @endif
-                        </div>
-                        <div class="muted" style="margin-top:5px">
-                            Cached: {{ number_format($oltDevice->onus_count) }}
+                            | Cached: {{ number_format($oltDevice->onus_count) }}
                             | Online: {{ number_format($oltDevice->online_onus_count) }}
                             | PON data:
                             @forelse ($ponSummary as $ponRow)
@@ -49,12 +61,14 @@
                             @empty
                                 none
                             @endforelse
+                            | <span class="badge {{ $connectionBadgeClass }}">{{ $connectionBadge }}</span>
+                            <span style="margin-left:5px">{{ $connectionMessage }}</span>
                         </div>
                         @if ($commandWarnings !== [])
                             <div class="badge failed" style="margin-top:8px">Profile mismatch: {{ implode(', ', $commandWarnings) }}</div>
                         @endif
                         </div>
-                        <span class="badge {{ $oltDevice->status === 'active' ? 'active' : 'inactive' }}">{{ ucfirst($oltDevice->status) }}</span>
+                        <span class="badge {{ $oltDevice->status === 'active' ? 'active' : 'inactive' }}">Configured {{ ucfirst($oltDevice->status) }}</span>
                     </div>
 
                     @if ($commandWarnings !== [])
@@ -106,6 +120,18 @@
                             @method('DELETE')
                             <button class="btn danger" type="submit">Delete OLT</button>
                         </form>
+                        <button class="btn light" type="button" data-olt-help-toggle data-help-target="olt-button-help-{{ $oltDevice->id }}" aria-controls="olt-button-help-{{ $oltDevice->id }}" aria-expanded="false">বাটনের কাজ দেখুন</button>
+                    </div>
+                    <div id="olt-button-help-{{ $oltDevice->id }}" class="muted" style="margin-top:8px; line-height:1.65" hidden>
+                        <strong>বাটনগুলোর কাজ:</strong>
+                        Edit OLT = OLT-এর IP, পোর্ট, লগইন ও PON সেটিং পরিবর্তন করুন।
+                        Save OLT Config = OLT-তে করা পরিবর্তন স্থায়ীভাবে সংরক্ষণ করুন।
+                        Download Config Backup = OLT-এর বর্তমান কনফিগারেশনের ব্যাকআপ ডাউনলোড করুন।
+                        Fast Status Refresh = দ্রুত অনলাইন/অফলাইন স্ট্যাটাস আপডেট করুন।
+                        All configured PONs = সব কনফিগার করা PON একসাথে বেছে নিন।
+                        Power/VLAN + MAC Refresh = পাওয়ার, VLAN ও MAC-সহ পূর্ণ তথ্য ব্যাকগ্রাউন্ডে আপডেট করুন; সময় লাগতে পারে।
+                        Clear Refresh Error = শুধু আগের refresh error/output মুছুন, ONU তালিকা থাকবে।
+                        Delete OLT = OLT এবং তার cached ONU/ONT তালিকা স্থায়ীভাবে মুছে ফেলুন।
                     </div>
                     @php
                         $activeRefreshRun = $oltDevice->latestRefreshRun?->isActive() ? $oltDevice->latestRefreshRun : null;
@@ -902,6 +928,20 @@ document.querySelectorAll('[data-background-refresh-form]').forEach(function (fo
             submitButton.disabled = false;
             submitButton.textContent = 'Power/VLAN + MAC Refresh';
         }
+    });
+});
+
+document.querySelectorAll('[data-olt-help-toggle]').forEach(function (button) {
+    button.addEventListener('click', function () {
+        const help = document.getElementById(button.dataset.helpTarget);
+
+        if (!help) {
+            return;
+        }
+
+        help.hidden = !help.hidden;
+        button.setAttribute('aria-expanded', help.hidden ? 'false' : 'true');
+        button.textContent = help.hidden ? 'বাটনের কাজ দেখুন' : 'বাটনের কাজ লুকান';
     });
 });
 

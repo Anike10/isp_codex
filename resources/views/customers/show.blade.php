@@ -7,88 +7,56 @@
         || auth()->user()?->hasPermission('manage_warranty_claims')
         || auth()->user()?->hasPermission('manage_products');
 @endphp
-<div class="topbar">
-    <div><h1>{{ $customer->name }}</h1><div class="muted">{{ $customer->connection_id ?: 'Product-only party' }} - {{ $customer->phone }}</div></div>
-    <div class="actions">
-        <a class="btn" href="{{ route('customers.payments.create', $customer) }}">Record Payment</a>
-        <a class="btn secondary" href="{{ route('customers.edit', $customer) }}">Edit</a>
-        <a class="btn light" href="{{ route('customers.index') }}">Back</a>
+@php
+    $activeUntil = $customer->activeUntil();
+    $daysRemaining = $customer->activeDaysRemaining();
+    $totalDue = (float) $customer->invoices->sum('due_amount');
+    $netBalance = (float) $customer->account_balance - $totalDue;
+    $serviceSubscription = $customer->activeSubscription ?: $customer->subscriptions->sortByDesc('id')->first();
+@endphp
+<style>
+    .party-page{max-width:1320px;margin:0 auto}.party-hero{padding:24px;border-radius:16px;color:#fff;background:linear-gradient(122deg,#102a43,#116149 58%,#1d76c9);box-shadow:0 16px 34px rgba(16,42,67,.18)}.party-hero-top{display:flex;gap:18px;justify-content:space-between;align-items:flex-start}.party-kicker{margin:0 0 7px;color:#c9f3e5;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.party-hero h1{font-size:32px;letter-spacing:-.03em}.party-subtitle{margin:7px 0 0;color:#dce9f7}.party-hero .btn.light{background:rgba(255,255,255,.16);color:#fff}.party-hero .btn.secondary{background:#fff;color:#116149}.party-quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:22px}.party-quick-item{min-height:88px;padding:14px;border:1px solid rgba(255,255,255,.16);border-radius:11px;background:rgba(255,255,255,.1)}.party-quick-label{display:block;color:#c4dbef;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}.party-quick-value{display:block;margin-top:8px;font-size:17px;font-weight:800;line-height:1.25}.party-quick-meta{display:block;margin-top:4px;color:#c4dbef;font-size:12px;font-weight:700}.party-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,.85fr);gap:16px;margin-top:16px}.party-card{padding:20px;border:1px solid #dce6ef;border-radius:14px;background:#fff;box-shadow:0 5px 16px rgba(15,23,42,.045)}.party-card h2{display:flex;gap:9px;align-items:center;margin-bottom:16px;font-size:18px}.party-card h2:before{width:4px;height:21px;border-radius:99px;background:#116149;content:""}.party-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;margin:0}.party-details>div{padding:11px 0;border-bottom:1px solid #edf1f5}.party-details dt{margin-bottom:4px;color:#667085;font-size:12px;font-weight:700}.party-details dd{margin:0;font-weight:700;line-height:1.45}.party-note{grid-column:1/-1}.party-note dd{padding:10px 12px;border-radius:8px;background:#f7fafc;font-weight:400;white-space:normal}.billing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.billing-stat{padding:14px;border-radius:10px;background:#f6f9fc}.billing-stat span{display:block;color:#667085;font-size:12px;font-weight:700}.billing-stat strong{display:block;margin-top:6px;font-size:21px}.validity-panel{margin-top:18px;padding:15px;border:1px solid #bce6d4;border-radius:10px;background:#f0fbf6}.validity-panel .muted{margin:7px 0 0}.validity-details{margin:10px 0 0;font-size:13px;line-height:1.5}.validity-editor{margin-top:13px;padding-top:12px;border-top:1px solid #cfeade}.validity-editor summary{color:#175cd3;font-weight:800;cursor:pointer}.validity-form{display:grid;grid-template-columns:180px minmax(220px,1fr) auto;gap:9px;margin-top:10px;align-items:end}.validity-form label{font-size:12px}.party-section{margin-top:16px;border-radius:14px;border-color:#dce6ef;box-shadow:0 5px 16px rgba(15,23,42,.04)}.party-section h2{display:flex;align-items:center;gap:9px}.party-section h2:before{width:4px;height:21px;border-radius:99px;background:#1d76c9;content:""}@media(max-width:800px){.party-hero{padding:18px}.party-hero-top,.party-layout{grid-template-columns:1fr;display:grid}.party-quick{grid-template-columns:repeat(2,minmax(0,1fr))}.party-details{grid-template-columns:1fr}.validity-form{grid-template-columns:1fr}.party-hero .actions>*{width:auto}.party-hero h1{font-size:26px}}@media(max-width:460px){.party-quick,.billing-grid{grid-template-columns:1fr}.party-hero .actions>*{width:100%}}
+</style>
+
+<div class="party-page">
+    <section class="party-hero">
+        <div class="party-hero-top">
+            <div><p class="party-kicker">Party profile</p><h1>{{ $customer->name }}</h1><p class="party-subtitle">{{ $customer->connection_id ?: 'Product-only party' }} · {{ $customer->phone }}</p></div>
+            <div class="actions"><a class="btn" href="{{ route('customers.payments.create', $customer) }}">Record Payment</a><a class="btn secondary" href="{{ route('customers.edit', $customer) }}">Edit Party</a><a class="btn light" href="{{ route('customers.index') }}">All Parties</a></div>
+        </div>
+        <div class="party-quick">
+            <div class="party-quick-item"><span class="party-quick-label">Service status</span><span class="party-quick-value"><span class="badge {{ $customer->status }}">{{ ucfirst($customer->status) }}</span></span></div>
+            <div class="party-quick-item"><span class="party-quick-label">Validity until</span><span class="party-quick-value">{{ $activeUntil?->format('d M Y') ?? 'Not set' }}</span>@if ($daysRemaining !== null)<span class="party-quick-meta">{{ $daysRemaining < 0 ? 'Expired '.abs($daysRemaining).' day(s) ago' : ($daysRemaining === 0 ? 'Last valid day' : $daysRemaining.' day(s) left') }}</span>@endif</div>
+            <div class="party-quick-item"><span class="party-quick-label">Current due</span><span class="party-quick-value">৳ {{ number_format($totalDue, 2) }}</span></div>
+            <div class="party-quick-item"><span class="party-quick-label">Package</span><span class="party-quick-value">{{ $serviceSubscription?->package?->name ?? 'Not assigned' }}</span></div>
+        </div>
+    </section>
+
+    <div class="party-layout">
+        <section class="party-card">
+            <h2>Service & Network</h2>
+            <dl class="party-details">
+                <div><dt>Party type</dt><dd>@if ($customer->is_customer)<span class="badge active">Customer</span>@endif @if ($customer->is_vendor)<span class="badge pending">Vendor</span>@endif</dd></div>
+                <div><dt>Grace period</dt><dd>{{ $customer->grace_used_at ? 'Used '.$customer->grace_days.' day(s), until '.$customer->grace_until?->format('Y-m-d') : 'Not used' }}</dd></div>
+                <div><dt>MikroTik user ID</dt><dd>{{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Not assigned' }}</dd></div>
+                <div><dt>MikroTik profile</dt><dd>{{ $serviceSubscription?->package?->mikrotik_profile ?? 'No saved profile' }}</dd></div>
+                <div class="party-note"><dt>MikroTik target</dt><dd>{{ ($customer->mikrotik_username || $customer->connection_id) ? ($customer->mikrotikRouter ? $customer->mikrotikRouter->name.' · '.$customer->mikrotikRouter->ip_address.':'.$customer->mikrotikRouter->api_port : 'All active MikroTik routers') : 'Not assigned' }}</dd></div>
+            </dl>
+            <div class="validity-panel">
+                <strong>Validity: {{ $activeUntil?->format('Y-m-d') ?? 'Not set' }}</strong>
+                <span class="badge {{ $daysRemaining !== null && $daysRemaining < 0 ? 'overdue' : 'active' }}">{{ $daysRemaining === null ? 'No paid period' : ($daysRemaining < 0 ? 'Expired '.abs($daysRemaining).' days ago' : ($daysRemaining === 0 ? 'Last day' : $daysRemaining.' days left')) }}</span>
+                @if ($customer->hasActiveGracePeriod()) <span class="badge pending">Grace period active</span> @endif
+                <div class="validity-details">{!! $customer->service_validity_note ? nl2br(e($customer->service_validity_note)) : 'No payment-based validity calculation recorded yet.' !!}</div>
+                <details class="validity-editor"><summary>Force validity date (note required)</summary><form method="post" action="{{ route('customers.service-validity.update', $customer) }}" class="validity-form">@csrf <div><label>New validity date</label><input type="date" name="service_valid_until" value="{{ old('service_valid_until', $customer->service_valid_until?->format('Y-m-d')) }}" required></div><div><label>Reason / note</label><input type="text" name="validity_note" value="{{ old('validity_note') }}" placeholder="Reason is required" required></div><button class="btn secondary" type="submit">Save</button></form></details>
+            </div>
+            @if (($customer->status === 'inactive' || ($daysRemaining !== null && $daysRemaining < 0)) && ! $customer->grace_used_at)
+                @if ($customer->subscriptions->isNotEmpty())<form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="margin-top:14px">@csrf <input type="number" name="grace_days" min="1" max="365" placeholder="Grace days" required><button class="btn secondary" type="submit">Give Grace Period</button></form>@else <p><a class="btn light" href="{{ route('customers.edit', $customer) }}">Assign package before giving grace</a></p>@endif
+            @endif
+        </section>
+        <aside class="party-card"><h2>Billing snapshot</h2><div class="billing-grid"><div class="billing-stat"><span>Invoice count</span><strong>{{ $customer->invoices->count() }}</strong></div><div class="billing-stat"><span>Total invoiced</span><strong>৳ {{ number_format($customer->invoices->sum('total'), 2) }}</strong></div><div class="billing-stat"><span>Total due</span><strong>৳ {{ number_format($totalDue, 2) }}</strong></div><div class="billing-stat"><span>Advance balance</span><strong style="color:{{ $customer->account_balance > 0 ? '#027a48' : 'inherit' }}">৳ {{ number_format($customer->account_balance, 2) }}</strong></div></div><dl class="party-details" style="margin-top:14px"><div><dt>Net balance</dt><dd style="color:{{ $netBalance < 0 ? '#b42318' : '#027a48' }}">৳ {{ number_format($netBalance, 2) }}</dd></div><div><dt>Email</dt><dd>{{ $customer->email ?? 'Not provided' }}</dd></div><div><dt>Special ISP customer</dt><dd>{{ $customer->never_suspend ? 'Yes · never auto-close' : 'No' }}</dd></div><div class="party-note"><dt>Address</dt><dd>{{ $customer->address ?: 'Not provided' }}</dd></div><div class="party-note"><dt>Party note</dt><dd>{!! $customer->notes ? nl2br(e($customer->notes)) : 'No note' !!}</dd></div></dl></aside>
     </div>
-</div>
 
-<div class="grid two">
-    <section class="card">
-        <h2>Profile</h2>
-        @php
-            $activeUntil = $customer->activeUntil();
-            $daysRemaining = $customer->activeDaysRemaining();
-        @endphp
-        <p><strong>Status:</strong> <span class="badge {{ $customer->status }}">{{ $customer->status }}</span></p>
-        <p><strong>Party Type:</strong>
-            @if ($customer->is_customer)<span class="badge active">Customer</span>@endif
-            @if ($customer->is_vendor)<span class="badge pending">Vendor</span>@endif
-        </p>
-        <p>
-            <strong>Active Until:</strong>
-            @if ($customer->status === 'active' && $activeUntil)
-                {{ $activeUntil->format('Y-m-d') }}
-                @if ($daysRemaining > 0)
-                    <span class="muted">({{ $daysRemaining }} days left)</span>
-                @elseif ($daysRemaining === 0)
-                    <span class="muted">(last day)</span>
-                @else
-                    <span class="badge overdue">Expired {{ abs($daysRemaining) }} days ago</span>
-                @endif
-                @if ($customer->hasActiveGracePeriod())
-                    <span class="badge pending">Grace period</span>
-                @endif
-            @elseif ($customer->status === 'active')
-                <span class="muted">No paid service month found</span>
-            @else
-                <span class="muted">Inactive</span>
-            @endif
-        </p>
-        <p><strong>Grace Period:</strong>
-            @if ($customer->grace_used_at)
-                Used {{ $customer->grace_days }} day(s), until {{ $customer->grace_until?->format('Y-m-d') }}
-            @else
-                Not used
-            @endif
-        </p>
-        @if (($customer->status === 'inactive' || ($daysRemaining !== null && $daysRemaining < 0)) && ! $customer->grace_used_at)
-            @if ($customer->subscriptions->isNotEmpty())
-                <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="margin:10px 0">
-                    @csrf
-                    <input type="number" name="grace_days" min="1" max="365" placeholder="Grace days" required>
-                    <button class="btn secondary" type="submit">Give Grace Period</button>
-                </form>
-            @else
-                <p><a class="btn light" href="{{ route('customers.edit', $customer) }}">Assign package before giving grace</a></p>
-            @endif
-        @endif
-        <p><strong>Special ISP Customer:</strong> {{ $customer->never_suspend ? 'Yes - never close line and auto-generate bill' : 'No' }}</p>
-        <p><strong>Email:</strong> {{ $customer->email ?? 'Not provided' }}</p>
-        <p><strong>Address:</strong> {{ $customer->address }}</p>
-        <p><strong>Package:</strong> {{ $customer->activeSubscription?->package?->name ?? 'No active package' }}</p>
-        <p><strong>MikroTik User ID:</strong> {{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Not assigned' }}</p>
-        <p><strong>MikroTik Password:</strong> {{ ($customer->mikrotik_username || $customer->connection_id) ? '4321' : 'Not assigned' }}</p>
-        <p><strong>MikroTik Target:</strong> {{ ($customer->mikrotik_username || $customer->connection_id) ? ($customer->mikrotikRouter ? $customer->mikrotikRouter->name.' - '.$customer->mikrotikRouter->ip_address.':'.$customer->mikrotikRouter->api_port : 'All active MikroTik routers') : 'Not assigned' }}</p>
-        <p><strong>MikroTik Profile:</strong> {{ $customer->activeSubscription?->package?->mikrotik_profile ?? 'No active profile' }}</p>
-    </section>
-    <section class="card">
-        <h2>Billing Summary</h2>
-        @php
-            $totalDue = (float) $customer->invoices->sum('due_amount');
-            $netBalance = (float) $customer->account_balance - $totalDue;
-        @endphp
-        <p><strong>Total invoices:</strong> {{ $customer->invoices->count() }}</p>
-        <p><strong>Total due:</strong> {{ number_format($totalDue, 2) }}</p>
-        <p><strong>Advance Balance:</strong> {{ number_format($customer->account_balance, 2) }}</p>
-        <p><strong>Net Balance:</strong> <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span></p>
-    </section>
-</div>
-
-<section class="card" style="margin-top:16px">
+<section class="card party-section" style="margin-top:16px">
     <h2>Assets & Warranty</h2>
     <table>
         <thead><tr><th>Product</th><th>Serial</th><th>Invoice</th><th>Sold Date</th><th>Warranty</th><th>Status</th><th>Action</th></tr></thead>
@@ -142,7 +110,7 @@
     </table>
 </section>
 
-<section class="card" style="margin-top:16px">
+<section class="card party-section" style="margin-top:16px">
     <h2>Warranty Claims</h2>
     <table>
         <thead><tr><th>Claim</th><th>Product</th><th>Serial</th><th>Status</th><th>Date</th></tr></thead>
@@ -168,7 +136,7 @@
     </table>
 </section>
 
-<section class="card" style="margin-top:16px">
+<section class="card party-section" style="margin-top:16px">
     <h2>Invoices</h2>
     <table>
         <thead><tr><th>Invoice</th><th>Month</th><th>Total</th><th>Due</th><th>Status</th></tr></thead>
@@ -196,7 +164,7 @@
 
 @include('partials.record_versions', ['versions' => $versions])
 
-<section class="card" style="margin-top:16px">
+<section class="card party-section" style="margin-top:16px">
     <h2>Advance Balance History</h2>
     <table>
         <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Balance</th><th>Reference</th><th>Note</th></tr></thead>
@@ -216,4 +184,5 @@
         </tbody>
     </table>
 </section>
+</div>
 @endsection

@@ -7,6 +7,7 @@ use App\Models\CustomerBalanceTransaction;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -147,7 +148,7 @@ class PaymentService
             $remainingDue = Invoice::where('customer_id', $customer->id)->where('due_amount', '>', 0)->sum('due_amount');
 
             if ((float) $remainingDue <= 0) {
-                $customer->update(['status' => 'active']);
+                $this->activatePaidServiceValidity($customer, $paymentDate, $data['note'] ?? null);
 
                 $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
 
@@ -241,7 +242,7 @@ class PaymentService
             $remainingDue = Invoice::where('customer_id', $customer->id)->where('due_amount', '>', 0)->sum('due_amount');
 
             if ((float) $remainingDue <= 0) {
-                $customer->update(['status' => 'active']);
+                $this->activatePaidServiceValidity($customer, $data['payment_date'], $data['note'] ?? null);
 
                 $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
 
@@ -375,7 +376,7 @@ class PaymentService
         $customer->refresh();
 
         if ((float) Invoice::where('customer_id', $customer->id)->where('due_amount', '>', 0)->sum('due_amount') <= 0) {
-            $customer->update(['status' => 'active']);
+            $this->activatePaidServiceValidity($customer, $data['payment_date'] ?? now()->toDateString(), $data['note'] ?? null);
 
             $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
 
@@ -423,5 +424,37 @@ class PaymentService
 
             return $transaction;
         });
+    }
+
+    /** Set a fresh paid month, less any grace days already consumed for this renewal. */
+    private function activatePaidServiceValidity(Customer $customer, string $paymentDate, ?string $paymentNote = null): void
+    {
+        $startsOn = Carbon::parse($paymentDate)->startOfDay();
+        $monthDays = $startsOn->copy()->diffInDays($startsOn->copy()->addMonthNoOverflow());
+        $graceDays = min(max(0, (int) ($customer->grace_days ?? 0)), max(0, $monthDays - 1));
+        $validDays = $monthDays - $graceDays;
+        $validUntil = $startsOn->copy()->addDays($validDays - 1);
+        $detail = sprintf(
+            '[%s] Paid validity: payment date %s; one-month period %d day(s); grace deducted %d day(s); validity %d day(s), %s to %s.%s',
+            now()->format('Y-m-d H:i'),
+            $startsOn->format('Y-m-d'),
+            $monthDays,
+            $graceDays,
+            $validDays,
+            $startsOn->format('Y-m-d'),
+            $validUntil->format('Y-m-d'),
+            $paymentNote ? ' Payment note: '.trim($paymentNote) : ''
+        );
+
+        $customer->update([
+            'status' => 'active',
+            'service_valid_from' => $startsOn->toDateString(),
+            'service_valid_until' => $validUntil->toDateString(),
+            'service_validity_note' => $detail,
+            'grace_until' => null,
+            'grace_days' => null,
+            'grace_used_at' => null,
+            'notes' => trim(implode("\n", array_filter([$customer->notes, $detail]))),
+        ]);
     }
 }

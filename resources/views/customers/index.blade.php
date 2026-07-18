@@ -21,7 +21,7 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Name</th><th>Phone</th><th>Role</th><th>User ID</th><th>Package</th><th>Balance</th><th>Status</th><th>Active Until</th><th></th></tr></thead>
+    <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Role</th><th>User ID</th><th>Package</th><th>Balance</th><th>Status</th><th>Active Until</th><th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
         @php
@@ -30,6 +30,7 @@
             $daysRemaining = $customer->activeDaysRemaining();
         @endphp
         <tr data-href="{{ route('customers.show', $customer) }}">
+            <td>{{ $customers->firstItem() + $loop->index }}</td>
             <td><a href="{{ route('customers.show', $customer) }}">{{ $customer->name }}</a></td>
             <td>{{ $customer->phone }}</td>
             <td>
@@ -102,7 +103,7 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="9">No parties found.</td></tr>
+        <tr><td colspan="10">No parties found.</td></tr>
     @endforelse
     </tbody>
 </table>

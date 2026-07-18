@@ -231,4 +231,12 @@ class MikrotikRouterController extends Controller
 
         return redirect()->route('mikrotik-routers.show', $mikrotikRouter)->with('success', 'MikroTik router updated successfully.');
     }
+
+    public function destroy(MikrotikRouter $mikrotikRouter)
+    {
+        $name = $mikrotikRouter->name;
+        $mikrotikRouter->delete();
+
+        return redirect()->route('mikrotik-routers.index')->with('success', "MikroTik router {$name} deleted. Linked parties were kept, but their MikroTik Target was cleared.");
+    }
 }
