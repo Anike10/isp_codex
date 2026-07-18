@@ -1379,8 +1379,10 @@ PPPoE sync:
   `remote-address`. Package edit reads every active router live and shows the
   current profile pool/default; on a connection failure it falls back to
   `mikrotik_imported_profiles.remote_address` and labels the result as a
-  snapshot. No selection means keep RouterOS/default behavior during customer
-  sync. Explicit package export sets or clears the profile remote-address.
+  snapshot. No selection means keep the router's existing profile
+  `remote-address` during customer sync and package export; sending an empty
+  value can be parsed by RouterOS as an ambiguous pool prefix. A selected pool
+  must match an exact live `/ip/pool` name before export.
 
 ### OLT ONU Inventory
 

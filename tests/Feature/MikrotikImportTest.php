@@ -207,9 +207,10 @@ class MikrotikImportTest extends TestCase
         ]);
 
         $service = $this->mock(MikrotikImportService::class);
-        $service->shouldReceive('liveRecords')->once()->andReturn([
-            ['.id' => '*P1', 'name' => 'home50'],
-        ]);
+        $service->shouldReceive('liveRecords')->twice()->andReturnUsing(fn ($givenRouter, $command) =>
+            $command === '/ppp/profile/print'
+                ? [['.id' => '*P1', 'name' => 'home50']]
+                : [['.id' => '*POOL1', 'name' => 'customer-pool']]);
         $service->shouldReceive('write')->once()->withArgs(fn ($givenRouter, $command, $attributes) =>
             $givenRouter->id === $router->id
             && $command === '/ppp/profile/set'
@@ -221,5 +222,39 @@ class MikrotikImportTest extends TestCase
         $this->actingAs($user)
             ->post(route('mikrotik-routers.profiles.export', [$router, $package]))
             ->assertRedirect();
+    }
+
+    public function test_profile_export_without_app_default_keeps_router_remote_address_and_shows_errors(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Main Router', 'ip_address' => '10.0.0.11', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+        $package = InternetPackage::create([
+            'name' => 'Home 100', 'speed' => '100 Mbps', 'mikrotik_profile' => 'home100',
+            'default_ip_pool' => null, 'monthly_price' => 2000, 'status' => 'active',
+        ]);
+
+        $service = $this->mock(MikrotikImportService::class);
+        $service->shouldReceive('liveRecords')->once()->withArgs(fn ($givenRouter, $command) =>
+            $givenRouter->id === $router->id && $command === '/ppp/profile/print')
+            ->andReturn([['.id' => '*P2', 'name' => 'home100', 'remote-address' => 'existing-pool']]);
+        $service->shouldReceive('write')->once()->withArgs(fn ($givenRouter, $command, $attributes) =>
+            $command === '/ppp/profile/set'
+            && $attributes['.id'] === '*P2'
+            && $attributes['name'] === 'home100'
+            && ! array_key_exists('remote-address', $attributes))
+            ->andThrow(new RuntimeException('RouterOS rejected this profile value'));
+
+        $this->actingAs($user)
+            ->from(route('mikrotik-routers.compare', $router))
+            ->post(route('mikrotik-routers.profiles.export', [$router, $package]))
+            ->assertRedirect(route('mikrotik-routers.compare', $router))
+            ->assertSessionHas('error', fn ($message) =>
+                str_contains($message, 'Profile export failed on Main Router')
+                && str_contains($message, 'RouterOS rejected this profile value'));
     }
 }

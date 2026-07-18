@@ -348,15 +348,33 @@ class MikrotikRouterDataController extends Controller
     public function exportProfile(MikrotikRouter $mikrotikRouter, InternetPackage $package, MikrotikImportService $service)
     {
         $name = $package->mikrotik_profile ?: $package->name;
-        $live = collect($service->liveRecords($mikrotikRouter, '/ppp/profile/print'))->firstWhere('name', $name);
-        $attributes = ['name' => $name, 'remote-address' => $package->default_ip_pool ?: ''];
-        if ($live) {
-            $service->write($mikrotikRouter, '/ppp/profile/set', ['.id' => $live['.id'], ...$attributes]);
-        } else {
-            $service->write($mikrotikRouter, '/ppp/profile/add', $attributes);
+        try {
+            $live = collect($service->liveRecords($mikrotikRouter, '/ppp/profile/print'))->firstWhere('name', $name);
+            $attributes = ['name' => $name];
+
+            if ($package->default_ip_pool) {
+                $poolExists = collect($service->liveRecords($mikrotikRouter, '/ip/pool/print'))
+                    ->contains(fn (array $pool) => ($pool['name'] ?? null) === $package->default_ip_pool);
+                if (! $poolExists) {
+                    return back()->with('error', "Profile export failed: exact IP pool '{$package->default_ip_pool}' does not exist on {$mikrotikRouter->name}. Import/create that pool or choose another package default.");
+                }
+                $attributes['remote-address'] = $package->default_ip_pool;
+            }
+
+            if ($live) {
+                $service->write($mikrotikRouter, '/ppp/profile/set', ['.id' => $live['.id'], ...$attributes]);
+            } else {
+                $service->write($mikrotikRouter, '/ppp/profile/add', $attributes);
+            }
+            $service->importProfiles($mikrotikRouter);
+
+            return back()->with('success', "Profile {$name} exported to MikroTik.");
+        } catch (Throwable $exception) {
+            report($exception);
+            $message = trim(preg_replace('/\s+/', ' ', $exception->getMessage()));
+
+            return back()->with('error', "Profile export failed on {$mikrotikRouter->name}: {$message}");
         }
-        $service->importProfiles($mikrotikRouter);
-        return back()->with('success', "Profile {$name} exported to MikroTik.");
     }
 
     public function exportCustomer(MikrotikRouter $mikrotikRouter, Customer $customer, MikrotikCustomerSyncService $service)
