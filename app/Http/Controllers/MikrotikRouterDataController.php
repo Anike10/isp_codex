@@ -12,15 +12,170 @@ use App\Models\MikrotikRouter;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\MikrotikImportService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class MikrotikRouterDataController extends Controller
 {
-    public function globalPools()
+    public function globalPools(Request $request)
     {
+        $poolNames = AppIpPool::query()
+            ->select('name')
+            ->distinct()
+            ->orderBy('name')
+            ->paginate($this->perPage($request))
+            ->withQueryString();
+        $records = AppIpPool::query()
+            ->with('router')
+            ->whereIn('name', $poolNames->getCollection()->pluck('name'))
+            ->orderBy('mikrotik_router_id')
+            ->get()
+            ->groupBy('name');
+
+        $poolNames->setCollection($poolNames->getCollection()->map(function (AppIpPool $nameRow) use ($records) {
+            $entries = $records->get($nameRow->name, collect());
+
+            return (object) [
+                'name' => $nameRow->name,
+                'entries' => $entries,
+                'representative' => $entries->first(),
+                'ranges' => $entries->pluck('ranges')->filter()->unique()->values(),
+            ];
+        }));
+
         return view('mikrotik_routers.global_pools', [
-            'pools' => AppIpPool::query()->with('router')->orderBy('name')->paginate(100),
+            'pools' => $poolNames,
         ]);
+    }
+
+    public function updateGlobalPool(Request $request, AppIpPool $appIpPool, MikrotikImportService $service)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'ranges' => ['required', 'string', 'max:2000'],
+            'sync_to_routers' => ['nullable', 'boolean'],
+        ]);
+        $oldName = $appIpPool->name;
+        $entries = AppIpPool::query()->with('router')->where('name', $oldName)->get();
+
+        if (! $request->boolean('sync_to_routers')) {
+            DB::transaction(function () use ($entries, $data, $oldName): void {
+                foreach ($entries as $entry) {
+                    if ($data['name'] === $oldName) {
+                        $entry->update(['ranges' => $data['ranges']]);
+                        continue;
+                    }
+
+                    AppIpPool::updateOrCreate(
+                        ['mikrotik_router_id' => $entry->mikrotik_router_id, 'name' => $data['name']],
+                        [
+                            'ranges' => $data['ranges'],
+                            'next_pool' => $entry->next_pool,
+                            'notes' => $entry->notes,
+                            'status' => $entry->status,
+                        ]
+                    );
+                }
+            });
+
+            $message = $data['name'] === $oldName
+                ? "Updated {$oldName} in the App only. MikroTik was not changed."
+                : "Created {$data['name']} in the App for {$entries->count()} router(s). {$oldName} and MikroTik were not changed.";
+
+            return redirect()->route('ip-pools.index')->with('success', $message);
+        }
+
+        $targets = $this->preflightGlobalPoolTargets($entries, $oldName, $data['name'], $service);
+        if (is_string($targets)) {
+            return back()->withInput()->with('error', $targets);
+        }
+
+        $updatedTargets = [];
+        try {
+            foreach ($targets as $target) {
+                $service->write($target['router'], '/ip/pool/set', [
+                    '.id' => $target['live']['.id'],
+                    'name' => $data['name'],
+                    'ranges' => $data['ranges'],
+                ]);
+                $updatedTargets[] = $target;
+            }
+
+            DB::transaction(function () use ($entries, $targets, $oldName, $data): void {
+                foreach ($entries as $entry) {
+                    $entry->update(['name' => $data['name'], 'ranges' => $data['ranges']]);
+                }
+                AppIpPool::query()->where('next_pool', $oldName)->update(['next_pool' => $data['name']]);
+                foreach ($targets as $target) {
+                    MikrotikImportedIpPool::query()
+                        ->where('mikrotik_router_id', $target['router']->id)
+                        ->where('routeros_id', $target['live']['.id'])
+                        ->update(['name' => $data['name'], 'ranges' => $data['ranges'], 'imported_at' => now()]);
+                }
+            });
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->restoreGlobalPoolTargets($updatedTargets, $service);
+
+            return back()->withInput()->with('error', 'Pool update failed. Previously updated routers were restored where possible; App data was not changed. '.$exception->getMessage());
+        }
+
+        return redirect()->route('ip-pools.index')
+            ->with('success', "Updated {$oldName} to {$data['name']} in the App and {$targets->count()} MikroTik router(s).");
+    }
+
+    public function deleteGlobalPool(Request $request, AppIpPool $appIpPool, MikrotikImportService $service)
+    {
+        $data = $request->validate(['delete_from_routers' => ['nullable', 'boolean']]);
+        $oldName = $appIpPool->name;
+        $entries = AppIpPool::query()->with('router')->where('name', $oldName)->get();
+
+        if (! ($data['delete_from_routers'] ?? false)) {
+            DB::transaction(function () use ($entries, $oldName): void {
+                $entries->each->delete();
+                AppIpPool::query()->where('next_pool', $oldName)->update(['next_pool' => null]);
+            });
+
+            return redirect()->route('ip-pools.index')->with('success', "Deleted {$oldName} from the App only. MikroTik was not changed.");
+        }
+
+        $targets = $this->preflightGlobalPoolTargets($entries, $oldName, $oldName, $service, false);
+        if (is_string($targets)) {
+            return back()->with('error', $targets);
+        }
+
+        $deletedTargets = [];
+        try {
+            foreach ($targets as $target) {
+                $service->write($target['router'], '/ip/pool/remove', ['.id' => $target['live']['.id']]);
+                $deletedTargets[] = $target;
+            }
+
+            DB::transaction(function () use ($entries, $targets, $oldName): void {
+                $entries->each->delete();
+                AppIpPool::query()->where('next_pool', $oldName)->update(['next_pool' => null]);
+                foreach ($targets as $target) {
+                    MikrotikImportedIpPool::query()
+                        ->where('mikrotik_router_id', $target['router']->id)
+                        ->where('routeros_id', $target['live']['.id'])
+                        ->delete();
+                }
+            });
+        } catch (Throwable $exception) {
+            report($exception);
+            foreach ($deletedTargets as $target) {
+                try {
+                    $service->write($target['router'], '/ip/pool/add', $this->routerPoolAttributes($target['live']));
+                } catch (Throwable $restoreException) {
+                    report($restoreException);
+                }
+            }
+
+            return back()->with('error', 'Pool delete failed. Deleted router pools were recreated where possible; App data was not changed. '.$exception->getMessage());
+        }
+
+        return redirect()->route('ip-pools.index')
+            ->with('success', "Deleted {$oldName} from the App and {$targets->count()} MikroTik router(s).");
     }
 
     public function profiles(MikrotikRouter $mikrotikRouter)
@@ -221,6 +376,86 @@ class MikrotikRouterDataController extends Controller
         $service->write($mikrotikRouter, $commands[$data['type']], ['.id' => $data['routeros_id']]);
 
         return back()->with('success', 'Selected extra item deleted from MikroTik.');
+    }
+
+    private function preflightGlobalPoolTargets($entries, string $oldName, string $newName, MikrotikImportService $service, bool $checkNewName = true)
+    {
+        if ($entries->isEmpty()) {
+            return 'No App IP pool records were found.';
+        }
+
+        if ($entries->contains(fn (AppIpPool $entry) => ! $entry->router)) {
+            return 'This pool has an App record without a linked router. Use App-only mode or link every record to a router first.';
+        }
+
+        $routers = $entries->pluck('router')->unique('id')->values();
+        $inactive = $routers->firstWhere('status', '!=', 'active');
+        if ($inactive) {
+            return "Router {$inactive->name} is disabled. Enable it first, or use App-only mode.";
+        }
+
+        if ($newName !== $oldName) {
+            $entryIds = $entries->pluck('id');
+            $routerIds = $routers->pluck('id');
+            $conflict = AppIpPool::query()
+                ->where('name', $newName)
+                ->whereIn('mikrotik_router_id', $routerIds)
+                ->whereNotIn('id', $entryIds)
+                ->with('router')
+                ->first();
+            if ($conflict) {
+                return "App pool {$newName} already exists for router ".($conflict->router?->name ?? $conflict->mikrotik_router_id).'. Choose another name.';
+            }
+        }
+
+        $targets = collect();
+        try {
+            foreach ($routers as $router) {
+                $livePools = collect($service->liveRecords($router, '/ip/pool/print'));
+                $live = $livePools->firstWhere('name', $oldName);
+                if (! $live || blank($live['.id'] ?? null)) {
+                    return "Pool {$oldName} was not found on router {$router->name}. Refresh/import that router first, or use App-only mode.";
+                }
+                if ($checkNewName && $newName !== $oldName) {
+                    $nameConflict = $livePools->first(fn (array $pool) =>
+                        ($pool['name'] ?? null) === $newName && ($pool['.id'] ?? null) !== $live['.id']);
+                    if ($nameConflict) {
+                        return "Pool {$newName} already exists on router {$router->name}. Choose another name.";
+                    }
+                }
+                $targets->push(['router' => $router, 'live' => $live]);
+            }
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return 'Router preflight failed; nothing was changed. '.$exception->getMessage();
+        }
+
+        return $targets;
+    }
+
+    private function restoreGlobalPoolTargets(array $targets, MikrotikImportService $service): void
+    {
+        foreach ($targets as $target) {
+            try {
+                $service->write($target['router'], '/ip/pool/set', [
+                    '.id' => $target['live']['.id'],
+                    ...$this->routerPoolAttributes($target['live']),
+                ]);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
+    }
+
+    private function routerPoolAttributes(array $pool): array
+    {
+        return array_filter([
+            'name' => $pool['name'] ?? null,
+            'ranges' => $pool['ranges'] ?? null,
+            'next-pool' => $pool['next-pool'] ?? null,
+            'comment' => $pool['comment'] ?? null,
+        ], fn ($value) => $value !== null);
     }
 
     private function poolData(Request $request): array

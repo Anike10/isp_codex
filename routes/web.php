@@ -155,6 +155,8 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('permission:manage_mikrotik_routers')->group(function () {
         Route::get('ip-pools', [MikrotikRouterDataController::class, 'globalPools'])->name('ip-pools.index');
+        Route::patch('ip-pools/{appIpPool}', [MikrotikRouterDataController::class, 'updateGlobalPool'])->name('ip-pools.update');
+        Route::delete('ip-pools/{appIpPool}', [MikrotikRouterDataController::class, 'deleteGlobalPool'])->name('ip-pools.destroy');
         Route::get('network-map', [NetworkMapController::class, 'show'])->name('network-map.index');
         Route::get('network-map/features', [NetworkMapController::class, 'index'])->name('network-map.features.index');
         Route::post('network-map/features', [NetworkMapController::class, 'store'])->name('network-map.features.store');

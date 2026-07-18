@@ -180,6 +180,10 @@ At minimum, this project must always be approached with senior capability in:
 - operator workflow and browser-state UX, including idempotent bulk imports,
   post-action redirect anchors/scroll retention, and clear separation between
   RouterOS snapshots and App master records.
+- distributed RouterOS configuration changes: group shared logical resources
+  across routers, preflight every target, detect name conflicts, update App data
+  only after all device writes succeed, and attempt compensation after partial
+  multi-router failures.
 
 ### Default Decision Order
 
