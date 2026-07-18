@@ -184,6 +184,23 @@ class OltOnuControllerCommandTest extends TestCase
         ]);
 
         $this->assertTrue($matched);
+
+        $truncated = $this->callPrivateCommandBuilder('oltNameReadbackWasTruncated', [
+            'KPI Ele Zhea KPI Ele Zhea',
+            'KPI Ele Zhead',
+        ]);
+
+        $this->assertTrue($truncated);
+    }
+
+    public function test_complete_olt_name_is_not_reported_as_truncated(): void
+    {
+        $truncated = $this->callPrivateCommandBuilder('oltNameReadbackWasTruncated', [
+            'Customer Long Name',
+            'Customer Long Name',
+        ]);
+
+        $this->assertFalse($truncated);
     }
 
     public function test_hsgq_epon_finds_auto_assigned_onu_id_from_output(): void

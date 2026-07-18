@@ -525,6 +525,7 @@ class OltOnuController extends Controller
         ]);
 
         $desired = (string) $data['name'];
+        $previousName = (string) $oltOnu->name;
 
         // Save immediately so UI reflects change
         $oltOnu->update(['name' => $desired]);
@@ -567,6 +568,8 @@ class OltOnuController extends Controller
         ];
 
         $matched = false;
+        $truncatedReadback = null;
+        $lastReadbackName = null;
         $aggregateOutput = [];
 
         foreach ($candidateCommandSets as $commands) {
@@ -583,10 +586,17 @@ class OltOnuController extends Controller
 
                 if ($record) {
                     $liveName = trim((string) ($record['name'] ?? $record['description'] ?? ''));
+                    if ($liveName !== '') {
+                        $lastReadbackName = $this->cleanOltReadbackName($liveName);
+                    }
 
                     if ($this->oltNamesMatch($liveName, $desired)) {
                         if ($liveName !== '') {
-                            $oltOnu->update(['name' => $this->cleanOltReadbackName($liveName)]);
+                            $cleanLiveName = $this->cleanOltReadbackName($liveName);
+                            $oltOnu->update(['name' => $cleanLiveName]);
+                            if ($this->oltNameReadbackWasTruncated($cleanLiveName, $desired)) {
+                                $truncatedReadback = $cleanLiveName;
+                            }
                         }
 
                         $matched = true;
@@ -605,18 +615,34 @@ class OltOnuController extends Controller
                 $liveName = trim((string) ($record['name'] ?? $record['description'] ?? ''));
                 if ($liveName !== '') {
                     // overwrite app with OLT value
-                    $oltOnu->update(['name' => $liveName]);
+                    $lastReadbackName = $this->cleanOltReadbackName($liveName);
+                    $oltOnu->update(['name' => $lastReadbackName]);
                 }
+            }
+
+            if ($lastReadbackName === null) {
+                $oltOnu->update(['name' => $previousName]);
             }
 
             $note = implode("\n---\n", array_filter($aggregateOutput));
             $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nAttempted name writes at ".now()->format('Y-m-d H:i:s')."\n".$note)]);
 
-            return back()->with('error', 'OLT name save failed; application now shows the value read from the OLT.');
+            $lengthMessage = $lastReadbackName
+                ? " Requested ".mb_strlen($desired)." characters, but OLT/readback returned '{$lastReadbackName}' (".mb_strlen($lastReadbackName).' characters).'
+                : ' The OLT may not support a name this long ('.mb_strlen($desired).' characters).';
+            $appStateMessage = $lastReadbackName
+                ? ' Application now shows the value read from the OLT.'
+                : ' No name could be read back, so the previous App name was restored.';
+
+            return back()->with('error', 'OLT name save failed.'.$appStateMessage.$lengthMessage);
         }
 
         $oltDevice->update(['last_error' => null]);
         $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nName written to OLT at ".now()->format('Y-m-d H:i:s')."\n".implode("\n", array_filter($aggregateOutput)))]);
+
+        if ($truncatedReadback !== null) {
+            return back()->with('warning', "OLT/readback did not support or return the full ONU name. Requested '{$desired}' (".mb_strlen($desired)." characters); saved/read back '{$truncatedReadback}' (".mb_strlen($truncatedReadback).' characters). The App now shows the actual OLT value.');
+        }
 
         return back()->with('success', "ONU name updated to '{$desired}' for {$oltOnu->pon_port}/{$oltOnu->onu_id} and written to OLT.");
     }
@@ -2149,6 +2175,17 @@ class OltOnuController extends Controller
         }
 
         return mb_strlen($actual) >= 8 && str_starts_with($expected, $actual);
+    }
+
+    private function oltNameReadbackWasTruncated(?string $actual, string $expected): bool
+    {
+        $actual = mb_strtolower($this->cleanOltReadbackName((string) $actual));
+        $expected = mb_strtolower($this->cleanOltReadbackName($expected));
+
+        return $actual !== ''
+            && $actual !== $expected
+            && mb_strlen($actual) < mb_strlen($expected)
+            && str_starts_with($expected, $actual);
     }
 
     private function cleanOltReadbackName(string $value): string

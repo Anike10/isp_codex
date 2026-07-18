@@ -1424,6 +1424,12 @@ The feature is for live data, not backup-file display. The app stores OLT access
 credentials in `olt_devices`, then the refresh action connects to the OLT and
 runs configured read-only commands.
 
+ONU name editing uses a wide field and allows up to 255 App characters. OLT
+models may accept fewer characters or return a truncated fixed-width name. A
+shorter prefix read back from the device remains a successful write for
+compatibility, but the operator must receive a warning with requested and
+read-back lengths, and the App must display the actual OLT value.
+
 Current known OLT access:
 
 ```text

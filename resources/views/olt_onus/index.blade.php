@@ -279,7 +279,7 @@
                 @php
                     $displayOnuName = $onu->displayName();
                 @endphp
-                <td class="name-edit-cell" data-name-cell data-onu-id="{{ $onu->id }}" data-onu-name="{{ $displayOnuName }}">
+                <td class="name-edit-cell" data-name-cell data-onu-id="{{ $onu->id }}" data-onu-name="{{ $displayOnuName }}" style="min-width:380px">
                     <div data-onu-click="{{ route('olt-onus.show', $onu) }}" style="cursor:pointer">
                         <span class="muted">PON/ONU:</span>
                         <strong>{{ $onu->pon_port }}/{{ $onu->onu_id }}</strong>
@@ -290,16 +290,17 @@
                     </div>
                     <div style="margin-top:5px">
                         <span class="muted">Name:</span>
-                        <span class="name-display">{{ $displayOnuName ?: 'N/A' }}</span>
+                        <span class="name-display" style="overflow-wrap:anywhere">{{ $displayOnuName ?: 'N/A' }}</span>
                     </div>
                     <form class="name-inline-form" method="post" action="{{ route('olt-onus.name.update', $onu) }}" data-preserve-scroll style="display:none; margin-top:8px">
                         @csrf
                         @method('PATCH')
-                        <div class="actions" style="gap:6px; flex-wrap:nowrap">
-                            <input name="name" type="text" value="{{ $displayOnuName }}" placeholder="ONU/ONT Name" style="width:150px; padding:7px" required>
+                        <div class="actions" style="gap:6px; flex-wrap:wrap">
+                            <input name="name" type="text" value="{{ $displayOnuName }}" placeholder="ONU/ONT Name" maxlength="255" style="width:420px; max-width:70vw; padding:9px" required>
                             <button class="btn secondary" type="submit" style="min-height:32px; padding:7px 9px">Save</button>
                             <button class="btn light" type="button" data-name-cancel style="min-height:32px; padding:7px 9px">Cancel</button>
                         </div>
+                        <div class="muted" style="margin-top:5px">App supports up to 255 characters. If the OLT accepts fewer characters, the saved OLT value will be shown with a warning.</div>
                     </form>
                 </td>
                 <td>
