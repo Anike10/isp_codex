@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
+<div class="router-detail-page">
 <div class="topbar">
     <div>
         <h1>{{ $mikrotikRouter->name }}</h1>
@@ -12,7 +13,7 @@
     </div>
 </div>
 
-<div class="card" style="margin-bottom:16px; border:1px solid var(--line)">
+<div class="card router-health-card" style="margin-bottom:16px; border:1px solid var(--line)">
     <div class="actions" style="justify-content:space-between; align-items:center">
         <div class="actions" style="gap:18px">
             <div><span class="muted">Router</span><br><strong>{{ $mikrotikRouter->ip_address }}:{{ $mikrotikRouter->api_port }}</strong></div>
@@ -24,7 +25,7 @@
     </div>
 </div>
 
-<div class="card" style="margin-bottom:16px; border:1px solid var(--primary, var(--line))">
+<div class="card router-import-card" style="margin-bottom:16px; border:1px solid var(--primary, var(--line))">
     <div class="actions" style="justify-content:space-between; align-items:flex-start; margin-bottom:14px">
         <div>
             <h2 style="margin-bottom:4px">Import from this MikroTik</h2>
@@ -39,17 +40,17 @@
     </div>
 
     <div class="grid" style="gap:12px">
-        <div style="border:1px solid var(--line); border-radius:8px; padding:14px">
+        <div class="router-import-tile" style="border:1px solid var(--line); border-radius:8px; padding:14px">
             <strong>1. PPP Profiles</strong>
             <div class="muted" style="min-height:42px; margin:6px 0 12px">Profile, speed/rate ও address settings আনুন। নতুন profile local package হবে।</div>
             <form method="post" action="{{ route('mikrotik-routers.import.profiles', $mikrotikRouter) }}">@csrf<button class="btn secondary" type="submit">Import PPP Profiles</button></form>
         </div>
-        <div style="border:1px solid var(--line); border-radius:8px; padding:14px">
+        <div class="router-import-tile" style="border:1px solid var(--line); border-radius:8px; padding:14px">
             <strong>2. IP Pools</strong>
             <div class="muted" style="min-height:42px; margin:6px 0 12px">IP pool name, ranges ও next-pool তথ্য আলাদা তালিকায় আনুন।</div>
             <form method="post" action="{{ route('mikrotik-routers.import.ip-pools', $mikrotikRouter) }}">@csrf<button class="btn secondary" type="submit">Import IP Pools</button></form>
         </div>
-        <div style="border:1px solid var(--line); border-radius:8px; padding:14px">
+        <div class="router-import-tile" style="border:1px solid var(--line); border-radius:8px; padding:14px">
             <strong>3. PPPoE Users / Secrets</strong>
             <div class="muted" style="min-height:42px; margin:6px 0 12px">Users আনুন, select করুন, তারপর Party ও Special ISP Customer হিসেবে তৈরি করুন।</div>
             <form method="post" action="{{ route('mikrotik-routers.import.secrets', $mikrotikRouter) }}">@csrf<button class="btn" type="submit">Import PPPoE Users</button></form>
@@ -57,8 +58,8 @@
     </div>
 </div>
 
-<div class="grid">
-    <div class="card">
+<div class="grid router-detail-grid">
+    <div class="card router-info-card">
         <h2>Connection & Sync</h2>
         <div class="form-grid">
             <div><span class="muted">API username</span><br><strong>{{ $mikrotikRouter->username }}</strong></div>
@@ -69,7 +70,7 @@
             <div><span class="muted">Last online</span><br><strong>{{ $mikrotikRouter->last_online_at?->format('Y-m-d H:i:s') ?? 'Never' }}</strong></div>
         </div>
     </div>
-    <div class="card">
+    <div class="card router-info-card">
         <h2>Health & Notes</h2>
         <p><strong>API duration:</strong> {{ $mikrotikRouter->api_status_since ? $mikrotikRouter->api_status_since->diffForHumans(null, true) : 'Never checked' }}</p>
         <p><strong>Ping duration:</strong> {{ $mikrotikRouter->ping_status_since ? $mikrotikRouter->ping_status_since->diffForHumans(null, true) : 'Never checked' }}</p>
@@ -77,5 +78,6 @@
         <p><strong>Last sync summary:</strong> {{ $mikrotikRouter->last_pppoe_sync_summary ?? 'No sync yet' }}</p>
         <p><strong>Notes:</strong> {{ $mikrotikRouter->notes ?? 'No notes' }}</p>
     </div>
+</div>
 </div>
 @endsection

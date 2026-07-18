@@ -8,7 +8,7 @@
     @endif
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Claim, customer, phone, product, serial"></div>
     <div>
         <label>Status</label>

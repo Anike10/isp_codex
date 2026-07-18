@@ -37,7 +37,7 @@
     @endforeach
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Account name or number"></div>
     <div><label>Method</label><select name="payment_method"><option value="">All methods</option>@foreach(['bkash'=>'bKash','nagad'=>'Nagad','bank'=>'Bank'] as $value=>$label)<option value="{{ $value }}" @selected(request('payment_method') === $value)>{{ $label }}</option>@endforeach</select></div>
     <div><label>Status</label><select name="status"><option value="">All statuses</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>

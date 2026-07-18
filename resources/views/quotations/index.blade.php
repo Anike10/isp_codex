@@ -19,7 +19,7 @@
     <strong>Accounting note:</strong> Quotation amounts are informational only. An amount enters invoice and stock accounts only after using <strong>Make Invoice</strong>.
 </section>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div>
         <label>Search</label>
         <input name="search" value="{{ request('search') }}" placeholder="Quotation no, party name, or phone">

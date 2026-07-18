@@ -6,7 +6,7 @@
     <a class="btn" href="{{ route('sale-returns.create') }}">New Sale Return</a>
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Return no, invoice no, party name, phone, connection ID, or note"></div>
     <div><label>Party</label><select name="customer_id"><option value="">All parties</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected((int) request('customer_id') === $customer->id)>{{ $customer->name }} - {{ $customer->phone }}</option>@endforeach</select></div>
     <div><label>From Date</label><input type="date" name="from" value="{{ request('from') }}"></div>

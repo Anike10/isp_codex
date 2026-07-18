@@ -26,11 +26,13 @@
     <div class="card stat"><span class="muted">Paid Salary Total</span><strong>{{ number_format($paidSalaryTotal, 2) }}</strong></div>
 </div>
 
-<form method="get" class="card actions" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <input type="month" name="salary_month" value="{{ $salaryMonth }}">
     <input type="number" name="bonus_year" value="{{ $bonusYear }}" min="2000" max="2100">
-    <button class="btn secondary" type="submit">Check Status</button>
-    <a class="btn light" href="{{ route('employees.show', $employee) }}">Reset</a>
+    <div class="actions">
+        <button class="btn secondary" type="submit">Check Status</button>
+        <a class="btn light" href="{{ route('employees.show', $employee) }}">Reset</a>
+    </div>
 </form>
 
 @if (auth()->user()?->hasPermission('manage_products'))

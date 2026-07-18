@@ -82,32 +82,54 @@
         margin: 0;
     }
 
-    .invoice-bulk-actions {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 12px;
-        padding: 12px;
-    }
-
-    .invoice-bulk-actions .actions {
-        justify-content: flex-end;
-    }
+    .invoice-index-page .topbar { align-items:stretch; background:linear-gradient(135deg,#14213d,#193b5f 58%,#176b78); border:0; border-radius:18px; color:#fff; gap:22px; padding:24px; box-shadow:0 16px 34px rgba(20,33,61,.18); }
+    .invoice-index-page .topbar .muted, .invoice-index-page .invoice-generate-note { color:rgba(255,255,255,.78); }
+    .invoice-index-page .topbar h1 { color:#fff; margin-bottom:6px; }
+    .invoice-quick-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; }
+    .invoice-generate-form { display:flex; align-items:center; gap:8px; padding:8px; border-radius:12px; background:rgba(255,255,255,.12); }
+    .invoice-generate-form input { width:150px; }
+    .invoice-bulk-actions { display:grid; grid-template-columns:minmax(230px,.72fr) minmax(0,1.28fr); align-items:start; gap:16px; margin-bottom:16px; padding:18px; border:1px solid #d8e2ef; border-radius:16px; background:linear-gradient(135deg,#f8fbff,#eef7f6); box-shadow:0 10px 24px rgba(16,48,72,.08); }
+    .invoice-bulk-heading { padding:10px 4px; }
+    .invoice-bulk-heading strong { display:block; font-size:18px; color:#14213d; margin-bottom:6px; }
+    .invoice-selection-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
 
     .invoice-bulk-payment {
+        grid-column: 1 / -1;
         display: grid;
         gap: 10px;
-        grid-template-columns: repeat(5, minmax(120px, 1fr));
-        margin-top: 12px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-top: 0;
+        padding: 14px;
+        border: 1px solid #d8e2ef;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 6px 16px rgba(16,48,72,.06);
     }
 
     .invoice-bulk-payment .full {
         grid-column: 1 / -1;
     }
+    .invoice-bulk-payment > .full:not(.actions) {
+        grid-column: span 2;
+        order: 5;
+    }
+    .invoice-bulk-payment > .full.actions {
+        grid-column: span 1;
+        order: 6;
+        align-self: end;
+    }
+    .invoice-bulk-payment > div:nth-child(1) { order: 2; }
+    .invoice-bulk-payment > div:nth-child(2) { order: 3; }
+    .invoice-bulk-payment > div:nth-child(3) { order: 4; }
+    .invoice-bulk-payment > div:nth-child(4) { order: 1; }
 
     .bulk-payment-status {
         align-self: end;
+        grid-column: span 1;
+        order: 6;
+        padding: 11px 12px;
+        border-radius: 10px;
+        background: #f3f7fb;
         color: var(--muted);
         font-size: 13px;
         font-weight: 700;
@@ -125,21 +147,29 @@
     }
 
     @media (max-width: 780px) {
+        .invoice-index-page .topbar { padding:18px; }
+        .invoice-quick-actions, .invoice-generate-form { justify-content:flex-start; }
+        .invoice-generate-form { flex-wrap:wrap; }
+        .invoice-bulk-actions { grid-template-columns:1fr; }
+        .invoice-selection-actions { justify-content:flex-start; }
         .invoice-row-actions {
             min-width: 210px;
         }
 
         .invoice-bulk-actions {
             align-items: stretch;
-            flex-direction: column;
         }
 
         .invoice-bulk-payment {
             grid-template-columns: 1fr;
         }
+        .bulk-payment-status,
+        .invoice-bulk-payment > .full:not(.actions),
+        .invoice-bulk-payment > .full.actions { grid-column: auto; }
     }
 </style>
 
+<div class="invoice-index-page">
 <div class="topbar">
     <div>
         <h1>Invoices</h1>
@@ -148,11 +178,11 @@
             Generate Bills creates monthly service invoices for special never-suspend customers only. Use Create Invoice for routers, installation, service charges, and other one-time bills.
         </div>
     </div>
-    <div class="actions">
+  <div class="actions invoice-quick-actions">
         <a class="btn secondary" href="{{ route('invoices.create', ['type' => 'product']) }}">Create Invoice</a>
         <a class="btn light" href="{{ route('quotations.create') }}">Create Quotation</a>
         <a class="btn light" href="{{ route('invoices.create', ['type' => 'service']) }}">Service Charge</a>
-        <form method="post" action="{{ route('invoices.generate') }}" class="actions">
+    <form method="post" action="{{ route('invoices.generate') }}" class="actions invoice-generate-form">
             @csrf
             <input type="month" name="billing_month" value="{{ $generationPreviewMonth }}" required>
             <button class="btn" type="submit">Generate Bills</button>
@@ -183,7 +213,7 @@
     </section>
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div class="full">
         <label>Search</label>
         <input name="search" value="{{ request('search') }}" placeholder="Party, mobile, connection ID, invoice no, product, serial, or month">
@@ -261,11 +291,11 @@
 @endif
 @if ($canBulkSelectInvoices)
     <div class="card invoice-bulk-actions">
-        <div>
-            <strong>Bulk Final</strong>
+        <div class="invoice-bulk-heading">
+            <strong>Bulk actions</strong>
             <div class="muted">Select invoices from this list, then finalize drafts or record one payment for one party.</div>
         </div>
-        <div class="actions">
+        <div class="actions invoice-selection-actions">
             <button class="btn light" type="button" id="selectAllInvoices">Select all</button>
             <button class="btn light" type="button" id="deselectAllInvoices">Deselect all</button>
             @if ($canFinalizeInvoices)
@@ -275,7 +305,7 @@
         @if ($canRecordPayments)
             <div class="invoice-bulk-payment">
                 <div>
-                    <label>Payment For On</label>
+                    <label>Payment amount</label>
                     <input type="number" step="0.01" name="amount" id="bulkPaymentAmount" form="bulkPaymentForm" readonly required>
                 </div>
                 <div>
@@ -303,7 +333,7 @@
                     <textarea name="note" form="bulkPaymentForm">Bulk payment from selected invoices.</textarea>
                 </div>
                 <div class="full actions">
-                    <button class="btn secondary" type="submit" form="bulkPaymentForm" id="bulkPaymentSubmit">Payment For On</button>
+                    <button class="btn secondary" type="submit" form="bulkPaymentForm" id="bulkPaymentSubmit">Record payment</button>
                 </div>
             </div>
         @endif
@@ -535,4 +565,5 @@
         refreshBulkActions();
     </script>
 @endif
+ </div>
 @endsection

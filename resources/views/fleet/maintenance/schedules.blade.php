@@ -26,7 +26,7 @@
     </form>
 </details>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Vehicle</label><select name="vehicle_id"><option value="">All vehicles</option>@foreach($vehicles as $vehicle)<option value="{{ $vehicle->id }}" @selected((int)request('vehicle_id')===$vehicle->id)>{{ $vehicle->registration_no }} — {{ $vehicle->name }}</option>@endforeach</select></div>
     <div><label>Status</label><select name="status"><option value="">All</option><option value="overdue" @selected(request('status')==='overdue')>Overdue</option><option value="due" @selected(request('status')==='due')>Due Now</option><option value="upcoming" @selected(request('status')==='upcoming')>Upcoming</option><option value="unscheduled" @selected(request('status')==='unscheduled')>Unscheduled</option></select></div>
     <div><label>Type</label><select name="type"><option value="">All</option>@foreach(\App\Models\VehicleMaintenanceItem::TYPES as $key=>$label)<option value="{{ $key }}" @selected(request('type')===$key)>{{ $label }}</option>@endforeach</select></div>

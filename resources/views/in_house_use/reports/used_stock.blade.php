@@ -4,7 +4,7 @@
 <div class="topbar"><div><h1>Returned Used Stock Report</h1><div class="muted">Employee-returned items available for reissue; never mixed with new saleable stock</div></div><a class="btn" href="{{ route('in-house-use.index') }}">Reissue Used Stock</a></div>
 @include('in_house_use.reports._nav')
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Product</label><input name="search" value="{{ request('search') }}" placeholder="Product name or SKU"></div>
     <div><label>Warehouse</label><select name="warehouse_id"><option value="">All warehouses</option>@foreach($warehouses as $warehouse)<option value="{{ $warehouse->id }}" @selected((int)request('warehouse_id') === $warehouse->id)>{{ $warehouse->name }}</option>@endforeach</select></div>
     <div class="full actions"><button class="btn secondary" type="submit">Filter</button><a class="btn light" href="{{ route('in-house-use.report.used-stock') }}">Reset</a></div>

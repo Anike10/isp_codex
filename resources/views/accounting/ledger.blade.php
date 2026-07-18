@@ -23,23 +23,25 @@
     @endif
 </div>
 
-<form method="get" class="card actions" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     @if ($selectedCustomer)
         <input type="hidden" name="customer_id" value="{{ $selectedCustomer->id }}">
     @endif
     <input type="date" name="from" value="{{ request('from') }}">
     <input type="date" name="to" value="{{ request('to') }}">
-    <button class="btn secondary" type="submit">Filter</button>
-    <a class="btn light" href="{{ $selectedCustomer ? route('accounting.ledger', ['customer_id' => $selectedCustomer->id]) : route('accounting.ledger') }}">Reset</a>
-    @if ($selectedCustomer)
-        @if ($canOpenPaymentAccounts)
-            <a class="btn light" href="{{ route('accounting.ledger') }}">All Ledger</a>
+    <div class="actions">
+        <button class="btn secondary" type="submit">Filter</button>
+        <a class="btn light" href="{{ $selectedCustomer ? route('accounting.ledger', ['customer_id' => $selectedCustomer->id]) : route('accounting.ledger') }}">Reset</a>
+        @if ($selectedCustomer)
+            @if ($canOpenPaymentAccounts)
+                <a class="btn light" href="{{ route('accounting.ledger') }}">All Ledger</a>
+            @endif
+            @if ($canOpenCustomers)
+                <a class="btn light" href="{{ route('customers.show', $selectedCustomer) }}">Party Details</a>
+                <a class="btn" href="{{ route('customers.payments.create', $selectedCustomer) }}">Record Payment</a>
+            @endif
         @endif
-        @if ($canOpenCustomers)
-            <a class="btn light" href="{{ route('customers.show', $selectedCustomer) }}">Party Details</a>
-            <a class="btn" href="{{ route('customers.payments.create', $selectedCustomer) }}">Record Payment</a>
-        @endif
-    @endif
+    </div>
 </form>
 
 <div class="grid stats" style="margin-bottom:16px">

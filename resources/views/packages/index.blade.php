@@ -6,7 +6,7 @@
     <a class="btn" href="{{ route('packages.create') }}">Add Package</a>
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Package name, speed, MikroTik profile, IP pool, description"></div>
     <div><label>Status</label><select name="status"><option value="">All statuses</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>
     <div><label>Min Price</label><input type="number" step="0.01" name="min_price" value="{{ request('min_price') }}"></div>
@@ -16,16 +16,19 @@
 
 @include('partials.per_page')
 
-<form id="package-bulk-delete-form" method="post" action="{{ route('packages.bulk-destroy') }}" class="card" style="margin-bottom:16px" onsubmit="return confirm('Delete the selected packages using the selected mode?')">
+<form id="package-bulk-delete-form" method="post" action="{{ route('packages.bulk-destroy') }}" class="card bulk-toolbar" style="margin-bottom:16px" onsubmit="return confirm('Delete the selected packages using the selected mode?')">
     @csrf
     @method('DELETE')
-    <div class="actions" style="align-items:center">
-        <button class="btn danger" type="submit">Delete Selected</button>
-        <label style="display:flex;align-items:center;gap:7px;margin:0">
-            <input id="package-force-delete" type="checkbox" name="force_delete" value="1" style="width:auto">
-            <strong>Force Delete</strong>
+    <div class="bulk-toolbar-copy">
+        <div class="bulk-toolbar-title"><span class="bulk-toolbar-icon">!</span><strong>Bulk package actions</strong></div>
+        <div class="muted">Normal delete assigned package মুছবে না। Force Delete করলে assigned subscriptions replacement package-এ move হবে।</div>
+    </div>
+    <div class="bulk-toolbar-row">
+        <label class="bulk-force-toggle">
+            <input id="package-force-delete" type="checkbox" name="force_delete" value="1">
+            <span><strong>Force Delete</strong><small>Move subscriptions safely</small></span>
         </label>
-        <div id="package-replacement-wrap" style="min-width:280px;display:none">
+        <div id="package-replacement-wrap" class="bulk-replacement" style="display:none">
             <label>Users will receive</label>
             <select id="package-replacement" name="replacement_package_id" disabled>
                 <option value="">Select replacement package</option>
@@ -34,7 +37,7 @@
                 @endforeach
             </select>
         </div>
-        <span class="muted">Normal delete assigned package মুছবে না। Force Delete সব subscription replacement package-এ move করবে।</span>
+        <button class="btn danger" type="submit">Delete Selected</button>
     </div>
 </form>
 

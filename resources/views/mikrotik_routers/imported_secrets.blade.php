@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
+<div class="router-subpage">
 <div class="topbar">
     <div>
         <h1>Imported PPPoE Secrets: {{ $mikrotikRouter->name }}</h1>
@@ -15,8 +16,8 @@
     </div>
 </div>
 
-<form method="get" class="actions" style="margin-bottom:12px">
-    <label>Rows per page <input type="number" name="per_page" min="1" max="500" value="{{ $perPage }}" style="width:90px"></label>
+<form method="get" class="actions per-page-form">
+    <label class="per-page-label">Rows per page <input class="per-page-select" type="number" name="per_page" min="1" max="500" value="{{ $perPage }}"></label>
     <button class="btn light" type="submit">Apply</button>
     <button class="btn light" type="submit" name="make_per_page_default" value="1">ডিফল্ট সেট করুন</button>
 </form>
@@ -91,9 +92,9 @@
 <div class="grid" style="margin-top:16px">
     <div class="card">
         <h2>Imported PPP Profiles</h2>
-        <form method="get" class="actions" style="margin-bottom:10px">
+        <form method="get" class="actions per-page-form">
             <input type="hidden" name="per_page" value="{{ $perPage }}">
-            <label>Profiles per page <input type="number" name="profile_per_page" min="1" max="500" value="{{ $profilePerPage }}" style="width:80px"></label>
+            <label class="per-page-label">Profiles per page <input class="per-page-select" type="number" name="profile_per_page" min="1" max="500" value="{{ $profilePerPage }}"></label>
             <button class="btn light" type="submit">Apply</button>
             <button class="btn light" type="submit" name="make_profile_per_page_default" value="1">ডিফল্ট সেট করুন</button>
         </form>
@@ -120,4 +121,5 @@ document.querySelector('[data-select-all]')?.addEventListener('change', function
     document.querySelectorAll('input[name="secret_ids[]"]').forEach(input => input.checked = this.checked);
 });
 </script>
+</div>
 @endsection

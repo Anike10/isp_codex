@@ -42,7 +42,7 @@
         .logout-form { margin:0; }
         .logout-form .btn { min-height:34px; padding:8px 12px; white-space:nowrap; }
         .main { max-width:1440px; margin:0 auto; padding:24px 20px 34px; }
-        .main.olt-onus-wide { max-width:none; margin-left:0; margin-right:0; padding-left:0; }
+        .main.olt-onus-wide { max-width:none; margin-left:auto; margin-right:auto; padding-left:20px; padding-right:20px; }
         .topbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:20px; }
         h1 { margin:0; font-size:28px; }
         h2 { margin:0 0 14px; font-size:20px; }
@@ -200,8 +200,9 @@
             .nav a, .nav summary { font-size:11px; padding:7px 8px; }
         }
     </style>
+    <link rel="stylesheet" href="{{ asset('css/gorgeous-theme.css') }}?v=20260719-17">
 </head>
-<body>
+<body class="app-theme">
 <div class="shell">
     <header class="app-header">
     <div class="header-inner">
@@ -422,6 +423,17 @@ window.addEventListener('load', function () {
 
 const navToggle = document.querySelector('.nav-toggle');
 const appNav = document.querySelector('#app-nav');
+if (appNav) {
+    const currentPath = window.location.pathname.replace(/\/$/, '');
+    const candidates = Array.from(appNav.querySelectorAll('a[href]'))
+        .map(link => ({ link, path: new URL(link.href, window.location.origin).pathname.replace(/\/$/, '') }))
+        .filter(item => item.path && (currentPath === item.path || currentPath.startsWith(item.path + '/')))
+        .sort((a, b) => b.path.length - a.path.length);
+    if (candidates[0]) {
+        candidates[0].link.classList.add('is-active');
+        candidates[0].link.closest('.nav-group')?.classList.add('has-active');
+    }
+}
 if (navToggle && appNav) {
     navToggle.addEventListener('click', function () {
         const isOpen = appNav.classList.toggle('is-open');

@@ -20,8 +20,9 @@
         .error { background:#fff0f0; color:var(--danger); border-radius:6px; padding:10px 12px; margin-bottom:14px; }
         .powered-by { margin-top:18px; color:var(--muted); font-size:13px; text-align:center; }
     </style>
+    <link rel="stylesheet" href="{{ asset('css/gorgeous-theme.css') }}?v=20260719-17">
 </head>
-<body>
+<body class="login-theme">
     <form method="post" action="{{ route('login.store') }}" class="login">
         @csrf
         <h1>{{ $appOrganization?->name ?? config('app.name') }}</h1>

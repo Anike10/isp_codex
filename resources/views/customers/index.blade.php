@@ -9,7 +9,7 @@
     <a class="btn" href="{{ route('customers.create') }}">Add Party</a>
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Search by name, phone, connection ID, MikroTik username"></div>
     <div><label>Role</label><select name="role"><option value="">All roles</option><option value="customer" @selected(request('role') === 'customer')>Customer</option><option value="vendor" @selected(request('role') === 'vendor')>Vendor</option><option value="reseller" @selected(request('role') === 'reseller')>Reseller</option></select></div>
     <div><label>Status</label><select name="status"><option value="">All statuses</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>

@@ -9,7 +9,7 @@
     <a class="btn" href="{{ route('tickets.create') }}">Add Ticket</a>
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Subject, description, party, phone, connection ID, technician"></div>
     <div><label>Priority</label><select name="priority"><option value="">All priorities</option>@foreach(['low','normal','high','urgent'] as $priority)<option value="{{ $priority }}" @selected(request('priority') === $priority)>{{ ucfirst($priority) }}</option>@endforeach</select></div>
     <div><label>Status</label><select name="status"><option value="">All statuses</option>@foreach(['open','processing','resolved','closed'] as $status)<option value="{{ $status }}" @selected(request('status') === $status)>{{ ucfirst($status) }}</option>@endforeach</select></div>

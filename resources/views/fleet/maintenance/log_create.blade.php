@@ -3,7 +3,7 @@
 @section('content')
 <div class="topbar"><div><h1>Log Repair / Maintenance</h1><div class="muted">Record what was checked, changed, serviced, or repaired on a vehicle</div></div><div class="actions"><a class="btn secondary" href="{{ route('fleet.settings') }}">Fleet Settings</a><a class="btn secondary" href="{{ route('fleet.maintenance.schedules') }}">Maintenance Schedules</a><a class="btn light" href="{{ route('fleet.index') }}">Vehicles</a></div></div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Select Vehicle First</label><select name="vehicle_id" required onchange="this.form.submit()"><option value="">Select vehicle</option>@foreach($vehicles as $vehicle)<option value="{{ $vehicle->id }}" @selected($selectedVehicle?->id===$vehicle->id)>{{ $vehicle->registration_no }} — {{ $vehicle->name }}</option>@endforeach</select></div>
     <div class="actions" style="align-self:end"><button class="btn secondary">Load Maintenance Items</button></div>
 </form>

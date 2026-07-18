@@ -11,7 +11,7 @@
     </div>
 </div>
 
-<form method="get" class="card" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div class="form-grid">
         <div>
             <label for="olt_device_id">OLT</label>

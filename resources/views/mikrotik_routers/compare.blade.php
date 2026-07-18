@@ -1,5 +1,6 @@
 @extends('layouts.app')
 @section('content')
+<div class="router-compare-page">
 <div class="topbar"><div><h1>Compare & Sync · {{ $mikrotikRouter->name }}</h1><div class="muted">App ও live MikroTik তুলনা করুন। App-এ নেই হলে Export, MikroTik-এ বেশি থাকলে Import অথবা confirmation দিয়ে Delete করুন।</div></div><a class="btn light" href="{{ route('mikrotik-routers.show', $mikrotikRouter) }}">Back</a></div>
 @unless($liveDataAvailable)<div class="alert error" style="margin-bottom:16px">{{ $liveDataError }} Live-dependent actions are temporarily disabled.</div>@endunless
 
@@ -59,4 +60,5 @@ document.addEventListener('dblclick', event => {
 });
 </script>
 @endif
+</div>
 @endsection

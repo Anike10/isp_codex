@@ -1,0 +1,836 @@
+/*
+ * Ultimate Solution unified UI
+ * Mirrors the reseller dashboard palette while allowing purpose-built pages
+ * to keep their own later, more-specific component styles.
+ */
+:root {
+    --us-navy: #102a43;
+    --us-navy-2: #173f5f;
+    --us-green: #116149;
+    --us-green-2: #0b7a58;
+    --us-blue: #1d76c9;
+    --us-ink: #172b3f;
+    --us-muted: #66778a;
+    --us-line: #dbe6ef;
+    --us-soft: #f4f8fb;
+    --us-shadow: 0 7px 22px rgba(16, 42, 67, .07);
+    --us-shadow-lg: 0 18px 42px rgba(16, 42, 67, .14);
+}
+
+.app-theme {
+    color: var(--us-ink);
+    background:
+        linear-gradient(rgba(244, 248, 251, .9), rgba(244, 248, 251, .94)),
+        radial-gradient(circle at 8% 0%, rgba(17, 151, 110, .22), transparent 32rem),
+        radial-gradient(circle at 100% 16%, rgba(29, 118, 201, .2), transparent 35rem),
+        radial-gradient(circle at 52% 100%, rgba(111, 66, 193, .08), transparent 28rem);
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+}
+
+.app-theme ::selection { color: #fff; background: var(--us-green); }
+.app-theme :focus-visible { outline: 3px solid rgba(29, 118, 201, .22); outline-offset: 2px; }
+
+/* App shell and navigation */
+.app-theme .app-header {
+    border-bottom: 1px solid rgba(255, 255, 255, .13);
+    background: linear-gradient(118deg, var(--us-navy) 0%, #104d42 57%, #185f94 100%);
+    box-shadow: 0 10px 28px rgba(16, 42, 67, .22);
+}
+.app-theme .header-inner { max-width: 1480px; padding: 11px 20px; gap: 12px; }
+.app-theme .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: -.025em;
+}
+.app-theme .brand::before {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, .24);
+    border-radius: 10px;
+    background: linear-gradient(145deg, rgba(255,255,255,.21), rgba(255,255,255,.08));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.18);
+    color: #fff;
+    font-size: 11px;
+    letter-spacing: 0;
+    content: "US";
+}
+.app-theme .nav { gap: 4px; }
+.app-theme .nav > a,
+.app-theme .nav > details > summary {
+    min-height: 38px;
+    padding: 9px 10px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    color: #d8e7f1;
+    font-size: 13px;
+    font-weight: 650;
+    transition: background .16s ease, border-color .16s ease, color .16s ease;
+}
+.app-theme .nav > a:hover,
+.app-theme .nav > details > summary:hover,
+.app-theme .nav > details[open] > summary,
+.app-theme .nav > a.is-active,
+.app-theme .nav > details.has-active > summary {
+    border-color: rgba(255, 255, 255, .15);
+    background: rgba(255, 255, 255, .13);
+    color: #fff;
+}
+.app-theme .nav > a.is-active,
+.app-theme .nav > details.has-active > summary {
+    box-shadow: inset 0 -2px 0 #80dfbd;
+}
+.app-theme .nav-menu {
+    min-width: 225px;
+    padding: 8px;
+    border: 1px solid var(--us-line);
+    border-radius: 13px;
+    box-shadow: var(--us-shadow-lg);
+}
+.app-theme .nav-menu a {
+    padding: 10px 11px;
+    border-radius: 8px;
+    color: var(--us-ink);
+    font-size: 13px;
+    font-weight: 600;
+}
+.app-theme .nav-menu a:hover,
+.app-theme .nav-menu a.is-active {
+    background: #eaf7f2;
+    color: var(--us-green);
+}
+.app-theme .current-user {
+    padding: 7px 10px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.11);
+}
+.app-theme .current-user-label { color: #b8cede; }
+
+/* Standard page presentation. Purpose-built page wrappers remain independent. */
+.app-theme .main { max-width: 1480px; min-height: calc(100vh - 126px); padding: 25px 20px 38px; }
+.app-theme .main.olt-onus-wide { max-width: 1680px; margin-left: auto; margin-right: auto; padding-left: 20px; padding-right: 20px; }
+.app-theme .main > .topbar {
+    position: relative;
+    overflow: hidden;
+    min-height: 96px;
+    padding: 20px 22px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 16px;
+    background: linear-gradient(122deg, #102a43 0%, #0b7556 57%, #1d76c9 100%);
+    box-shadow: 0 15px 32px rgba(16, 42, 67, .17);
+    color: #fff;
+}
+.app-theme .main > .topbar::after {
+    position: absolute;
+    right: -58px;
+    bottom: -96px;
+    width: 220px;
+    height: 220px;
+    border: 34px solid rgba(255,255,255,.07);
+    border-radius: 50%;
+    content: "";
+}
+.app-theme .main > .topbar > * { position: relative; z-index: 1; }
+.app-theme .main > .topbar h1,
+.app-theme .main > .topbar h2 { color: #fff; letter-spacing: -.035em; }
+.app-theme .main > .topbar .muted { color: #cee0ec; }
+.app-theme .main > .topbar .btn { border-color: rgba(255,255,255,.25); }
+.app-theme .main > .topbar .btn.light { background: rgba(255,255,255,.14); color: #fff; }
+.app-theme .main > .topbar .btn.secondary { background: #fff; color: var(--us-green); }
+
+.app-theme h1, .app-theme h2, .app-theme h3 { letter-spacing: -.025em; }
+.app-theme .card {
+    position: relative;
+    border: 1px solid var(--us-line);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: var(--us-shadow);
+}
+.app-theme .main > .card::before,
+.app-theme .main > .grid > .card::before {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    border-radius: 14px 14px 0 0;
+    background: linear-gradient(90deg, var(--us-green), #22a77a 46%, var(--us-blue));
+    opacity: .82;
+    content: "";
+}
+.app-theme .main > .card,
+.app-theme .main > .grid > .card { padding: 20px; }
+.app-theme .main > .card > h2:first-child,
+.app-theme .main > .grid > .card > h2:first-child {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+.app-theme .main > .card > h2:first-child::before,
+.app-theme .main > .grid > .card > h2:first-child::before {
+    width: 4px;
+    height: 21px;
+    border-radius: 99px;
+    background: linear-gradient(var(--us-green), var(--us-blue));
+    content: "";
+}
+.app-theme .muted { color: var(--us-muted); }
+
+/* Summary cards */
+.app-theme .main > .stats,
+.app-theme .main > .grid.stats { gap: 12px; }
+.app-theme .main > .stats .stat,
+.app-theme .main > .grid.stats .stat {
+    position: relative;
+    overflow: hidden;
+    min-height: 112px;
+    padding: 17px;
+    border: 1px solid var(--us-line);
+    border-radius: 13px;
+    background: linear-gradient(145deg, #fff, #f3faf7 54%, #f1f7fc);
+    box-shadow: var(--us-shadow);
+}
+.app-theme .main > .stats .stat:nth-child(4n+1),
+.app-theme .main > .grid.stats .stat:nth-child(4n+1) { border-top: 3px solid #159a70; }
+.app-theme .main > .stats .stat:nth-child(4n+2),
+.app-theme .main > .grid.stats .stat:nth-child(4n+2) { border-top: 3px solid #2d83c8; background: linear-gradient(145deg,#fff,#f0f7fd); }
+.app-theme .main > .stats .stat:nth-child(4n+3),
+.app-theme .main > .grid.stats .stat:nth-child(4n+3) { border-top: 3px solid #8466c7; background: linear-gradient(145deg,#fff,#f7f3fd); }
+.app-theme .main > .stats .stat:nth-child(4n+4),
+.app-theme .main > .grid.stats .stat:nth-child(4n+4) { border-top: 3px solid #df8a2b; background: linear-gradient(145deg,#fff,#fff8ee); }
+.app-theme .main > .stats .stat::after,
+.app-theme .main > .grid.stats .stat::after {
+    position: absolute;
+    top: -35px;
+    right: -35px;
+    width: 92px;
+    height: 92px;
+    border-radius: 50%;
+    background: rgba(17, 97, 73, .06);
+    content: "";
+}
+.app-theme .stat .muted {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .055em;
+    text-transform: uppercase;
+}
+.app-theme .stat strong { position: relative; z-index: 1; color: #1a3852; letter-spacing: -.035em; }
+
+/* Buttons and controls */
+.app-theme .btn {
+    gap: 7px;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--us-green-2), var(--us-green));
+    box-shadow: 0 4px 10px rgba(17, 97, 73, .16);
+    font-size: 13px;
+    transition: filter .15s ease, box-shadow .15s ease;
+}
+.app-theme .btn:hover { filter: brightness(1.05); box-shadow: 0 7px 16px rgba(17, 97, 73, .2); }
+.app-theme .btn.secondary { background: linear-gradient(135deg, var(--us-blue), #155b91); box-shadow: 0 4px 10px rgba(29,118,201,.17); }
+.app-theme .btn.light { border-color: #d6e1ea; background: #eff4f8; color: #263b4e; box-shadow: none; }
+.app-theme .btn.light:hover { border-color: #bdccd8; background: #e6eef4; }
+.app-theme .btn.danger { background: linear-gradient(135deg, #c73d32, #a91e16); }
+.app-theme .btn[disabled],
+.app-theme button[disabled] { cursor: not-allowed; filter: grayscale(.2); opacity: .55; box-shadow: none; }
+.app-theme label { color: #34465a; font-size: 13px; }
+.app-theme input,
+.app-theme select,
+.app-theme textarea {
+    min-height: 42px;
+    border-color: #cedae5;
+    border-radius: 9px;
+    color: var(--us-ink);
+    box-shadow: inset 0 1px 2px rgba(16,42,67,.025);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+.app-theme input:hover,
+.app-theme select:hover,
+.app-theme textarea:hover { border-color: #adbecc; }
+.app-theme input:focus,
+.app-theme select:focus,
+.app-theme textarea:focus {
+    border-color: var(--us-blue);
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(29,118,201,.1);
+}
+.app-theme input[type="checkbox"],
+.app-theme input[type="radio"] { width: auto; min-height: auto; accent-color: var(--us-green); box-shadow: none; }
+
+/* Purpose-sized fields across standard forms. Low specificity lets a
+   purpose-built page keep its own component widths. */
+:where(.app-theme .main) input:where(:not([type="checkbox"]):not([type="radio"]):not([type="hidden"])),
+:where(.app-theme .main) select { width: min(100%, 360px); }
+:where(.app-theme .main) textarea { width: min(100%, 720px); }
+:where(.app-theme .main) input:where([type="date"]),
+:where(.app-theme .main) input:where([type="month"]) { width: min(100%, 190px); }
+:where(.app-theme .main) input:where([type="time"]) { width: min(100%, 150px); }
+:where(.app-theme .main) input:where([type="datetime-local"]) { width: min(100%, 235px); }
+:where(.app-theme .main) input:where([type="number"]) { width: min(100%, 180px); }
+:where(.app-theme .main) input:where([type="email"]),
+:where(.app-theme .main) input:where([type="password"]) { width: min(100%, 340px); }
+:where(.app-theme .main) input:where([type="tel"]),
+:where(.app-theme .main) input:where([name="phone"]),
+:where(.app-theme .main) input:where([name$="_phone"]) { width: min(100%, 225px); }
+:where(.app-theme .main) input:where([type="url"]) { width: min(100%, 520px); }
+:where(.app-theme .main) input:where([type="file"]) { width: min(100%, 520px); }
+:where(.app-theme .main) input:where([name="name"]),
+:where(.app-theme .main) input:where([name$="_name"]),
+:where(.app-theme .main) input:where([name="subject"]),
+:where(.app-theme .main) input:where([name="title"]) { width: min(100%, 420px); }
+:where(.app-theme .main) input:where([name="address"]),
+:where(.app-theme .main) input:where([name$="_address"]),
+:where(.app-theme .main) input:where([name="reference"]),
+:where(.app-theme .main) input:where([name="note"]) { width: min(100%, 520px); }
+:where(.app-theme .main) input:where([name="amount"]),
+:where(.app-theme .main) input:where([name$="_amount"]),
+:where(.app-theme .main) input:where([name*="price"]),
+:where(.app-theme .main) input:where([name*="balance"]),
+:where(.app-theme .main) input:where([name*="discount"]),
+:where(.app-theme .main) input:where([name*="commission"]),
+:where(.app-theme .main) input:where([name*="limit"]) { width: min(100%, 190px); }
+:where(.app-theme .main) input:where([name="quantity"]),
+:where(.app-theme .main) input:where([name$="_quantity"]),
+:where(.app-theme .main) input:where([name="qty"]),
+:where(.app-theme .main) input:where([name$="_qty"]),
+:where(.app-theme .main) input:where([name*="days"]),
+:where(.app-theme .main) input:where([name*="count"]) { width: min(100%, 135px); }
+:where(.app-theme .main) input:where([name*="connection_id"]),
+:where(.app-theme .main) input:where([name*="username"]),
+:where(.app-theme .main) input:where([name*="invoice_no"]),
+:where(.app-theme .main) input:where([name*="serial"]) { width: min(100%, 290px); }
+:where(.app-theme .main) select:where([name="status"]),
+:where(.app-theme .main) select:where([name$="_status"]),
+:where(.app-theme .main) select:where([name="payment_method"]),
+:where(.app-theme .main) select:where([name="per_page"]) { width: min(100%, 210px); }
+:where(.app-theme .main) select:where([multiple]) { width: min(100%, 460px); min-height: 150px; }
+:where(.app-theme .main table) input:where(:not([type="checkbox"]):not([type="radio"])),
+:where(.app-theme .main table) select,
+:where(.app-theme .main table) textarea { max-width: 100%; }
+.app-theme .main .form-grid > div,
+.app-theme .main form > div { align-self: start; }
+
+/* Data-entry forms use predictable 12-column spans. */
+.app-theme .main form.card.form-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: 16px;
+    row-gap: 15px;
+    align-items: start;
+}
+.app-theme .main form.card.form-grid > div { grid-column: span 3; min-width: 0; }
+.app-theme .main form.card.form-grid > div:has(> input[type="number"]),
+.app-theme .main form.card.form-grid > div:has(> input[type="date"]),
+.app-theme .main form.card.form-grid > div:has(> input[type="month"]),
+.app-theme .main form.card.form-grid > div:has(> input[type="time"]),
+.app-theme .main form.card.form-grid > div:has(> select[name="status"]),
+.app-theme .main form.card.form-grid > div:has(> select[name$="_status"]),
+.app-theme .main form.card.form-grid > div:has(> select[name="payment_method"]) { grid-column: span 2; }
+.app-theme .main form.card.form-grid > div:has(> textarea) { grid-column: span 6; }
+.app-theme .main form.card.form-grid > .full { grid-column: 1 / -1 !important; }
+.app-theme .main form.card.form-grid > .actions { align-self: end; }
+.app-theme .main form.card.form-grid > .full.actions { grid-column: 1 / -1; min-height: 42px; }
+.app-theme .main form.card.form-grid > .full.actions .btn,
+.app-theme .main form.card.form-grid > .full.actions form { width: auto; }
+.app-theme .main form.card.form-grid > div > input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.app-theme .main form.card.form-grid > div > select,
+.app-theme .main form.card.form-grid > div > textarea { width: 100%; max-width: none; }
+.app-theme .main form.card.form-grid > .full > input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.app-theme .main form.card.form-grid > .full > select,
+.app-theme .main form.card.form-grid > .full > textarea { max-width: 720px; }
+.app-theme .main form.card.form-grid > div > .muted {
+    display: block;
+    max-width: 440px;
+    margin-top: 5px;
+}
+
+/* Unified filter bars: intrinsic controls share one balanced row. */
+.app-theme .main form.card.filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px 14px;
+    padding: 16px 18px;
+    background: linear-gradient(145deg, #ffffff, #f5f9fb);
+}
+.app-theme .main form.card.filter-form > .form-grid { display: contents; }
+.app-theme .main form.card.filter-form > div:not(.form-grid):not(.actions),
+.app-theme .main form.card.filter-form > .form-grid > div:not(.actions) {
+    flex: 1 1 220px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+}
+.app-theme .main form.card.filter-form > div:has(input[name="search"]),
+.app-theme .main form.card.filter-form > div:has(input[name="q"]),
+.app-theme .main form.card.filter-form > div:has(input[type="search"]),
+.app-theme .main form.card.filter-form > .form-grid > div:has(input[name="search"]),
+.app-theme .main form.card.filter-form > .form-grid > div:has(input[name="q"]),
+.app-theme .main form.card.filter-form > .form-grid > div:has(input[type="search"]) {
+    flex: 1 1 220px;
+    width: auto;
+    max-width: none;
+}
+.app-theme .main form.card.filter-form > div:has(> input[type="number"]),
+.app-theme .main form.card.filter-form > div:has(> input[type="date"]),
+.app-theme .main form.card.filter-form > div:has(> input[type="month"]),
+.app-theme .main form.card.filter-form > .form-grid > div:has(> input[type="number"]),
+.app-theme .main form.card.filter-form > .form-grid > div:has(> input[type="date"]),
+.app-theme .main form.card.filter-form > .form-grid > div:has(> input[type="month"]) { flex: 1 1 220px; width: auto; max-width: none; }
+.app-theme .main form.card.filter-form > div > input:not([type="checkbox"]):not([type="radio"]),
+.app-theme .main form.card.filter-form > div > select,
+.app-theme .main form.card.filter-form > .form-grid > div > input:not([type="checkbox"]):not([type="radio"]),
+.app-theme .main form.card.filter-form > .form-grid > div > select { width: 100%; max-width: none; }
+.app-theme .main form.card.filter-form > .full { grid-column: auto; }
+.app-theme .main form.card.filter-form > .actions,
+.app-theme .main form.card.filter-form > .form-grid > .actions {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 42px;
+    margin: 0 !important;
+    align-self: flex-end;
+}
+.app-theme .main form.card.filter-form > .actions .btn,
+.app-theme .main form.card.filter-form > .actions form,
+.app-theme .main form.card.filter-form > .form-grid > .actions .btn,
+.app-theme .main form.card.filter-form > .form-grid > .actions form,
+.app-theme .main form.card.filter-form > .btn {
+    width: auto;
+    min-height: 37px;
+}
+.app-theme .main form.card.filter-form > input:not([type="hidden"]),
+.app-theme .main form.card.filter-form > select {
+    flex: 1 1 220px;
+    width: auto;
+    max-width: none;
+}
+.app-theme .main form.card.filter-form > input[type="date"],
+.app-theme .main form.card.filter-form > input[type="month"],
+.app-theme .main form.card.filter-form > input[type="number"] {
+    flex: 1 1 220px;
+    width: auto;
+    max-width: none;
+}
+.app-theme .main form.card.filter-form > input[name="q"],
+.app-theme .main form.card.filter-form > input[name="search"] {
+    flex: 1 1 220px;
+    width: auto;
+    max-width: none;
+}
+.app-theme .main form.card.filter-form > button,
+.app-theme .main form.card.filter-form > a {
+    flex: 0 0 auto;
+    width: auto;
+}
+.app-theme .main form.card.filter-form > label {
+    flex: 1 1 220px;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    font-size: 12px;
+}
+.app-theme .main form.card.filter-form > label > input:not([type="checkbox"]):not([type="radio"]),
+.app-theme .main form.card.filter-form > label > select { width: 100%; max-width: none; margin-top: 5px; }
+.app-theme .main form.card.filter-form > div > label,
+.app-theme .main form.card.filter-form > .form-grid > div > label { margin-bottom: 5px; font-size: 12px; }
+
+/* Custom full-width groups that intentionally sit inside a standard grid. */
+.app-theme .main #paymentForm > .payment-field-row,
+.app-theme .main #paymentForm > .advance-allocation-panel { grid-column: 1 / -1; }
+.app-theme .main .per-page-select { width: auto; min-width: 90px; }
+
+/* Consistent bulk-action toolbar used beside list filters. */
+.app-theme .main .bulk-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px 24px;
+    padding: 14px 16px;
+    border: 1px solid #d7e1e9;
+    border-top: 3px solid #173f5f;
+    background: linear-gradient(135deg, #ffffff, #f7fafc 62%, #f1f5f8);
+}
+.app-theme .main > .bulk-toolbar::before { display: none; }
+.app-theme .main .bulk-toolbar-copy { min-width: 0; }
+.app-theme .main .bulk-toolbar-title { display: flex; align-items: center; gap: 9px; color: #7c251f; font-size: 14px; }
+.app-theme .main .bulk-toolbar-icon {
+    display: inline-grid;
+    width: 25px;
+    height: 25px;
+    place-items: center;
+    border-radius: 8px;
+    background: #c43b32;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 900;
+}
+.app-theme .main .bulk-toolbar-copy .muted { display: block; margin-top: 4px; font-size: 12px; line-height: 1.45; }
+.app-theme .main .bulk-toolbar-row {
+    display: grid;
+    grid-template-columns: minmax(185px, 1fr) minmax(220px, 280px) auto;
+    gap: 10px 12px;
+    align-items: stretch;
+}
+.app-theme .main .bulk-toolbar-row > * { min-width: 0; }
+.app-theme .main .bulk-force-toggle {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 42px;
+    padding: 6px 11px;
+    border: 1px solid #cbd8e2;
+    border-radius: 10px;
+    background: #fff;
+    color: #263f53;
+    cursor: pointer;
+}
+.app-theme .main .bulk-force-toggle input { width: auto; min-height: auto; accent-color: #173f5f; }
+.app-theme .main .bulk-force-toggle span { display: grid; gap: 1px; line-height: 1.2; }
+.app-theme .main .bulk-force-toggle small { color: #667b8d; font-size: 10px; }
+.app-theme .main .bulk-replacement { flex: 0 1 280px; min-width: 230px; }
+.app-theme .main .bulk-replacement select { width: 100%; max-width: none; }
+
+/* Router pages: make connection state, imports and sync actions easy to scan. */
+.app-theme .main .router-detail-page,
+.app-theme .main .router-list-page,
+.app-theme .main .router-compare-page,
+.app-theme .main .router-subpage { --router-ink: #173f5f; --router-teal: #116149; }
+.app-theme .main .router-subpage > table,
+.app-theme .main .router-subpage > .card { border-color: #cbdde8; box-shadow: 0 8px 20px rgba(16,42,67,.06); }
+.app-theme .main .router-subpage > table { min-width: 760px; }
+.app-theme .main .router-detail-page .router-health-card {
+    padding: 18px 20px;
+    border-color: #cbdde8 !important;
+    background: linear-gradient(135deg, #f8fbfd, #eef7f4);
+    box-shadow: 0 8px 20px rgba(16,42,67,.07);
+}
+.app-theme .main .router-health-card::before,
+.app-theme .main .router-import-card::before { display: none; }
+.app-theme .main .router-health-card > .actions { gap: 18px; }
+.app-theme .main .router-health-card > .actions > .actions { gap: 22px; }
+.app-theme .main .router-health-card .muted { color: #637b8c; }
+.app-theme .main .router-import-card {
+    padding: 20px;
+    border-color: #cbdde8 !important;
+    background: linear-gradient(135deg, #ffffff, #f5faf8);
+}
+.app-theme .main .router-import-card > .actions:first-child {
+    padding-bottom: 16px;
+    border-bottom: 1px solid #e0e9ee;
+}
+.app-theme .main .router-import-card > .actions:first-child h2 { color: var(--router-ink); margin-bottom: 4px; }
+.app-theme .main .router-import-card > .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+.app-theme .main .router-import-tile {
+    display: flex;
+    min-height: 168px;
+    flex-direction: column;
+    justify-content: space-between;
+    border-color: #d5e3e8 !important;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(16,42,67,.045);
+    transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.app-theme .main .router-import-tile:hover { transform: translateY(-2px); border-color: #9ac8ba !important; box-shadow: 0 9px 20px rgba(16,42,67,.09); }
+.app-theme .main .router-import-tile strong { color: var(--router-ink); }
+.app-theme .main .router-import-tile form { margin-top: 12px; }
+.app-theme .main .router-detail-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 16px; }
+.app-theme .main .router-info-card { padding: 20px; }
+.app-theme .main .router-info-card h2 { color: var(--router-ink); }
+.app-theme .main .router-info-card .form-grid { gap: 12px 18px; }
+.app-theme .main .router-info-card .form-grid > div { padding: 10px 12px; border: 1px solid #e1eaf0; border-radius: 8px; background: #f8fbfc; }
+.app-theme .main .router-info-card p { margin: 0; padding: 10px 0; border-bottom: 1px solid #e5edf1; line-height: 1.5; }
+.app-theme .main .router-info-card p:last-child { border-bottom: 0; }
+.app-theme .main .router-list-page table { min-width: 1180px; }
+.app-theme .main .router-list-page .connection-cell { min-width: 190px; }
+.app-theme .main .router-list-page .router-diagnostic { line-height: 1.35; }
+.app-theme .main .router-compare-page > .card {
+    border-color: #cbdde8;
+    box-shadow: 0 8px 20px rgba(16,42,67,.065);
+}
+.app-theme .main .router-compare-page > .card > .actions:first-child {
+    padding: 2px 0 15px;
+    border-bottom: 1px solid #e0e9ee;
+}
+.app-theme .main .router-compare-page > .card > .actions:first-child h2 { color: var(--router-ink); margin-bottom: 4px; }
+.app-theme .main .router-compare-page table { margin-top: 15px; }
+.app-theme .main .router-compare-page td .actions { gap: 7px; }
+.app-theme .main .router-compare-page td .btn { min-height: 34px; padding: 8px 10px; font-size: 12px; }
+
+/* Invoice detail summary cards. */
+.app-theme .main .invoice-detail-page { --invoice-ink: #173f5f; }
+.app-theme .main .invoice-summary-grid { grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); gap: 16px; }
+.app-theme .main .invoice-summary-card {
+    padding: 20px;
+    border-color: #cbdde8;
+    background: linear-gradient(145deg, #fff, #f7fafc);
+    box-shadow: 0 8px 20px rgba(16,42,67,.065);
+}
+.app-theme .main .invoice-summary-card h2 { color: var(--invoice-ink); margin-bottom: 12px; }
+.app-theme .main .invoice-total-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 0;
+    padding: 9px 0;
+    border-bottom: 1px solid #e4edf2;
+}
+.app-theme .main .invoice-total-row strong { color: #536b7c; font-size: 12px; }
+.app-theme .main .invoice-total-row > span { color: #1a3449; font-weight: 700; text-align: right; }
+.app-theme .main .invoice-total-row:last-child { border-bottom: 0; }
+.app-theme .main .invoice-total-emphasis {
+    margin: 5px -10px 0;
+    padding: 12px 10px;
+    border: 1px solid #b9d8cc;
+    border-radius: 8px;
+    background: #edf8f3;
+}
+.app-theme .main .invoice-total-emphasis strong,
+.app-theme .main .invoice-total-emphasis > span { color: #116149; font-size: 15px; }
+.app-theme .main .invoice-paid-row > span { color: #116149; }
+.app-theme .main .invoice-due-row { margin: 4px -10px; padding: 10px; border-radius: 8px; background: #fff7ed; border-color: #f3d5a8; }
+.app-theme .main .invoice-due-row strong,
+.app-theme .main .invoice-due-row > span { color: #a35b08; }
+.app-theme .main .invoice-party-card p {
+    display: grid;
+    grid-template-columns: 125px minmax(0, 1fr);
+    gap: 10px;
+    margin: 0;
+    padding: 11px 0;
+    border-bottom: 1px solid #e4edf2;
+    overflow-wrap: anywhere;
+}
+.app-theme .main .invoice-party-card p:last-child { border-bottom: 0; }
+.app-theme .main .invoice-party-card p strong { color: #536b7c; font-size: 12px; }
+
+/* Protect purpose-built component sizing from generic semantic widths. */
+.app-theme .reseller-page .payment-form input { width: 120px; max-width: 120px; }
+.app-theme .wallet-pay-page .wallet-form input:not([type="checkbox"]):not([type="hidden"]),
+.app-theme .wallet-pay-page .wallet-form textarea { width: 100%; max-width: none; }
+
+/* Tables, status and feedback */
+.app-theme table {
+    border-color: var(--us-line);
+    border-radius: 11px;
+    box-shadow: 0 3px 10px rgba(16,42,67,.035);
+}
+.app-theme th, .app-theme td { padding: 12px 13px; border-color: #e3ebf1; }
+.app-theme th {
+    border-bottom: 2px solid #c3d9e7;
+    background: linear-gradient(115deg, #e5f4ef, #e7f1fb 64%, #f0ecfa);
+    color: #3d566b;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .045em;
+}
+.app-theme tbody tr:not(.invoice-row-due):not(.invoice-row-overdue):not(.invoice-row-paid):nth-child(odd) td { background: #f1f5f4; }
+.app-theme tbody tr:not(.invoice-row-due):not(.invoice-row-overdue):not(.invoice-row-paid):nth-child(even) td { background: #dce8eb; }
+.app-theme tbody tr:not(.invoice-row-due):not(.invoice-row-overdue):not(.invoice-row-paid):hover td { background: #cfdfda; }
+.app-theme tbody tr td:first-child { border-left: 3px solid transparent; }
+.app-theme tbody tr:not(.invoice-row-due):not(.invoice-row-overdue):not(.invoice-row-paid):nth-child(even) td:first-child { border-left-color: rgba(29,118,201,.32); }
+.app-theme tbody tr:not(.invoice-row-due):not(.invoice-row-overdue):not(.invoice-row-paid):nth-child(odd) td:first-child { border-left-color: rgba(17,151,110,.24); }
+
+/* Compact search controls; data-entry inputs keep their normal full size. */
+.app-theme .main input:not([type="checkbox"]):not([type="radio"]),
+.app-theme .main select,
+.app-theme .main textarea { border-radius: 6px; }
+.app-theme .main input[name="search"],
+.app-theme .main input[name="q"],
+.app-theme .main input[type="search"],
+.app-theme .main .permission-search,
+.app-theme .main .access-search {
+    width: min(100%, 440px);
+    min-height: 37px;
+    padding: 7px 13px 7px 36px;
+    border-color: #b8c9d4;
+    border-radius: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: #f9fbfc;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='%23566f82' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E");
+    background-position: 12px center;
+    background-repeat: no-repeat;
+    box-shadow: 0 3px 9px rgba(16,42,67,.055);
+    font-size: 13px;
+}
+.app-theme .main input[name="search"]:focus,
+.app-theme .main input[name="q"]:focus,
+.app-theme .main input[type="search"]:focus,
+.app-theme .main .permission-search:focus,
+.app-theme .main .access-search:focus {
+    border-color: var(--us-green-2);
+    background-color: #fff;
+    box-shadow: 0 0 0 4px rgba(17,151,110,.1), 0 4px 12px rgba(16,42,67,.07);
+}
+.app-theme .main form:has(input[name="search"]) .actions .btn,
+.app-theme .main form:has(input[name="q"]) .actions .btn,
+.app-theme .main form:has(input[type="search"]) .btn {
+    min-height: 36px;
+    padding: 8px 12px;
+}
+.app-theme .badge { border: 1px solid rgba(71,84,103,.07); padding: 5px 9px; font-size: 11px; }
+.app-theme .alert {
+    position: relative;
+    padding: 13px 15px 13px 43px;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    box-shadow: var(--us-shadow);
+}
+.app-theme .alert::before {
+    position: absolute;
+    top: 11px;
+    left: 14px;
+    display: grid;
+    width: 22px;
+    height: 22px;
+    place-items: center;
+    border-radius: 50%;
+    font-weight: 900;
+}
+.app-theme .alert.success { border-color: #b9e5cf; background: #eefaf4; }
+.app-theme .alert.success::before { background: #caeedb; content: "✓"; }
+.app-theme .alert.warning { border-color: #efd29e; background: #fff9eb; }
+.app-theme .alert.warning::before { background: #f6e2b8; content: "!"; }
+.app-theme .alert.error { border-color: #edbdb9; background: #fff4f3; }
+.app-theme .alert.error::before { background: #f6d3d0; content: "×"; }
+.app-theme .action-menu-panel { padding: 7px; border-radius: 11px; box-shadow: var(--us-shadow-lg); }
+.app-theme .page-link { border-radius: 9px; }
+.app-theme .page-link:hover { border-color: #b8c8d5; background: #eaf7f2; color: var(--us-green); }
+.app-theme .page-link.active { background: linear-gradient(135deg, var(--us-green-2), var(--us-green)); box-shadow: 0 5px 12px rgba(17,97,73,.18); }
+.app-theme .page-timing { border: 1px solid rgba(255,255,255,.1); border-radius: 9px; background: rgba(16,42,67,.88); backdrop-filter: blur(8px); }
+.app-theme .app-footer { color: #7a8999; }
+
+/* Standalone login */
+.login-theme {
+    background:
+        radial-gradient(circle at 15% 10%, rgba(17,97,73,.18), transparent 30rem),
+        radial-gradient(circle at 90% 90%, rgba(29,118,201,.17), transparent 32rem),
+        #edf4f7;
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+}
+.login-theme .login {
+    position: relative;
+    overflow: hidden;
+    padding: 32px;
+    border: 1px solid rgba(211,224,234,.95);
+    border-radius: 20px;
+    box-shadow: var(--us-shadow-lg);
+}
+.login-theme .login::before { position: absolute; top: 0; left: 0; width: 100%; height: 6px; background: linear-gradient(90deg,var(--us-green),var(--us-blue)); content: ""; }
+.login-theme .login h1 { color: var(--us-navy); letter-spacing: -.04em; }
+.login-theme input { min-height: 43px; border-radius: 9px; }
+.login-theme input:focus { border-color: var(--us-blue); outline: none; box-shadow: 0 0 0 4px rgba(29,118,201,.1); }
+.login-theme .btn { min-height: 44px; border-radius: 9px; background: linear-gradient(135deg,var(--us-green-2),var(--us-green)); box-shadow: 0 6px 15px rgba(17,97,73,.2); }
+
+@media (max-width: 1100px) {
+    .app-theme .main form.card.form-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+    .app-theme .main form.card.form-grid > div { grid-column: span 4; }
+    .app-theme .main form.card.form-grid > div:has(> input[type="number"]),
+    .app-theme .main form.card.form-grid > div:has(> input[type="date"]),
+    .app-theme .main form.card.form-grid > div:has(> input[type="month"]),
+    .app-theme .main form.card.form-grid > div:has(> input[type="time"]),
+    .app-theme .main form.card.form-grid > div:has(> select[name="status"]),
+    .app-theme .main form.card.form-grid > div:has(> select[name$="_status"]),
+    .app-theme .main form.card.form-grid > div:has(> select[name="payment_method"]) { grid-column: span 3; }
+    .app-theme .main form.card.form-grid > div:has(> textarea) { grid-column: span 6; }
+    .app-theme .main form.card.form-grid > .full { grid-column: 1 / -1 !important; }
+}
+
+@media (max-width: 980px) {
+    .app-theme .header-inner { padding: 10px 12px; }
+    .app-theme .main { padding: 16px 12px 30px; }
+    .app-theme .main.olt-onus-wide { padding-left: 12px; padding-right: 12px; }
+    .app-theme .main > .topbar { min-height: 0; padding: 17px; }
+    .app-theme .nav { border-radius: 11px; }
+    .app-theme .nav-menu { box-shadow: none; }
+}
+
+@media (max-width: 760px) {
+    .app-theme .main form.card.form-grid > div,
+    .app-theme .main form.card.form-grid > div:has(> input[type="number"]),
+    .app-theme .main form.card.form-grid > div:has(> input[type="date"]),
+    .app-theme .main form.card.form-grid > div:has(> input[type="month"]),
+    .app-theme .main form.card.form-grid > div:has(> input[type="time"]),
+    .app-theme .main form.card.form-grid > div:has(> select) { grid-column: span 6; }
+    .app-theme .main form.card.form-grid > div:has(> textarea),
+    .app-theme .main form.card.form-grid > .full { grid-column: 1 / -1 !important; }
+    .app-theme .main .router-import-card > .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .app-theme .main .router-detail-grid { grid-template-columns: 1fr; }
+    .app-theme .main .invoice-summary-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+    .app-theme { background: var(--us-soft); }
+    .app-theme .brand::before { width: 28px; height: 28px; border-radius: 8px; }
+    .app-theme .main { padding: 11px 9px 25px; }
+    .app-theme .main.olt-onus-wide { padding-left: 9px; padding-right: 9px; }
+    .app-theme .main > .topbar { padding: 14px; border-radius: 12px; }
+    .app-theme .card { border-radius: 11px; }
+    .app-theme .main > .card,
+    .app-theme .main > .grid > .card { padding: 14px; }
+    .app-theme .main > .stats .stat,
+    .app-theme .main > .grid.stats .stat { min-height: 98px; padding: 13px; }
+    .login-theme .login { padding: 26px 20px; border-radius: 16px; }
+    :where(.app-theme .main) input:where([name="search"]),
+    :where(.app-theme .main) input:where([name="q"]),
+    :where(.app-theme .main) input:where([type="search"]),
+    .app-theme .main .permission-search,
+    .app-theme .main .access-search { width: 100%; max-width: none; }
+    :where(.app-theme .main) input:where(:not([type="checkbox"]):not([type="radio"]):not([type="hidden"])),
+    :where(.app-theme .main) select,
+    :where(.app-theme .main) textarea { width: 100%; max-width: none; }
+    .app-theme .main form.card.form-grid { grid-template-columns: 1fr; }
+    .app-theme .main form.card.form-grid > * { grid-column: 1 / -1 !important; }
+    .app-theme .main form.card.filter-form { display: grid; grid-template-columns: 1fr; padding: 14px; }
+    .app-theme .main form.card.filter-form > div,
+    .app-theme .main form.card.filter-form > .form-grid > div,
+    .app-theme .main form.card.filter-form > .actions,
+    .app-theme .main form.card.filter-form > .form-grid > .actions,
+    .app-theme .main form.card.filter-form > input,
+    .app-theme .main form.card.filter-form > select,
+    .app-theme .main form.card.filter-form > button,
+    .app-theme .main form.card.filter-form > a,
+    .app-theme .main form.card.filter-form > label {
+        width: 100% !important;
+        max-width: none !important;
+        flex-basis: auto !important;
+    }
+    .app-theme .main form.card.filter-form > .actions,
+    .app-theme .main form.card.filter-form > .form-grid > .actions { display: grid; grid-template-columns: 1fr 1fr; }
+    .app-theme .main form.card.filter-form > .actions .btn,
+    .app-theme .main form.card.filter-form > .form-grid > .actions .btn { width: 100%; }
+    .app-theme .main .per-page-select { width: 120px !important; min-width: 120px; max-width: 120px; }
+    .app-theme .main .reseller-page .payment-form input { width: 120px; max-width: 120px; }
+    .app-theme .main .reseller-page .payment-form .btn { width: auto; flex: 0 0 auto; }
+    .app-theme .main .bulk-toolbar { grid-template-columns: 1fr; gap: 13px; }
+    .app-theme .main .bulk-toolbar-row { grid-template-columns: 1fr; }
+    .app-theme .main .bulk-toolbar-row > *,
+    .app-theme .main .bulk-replacement { width: 100%; min-width: 0; flex-basis: auto; }
+    .app-theme .main .bulk-force-toggle { width: 100%; }
+    .app-theme .main .router-import-card > .grid { grid-template-columns: 1fr; }
+    .app-theme .main .router-import-card,
+    .app-theme .main .router-info-card { padding: 14px; }
+    .app-theme .main .router-health-card > .actions,
+    .app-theme .main .router-health-card > .actions > .actions,
+    .app-theme .main .router-import-card > .actions:first-child { align-items: stretch; flex-direction: column; }
+    .app-theme .main .router-health-card > .actions > .actions,
+    .app-theme .main .router-import-card > .actions:first-child > .actions { width: 100%; }
+    .app-theme .main .router-compare-page > .card > .actions:first-child { align-items: stretch; flex-direction: column; }
+    .app-theme .main .invoice-summary-card { padding: 14px; }
+    .app-theme .main .invoice-party-card p { grid-template-columns: 105px minmax(0, 1fr); gap: 8px; }
+}
+
+@media print {
+    .app-theme { background: #fff; }
+    .app-theme .card,
+    .app-theme table,
+    .app-theme .main > .topbar { box-shadow: none; }
+}

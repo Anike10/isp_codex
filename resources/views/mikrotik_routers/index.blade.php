@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
+<div class="router-list-page">
 <div class="topbar">
     <div>
         <h1>MikroTik Routers</h1>
@@ -82,6 +83,7 @@
     </tbody>
 </table>
 <div style="margin-top:16px">{{ $routers->links() }}</div>
+</div>
 
 <script>
 const routerBadges = Array.from(document.querySelectorAll('.router-connection'));

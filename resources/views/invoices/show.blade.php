@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
+<div class="invoice-detail-page">
 @php
     $canViewPaymentVoucher = auth()->user()?->hasPermission('manage_payments');
     $canRecordPayment = $canViewPaymentVoucher && (float) $invoice->due_amount > 0;
@@ -54,26 +55,26 @@
     </div>
 </div>
 
-<div class="grid two">
-    <section class="card">
+<div class="grid two invoice-summary-grid">
+    <section class="card invoice-summary-card invoice-total-card">
         <h2>Invoice</h2>
-        <p><strong>Subtotal:</strong> {{ number_format($invoice->subtotal, 2) }}</p>
+        <p class="invoice-total-row"><strong>Subtotal:</strong> <span>{{ number_format($invoice->subtotal, 2) }}</span></p>
         @if($invoice->reseller_id)
-            <p><strong>Reseller:</strong> {{ $invoice->reseller?->name ?? 'Reseller #'.$invoice->reseller_id }}</p>
-            <p><strong>Gross total:</strong> {{ number_format((float) $invoice->gross_total, 2) }}</p>
-            <p><strong>Commission snapshot:</strong> {{ number_format((float) $invoice->reseller_commission_percent, 2) }}% ({{ number_format((float) $invoice->reseller_commission_amount, 2) }})</p>
+            <p class="invoice-total-row"><strong>Reseller:</strong> <span>{{ $invoice->reseller?->name ?? 'Reseller #'.$invoice->reseller_id }}</span></p>
+            <p class="invoice-total-row"><strong>Gross total:</strong> <span>{{ number_format((float) $invoice->gross_total, 2) }}</span></p>
+            <p class="invoice-total-row"><strong>Commission snapshot:</strong> <span>{{ number_format((float) $invoice->reseller_commission_percent, 2) }}% ({{ number_format((float) $invoice->reseller_commission_amount, 2) }})</span></p>
         @endif
         @if ((float) $invoice->discount > 0)
-            <p><strong>Discount:</strong> {{ number_format($invoice->discount, 2) }}</p>
+            <p class="invoice-total-row"><strong>Discount:</strong> <span>{{ number_format($invoice->discount, 2) }}</span></p>
         @endif
-        <p><strong>VAT:</strong> {{ number_format($invoice->vat ?? 0, 2) }}</p>
-        <p><strong>Total:</strong> {{ number_format($invoice->total, 2) }}</p>
-        <p><strong>Paid:</strong> {{ number_format($invoice->paid_amount, 2) }}</p>
-        <p><strong>Due:</strong> {{ number_format($invoice->due_amount, 2) }}</p>
-        <p><strong>Status:</strong> <span class="badge {{ $invoice->status }}">{{ $invoice->status }}</span></p>
-        <p><strong>Finalized:</strong> {{ $invoice->finalized_at?->format('Y-m-d H:i') ?? 'Not finalized' }}</p>
+        <p class="invoice-total-row"><strong>VAT:</strong> <span>{{ number_format($invoice->vat ?? 0, 2) }}</span></p>
+        <p class="invoice-total-row invoice-total-emphasis"><strong>Total:</strong> <span>{{ number_format($invoice->total, 2) }}</span></p>
+        <p class="invoice-total-row invoice-paid-row"><strong>Paid:</strong> <span>{{ number_format($invoice->paid_amount, 2) }}</span></p>
+        <p class="invoice-total-row invoice-due-row"><strong>Due:</strong> <span>{{ number_format($invoice->due_amount, 2) }}</span></p>
+        <p class="invoice-total-row"><strong>Status:</strong> <span class="badge {{ $invoice->status }}">{{ $invoice->status }}</span></p>
+        <p class="invoice-total-row"><strong>Finalized:</strong> <span>{{ $invoice->finalized_at?->format('Y-m-d H:i') ?? 'Not finalized' }}</span></p>
     </section>
-    <section class="card">
+    <section class="card invoice-summary-card invoice-party-card">
         <h2>Party</h2>
         <p><strong>Name:</strong> {{ $invoice->customer->name }}</p>
         <p><strong>Phone:</strong> {{ $invoice->customer->phone }}</p>
@@ -160,7 +161,7 @@
 </section>
 @endif
 
-@if($invoice->items->count() > 0)
+@if($invoice->items->count() > 0 || $invoice->invoice_type === 'service')
 <section class="card" style="margin-top:16px">
     <h2>Items</h2>
     <table>
@@ -177,6 +178,17 @@
                 <td>{{ number_format($item->total, 2) }}</td>
             </tr>
         @endforeach
+        @if ($invoice->items->isEmpty() && $invoice->invoice_type === 'service')
+            <tr>
+                <td>1</td>
+                <td>Monthly Internet Service Bill for {{ $invoice->formatted_billing_month }}</td>
+                <td>N/A</td>
+                <td>N/A</td>
+                <td>1</td>
+                <td>{{ number_format((float) $invoice->subtotal, 2) }}</td>
+                <td>{{ number_format((float) $invoice->subtotal, 2) }}</td>
+            </tr>
+        @endif
         </tbody>
     </table>
 </section>
@@ -215,7 +227,6 @@
 </section>
 @endif
 
-@include('partials.record_versions', ['versions' => $versions])
 
 <section class="card" style="margin-top:16px">
     <h2>Payment Allocations</h2>
@@ -337,4 +348,5 @@ refreshInvoiceAccounts();
         </tbody>
     </table>
 </section>
+</div>
 @endsection

@@ -50,7 +50,7 @@
     </div>
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Product Serial Search</label><input name="serial_search" value="{{ $serialSearch }}" placeholder="Enter product serial number"></div>
     <div><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Name, SKU, barcode, brand, category"></div>
     <div>

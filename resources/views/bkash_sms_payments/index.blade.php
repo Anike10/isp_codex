@@ -25,7 +25,7 @@
     <p><strong>Body:</strong> message=full SMS text, sender=bKash</p>
 </section>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="TrxID, ref, sender number, party, invoice no, or SMS text"></div>
     <div><label>Status</label><select name="status"><option value="">All statuses</option>@foreach(['pending','processed','balance','duplicate','failed'] as $status)<option value="{{ $status }}" @selected(request('status') === $status)>{{ ucfirst($status) }}</option>@endforeach</select></div>
     <div><label>From Date</label><input type="date" name="from" value="{{ request('from') }}"></div>

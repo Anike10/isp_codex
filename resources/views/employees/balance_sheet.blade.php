@@ -13,10 +13,12 @@
     </div>
 </div>
 
-<form method="get" class="card actions" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <input type="number" name="year" value="{{ $year }}" min="2000" max="2100">
-    <button class="btn secondary" type="submit">View Year</button>
-    <a class="btn light" href="{{ route('employees.balance-sheet', $employee) }}">Current Year</a>
+    <div class="actions">
+        <button class="btn secondary" type="submit">View Year</button>
+        <a class="btn light" href="{{ route('employees.balance-sheet', $employee) }}">Current Year</a>
+    </div>
 </form>
 
 <div class="grid stats" style="margin-bottom:16px">

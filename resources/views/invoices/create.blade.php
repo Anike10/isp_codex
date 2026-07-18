@@ -50,6 +50,10 @@
     $cancelRoute = $isEdit
         ? ($isQuotation ? route('quotations.show', $document) : route('invoices.show', $document))
         : $indexRoute;
+    $initialSubtotal = $isEdit ? (float) ($document->subtotal ?? 0) : 0;
+    $initialDiscountAmount = $isEdit ? (float) ($document->discount ?? 0) : 0;
+    $initialVatAmount = $isEdit ? (float) ($document->vat ?? 0) : 0;
+    $initialGrandTotal = $isEdit ? (float) ($document->total ?? 0) : 0;
 @endphp
 
 <style>
@@ -67,20 +71,25 @@
         border: 1px solid #d8dee9;
         border-radius: 8px;
         background:
-            linear-gradient(135deg, rgba(17, 97, 73, .10), rgba(29, 118, 201, .08)),
-            #ffffff;
+            radial-gradient(circle at 100% 0%, rgba(255,255,255,.18), transparent 32%),
+            linear-gradient(125deg, #102a43, #116149 62%, #1d76c9);
+        color: #fff;
     }
 
     .invoice-hero h1 {
         font-size: 30px;
         letter-spacing: 0;
+        color: #fff;
     }
 
     .invoice-hero .muted {
         max-width: 650px;
         margin-top: 8px;
         line-height: 1.5;
+        color: #d7e8ef;
     }
+
+    .invoice-hero .btn.light { border-color: rgba(255,255,255,.28); background: rgba(255,255,255,.14); color: #fff; }
 
     .invoice-shell {
         display: grid;
@@ -92,8 +101,9 @@
     .invoice-panel,
     .invoice-summary {
         background: #ffffff;
-        border: 1px solid #d8dee9;
+        border: 1px solid #cbdde8;
         border-radius: 8px;
+        box-shadow: 0 8px 20px rgba(16,42,67,.065);
     }
 
     .invoice-panel {
@@ -107,7 +117,7 @@
         align-items: center;
         padding: 18px 20px;
         border-bottom: 1px solid #e6ebf2;
-        background: #fbfcfe;
+        background: linear-gradient(110deg, #eef8f4, #f2f7fc);
     }
 
     .section-head h2 {
@@ -201,8 +211,12 @@
         padding: 14px;
         border: 1px solid #e1e7ef;
         border-radius: 8px;
-        background: #ffffff;
+        background: linear-gradient(135deg, #ffffff, #f7fbfc);
+        box-shadow: 0 3px 9px rgba(16,42,67,.035);
     }
+
+    .item-row:nth-child(odd) { border-left: 3px solid #8ccdb7; }
+    .item-row:nth-child(even) { border-left: 3px solid #8eb9dc; }
 
     .item-row.is-dragging {
         opacity: .55;
@@ -362,6 +376,7 @@
         position: sticky;
         top: 18px;
         padding: 18px;
+        background: linear-gradient(145deg, #ffffff, #f0f8f5 68%, #f0f6fb);
     }
 
     .summary-title {
@@ -394,7 +409,8 @@
         margin-top: 14px;
         padding: 16px;
         border-radius: 8px;
-        background: #edf8f4;
+        border: 1px solid #b9d8cc;
+        background: linear-gradient(135deg, #e5f7ef, #eff8fd);
         color: #0f513e;
     }
 
@@ -603,7 +619,12 @@
         <a class="btn light" href="{{ $indexRoute }}">Back to {{ $isQuotation ? 'Quotations' : 'Invoices' }}</a>
     </div>
 
-    <form method="post" action="{{ $formAction }}" id="invoiceForm">
+    <form method="post" action="{{ $formAction }}" id="invoiceForm"
+        data-edit="{{ $isEdit ? '1' : '0' }}"
+        data-initial-subtotal="{{ number_format($initialSubtotal, 2, '.', '') }}"
+        data-initial-discount="{{ number_format($initialDiscountAmount, 2, '.', '') }}"
+        data-initial-vat="{{ number_format($initialVatAmount, 2, '.', '') }}"
+        data-initial-total="{{ number_format($initialGrandTotal, 2, '.', '') }}">
         @csrf
         @if ($isEdit)
             @method('PUT')
@@ -813,20 +834,20 @@
                 </div>
                 <div class="summary-row">
                     <span>Subtotal</span>
-                    <strong>BDT <span id="subtotalAmount">0.00</span></strong>
+                    <strong>BDT <span id="subtotalAmount">{{ number_format($initialSubtotal, 2) }}</span></strong>
                 </div>
                 <div class="summary-row">
                     <span>Discount</span>
-                    <strong><span id="discountLabel">BDT</span> <span id="discountAmount">0.00</span></strong>
+                    <strong><span id="discountLabel">BDT</span> <span id="discountAmount">{{ number_format($initialDiscountAmount, 2) }}</span></strong>
                 </div>
                 <div class="summary-row">
                     <span>VAT</span>
-                    <strong><span id="vatLabel">BDT</span> <span id="vatAmount">0.00</span></strong>
+                    <strong><span id="vatLabel">BDT</span> <span id="vatAmount">{{ number_format($initialVatAmount, 2) }}</span></strong>
                 </div>
 
                 <div class="summary-total">
                     {{ $isQuotation ? 'Quoted Amount' : 'Payable Amount' }}
-                    <span>BDT <span id="grandTotal">0.00</span></span>
+                    <span>BDT <span id="grandTotal">{{ number_format($initialGrandTotal, 2) }}</span></span>
                 </div>
 
                 <div class="summary-actions">
@@ -1560,6 +1581,15 @@ function updateTotals() {
     document.querySelectorAll('.item-row').forEach(updateRowTotal);
 
     const totals = document.querySelectorAll('.total');
+    const invoiceForm = document.getElementById('invoiceForm');
+    if (totals.length === 0 && invoiceForm?.dataset.edit === '1') {
+        document.getElementById('itemCount').textContent = '0';
+        document.getElementById('subtotalAmount').textContent = Number(invoiceForm.dataset.initialSubtotal || 0).toFixed(2);
+        document.getElementById('discountAmount').textContent = Number(invoiceForm.dataset.initialDiscount || 0).toFixed(2);
+        document.getElementById('vatAmount').textContent = Number(invoiceForm.dataset.initialVat || 0).toFixed(2);
+        document.getElementById('grandTotal').textContent = Number(invoiceForm.dataset.initialTotal || 0).toFixed(2);
+        return;
+    }
     let subtotal = 0;
     totals.forEach(total => {
         subtotal += parseFloat(total.value) || 0;

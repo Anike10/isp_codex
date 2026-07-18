@@ -11,7 +11,7 @@
     <a class="btn" href="{{ route('payments.create') }}">Record Payment</a>
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Party, phone, connection ID, invoice no, month, account, or note"></div>
     <div><label>Method</label><select name="payment_method"><option value="">All methods</option>@foreach(['cash'=>'Cash','bkash'=>'bKash','nagad'=>'Nagad','bank'=>'Bank'] as $value=>$label)<option value="{{ $value }}" @selected(request('payment_method') === $value)>{{ $label }}</option>@endforeach</select></div>
     <div><label>Account</label><select name="payment_account_id"><option value="">All accounts</option>@foreach($paymentAccounts as $account)<option value="{{ $account->id }}" @selected((int) request('payment_account_id') === $account->id)>{{ ucfirst($account->payment_method) }} - {{ $account->account_name }} - {{ $account->account_number }}</option>@endforeach</select></div>

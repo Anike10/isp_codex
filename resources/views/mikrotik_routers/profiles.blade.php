@@ -1,5 +1,7 @@
 @extends('layouts.app')
 @section('content')
+<div class="router-subpage">
 <div class="topbar"><div><h1>PPP Profiles · {{ $mikrotikRouter->name }}</h1><div class="muted">Router profiles imported locally. New imported profiles are also available as Packages.</div></div><div class="actions"><form method="post" action="{{ route('mikrotik-routers.import.profiles', $mikrotikRouter) }}">@csrf<button class="btn secondary">Import from MikroTik</button></form><a class="btn light" href="{{ route('mikrotik-routers.compare', $mikrotikRouter) }}">Compare & Export</a><a class="btn light" href="{{ route('mikrotik-routers.show', $mikrotikRouter) }}">Back</a></div></div>
 <table><thead><tr><th>Profile</th><th>Rate limit</th><th>Local address</th><th>Remote address/pool</th><th>Status</th><th>Imported</th></tr></thead><tbody>@forelse($profiles as $profile)<tr><td><strong>{{ $profile->name }}</strong></td><td>{{ $profile->rate_limit ?: '—' }}</td><td>{{ $profile->local_address ?: '—' }}</td><td>{{ $profile->remote_address ?: '—' }}</td><td><span class="badge {{ $profile->disabled ? 'inactive' : 'active' }}">{{ $profile->disabled ? 'Disabled' : 'Enabled' }}</span></td><td>{{ $profile->imported_at?->format('Y-m-d H:i') }}</td></tr>@empty<tr><td colspan="6">No profiles yet. Import from MikroTik.</td></tr>@endforelse</tbody></table><div style="margin-top:16px">{{ $profiles->links() }}</div>
+</div>
 @endsection

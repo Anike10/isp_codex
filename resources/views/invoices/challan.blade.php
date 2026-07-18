@@ -126,6 +126,8 @@
             letter-spacing: 1px;
         }
 
+        .print-document-label { display: none; }
+
         .status {
             display: inline-block;
             margin-top: 8px;
@@ -325,6 +327,16 @@
                 print-color-adjust: exact;
             }
             .toolbar { display: none; }
+            .print-document-label {
+                display: block;
+                margin-bottom: 6mm;
+                color: var(--brand-dark);
+                font-size: 20px;
+                font-weight: 800;
+                letter-spacing: 1.5px;
+                text-align: right;
+            }
+            .page .brand-bar .bill-title h2 { display: none; }
             body.bw-print * {
                 text-shadow: none !important;
                 box-shadow: none !important;
@@ -572,6 +584,7 @@
     </div>
 
     <main class="page">
+        <div class="print-document-label">INVOICE</div>
         <section class="brand-bar">
             <div class="company">
                 <div>
@@ -631,7 +644,7 @@
                     <tr>
                         <td class="center">{{ $index + 1 }}</td>
                         <td>
-                            <div>{{ $item->product_name }}</div>
+                            <div>{{ $item->product_name }}@if($invoice->invoice_type === 'service') <span class="muted">({{ $invoice->formatted_billing_month }})</span>@endif</div>
                             @if (filled($item->serial_numbers))
                                 <div class="item-serials">Serial: {{ $serialFormatter->formatCompact($item->serial_numbers) }}</div>
                             @endif
@@ -643,7 +656,7 @@
                 @empty
                     <tr>
                         <td class="center">1</td>
-                        <td>Monthly internet service bill for {{ $invoice->formatted_billing_month }}</td>
+                        <td>Monthly Internet Service Bill for {{ $invoice->formatted_billing_month }}</td>
                         <td class="center">1</td>
                         <td class="right">{{ number_format($invoice->subtotal, 2) }}</td>
                         <td class="right">{{ number_format($invoice->subtotal, 2) }}</td>

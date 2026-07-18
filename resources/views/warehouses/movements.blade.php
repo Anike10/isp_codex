@@ -6,7 +6,7 @@
     <a class="btn light" href="{{ route('warehouses.index') }}">Warehouses</a>
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Warehouse</label><select name="warehouse_id"><option value="">All</option>@foreach($warehouses as $warehouse)<option value="{{ $warehouse->id }}" @selected((int)request('warehouse_id') === $warehouse->id)>{{ $warehouse->name }}</option>@endforeach</select></div>
     <div><label>Product</label><select name="product_id"><option value="">All</option>@foreach($products as $product)<option value="{{ $product->id }}" @selected((int)request('product_id') === $product->id)>{{ $product->name }} ({{ $product->sku }})</option>@endforeach</select></div>
     <div><label>Type</label><select name="type"><option value="">All</option>@foreach(['in'=>'In','out'=>'Out','use'=>'Own Use','transfer_in'=>'Transfer In','transfer_out'=>'Transfer Out'] as $value=>$label)<option value="{{ $value }}" @selected(request('type') === $value)>{{ $label }}</option>@endforeach</select></div>

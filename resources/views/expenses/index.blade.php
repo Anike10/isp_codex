@@ -26,7 +26,7 @@
     <div class="card stat"><span class="muted">Salary Employees</span><strong>{{ $employeeCount }}</strong></div>
 </div>
 
-<form method="get" class="card actions" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <input name="search" value="{{ request('search') }}" placeholder="Search reference, note, employee, account">
     <select name="expense_type">
         <option value="">All types</option>
@@ -43,8 +43,10 @@
     <input name="employee_name" value="{{ request('employee_name') }}" placeholder="Employee name">
     <input type="date" name="from" value="{{ request('from') }}">
     <input type="date" name="to" value="{{ request('to') }}">
-    <button class="btn secondary" type="submit">Filter</button>
-    <a class="btn light" href="{{ route('expenses.index') }}">Reset</a>
+    <div class="actions">
+        <button class="btn secondary" type="submit">Filter</button>
+        <a class="btn light" href="{{ route('expenses.index') }}">Reset</a>
+    </div>
 </form>
 
 @include('partials.per_page')

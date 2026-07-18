@@ -1,5 +1,6 @@
 @extends('layouts.app')
 @section('content')
+<div class="router-subpage">
 <div class="topbar"><div><h1>App IP Pools · {{ $mikrotikRouter->name }}</h1><div class="muted">এখানকার তালিকাটি App-এ save করা master IP pool। নিচে MikroTik থেকে আনা আলাদা snapshot আছে।</div></div><div class="actions"><form method="post" action="{{ route('mikrotik-routers.import.ip-pools', $mikrotikRouter) }}">@csrf<button class="btn secondary">Refresh MikroTik Pools</button></form><a class="btn light" href="{{ route('mikrotik-routers.compare', $mikrotikRouter) }}">Compare</a><a class="btn light" href="{{ route('mikrotik-routers.show', $mikrotikRouter) }}">Back</a></div></div>
 <form class="card form-grid" method="post" action="{{ route('mikrotik-routers.pools.store', $mikrotikRouter) }}" style="margin-bottom:16px">@csrf
     <div><label>Pool name</label><input name="name" required></div><div><label>Ranges</label><input name="ranges" placeholder="10.0.0.2-10.0.0.254" required></div><div><label>Next pool</label><input name="next_pool"></div><div><label>App note</label><input name="notes"></div><div class="full"><button class="btn" type="submit">Add to App IP Pools</button></div>
@@ -9,4 +10,5 @@
 @empty<tr><td colspan="6">No IP pool saved in the app yet.</td></tr>@endforelse
 </tbody></table><div style="margin-top:16px">{{ $pools->links() }}</div></section>
 <section class="card"><h2>MikroTik Pool Snapshot</h2><div class="muted" style="margin-bottom:8px">Router থেকে import করা pool। প্রয়োজন হলে প্রতিটি pool App master list-এ save করুন।</div><table><thead><tr><th>Name</th><th>Ranges</th><th>Next pool</th><th>Router note</th><th>Action</th></tr></thead><tbody>@forelse($mikrotikPools as $pool)<tr><td>{{ $pool->name }}</td><td>{{ $pool->ranges ?: '—' }}</td><td>{{ $pool->next_pool ?: '—' }}</td><td>{{ $pool->source_note ?: '—' }}</td><td><form method="post" action="{{ route('mikrotik-routers.imported-pools.save-to-app',[$mikrotikRouter,$pool]) }}">@csrf<button class="btn light">Save to App</button></form></td></tr>@empty<tr><td colspan="5">No MikroTik pool imported yet.</td></tr>@endforelse</tbody></table></section>
+</div>
 @endsection

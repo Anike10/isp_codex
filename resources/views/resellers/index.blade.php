@@ -8,7 +8,7 @@
     @endif
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Name, phone, or email"></div>
     <div><label>Status</label><select name="status"><option value="">All statuses</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>
     <div class="full actions"><button class="btn secondary" type="submit">Search</button><a class="btn light" href="{{ route('resellers.index') }}">Reset</a></div>

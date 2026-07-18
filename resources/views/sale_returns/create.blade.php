@@ -35,7 +35,7 @@
 </div>
 
 @if (! $invoice)
-    <form method="get" class="card form-grid">
+    <form method="get" class="card filter-form">
         <div class="full">
             <label>Invoice</label>
             <select name="invoice_id" required>

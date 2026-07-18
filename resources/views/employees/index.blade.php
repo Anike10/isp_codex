@@ -20,7 +20,7 @@
     <div class="card stat"><span class="muted">{{ $bonusYear }} Bonus Due</span><strong>{{ number_format($bonusDueThisYear, 2) }}</strong></div>
 </div>
 
-<form method="get" class="card actions" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <input name="q" value="{{ request('q') }}" placeholder="Search employee">
     <input type="month" name="salary_month" value="{{ $salaryMonth }}">
     <input type="number" name="bonus_year" value="{{ $bonusYear }}" min="2000" max="2100" placeholder="Bonus year">
@@ -29,8 +29,10 @@
         <option value="active" @selected(request('status') === 'active')>Active</option>
         <option value="inactive" @selected(request('status') === 'inactive')>Inactive</option>
     </select>
-    <button class="btn secondary" type="submit">Filter</button>
-    <a class="btn light" href="{{ route('employees.index') }}">Reset</a>
+    <div class="actions">
+        <button class="btn secondary" type="submit">Filter</button>
+        <a class="btn light" href="{{ route('employees.index') }}">Reset</a>
+    </div>
 </form>
 
 @include('partials.per_page')

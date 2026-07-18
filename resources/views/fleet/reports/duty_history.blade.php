@@ -4,7 +4,7 @@
 <div class="topbar"><div><h1>Staff Duty History Report</h1><div class="muted">Current and previous Driver, Helper and Supervisor assignments</div></div><a class="btn light" href="{{ route('fleet.index') }}">Vehicles</a></div>
 @include('fleet.reports._nav')
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Duty Active From</label><input type="date" name="from" value="{{ request('from') }}"></div>
     <div><label>Duty Active To</label><input type="date" name="to" value="{{ request('to') }}"></div>
     <div><label>Vehicle</label><select name="vehicle_id"><option value="">All vehicles</option>@foreach($vehicles as $vehicle)<option value="{{ $vehicle->id }}" @selected((int)request('vehicle_id')===$vehicle->id)>{{ $vehicle->registration_no }} — {{ $vehicle->name }}</option>@endforeach</select></div>

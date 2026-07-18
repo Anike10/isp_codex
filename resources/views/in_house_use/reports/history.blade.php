@@ -4,7 +4,7 @@
 <div class="topbar"><div><h1>In-house Issue / Return History</h1><div class="muted">Complete assignment lifecycle with employee, serial, issue, and return balances</div></div><a class="btn" href="{{ route('in-house-use.index') }}">Create Issue</a></div>
 @include('in_house_use.reports._nav')
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Search Product</label><input name="search" value="{{ request('search') }}" placeholder="Product name or SKU"></div>
     <div><label>Employee</label><select name="employee_id"><option value="">All employees</option>@foreach($employees as $employee)<option value="{{ $employee->id }}" @selected((int)request('employee_id') === $employee->id)>{{ $employee->name }}</option>@endforeach</select></div>
     <div><label>Status</label><select name="status"><option value="">All</option><option value="outstanding" @selected(request('status') === 'outstanding')>Currently Holding</option><option value="returned" @selected(request('status') === 'returned')>Fully Returned</option></select></div>

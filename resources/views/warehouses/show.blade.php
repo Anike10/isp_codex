@@ -10,9 +10,9 @@
     </div>
 </div>
 
-<form method="get" class="card actions" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <input name="search" value="{{ request('search') }}" placeholder="Product name, SKU, or serial">
-    <button class="btn secondary" type="submit">Search</button>
+    <div class="actions"><button class="btn secondary" type="submit">Search</button></div>
 </form>
 
 <h2>Current Stock</h2>

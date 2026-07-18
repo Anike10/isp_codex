@@ -13,7 +13,7 @@
     <div class="card stat"><span class="muted">Service Items Due</span><strong>{{ $dueCount }}</strong></div>
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Registration, name, make, model"></div>
     <div><label>Status</label><select name="status"><option value="">All</option>@foreach(\App\Models\Vehicle::STATUSES as $key => $label)<option value="{{ $key }}" @selected(request('status') === $key)>{{ $label }}</option>@endforeach</select></div>
     <div><label>Expense From</label><input type="date" name="from" value="{{ request('from') }}"></div>

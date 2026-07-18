@@ -66,7 +66,7 @@
     </div>
 </div>
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div>
         <label>From Date</label>
         <input type="date" name="from" value="{{ request('from') }}">

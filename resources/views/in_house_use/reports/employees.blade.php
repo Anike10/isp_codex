@@ -4,7 +4,7 @@
 <div class="topbar"><div><h1>Employee Asset Report</h1><div class="muted">Employee-wise issued, returned, and currently-held products</div></div><a class="btn" href="{{ route('in-house-use.index') }}">Create Issue</a></div>
 @include('in_house_use.reports._nav')
 
-<form method="get" class="card form-grid" style="margin-bottom:16px">
+<form method="get" class="card filter-form" style="margin-bottom:16px">
     <div><label>Employee</label><select name="employee_id"><option value="">All employees</option>@foreach($employeeOptions as $employee)<option value="{{ $employee->id }}" @selected((int)request('employee_id') === $employee->id)>{{ $employee->name }}{{ $employee->designation ? ' - '.$employee->designation : '' }}</option>@endforeach</select></div>
     <div class="full actions"><button class="btn secondary" type="submit">Show Report</button><a class="btn light" href="{{ route('in-house-use.report.employees') }}">Reset</a></div>
 </form>
