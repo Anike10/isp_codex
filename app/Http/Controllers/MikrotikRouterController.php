@@ -152,6 +152,27 @@ class MikrotikRouterController extends Controller
         ]);
     }
 
+    public function toggleStatus(MikrotikRouter $mikrotikRouter)
+    {
+        $disabled = $mikrotikRouter->status === 'active';
+        $checkedAt = now();
+        $mikrotikRouter->update([
+            'status' => $disabled ? 'inactive' : 'active',
+            'last_api_status' => $disabled ? 'inactive' : 'checking',
+            'last_ping_status' => $disabled ? 'inactive' : 'checking',
+            'api_status_since' => $checkedAt,
+            'ping_status_since' => $checkedAt,
+            'last_checked_at' => $checkedAt,
+            'last_connection_message' => $disabled
+                ? 'Router is temporarily disabled in this app. Status checks and scheduled PPPoE sync are paused.'
+                : 'Router re-enabled. Waiting for the next connection check.',
+        ]);
+
+        return back()->with('success', $disabled
+            ? "MikroTik router {$mikrotikRouter->name} temporarily disabled."
+            : "MikroTik router {$mikrotikRouter->name} enabled.");
+    }
+
     private function routerStatusPayload(MikrotikRouter $router): array
     {
         return [

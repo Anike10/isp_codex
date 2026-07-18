@@ -1372,6 +1372,14 @@ PPPoE sync:
 - Inactive users are moved to the router's `inactive_pppoe_profile`.
 - If a profile/status changes, remove the active PPP session from `/ppp/active` so the new profile applies after reconnect.
 - If one router fails, sync should continue on other eligible routers.
+- A router marked inactive from `/mikrotik-routers` is temporarily disabled:
+  live connection checks return `Inactive`, and scheduled/customer PPPoE sync
+  excludes it until an operator enables it again.
+- `internet_packages.default_ip_pool` is the App-selected RouterOS PPP profile
+  `remote-address`. Package edit shows this selection beside each router's last
+  imported `mikrotik_imported_profiles.remote_address`; no selection means keep
+  RouterOS/default behavior during customer sync. Explicit package export sets
+  or clears the profile remote-address.
 
 ### OLT ONU Inventory
 

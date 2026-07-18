@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AppIpPool;
 use App\Models\Customer;
+use App\Models\InternetPackage;
 use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
 use App\Models\Permission;
@@ -163,5 +164,62 @@ class MikrotikImportTest extends TestCase
         $router->refresh();
         $this->assertSame('admin', $router->username);
         $this->assertSame('router-secret', $router->password);
+    }
+
+    public function test_router_can_be_temporarily_disabled_and_enabled_from_list_action(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Temporary Router', 'ip_address' => '10.0.0.9', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+
+        $this->actingAs($user)->patch(route('mikrotik-routers.toggle-status', $router))->assertRedirect();
+        $router->refresh();
+        $this->assertSame('inactive', $router->status);
+        $this->assertSame('inactive', $router->last_api_status);
+        $this->assertStringContainsString('temporarily disabled', $router->last_connection_message);
+
+        $this->actingAs($user)->get(route('mikrotik-routers.index'))
+            ->assertOk()
+            ->assertSee('Enable');
+
+        $this->actingAs($user)->patch(route('mikrotik-routers.toggle-status', $router))->assertRedirect();
+        $router->refresh();
+        $this->assertSame('active', $router->status);
+        $this->assertSame('checking', $router->last_api_status);
+    }
+
+    public function test_package_profile_export_applies_selected_default_ip_pool(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Main Router', 'ip_address' => '10.0.0.10', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+        $package = InternetPackage::create([
+            'name' => 'Home 50', 'speed' => '50 Mbps', 'mikrotik_profile' => 'home50',
+            'default_ip_pool' => 'customer-pool', 'monthly_price' => 1500, 'status' => 'active',
+        ]);
+
+        $service = $this->mock(MikrotikImportService::class);
+        $service->shouldReceive('liveRecords')->once()->andReturn([
+            ['.id' => '*P1', 'name' => 'home50'],
+        ]);
+        $service->shouldReceive('write')->once()->withArgs(fn ($givenRouter, $command, $attributes) =>
+            $givenRouter->id === $router->id
+            && $command === '/ppp/profile/set'
+            && $attributes['.id'] === '*P1'
+            && $attributes['remote-address'] === 'customer-pool')
+            ->andReturn([]);
+        $service->shouldReceive('importProfiles')->once()->andReturn(1);
+
+        $this->actingAs($user)
+            ->post(route('mikrotik-routers.profiles.export', [$router, $package]))
+            ->assertRedirect();
     }
 }

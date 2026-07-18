@@ -349,7 +349,7 @@ class MikrotikRouterDataController extends Controller
     {
         $name = $package->mikrotik_profile ?: $package->name;
         $live = collect($service->liveRecords($mikrotikRouter, '/ppp/profile/print'))->firstWhere('name', $name);
-        $attributes = ['name' => $name];
+        $attributes = ['name' => $name, 'remote-address' => $package->default_ip_pool ?: ''];
         if ($live) {
             $service->write($mikrotikRouter, '/ppp/profile/set', ['.id' => $live['.id'], ...$attributes]);
         } else {

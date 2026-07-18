@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppIpPool;
 use App\Models\InternetPackage;
+use App\Models\MikrotikImportedProfile;
 use Illuminate\Http\Request;
 
 class PackageController extends Controller
@@ -31,12 +33,25 @@ class PackageController extends Controller
 
     public function create()
     {
-        return view('packages.create');
+        return view('packages.create', [
+            'ipPoolNames' => $this->ipPoolNames(),
+            'runningPoolProfiles' => collect(),
+        ]);
     }
 
     public function edit(InternetPackage $package)
     {
-        return view('packages.create', compact('package'));
+        $profileName = $package->mikrotik_profile ?: $package->name;
+
+        return view('packages.create', [
+            'package' => $package,
+            'ipPoolNames' => $this->ipPoolNames(),
+            'runningPoolProfiles' => MikrotikImportedProfile::query()
+                ->with('router')
+                ->where('name', $profileName)
+                ->orderBy('mikrotik_router_id')
+                ->get(),
+        ]);
     }
 
     public function show(InternetPackage $package)
@@ -110,9 +125,15 @@ class PackageController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'speed' => ['required', 'string', 'max:100'],
             'mikrotik_profile' => ['nullable', 'string', 'max:255'],
+            'default_ip_pool' => ['nullable', 'string', 'max:255', 'exists:app_ip_pools,name'],
             'monthly_price' => ['required', 'numeric', 'min:0'],
             'description' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
         ]);
+    }
+
+    private function ipPoolNames()
+    {
+        return AppIpPool::query()->select('name')->distinct()->orderBy('name')->pluck('name');
     }
 }

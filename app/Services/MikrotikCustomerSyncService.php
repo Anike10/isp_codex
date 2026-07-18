@@ -116,7 +116,7 @@ class MikrotikCustomerSyncService
             '.proplist' => '.id,profile,disabled',
         ]);
 
-        $this->ensurePppProfile($client, $profile);
+        $this->ensurePppProfile($client, $profile, $inactive ? null : $package?->default_ip_pool);
 
         $payload = [
             'name' => $username,
@@ -151,20 +151,31 @@ class MikrotikCustomerSyncService
         return $inactive ? 'moved_inactive' : 'updated';
     }
 
-    private function ensurePppProfile(RouterOsClient $client, string $profile): void
+    private function ensurePppProfile(RouterOsClient $client, string $profile, ?string $defaultIpPool = null): void
     {
         $existing = $client->command('/ppp/profile/print', [
             '?name' => $profile,
-            '.proplist' => '.id',
+            '.proplist' => '.id,remote-address',
         ]);
 
         if ($existing !== []) {
+            if ($defaultIpPool && ($existing[0]['remote-address'] ?? null) !== $defaultIpPool) {
+                $client->command('/ppp/profile/set', [
+                    '.id' => $existing[0]['.id'],
+                    'remote-address' => $defaultIpPool,
+                ]);
+            }
+
             return;
         }
 
-        $client->command('/ppp/profile/add', [
+        $attributes = [
             'name' => $profile,
-        ]);
+        ];
+        if ($defaultIpPool) {
+            $attributes['remote-address'] = $defaultIpPool;
+        }
+        $client->command('/ppp/profile/add', $attributes);
     }
 
     private function disconnectActiveSession(RouterOsClient $client, string $username): void

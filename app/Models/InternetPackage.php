@@ -16,6 +16,7 @@ class InternetPackage extends Model
         'name',
         'speed',
         'mikrotik_profile',
+        'default_ip_pool',
         'monthly_price',
         'description',
         'status',

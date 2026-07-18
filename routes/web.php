@@ -193,6 +193,7 @@ Route::middleware('auth')->group(function () {
         Route::get('olt-onus/{oltOnu}', [OltOnuController::class, 'show'])->name('olt-onus.show');
         Route::get('olt-onus', [OltOnuController::class, 'index'])->name('olt-onus.index');
         Route::get('mikrotik-routers/{mikrotikRouter}/connection-status', [MikrotikRouterController::class, 'connectionStatus'])->name('mikrotik-routers.connection-status');
+        Route::patch('mikrotik-routers/{mikrotikRouter}/toggle-status', [MikrotikRouterController::class, 'toggleStatus'])->name('mikrotik-routers.toggle-status');
         Route::post('mikrotik-routers/{mikrotikRouter}/import/profiles', [MikrotikImportController::class, 'importProfiles'])->name('mikrotik-routers.import.profiles');
         Route::post('mikrotik-routers/{mikrotikRouter}/import/ip-pools', [MikrotikImportController::class, 'importIpPools'])->name('mikrotik-routers.import.ip-pools');
         Route::post('mikrotik-routers/{mikrotikRouter}/import/secrets', [MikrotikImportController::class, 'importSecrets'])->name('mikrotik-routers.import.secrets');
