@@ -12,6 +12,7 @@ use App\Models\MikrotikRouter;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\MikrotikImportService;
 use Illuminate\Http\Request;
+use Throwable;
 
 class MikrotikRouterDataController extends Controller
 {
@@ -154,9 +155,22 @@ class MikrotikRouterDataController extends Controller
 
     public function compare(MikrotikRouter $mikrotikRouter, MikrotikImportService $service)
     {
-        $liveProfiles = collect($service->liveRecords($mikrotikRouter, '/ppp/profile/print'));
-        $livePools = collect($service->liveRecords($mikrotikRouter, '/ip/pool/print'));
-        $liveSecrets = collect($service->liveRecords($mikrotikRouter, '/ppp/secret/print'));
+        $liveDataAvailable = true;
+        $liveDataError = null;
+
+        try {
+            $liveProfiles = collect($service->liveRecords($mikrotikRouter, '/ppp/profile/print'));
+            $livePools = collect($service->liveRecords($mikrotikRouter, '/ip/pool/print'));
+            $liveSecrets = collect($service->liveRecords($mikrotikRouter, '/ppp/secret/print'));
+        } catch (Throwable $exception) {
+            report($exception);
+
+            $liveDataAvailable = false;
+            $liveDataError = 'MikroTik live data is unavailable. Check the router connection and API credentials, then reload this page.';
+            $liveProfiles = collect();
+            $livePools = collect();
+            $liveSecrets = collect();
+        }
         $packageProfiles = InternetPackage::query()->whereNotNull('mikrotik_profile')->orderBy('mikrotik_profile')->get();
         // A Party without a MikroTik Target is still an App-side PPPoE user.
         // Include it here so an operator can choose this router by exporting it.
@@ -172,7 +186,7 @@ class MikrotikRouterDataController extends Controller
             ->get();
         $localPools = AppIpPool::query()->where('mikrotik_router_id', $mikrotikRouter->id)->orderBy('name')->get();
 
-        return view('mikrotik_routers.compare', compact('mikrotikRouter', 'liveProfiles', 'livePools', 'liveSecrets', 'packageProfiles', 'customers', 'localPools'));
+        return view('mikrotik_routers.compare', compact('mikrotikRouter', 'liveProfiles', 'livePools', 'liveSecrets', 'packageProfiles', 'customers', 'localPools', 'liveDataAvailable', 'liveDataError'));
     }
 
     public function exportProfile(MikrotikRouter $mikrotikRouter, InternetPackage $package, MikrotikImportService $service)

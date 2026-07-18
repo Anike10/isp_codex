@@ -7,7 +7,9 @@ use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
 use App\Models\Permission;
 use App\Models\User;
+use App\Services\MikrotikImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use RuntimeException;
 use Tests\TestCase;
 
 class MikrotikImportTest extends TestCase
@@ -40,5 +42,27 @@ class MikrotikImportTest extends TestCase
         $this->assertStringContainsString('Imported from MikroTik: Core Router', $customer->notes);
         $this->assertDatabaseHas('subscriptions', ['customer_id' => $customer->id]);
         $this->assertDatabaseHas('mikrotik_imported_secrets', ['id' => $secret->id, 'customer_id' => $customer->id]);
+    }
+
+    public function test_compare_page_remains_available_when_the_router_api_fails(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Offline Router', 'ip_address' => '10.0.0.2', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+
+        $service = $this->mock(MikrotikImportService::class);
+        $service->shouldReceive('liveRecords')
+            ->once()
+            ->andThrow(new RuntimeException('Connection refused'));
+
+        $this->actingAs($user)
+            ->get(route('mikrotik-routers.compare', $router))
+            ->assertOk()
+            ->assertSee('MikroTik live data is unavailable')
+            ->assertSee('Live-dependent actions are temporarily disabled.');
     }
 }
