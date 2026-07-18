@@ -8,6 +8,7 @@ use App\Models\PaymentAccount;
 use App\Services\BillingService;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 
@@ -36,6 +37,8 @@ class CustomerPaymentController extends Controller
             'payment_date' => ['required', 'date'],
             'note' => ['nullable', 'string'],
         ]);
+
+        $this->logSubmittedAmount($request, $customer, $data, 'customer_payment');
 
         if ($data['payment_method'] === 'cash') {
             $data['payment_account_id'] = null;
@@ -95,6 +98,8 @@ class CustomerPaymentController extends Controller
             'invoice_allocations' => ['nullable', 'array'],
             'invoice_allocations.*' => ['nullable', 'numeric', 'min:0'],
         ]);
+
+        $this->logSubmittedAmount($request, $customer, $data, 'customer_advance');
 
         if ($data['payment_method'] === 'cash') {
             $data['payment_account_id'] = null;
@@ -183,5 +188,16 @@ class CustomerPaymentController extends Controller
         ]);
 
         return $customer->refresh()->status === 'active';
+    }
+
+    private function logSubmittedAmount(Request $request, Customer $customer, array $data, string $source): void
+    {
+        Log::info('Payment amount submission audit.', [
+            'source' => $source,
+            'customer_id' => $customer->id,
+            'user_id' => $request->user()?->id,
+            'raw_amount' => (string) $request->input('amount'),
+            'validated_amount' => (string) ($data['amount'] ?? ''),
+        ]);
     }
 }

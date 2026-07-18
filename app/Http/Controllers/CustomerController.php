@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\MikrotikRouter;
+use App\Models\ResellerCommissionHistory;
 use App\Models\Subscription;
 use App\Observers\RecordVersionObserver;
 use App\Services\MikrotikCustomerSyncService;
@@ -44,6 +45,7 @@ class CustomerController extends Controller
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))
             ->when($request->query('role') === 'customer', fn ($query) => $query->where('is_customer', true))
             ->when($request->query('role') === 'vendor', fn ($query) => $query->where('is_vendor', true))
+            ->when($request->query('role') === 'reseller', fn ($query) => $query->where('is_reseller', true))
             ->when($request->filled('package_id'), fn ($query) => $query->whereHas('activeSubscription', fn ($query) => $query->where('internet_package_id', $request->integer('package_id'))))
             ->when($request->query('due_state') === 'due', fn ($query) => $query->whereHas('invoices', fn ($query) => $query->where('due_amount', '>', 0)))
             ->when($request->query('due_state') === 'advance', fn ($query) => $query->where('account_balance', '>', 0))
@@ -62,6 +64,7 @@ class CustomerController extends Controller
         return view('customers.create', [
             'packages' => InternetPackage::where('status', 'active')->orderBy('name')->get(),
             'routers' => MikrotikRouter::where('status', 'active')->orderBy('name')->get(),
+            'resellers' => Customer::where('is_reseller', true)->where('status', 'active')->orderBy('name')->get(),
         ]);
     }
 
@@ -71,14 +74,20 @@ class CustomerController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
-            'connection_id' => ['required_with:internet_package_id', 'nullable', 'string', 'max:100', 'unique:customers,connection_id'],
+            'connection_id' => ['required_with:internet_package_id', 'required_if:use_fixed_ip,1', 'nullable', 'string', 'max:100', 'unique:customers,connection_id'],
             'address' => ['required', 'string'],
             'notes' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
             'is_customer' => ['nullable', 'boolean'],
             'is_vendor' => ['nullable', 'boolean'],
+            'is_reseller' => ['nullable', 'boolean'],
+            'reseller_id' => ['nullable', Rule::exists('customers', 'id')->where('is_reseller', true)],
+            'reseller_daily_payment_limit' => ['nullable', 'numeric', 'min:1'],
+            'reseller_commission_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'never_suspend' => ['nullable', 'boolean'],
             'mikrotik_router_id' => ['nullable', 'exists:mikrotik_routers,id'],
+            'use_fixed_ip' => ['nullable', 'boolean'],
+            'fixed_ip_address' => ['nullable', 'required_if:use_fixed_ip,1', 'ip', 'max:45', 'unique:customers,fixed_ip_address'],
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
             'start_date' => ['nullable', 'date'],
         ]);
@@ -86,10 +95,23 @@ class CustomerController extends Controller
         $this->normalizeCustomerConnectionData($data);
         $data['is_customer'] = (bool) ($data['is_customer'] ?? false) || ! empty($data['internet_package_id']);
         $data['is_vendor'] = (bool) ($data['is_vendor'] ?? false);
+        $this->normalizeResellerData($data);
         $this->ensurePartyHasRole($data);
         $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
+        $this->normalizeIpMode($data);
 
         $customer = Customer::create($data);
+
+        if ($customer->is_reseller) {
+            ResellerCommissionHistory::create([
+                'reseller_id' => $customer->id,
+                'old_percent' => null,
+                'new_percent' => $customer->reseller_commission_percent,
+                'changed_by' => $request->user()?->id,
+                'changed_at' => now(),
+                'note' => 'Initial reseller commission.',
+            ]);
+        }
 
         if (! empty($data['internet_package_id'])) {
             Subscription::create([
@@ -116,6 +138,7 @@ class CustomerController extends Controller
             'customer' => $customer,
             'packages' => InternetPackage::where('status', 'active')->orderBy('name')->get(),
             'routers' => MikrotikRouter::where('status', 'active')->orderBy('name')->get(),
+            'resellers' => Customer::where('is_reseller', true)->whereKeyNot($customer->id)->where('status', 'active')->orderBy('name')->get(),
         ]);
     }
 
@@ -125,14 +148,20 @@ class CustomerController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
-            'connection_id' => ['required_with:internet_package_id', 'nullable', 'string', 'max:100', Rule::unique('customers', 'connection_id')->ignore($customer->id)],
+            'connection_id' => ['required_with:internet_package_id', 'required_if:use_fixed_ip,1', 'nullable', 'string', 'max:100', Rule::unique('customers', 'connection_id')->ignore($customer->id)],
             'address' => ['required', 'string'],
             'notes' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
             'is_customer' => ['nullable', 'boolean'],
             'is_vendor' => ['nullable', 'boolean'],
+            'is_reseller' => ['nullable', 'boolean'],
+            'reseller_id' => ['nullable', Rule::exists('customers', 'id')->where('is_reseller', true), Rule::notIn([$customer->id])],
+            'reseller_daily_payment_limit' => ['nullable', 'numeric', 'min:1'],
+            'reseller_commission_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'never_suspend' => ['nullable', 'boolean'],
             'mikrotik_router_id' => ['nullable', 'exists:mikrotik_routers,id'],
+            'use_fixed_ip' => ['nullable', 'boolean'],
+            'fixed_ip_address' => ['nullable', 'required_if:use_fixed_ip,1', 'ip', 'max:45', Rule::unique('customers', 'fixed_ip_address')->ignore($customer->id)],
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
             'start_date' => ['nullable', 'date'],
         ]);
@@ -140,16 +169,31 @@ class CustomerController extends Controller
         $this->normalizeCustomerConnectionData($data, $customer);
         $data['is_customer'] = (bool) ($data['is_customer'] ?? false) || ! empty($data['internet_package_id']);
         $data['is_vendor'] = (bool) ($data['is_vendor'] ?? false);
+        $this->normalizeResellerData($data, $customer);
         $this->ensurePartyHasRole($data);
         $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
+        $this->normalizeIpMode($data);
 
         DB::transaction(function () use (&$customer, $data, $recordVersionService): void {
             $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+            $oldCommissionPercent = (float) $customer->reseller_commission_percent;
             $activeSubscription = $customer->activeSubscription()->with('package')->lockForUpdate()->first();
             $customer->setRelation('activeSubscription', $activeSubscription);
             $oldSnapshot = $recordVersionService->snapshot($customer, ['activeSubscription.package']);
 
-            RecordVersionObserver::withoutRecording(fn () => $customer->update(Arr::except($data, ['internet_package_id', 'start_date'])));
+            $newPackageId = ! empty($data['internet_package_id']) ? (int) $data['internet_package_id'] : null;
+            $oldPackageId = $activeSubscription?->internet_package_id ? (int) $activeSubscription->internet_package_id : null;
+            $connectionChanged = $customer->connection_id !== ($data['connection_id'] ?? null)
+                || (int) ($customer->mikrotik_router_id ?? 0) !== (int) ($data['mikrotik_router_id'] ?? 0);
+            $switchedFromFixedToDynamic = $customer->use_fixed_ip && ! $data['use_fixed_ip'];
+            $customerData = Arr::except($data, ['internet_package_id', 'start_date']);
+
+            if ($oldPackageId !== $newPackageId || $connectionChanged || $switchedFromFixedToDynamic) {
+                $customerData['learned_ip_address'] = null;
+                $customerData['learned_ip_package_id'] = null;
+            }
+
+            RecordVersionObserver::withoutRecording(fn () => $customer->update($customerData));
 
             if (! empty($data['internet_package_id'])) {
                 if ($activeSubscription) {
@@ -178,6 +222,18 @@ class CustomerController extends Controller
                 'source' => 'party_edit',
                 'party_name' => $customer->name,
             ]);
+
+            $newCommissionPercent = (float) $customer->reseller_commission_percent;
+            if ($customer->is_reseller && $oldCommissionPercent !== $newCommissionPercent) {
+                ResellerCommissionHistory::create([
+                    'reseller_id' => $customer->id,
+                    'old_percent' => $oldCommissionPercent,
+                    'new_percent' => $newCommissionPercent,
+                    'changed_by' => auth()->id(),
+                    'changed_at' => now(),
+                    'note' => 'Commission changed from party edit.',
+                ]);
+            }
         });
 
         $syncResult = $this->syncMikrotikCustomer($customer);
@@ -194,6 +250,11 @@ class CustomerController extends Controller
             'activeSubscription.package',
             'subscriptions.package',
             'mikrotikRouter',
+            'reseller',
+            'resellerCustomers',
+            'loginUsers.roles',
+            'reseller.commissionHistories.changedByUser',
+            'commissionHistories.changedByUser',
             'invoices' => fn ($query) => $query->latest(),
             'balanceTransactions' => fn ($query) => $query->latest()->limit(10),
             'tickets' => fn ($query) => $query->latest(),
@@ -325,12 +386,39 @@ class CustomerController extends Controller
         }
     }
 
+    private function normalizeIpMode(array &$data): void
+    {
+        $data['use_fixed_ip'] = (bool) ($data['use_fixed_ip'] ?? false);
+        $data['fixed_ip_address'] = $data['use_fixed_ip']
+            ? trim((string) ($data['fixed_ip_address'] ?? ''))
+            : null;
+    }
+
     private function ensurePartyHasRole(array $data): void
     {
-        if (! $data['is_customer'] && ! $data['is_vendor']) {
+        if (! $data['is_customer'] && ! $data['is_vendor'] && ! $data['is_reseller']) {
             throw ValidationException::withMessages([
-                'is_customer' => 'Select at least Customer or Vendor for this party.',
+                'is_customer' => 'Select at least Customer, Vendor, or Reseller for this party.',
             ]);
+        }
+    }
+
+    private function normalizeResellerData(array &$data, ?Customer $customer = null): void
+    {
+        $data['is_reseller'] = (bool) ($data['is_reseller'] ?? false);
+
+        if ($data['is_reseller']) {
+            $data['reseller_id'] = null;
+            $data['reseller_daily_payment_limit'] = filled($data['reseller_daily_payment_limit'] ?? null)
+                ? round((float) $data['reseller_daily_payment_limit'], 2)
+                : null;
+            $data['reseller_commission_percent'] = round((float) ($data['reseller_commission_percent'] ?? 0), 2);
+        } else {
+            // Keep reseller settings when the role is temporarily disabled so
+            // re-enabling the role does not silently erase the agreed terms.
+            $data['reseller_daily_payment_limit'] = $customer?->reseller_daily_payment_limit;
+            $data['reseller_commission_percent'] = $customer?->reseller_commission_percent ?? 0;
+            $data['reseller_id'] = filled($data['reseller_id'] ?? null) ? (int) $data['reseller_id'] : null;
         }
     }
 }

@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}?v=us-20260718">
     <title>{{ $title ?? ($appOrganization?->name ?? config('app.name')) }}</title>
     <style>
         :root { color-scheme: light; --ink:#172033; --muted:#667085; --line:#d8dee9; --bg:#f4f7fb; --panel:#fff; --brand:#116149; --accent:#1d76c9; --warn:#b45309; --danger:#b42318; --zebra:#edf4f8; --zebra-soft:#f7fafc; }
@@ -217,6 +217,7 @@
                     || auth()->user()?->hasPermission('manage_payments')
                     || auth()->user()?->hasPermission('manage_payment_accounts')
                     || auth()->user()?->hasPermission('manage_customers')
+                    || auth()->user()?->hasPermission('manage_resellers')
                     || auth()->user()?->hasPermission('manage_expenses');
                 $canManageWarranty = auth()->user()?->hasPermission('view_warranty_claims')
                     || auth()->user()?->hasPermission('manage_warranty_claims')
@@ -228,6 +229,9 @@
             @endphp
             @if (auth()->user()?->hasPermission('view_dashboard'))
                 <a href="{{ route('dashboard') }}">Dashboard</a>
+            @endif
+            @if (auth()->user()?->hasPermission('use_reseller_portal') && auth()->user()?->reseller_id)
+                <a href="{{ route('reseller.dashboard') }}">Reseller Portal</a>
             @endif
 
             @if ($canManageNetwork)
@@ -256,6 +260,9 @@
                     <div class="nav-menu">
                         @if (auth()->user()?->hasPermission('manage_customers'))
                             <a href="{{ route('customers.index') }}">Parties</a>
+                        @endif
+                        @if (auth()->user()?->hasPermission('manage_resellers'))
+                            <a href="{{ route('resellers.index') }}">Resellers</a>
                         @endif
                         @if (auth()->user()?->hasPermission('manage_invoices'))
                             <a href="{{ route('invoices.index') }}">Invoices</a>

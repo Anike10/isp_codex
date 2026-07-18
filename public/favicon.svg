@@ -1,5 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-    <rect width="64" height="64" rx="14" fill="#14213d"/>
-    <path d="M12 16h40v32H12z" fill="#116149" opacity=".9"/>
-    <text x="32" y="40" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">US</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="US">
+    <defs>
+        <linearGradient id="us-bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#17345f"/>
+            <stop offset="1" stop-color="#0b172d"/>
+        </linearGradient>
+    </defs>
+    <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#us-bg)"/>
+    <rect x="7" y="7" width="50" height="50" rx="11" fill="none" stroke="#2fc08d" stroke-width="3"/>
+    <text x="32" y="41" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800" letter-spacing="-1" fill="#ffffff">US</text>
 </svg>

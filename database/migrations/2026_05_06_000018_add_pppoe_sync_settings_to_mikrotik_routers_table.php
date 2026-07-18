@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('mikrotik_routers', function (Blueprint $table) {
-            $table->unsignedInteger('pppoe_sync_interval_minutes')->default(10)->after('api_port');
+            $table->unsignedInteger('pppoe_sync_interval_minutes')->default(60)->after('api_port');
             $table->timestamp('last_pppoe_sync_at')->nullable()->after('last_connection_message');
             $table->string('inactive_pppoe_profile')->default('inactive')->after('last_pppoe_sync_at');
             $table->text('last_pppoe_sync_summary')->nullable()->after('inactive_pppoe_profile');

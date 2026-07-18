@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Customer;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -28,6 +29,7 @@ class UserController extends Controller
         return view('users.create', [
             'roles' => Role::orderBy('label')->get(),
             'permissions' => Permission::orderBy('label')->get(),
+            'resellers' => Customer::where('is_reseller', true)->where('status', 'active')->orderBy('name')->get(),
         ]);
     }
 
@@ -37,6 +39,7 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:6'],
+            'reseller_id' => ['nullable', 'exists:customers,id'],
             'roles' => ['nullable', 'array'],
             'roles.*' => ['exists:roles,id'],
             'permissions' => ['nullable', 'array'],
@@ -47,6 +50,7 @@ class UserController extends Controller
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
+            'reseller_id' => $this->validatedResellerId($data['reseller_id'] ?? null),
         ]);
 
         $user->roles()->sync($data['roles'] ?? []);
@@ -63,6 +67,7 @@ class UserController extends Controller
             'user' => $user,
             'roles' => Role::orderBy('label')->get(),
             'permissions' => Permission::orderBy('label')->get(),
+            'resellers' => Customer::where('is_reseller', true)->where('status', 'active')->orderBy('name')->get(),
         ]);
     }
 
@@ -72,6 +77,7 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email,'.$user->id],
             'password' => ['nullable', 'string', 'min:6'],
+            'reseller_id' => ['nullable', 'exists:customers,id'],
             'roles' => ['nullable', 'array'],
             'roles.*' => ['exists:roles,id'],
             'permissions' => ['nullable', 'array'],
@@ -81,6 +87,7 @@ class UserController extends Controller
         $payload = [
             'name' => $data['name'],
             'email' => $data['email'],
+            'reseller_id' => $this->validatedResellerId($data['reseller_id'] ?? null),
         ];
 
         if (! empty($data['password'])) {
@@ -114,5 +121,15 @@ class UserController extends Controller
         });
 
         return redirect()->route('users.index')->with('success', 'User updated successfully.');
+    }
+
+    private function validatedResellerId(mixed $resellerId): ?int
+    {
+        if (! filled($resellerId)) {
+            return null;
+        }
+
+        return Customer::query()->whereKey($resellerId)->where('is_reseller', true)->value('id')
+            ?? abort(422, 'The selected party is not a reseller.');
     }
 }

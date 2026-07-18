@@ -10,13 +10,15 @@ use App\Models\PaymentAccount;
 use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\Quotation;
+use App\Models\SaleReturn;
 use App\Models\Subscription;
 use App\Observers\RecordVersionObserver;
 use App\Services\BillingService;
 use App\Services\InventoryService;
-use App\Services\PrintContextService;
 use App\Services\PaymentService;
+use App\Services\PrintContextService;
 use App\Services\RecordVersionService;
+use App\Services\ResellerCommissionService;
 use App\Support\SerialNumberParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -25,6 +27,8 @@ use InvalidArgumentException;
 
 class InvoiceController extends Controller
 {
+    public function __construct(private readonly ResellerCommissionService $resellerCommissionService) {}
+
     private const PAYMENT_NOTE_SETTING_KEY = 'invoice_payment_note';
 
     private const DEFAULT_PAYMENT_NOTE = 'Please pay the due amount by the due date. Keep this bill for your records.';
@@ -148,6 +152,10 @@ class InvoiceController extends Controller
             $invoice = DB::transaction(function () use ($data, $customerId, $itemsData, $subtotal, $total, $inventoryService): Invoice {
                 $invoice = Invoice::create([
                     'customer_id' => $customerId,
+                    'reseller_id' => $data['reseller_id'],
+                    'reseller_commission_percent' => $data['reseller_commission_percent'],
+                    'reseller_commission_amount' => $data['reseller_commission_amount'],
+                    'gross_total' => $data['gross_total'],
                     'invoice_no' => Invoice::generateInvoiceNo($customerId, $data['billing_month']),
                     'billing_month' => $data['billing_month'],
                     'invoice_type' => $data['invoice_type'] ?? 'product',
@@ -191,7 +199,7 @@ class InvoiceController extends Controller
             ]);
         }
 
-        if (class_exists(\App\Models\SaleReturn::class) && $invoice->saleReturns()->exists()) {
+        if (class_exists(SaleReturn::class) && $invoice->saleReturns()->exists()) {
             return redirect()->route('invoices.show', $invoice)->withErrors([
                 'invoice' => 'Invoices with sale returns cannot be edited because returned stock and credit history are already linked to their items.',
             ]);
@@ -221,7 +229,7 @@ class InvoiceController extends Controller
         $becameReturnLocked = false;
 
         try {
-            [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
+            [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data, $invoice);
 
             DB::transaction(function () use (&$invoice, $data, $customerId, $itemsData, $subtotal, $total, $inventoryService, $recordVersionService, &$becameFinalized, &$becameReturnLocked): void {
                 $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
@@ -232,7 +240,7 @@ class InvoiceController extends Controller
                     return;
                 }
 
-                if (class_exists(\App\Models\SaleReturn::class) && $invoice->saleReturns()->exists()) {
+                if (class_exists(SaleReturn::class) && $invoice->saleReturns()->exists()) {
                     $becameReturnLocked = true;
 
                     return;
@@ -246,6 +254,10 @@ class InvoiceController extends Controller
 
                 RecordVersionObserver::withoutRecording(fn () => $invoice->update([
                     'customer_id' => $customerId,
+                    'reseller_id' => $data['reseller_id'],
+                    'reseller_commission_percent' => $data['reseller_commission_percent'],
+                    'reseller_commission_amount' => $data['reseller_commission_amount'],
+                    'gross_total' => $data['gross_total'],
                     'billing_month' => $data['billing_month'],
                     'invoice_type' => $data['invoice_type'] ?? $invoice->invoice_type ?? 'product',
                     'subtotal' => $subtotal,
@@ -422,6 +434,10 @@ class InvoiceController extends Controller
         $newInvoice = DB::transaction(function () use ($invoice, $nextBillingMonth) {
             $copy = Invoice::create([
                 'customer_id' => $invoice->customer_id,
+                'reseller_id' => $invoice->reseller_id,
+                'reseller_commission_percent' => $invoice->reseller_commission_percent,
+                'reseller_commission_amount' => $invoice->reseller_commission_amount,
+                'gross_total' => $invoice->gross_total,
                 'invoice_no' => Invoice::generateInvoiceNo($invoice->customer_id, $nextBillingMonth),
                 'billing_month' => $nextBillingMonth,
                 'invoice_type' => $invoice->invoice_type,
@@ -575,7 +591,7 @@ class InvoiceController extends Controller
         ]);
     }
 
-    private function prepareInvoiceData(array $data): array
+    private function prepareInvoiceData(array $data, ?Invoice $existingInvoice = null): array
     {
         $customerId = $data['customer_id'] ?? null;
 
@@ -637,13 +653,36 @@ class InvoiceController extends Controller
             ];
         }
 
-        $discountAmount = $this->resolveAdjustmentAmount($subtotal, $data['discount'], $data['discount_type']);
-        $afterDiscount = max(0, $subtotal - $discountAmount);
+        $manualDiscountAmount = $this->resolveAdjustmentAmount($subtotal, $data['discount'], $data['discount_type']);
+        $afterDiscount = max(0, $subtotal - $manualDiscountAmount);
         $vatAmount = $this->resolveAdjustmentAmount($afterDiscount, $data['vat'], $data['vat_type']);
-        $total = $afterDiscount + $vatAmount;
+        $grossTotal = round($afterDiscount + $vatAmount, 2);
 
-        $data['discount_amount'] = $discountAmount;
+        if ($existingInvoice?->reseller_id) {
+            $commissionPercent = round((float) $existingInvoice->reseller_commission_percent, 2);
+            $commissionAmount = round($grossTotal * $commissionPercent / 100, 2);
+            $commission = [
+                'reseller_id' => $existingInvoice->reseller_id,
+                'percent' => $commissionPercent,
+                'amount' => $commissionAmount,
+                'gross_total' => $grossTotal,
+                'net_total' => round(max(0, $grossTotal - $commissionAmount), 2),
+            ];
+        } else {
+            $commission = $this->resellerCommissionService->calculate(
+                Customer::findOrFail($customerId),
+                $grossTotal
+            );
+        }
+
+        $total = $commission['net_total'];
+
+        $data['discount_amount'] = round($manualDiscountAmount + $commission['amount'], 2);
         $data['vat_amount'] = $vatAmount;
+        $data['reseller_id'] = $commission['reseller_id'];
+        $data['reseller_commission_percent'] = $commission['percent'];
+        $data['reseller_commission_amount'] = $commission['amount'];
+        $data['gross_total'] = $commission['gross_total'];
 
         return [$customerId, $itemsData, $subtotal, $total, $data];
     }
@@ -815,7 +854,7 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice)
     {
-        $relations = ['customer', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items', 'printLogs.organization', 'printLogs.user'];
+        $relations = ['customer', 'reseller', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items', 'printLogs.organization', 'printLogs.user'];
 
         if (method_exists(InvoiceItem::class, 'saleReturnItems')) {
             $relations[] = 'items.saleReturnItems.saleReturn';

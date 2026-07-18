@@ -5,13 +5,13 @@
     $canOpenPackages = auth()->user()?->hasPermission('manage_packages');
 @endphp
 <div class="topbar">
-    <div><h1>Parties</h1><div class="muted">Customers, vendors, and product-only buyers</div></div>
+    <div><h1>Parties</h1><div class="muted">Customers, vendors, resellers, and product-only buyers</div></div>
     <a class="btn" href="{{ route('customers.create') }}">Add Party</a>
 </div>
 
 <form method="get" class="card form-grid" style="margin-bottom:16px">
     <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Search by name, phone, connection ID, MikroTik username"></div>
-    <div><label>Role</label><select name="role"><option value="">All roles</option><option value="customer" @selected(request('role') === 'customer')>Customer</option><option value="vendor" @selected(request('role') === 'vendor')>Vendor</option></select></div>
+    <div><label>Role</label><select name="role"><option value="">All roles</option><option value="customer" @selected(request('role') === 'customer')>Customer</option><option value="vendor" @selected(request('role') === 'vendor')>Vendor</option><option value="reseller" @selected(request('role') === 'reseller')>Reseller</option></select></div>
     <div><label>Status</label><select name="status"><option value="">All statuses</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>
     <div><label>Package</label><select name="package_id"><option value="">All packages</option>@foreach($packages as $package)<option value="{{ $package->id }}" @selected((int) request('package_id') === $package->id)>{{ $package->name }}</option>@endforeach</select></div>
     <div><label>Balance</label><select name="due_state"><option value="">All balances</option><option value="due" @selected(request('due_state') === 'due')>Has due</option><option value="advance" @selected(request('due_state') === 'advance')>Has advance</option></select></div>
@@ -36,6 +36,7 @@
             <td>
                 @if ($customer->is_customer)<span class="badge active">Customer</span>@endif
                 @if ($customer->is_vendor)<span class="badge pending">Vendor</span>@endif
+                @if ($customer->is_reseller)<span class="badge active">Reseller</span>@endif
             </td>
             <td>{{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}</td>
             <td>

@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\Invoice;
 use App\Models\Customer;
+use App\Models\Invoice;
 use App\Models\Subscription;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 class BillingService
 {
+    public function __construct(private readonly ResellerCommissionService $resellerCommissionService) {}
+
     public function generateMonthlyBills(string $billingMonth): Collection
     {
         $month = Carbon::createFromFormat('Y-m', $billingMonth)->startOfMonth();
@@ -91,6 +93,12 @@ class BillingService
     private function createServiceInvoice(Subscription $subscription, Carbon $month): Invoice
     {
         return DB::transaction(function () use ($subscription, $month) {
+            $subscription->loadMissing(['customer', 'package']);
+            $commission = $this->resellerCommissionService->calculate(
+                $subscription->customer,
+                (float) $subscription->package->monthly_price
+            );
+
             return Invoice::firstOrCreate(
                 [
                     'customer_id' => $subscription->customer_id,
@@ -100,11 +108,17 @@ class BillingService
                 [
                     'invoice_no' => Invoice::generateInvoiceNo($subscription->customer_id, $month->format('Y-m')),
                     'subtotal' => $subscription->package->monthly_price,
-                    'discount' => 0,
+                    'reseller_id' => $commission['reseller_id'],
+                    'reseller_commission_percent' => $commission['percent'],
+                    'reseller_commission_amount' => $commission['amount'],
+                    'gross_total' => $commission['gross_total'],
+                    'discount' => $commission['amount'],
+                    'discount_type' => 'amount',
+                    'discount_value' => 0,
                     'vat' => 0,
-                    'total' => $subscription->package->monthly_price,
+                    'total' => $commission['net_total'],
                     'paid_amount' => 0,
-                    'due_amount' => $subscription->package->monthly_price,
+                    'due_amount' => $commission['net_total'],
                     'status' => 'unpaid',
                     'due_date' => $month->copy()->day(10),
                     'invoice_type' => 'service',
@@ -112,5 +126,4 @@ class BillingService
             );
         });
     }
-
 }

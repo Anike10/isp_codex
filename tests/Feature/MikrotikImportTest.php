@@ -18,13 +18,32 @@ class MikrotikImportTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_new_router_form_and_database_default_to_sixty_minute_sync(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $this->actingAs($user)
+            ->get(route('mikrotik-routers.create', absolute: false))
+            ->assertOk()
+            ->assertSee('name="pppoe_sync_interval_minutes" value="60"', false);
+
+        $router = MikrotikRouter::create([
+            'name' => 'Default Interval Router', 'ip_address' => '10.0.0.60', 'api_port' => 8728,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'api', 'password' => 'secret',
+            'status' => 'active',
+        ]);
+
+        $this->assertSame(60, $router->refresh()->pppoe_sync_interval_minutes);
+    }
+
     public function test_selected_imported_secret_creates_a_party_with_router_source_and_special_selection(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
         $router = MikrotikRouter::create([
             'name' => 'Core Router', 'ip_address' => '10.0.0.1', 'api_port' => 8728,
-            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'pppoe_sync_interval_minutes' => 60, 'inactive_pppoe_profile' => 'inactive',
             'username' => 'api', 'password' => 'secret', 'status' => 'active',
         ]);
         $secret = MikrotikImportedSecret::create([
@@ -155,7 +174,7 @@ class MikrotikImportTest extends TestCase
 
         $this->actingAs($user)->put(route('mikrotik-routers.update', $router), [
             'name' => 'Main Router', 'ip_address' => '10.0.0.3', 'api_port' => 8787,
-            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'pppoe_sync_interval_minutes' => 60, 'inactive_pppoe_profile' => 'inactive',
             'router_api_username' => 'admin', 'router_api_password' => '',
             'username' => 'anike10@gmail.com', 'password' => 'website-login-password',
             'status' => 'active', 'notes' => null,
@@ -256,5 +275,105 @@ class MikrotikImportTest extends TestCase
             ->assertSessionHas('error', fn ($message) =>
                 str_contains($message, 'Profile export failed on Main Router')
                 && str_contains($message, 'RouterOS rejected this profile value'));
+    }
+
+    public function test_compare_delete_from_app_removes_profile_mapping_without_deleting_package(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Mapping Router', 'ip_address' => '10.0.0.12', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+        $package = InternetPackage::create([
+            'name' => 'Mapped Package', 'speed' => '30 Mbps', 'mikrotik_profile' => 'mapped-30',
+            'default_ip_pool' => 'customer-pool', 'monthly_price' => 1200, 'status' => 'active',
+        ]);
+
+        $this->actingAs($user)->delete(route('mikrotik-routers.compare.app-item.destroy', $router, false), [
+            'type' => 'profile',
+            'app_id' => $package->id,
+        ])->assertRedirect();
+
+        $package->refresh();
+        $this->assertNull($package->mikrotik_profile);
+        $this->assertNull($package->default_ip_pool);
+        $this->assertDatabaseHas('internet_packages', ['id' => $package->id, 'name' => 'Mapped Package']);
+    }
+
+    public function test_compare_delete_from_app_removes_pppoe_mapping_without_deleting_party(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Party Router', 'ip_address' => '10.0.0.13', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+        $customer = Customer::create([
+            'name' => 'Preserved Party', 'phone' => '01700000001', 'connection_id' => 'party-100',
+            'mikrotik_username' => 'party-100', 'mikrotik_password' => 'pppoe-password',
+            'mikrotik_router_id' => $router->id, 'address' => 'Kushtia', 'status' => 'active',
+            'is_customer' => true,
+        ]);
+
+        $this->actingAs($user)->delete(route('mikrotik-routers.compare.app-item.destroy', $router, false), [
+            'type' => 'secret',
+            'app_id' => $customer->id,
+        ])->assertRedirect();
+
+        $customer->refresh();
+        $this->assertNull($customer->connection_id);
+        $this->assertNull($customer->mikrotik_username);
+        $this->assertNull($customer->mikrotik_password);
+        $this->assertNull($customer->mikrotik_router_id);
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'name' => 'Preserved Party']);
+    }
+
+    public function test_compare_shows_delete_from_app_in_all_three_tables_when_app_records_exist(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Compare Router', 'ip_address' => '10.0.0.14', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+        InternetPackage::create([
+            'name' => 'Compare Package', 'speed' => '40 Mbps', 'mikrotik_profile' => 'compare-40',
+            'monthly_price' => 1400, 'status' => 'active',
+        ]);
+        AppIpPool::create([
+            'mikrotik_router_id' => $router->id, 'name' => 'compare-pool',
+            'ranges' => '10.40.0.2-10.40.0.254', 'status' => 'active',
+        ]);
+        Customer::create([
+            'name' => 'Compare Party', 'phone' => '01700000002', 'connection_id' => 'compare-user',
+            'mikrotik_username' => 'compare-user', 'mikrotik_password' => 'secret',
+            'mikrotik_router_id' => $router->id, 'address' => 'Kushtia', 'status' => 'active',
+            'is_customer' => true,
+        ]);
+
+        $service = $this->mock(MikrotikImportService::class);
+        $service->shouldReceive('liveRecords')->once()->withArgs(fn (MikrotikRouter $givenRouter, string $command) => $givenRouter->id === $router->id && $command === '/ppp/profile/print')
+            ->andReturn([['.id' => '*P1', 'name' => 'compare-40']]);
+        $service->shouldReceive('liveRecords')->once()->withArgs(fn (MikrotikRouter $givenRouter, string $command) => $givenRouter->id === $router->id && $command === '/ip/pool/print')
+            ->andReturn([['.id' => '*L1', 'name' => 'compare-pool', 'ranges' => '10.40.0.2-10.40.0.254']]);
+        $service->shouldReceive('liveRecords')->once()->withArgs(fn (MikrotikRouter $givenRouter, string $command) => $givenRouter->id === $router->id && $command === '/ppp/secret/print')
+            ->andReturn([['.id' => '*S1', 'name' => 'compare-user']]);
+
+        $response = $this->actingAs($user)->get(route('mikrotik-routers.compare', $router, false));
+
+        $response->assertOk();
+        $html = $response->getContent();
+        $this->assertSame(3, substr_count($html, '>Delete from App</button>'));
+        $this->assertSame(3, substr_count($html, '<th>App Actions</th><th>Where it exists</th><th>MikroTik Actions</th>'));
+        preg_match_all('/<table>.*?<\/table>/s', $html, $tables);
+        $this->assertCount(3, $tables[0]);
+        foreach ($tables[0] as $table) {
+            $this->assertLessThan(strpos($table, 'App + MikroTik'), strpos($table, '>Delete from App</button>'));
+            $this->assertLessThan(strpos($table, '>Delete from MikroTik</button>'), strpos($table, 'App + MikroTik'));
+        }
     }
 }

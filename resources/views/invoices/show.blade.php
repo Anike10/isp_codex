@@ -58,6 +58,11 @@
     <section class="card">
         <h2>Invoice</h2>
         <p><strong>Subtotal:</strong> {{ number_format($invoice->subtotal, 2) }}</p>
+        @if($invoice->reseller_id)
+            <p><strong>Reseller:</strong> {{ $invoice->reseller?->name ?? 'Reseller #'.$invoice->reseller_id }}</p>
+            <p><strong>Gross total:</strong> {{ number_format((float) $invoice->gross_total, 2) }}</p>
+            <p><strong>Commission snapshot:</strong> {{ number_format((float) $invoice->reseller_commission_percent, 2) }}% ({{ number_format((float) $invoice->reseller_commission_amount, 2) }})</p>
+        @endif
         @if ((float) $invoice->discount > 0)
             <p><strong>Discount:</strong> {{ number_format($invoice->discount, 2) }}</p>
         @endif

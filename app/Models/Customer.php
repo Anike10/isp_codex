@@ -23,6 +23,13 @@ class Customer extends Model
         'mikrotik_username',
         'mikrotik_password',
         'mikrotik_router_id',
+        'use_fixed_ip',
+        'fixed_ip_address',
+        'learned_ip_address',
+        'learned_ip_package_id',
+        'last_connected_ip',
+        'last_connected_mac',
+        'last_connected_at',
         'address',
         'notes',
         'status',
@@ -36,6 +43,10 @@ class Customer extends Model
         'account_balance',
         'is_customer',
         'is_vendor',
+        'is_reseller',
+        'reseller_id',
+        'reseller_daily_payment_limit',
+        'reseller_commission_percent',
     ];
 
     protected $hidden = [
@@ -46,6 +57,8 @@ class Customer extends Model
     {
         return [
             'mikrotik_password' => 'encrypted',
+            'use_fixed_ip' => 'boolean',
+            'last_connected_at' => 'datetime',
             'never_suspend' => 'boolean',
             'grace_until' => 'date',
             'grace_used_at' => 'datetime',
@@ -54,6 +67,9 @@ class Customer extends Model
             'account_balance' => 'decimal:2',
             'is_customer' => 'boolean',
             'is_vendor' => 'boolean',
+            'is_reseller' => 'boolean',
+            'reseller_daily_payment_limit' => 'decimal:2',
+            'reseller_commission_percent' => 'decimal:2',
         ];
     }
 
@@ -126,6 +142,11 @@ class Customer extends Model
         return $this->hasMany(Invoice::class);
     }
 
+    public function latestInvoice(): HasOne
+    {
+        return $this->hasOne(Invoice::class)->latestOfMany();
+    }
+
     public function quotations(): HasMany
     {
         return $this->hasMany(Quotation::class);
@@ -144,6 +165,31 @@ class Customer extends Model
     public function balanceTransactions(): HasMany
     {
         return $this->hasMany(CustomerBalanceTransaction::class);
+    }
+
+    public function reseller(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reseller_id');
+    }
+
+    public function resellerCustomers(): HasMany
+    {
+        return $this->hasMany(self::class, 'reseller_id');
+    }
+
+    public function loginUsers(): HasMany
+    {
+        return $this->hasMany(User::class, 'reseller_id');
+    }
+
+    public function fundedPaymentAllocations(): HasMany
+    {
+        return $this->hasMany(PaymentAllocation::class, 'funded_by_customer_id');
+    }
+
+    public function commissionHistories(): HasMany
+    {
+        return $this->hasMany(ResellerCommissionHistory::class, 'reseller_id')->latest('changed_at');
     }
 
     public function purchaseBills(): HasMany

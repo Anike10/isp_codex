@@ -54,6 +54,16 @@
                 <label>Password</label>
                 <input type="password" name="password" required>
             </div>
+            <div>
+                <label>Linked Reseller</label>
+                <select name="reseller_id">
+                    <option value="">Not a reseller login</option>
+                    @foreach ($resellers as $reseller)
+                        <option value="{{ $reseller->id }}" @selected((int) old('reseller_id', request('reseller_id')) === $reseller->id)>{{ $reseller->name }} — {{ $reseller->phone }}</option>
+                    @endforeach
+                </select>
+                <span class="muted">Select this for users with the Reseller role.</span>
+            </div>
             <button class="btn" type="submit">Save User</button>
         </div>
     </div>

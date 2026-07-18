@@ -29,6 +29,8 @@ use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseBillController;
 use App\Http\Controllers\QuotationController;
+use App\Http\Controllers\ResellerController;
+use App\Http\Controllers\ResellerPortalController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SaleReturnController;
 use App\Http\Controllers\TicketController;
@@ -46,6 +48,15 @@ Route::middleware('auth')->group(function () {
     Route::post('logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::get('/', [DashboardController::class, 'index'])->middleware('permission:view_dashboard')->name('dashboard');
+
+    Route::middleware('permission:use_reseller_portal')->group(function () {
+        Route::get('reseller', [ResellerPortalController::class, 'dashboard'])->name('reseller.dashboard');
+        Route::post('reseller/invoices/{invoice}/pay', [ResellerPortalController::class, 'pay'])->name('reseller.invoices.pay');
+        Route::get('reseller/invoices/{invoice}/print', [ResellerPortalController::class, 'printInvoice'])->name('reseller.invoices.print');
+        Route::post('reseller/customers/{customer}/invoices', [ResellerPortalController::class, 'generateInvoice'])->name('reseller.customers.invoices.store');
+        Route::get('reseller/customers/{customer}/payments/create', [ResellerPortalController::class, 'createPayment'])->name('reseller.customers.payments.create');
+        Route::post('reseller/customers/{customer}/payments', [ResellerPortalController::class, 'storePayment'])->name('reseller.customers.payments.store');
+    });
 
     Route::middleware('permission:manage_customers')->group(function () {
         Route::get('customers/{customer}/payments/create', [CustomerPaymentController::class, 'create'])->name('customers.payments.create');
@@ -210,6 +221,7 @@ Route::middleware('auth')->group(function () {
         Route::post('mikrotik-routers/{mikrotikRouter}/imported-pools/{mikrotikImportedIpPool}/save-to-app', [MikrotikRouterDataController::class, 'saveImportedPool'])->name('mikrotik-routers.imported-pools.save-to-app');
         Route::get('mikrotik-routers/{mikrotikRouter}/compare', [MikrotikRouterDataController::class, 'compare'])->name('mikrotik-routers.compare');
         Route::patch('mikrotik-routers/{mikrotikRouter}/compare/inline', [MikrotikRouterDataController::class, 'inlineUpdate'])->name('mikrotik-routers.compare.inline-update');
+        Route::delete('mikrotik-routers/{mikrotikRouter}/compare/app-item', [MikrotikRouterDataController::class, 'deleteAppItem'])->name('mikrotik-routers.compare.app-item.destroy');
         Route::post('mikrotik-routers/{mikrotikRouter}/profiles/{package}/export', [MikrotikRouterDataController::class, 'exportProfile'])->name('mikrotik-routers.profiles.export');
         Route::post('mikrotik-routers/{mikrotikRouter}/customers/{customer}/export', [MikrotikRouterDataController::class, 'exportCustomer'])->name('mikrotik-routers.customers.export');
         Route::delete('mikrotik-routers/{mikrotikRouter}/router-extra', [MikrotikRouterDataController::class, 'deleteRouterExtra'])->name('mikrotik-routers.router-extra.destroy');
@@ -262,6 +274,12 @@ Route::middleware('auth')->group(function () {
     Route::middleware('permission:manage_users')->group(function () {
         Route::resource('users', UserController::class)->only(['index', 'create', 'store', 'edit', 'update']);
         Route::resource('roles', RoleController::class)->only(['index', 'create', 'store', 'edit', 'update']);
+    });
+
+    Route::middleware('permission:manage_resellers')->group(function () {
+        Route::get('resellers', [ResellerController::class, 'index'])->name('resellers.index');
+        Route::get('resellers/{reseller}', [ResellerController::class, 'show'])->name('resellers.show');
+        Route::post('resellers/{reseller}/invoices/{invoice}/pay', [ResellerController::class, 'pay'])->name('resellers.invoices.pay');
     });
 
     Route::get('backup/database', [DatabaseBackupController::class, 'download'])

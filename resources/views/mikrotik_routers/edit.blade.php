@@ -31,8 +31,8 @@
     </div>
     <div>
         <label>PPPoE Sync Interval Minutes</label>
-        <input type="number" min="1" max="1440" name="pppoe_sync_interval_minutes" value="{{ old('pppoe_sync_interval_minutes', $mikrotikRouter->pppoe_sync_interval_minutes) }}" required>
-        <span class="muted">How often this router should verify all PPPoE users.</span>
+        <input type="number" min="60" max="1440" step="60" name="pppoe_sync_interval_minutes" value="{{ old('pppoe_sync_interval_minutes', $mikrotikRouter->pppoe_sync_interval_minutes) }}" required>
+        <span class="muted">Default 60 minutes. The hourly scheduler checks whether this router is due.</span>
     </div>
     <div>
         <label>Inactive PPPoE Profile</label>

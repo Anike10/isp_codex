@@ -2,7 +2,7 @@
 
 @section('content')
 <div class="topbar">
-    <div><h1>Edit Party</h1><div class="muted">Update party details, customer/vendor roles, and internet package assignment</div></div>
+    <div><h1>Edit Party</h1><div class="muted">Update party details, reseller assignment, wallet limit, and internet package</div></div>
     <a class="btn light" href="{{ route('customers.show', $customer) }}">Back</a>
 </div>
 
@@ -35,6 +35,19 @@
         </select>
         <span class="muted">Used only for ISP parties with a Connection ID.</span>
     </div>
+    <div>
+        <label>IP Assignment</label>
+        <label style="font-weight:400; display:flex; gap:8px; align-items:center;">
+            <input id="use-fixed-ip" type="checkbox" name="use_fixed_ip" value="1" @checked(old('use_fixed_ip', $customer->use_fixed_ip)) style="width:auto;">
+            Always use a fixed IP
+        </label>
+        <span class="muted">Dynamic mode learns a fresh IP after a package change and stores it in the MikroTik secret.</span>
+    </div>
+    <div>
+        <label>Fixed IP Address</label>
+        <input id="fixed-ip-address" name="fixed_ip_address" value="{{ old('fixed_ip_address', $customer->fixed_ip_address) }}" placeholder="Example: 10.10.10.25">
+        <span class="muted">Required only when Fixed IP is selected.</span>
+    </div>
     <div class="full"><label>Address</label><textarea name="address" required>{{ old('address', $customer->address) }}</textarea></div>
     <div class="full"><label>Note</label><textarea name="notes">{{ old('notes', $customer->notes) }}</textarea></div>
     <div>
@@ -54,6 +67,29 @@
             <input type="checkbox" name="is_vendor" value="1" @checked(old('is_vendor', $customer->is_vendor)) style="width:auto;">
             Vendor / Wholesale shop
         </label>
+        <label style="font-weight:400; display:flex; gap:8px; align-items:center; margin-top:6px">
+            <input id="is-reseller" type="checkbox" name="is_reseller" value="1" @checked(old('is_reseller', $customer->is_reseller)) style="width:auto;">
+            Reseller
+        </label>
+    </div>
+    <div>
+        <label>Assigned Reseller</label>
+        <select id="reseller-id" name="reseller_id">
+            <option value="">Direct customer / no reseller</option>
+            @foreach ($resellers as $reseller)
+                <option value="{{ $reseller->id }}" @selected((int) old('reseller_id', $customer->reseller_id) === $reseller->id)>{{ $reseller->name }} — {{ $reseller->phone }}</option>
+            @endforeach
+        </select>
+        <span class="muted">A reseller account itself cannot be assigned under another reseller.</span>
+    </div>
+    <div>
+        <label>Reseller Daily Payment Limit</label>
+        <input id="reseller-limit" type="number" min="1" step="0.01" name="reseller_daily_payment_limit" value="{{ old('reseller_daily_payment_limit', $customer->reseller_daily_payment_limit) }}" placeholder="Blank means unlimited">
+    </div>
+    <div>
+        <label>Reseller Commission (%)</label>
+        <input id="reseller-commission" type="number" min="0" max="100" step="0.01" name="reseller_commission_percent" value="{{ old('reseller_commission_percent', $customer->reseller_commission_percent) }}">
+        <span class="muted">Changes are saved in commission history; old invoices keep their original percentage.</span>
     </div>
     <div>
         <label>Special ISP Customer</label>
@@ -79,4 +115,22 @@
     </div>
     <div class="full"><button class="btn" type="submit">Update Party</button></div>
 </form>
+<script>
+const fixedIpToggle = document.getElementById('use-fixed-ip');
+const fixedIpInput = document.getElementById('fixed-ip-address');
+const updateFixedIpInput = () => { fixedIpInput.required = fixedIpToggle.checked; };
+fixedIpToggle.addEventListener('change', updateFixedIpInput);
+updateFixedIpInput();
+const resellerToggle = document.getElementById('is-reseller');
+const resellerSelect = document.getElementById('reseller-id');
+const resellerLimit = document.getElementById('reseller-limit');
+const resellerCommission = document.getElementById('reseller-commission');
+const updateResellerFields = () => {
+    resellerSelect.disabled = resellerToggle.checked;
+    resellerLimit.disabled = ! resellerToggle.checked;
+    resellerCommission.disabled = ! resellerToggle.checked;
+};
+resellerToggle.addEventListener('change', updateResellerFields);
+updateResellerFields();
+</script>
 @endsection

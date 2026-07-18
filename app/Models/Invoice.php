@@ -16,6 +16,10 @@ class Invoice extends Model
     protected $fillable = [
         'entry_by',
         'customer_id',
+        'reseller_id',
+        'reseller_commission_percent',
+        'reseller_commission_amount',
+        'gross_total',
         'invoice_no',
         'billing_month',
         'invoice_type',
@@ -80,6 +84,11 @@ class Invoice extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function reseller(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class, 'reseller_id');
     }
 
     public function payments(): HasMany

@@ -6,6 +6,7 @@ use App\Models\MikrotikRouter;
 use App\Services\MikrotikCustomerSyncService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -70,7 +71,7 @@ Artisan::command('mikrotik:sync-router-users {--force : Sync every active router
 
             try {
                 $summary = $syncService->syncRouter($router);
-                $summaryText = "created={$summary['created']}, updated={$summary['updated']}, inactive_profile={$summary['moved_inactive']}, skipped={$summary['skipped']}, failed={$summary['failed']}";
+                $summaryText = "active_sessions={$summary['active_sessions_captured']}, created={$summary['created']}, updated={$summary['updated']}, inactive_profile={$summary['moved_inactive']}, skipped={$summary['skipped']}, failed={$summary['failed']}";
 
                 $router->update([
                     'last_pppoe_sync_at' => now(),
@@ -157,3 +158,7 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
 
     return self::SUCCESS;
 })->purpose('Disable non-special customers with overdue due invoices and sync MikroTik inactive profile');
+
+Schedule::command('mikrotik:sync-router-users')
+    ->hourly()
+    ->withoutOverlapping();

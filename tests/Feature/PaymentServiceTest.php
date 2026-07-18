@@ -742,6 +742,43 @@ class PaymentServiceTest extends TestCase
         $this->assertStringContainsString('Paid after grace.', $customer->notes);
     }
 
+    public function test_decimal_payment_math_does_not_leave_a_one_cent_residual(): void
+    {
+        $customer = $this->createCustomer();
+        $invoice = $this->createInvoice($customer, '2026-07', 0.30, '2026-07-10');
+
+        $this->paymentService()->addAdvanceCredit($customer, [
+            'amount' => 0.10,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-07-01',
+        ]);
+        $this->paymentService()->recordPayment($invoice, [
+            'amount' => 0.20,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-07-02',
+        ]);
+
+        $this->assertSame(0.0, (float) $invoice->refresh()->due_amount);
+        $this->assertSame(0.30, (float) $invoice->paid_amount);
+        $this->assertSame('paid', $invoice->status);
+        $this->assertSame(0.0, (float) $customer->refresh()->account_balance);
+    }
+
+    public function test_customer_payment_form_prefills_the_exact_total_due(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = $this->createCustomer();
+        $this->createInvoice($customer, '2026-07', 500, '2026-07-10');
+
+        $this->actingAs($user)
+            ->get(route('customers.payments.create', $customer))
+            ->assertOk()
+            ->assertSee('type="text" inputmode="decimal"', false)
+            ->assertSee('value="500.00"', false)
+            ->assertSee('This field has no mouse-wheel or arrow-step adjustment.');
+    }
+
     private function paymentService(): PaymentService
     {
         return new PaymentService($this->createMock(MikrotikCustomerSyncService::class));

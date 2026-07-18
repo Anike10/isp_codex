@@ -32,16 +32,16 @@ class PaymentService
                 throw new InvalidArgumentException('This invoice is already paid.');
             }
 
-            $oldAdvanceBalance = (float) $customer->account_balance;
+            $oldAdvanceBalance = $this->money($customer->account_balance);
             $advanceRemaining = $oldAdvanceBalance;
-            $paymentRemaining = (float) $data['amount'];
+            $paymentRemaining = $this->money($data['amount']);
             $paymentDate = $data['payment_date'];
 
             $payment = Payment::create([
                 'entry_by' => $data['entry_by'] ?? null,
                 'customer_id' => $invoice->customer_id,
                 'invoice_id' => $invoice->id,
-                'amount' => $data['amount'],
+                'amount' => $paymentRemaining,
                 'payment_method' => $data['payment_method'],
                 'payment_account_id' => $data['payment_account_id'] ?? null,
                 'payment_date' => $data['payment_date'],
@@ -62,8 +62,8 @@ class PaymentService
                     break;
                 }
 
-                $dueBeforePayment = (float) $dueInvoice->due_amount;
-                $advanceApplied = min($advanceRemaining, $dueBeforePayment);
+                $dueBeforePayment = $this->money($dueInvoice->due_amount);
+                $advanceApplied = $this->money(min($advanceRemaining, $dueBeforePayment));
 
                 if ($advanceApplied > 0) {
                     PaymentAllocation::create([
@@ -77,11 +77,11 @@ class PaymentService
                         'note' => 'Applied from customer advance balance.',
                     ]);
 
-                    $advanceRemaining -= $advanceApplied;
-                    $dueBeforePayment -= $advanceApplied;
+                    $advanceRemaining = $this->money($advanceRemaining - $advanceApplied);
+                    $dueBeforePayment = $this->money($dueBeforePayment - $advanceApplied);
                 }
 
-                $paymentApplied = min($paymentRemaining, $dueBeforePayment);
+                $paymentApplied = $this->money(min($paymentRemaining, $dueBeforePayment));
 
                 if ($paymentApplied > 0) {
                     PaymentAllocation::create([
@@ -95,21 +95,21 @@ class PaymentService
                         'note' => $data['note'] ?? null,
                     ]);
 
-                    $paymentRemaining -= $paymentApplied;
+                    $paymentRemaining = $this->money($paymentRemaining - $paymentApplied);
                 }
 
-                $paidAgainstInvoice = $advanceApplied + $paymentApplied;
+                $paidAgainstInvoice = $this->money($advanceApplied + $paymentApplied);
 
                 if ($paidAgainstInvoice <= 0) {
                     continue;
                 }
 
-                $dueInvoice->paid_amount += $paidAgainstInvoice;
+                $dueInvoice->paid_amount = $this->money((float) $dueInvoice->paid_amount + $paidAgainstInvoice);
                 $dueInvoice->recalculateSettlement();
             }
 
-            $advanceUsed = $oldAdvanceBalance - $advanceRemaining;
-            $newAdvanceBalance = $advanceRemaining + $paymentRemaining;
+            $advanceUsed = $this->money($oldAdvanceBalance - $advanceRemaining);
+            $newAdvanceBalance = $this->money($advanceRemaining + $paymentRemaining);
 
             if ($advanceUsed > 0) {
                 CustomerBalanceTransaction::create([
@@ -235,7 +235,7 @@ class PaymentService
                     'note' => $data['note'] ?? 'Bulk payment from selected invoices.',
                 ]);
 
-                $invoice->paid_amount += $amount;
+                $invoice->paid_amount = $this->money((float) $invoice->paid_amount + $amount);
                 $invoice->recalculateSettlement();
             }
 
@@ -282,7 +282,8 @@ class PaymentService
 
         return DB::transaction(function () use ($customer, $data) {
             $customer = Customer::whereKey($customer->id)->lockForUpdate()->firstOrFail();
-            $balanceAfter = (float) $customer->account_balance + (float) $data['amount'];
+            $amount = $this->money($data['amount']);
+            $balanceAfter = $this->money((float) $customer->account_balance + $amount);
 
             $transaction = CustomerBalanceTransaction::create([
                 'entry_by' => $data['entry_by'] ?? null,
@@ -291,7 +292,7 @@ class PaymentService
                 'payment_account_id' => $data['payment_account_id'] ?? null,
                 'payment_method' => $data['payment_method'] ?? null,
                 'direction' => 'credit',
-                'amount' => $data['amount'],
+                'amount' => $amount,
                 'balance_after' => $balanceAfter,
                 'transaction_date' => $data['payment_date'] ?? now()->toDateString(),
                 'reference' => $data['reference'] ?? null,
@@ -302,6 +303,137 @@ class PaymentService
 
             return $transaction;
         });
+    }
+
+    public function applyResellerWalletToInvoice(Customer $reseller, Invoice $invoice, array $data): PaymentAllocation
+    {
+        $amount = round((float) ($data['amount'] ?? 0), 2);
+        $operationKey = (string) ($data['operation_key'] ?? '');
+        $paymentDate = (string) ($data['payment_date'] ?? now()->toDateString());
+
+        if ($amount <= 0) {
+            throw new InvalidArgumentException('Payment amount must be greater than zero.');
+        }
+
+        if ($operationKey === '') {
+            throw new InvalidArgumentException('A unique payment operation key is required.');
+        }
+
+        $allocation = DB::transaction(function () use ($reseller, $invoice, $data, $amount, $operationKey, $paymentDate) {
+            $reseller = Customer::query()->whereKey($reseller->id)->lockForUpdate()->firstOrFail();
+
+            $existing = PaymentAllocation::query()->where('operation_key', $operationKey)->first();
+            if ($existing) {
+                if ((int) $existing->funded_by_customer_id !== (int) $reseller->id) {
+                    throw new InvalidArgumentException('This payment operation key has already been used.');
+                }
+
+                return $existing;
+            }
+
+            $invoice = Invoice::query()->with('customer')->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            $customer = $invoice->customer;
+
+            if (! $reseller->is_reseller || $reseller->status !== 'active') {
+                throw new InvalidArgumentException('The reseller wallet is not active.');
+            }
+
+            if ((int) $customer->reseller_id !== (int) $reseller->id) {
+                throw new InvalidArgumentException('This customer is not assigned to the reseller.');
+            }
+
+            if ((float) $invoice->due_amount <= 0) {
+                throw new InvalidArgumentException('This invoice is already paid.');
+            }
+
+            if ($amount > (float) $invoice->due_amount) {
+                throw new InvalidArgumentException('Payment cannot be greater than the invoice due amount.');
+            }
+
+            if ($amount > (float) $reseller->account_balance) {
+                throw new InvalidArgumentException('The reseller wallet has insufficient balance.');
+            }
+
+            $dailyLimit = $reseller->reseller_daily_payment_limit !== null
+                ? (float) $reseller->reseller_daily_payment_limit
+                : null;
+            $spentToday = (float) CustomerBalanceTransaction::query()
+                ->where('customer_id', $reseller->id)
+                ->where('payment_method', 'reseller_wallet')
+                ->where('direction', 'debit')
+                ->whereDate('transaction_date', $paymentDate)
+                ->sum('amount');
+
+            if ($dailyLimit !== null && round($spentToday + $amount, 2) > $dailyLimit) {
+                $remaining = max(0, $dailyLimit - $spentToday);
+                throw new InvalidArgumentException('Daily reseller payment limit exceeded. Remaining today: '.number_format($remaining, 2).'.');
+            }
+
+            $allocation = PaymentAllocation::create([
+                'entry_by' => $data['entry_by'] ?? null,
+                'customer_id' => $customer->id,
+                'funded_by_customer_id' => $reseller->id,
+                'invoice_id' => $invoice->id,
+                'payment_id' => null,
+                'source_type' => 'reseller_wallet',
+                'operation_key' => $operationKey,
+                'amount' => $amount,
+                'allocated_at' => $paymentDate,
+                'note' => $data['note'] ?? 'Paid from reseller wallet.',
+            ]);
+
+            $invoice->paid_amount = $this->money((float) $invoice->paid_amount + $amount);
+            $invoice->recalculateSettlement();
+
+            $balanceAfter = round((float) $reseller->account_balance - $amount, 2);
+            CustomerBalanceTransaction::create([
+                'entry_by' => $data['entry_by'] ?? null,
+                'customer_id' => $reseller->id,
+                'payment_id' => null,
+                'invoice_id' => $invoice->id,
+                'payment_account_id' => null,
+                'payment_method' => 'reseller_wallet',
+                'direction' => 'debit',
+                'amount' => $amount,
+                'balance_after' => $balanceAfter,
+                'transaction_date' => $paymentDate,
+                'reference' => 'INV-'.$invoice->id,
+                'operation_key' => $operationKey,
+                'note' => $data['note'] ?? 'Invoice paid from reseller wallet for '.$customer->name.'.',
+            ]);
+            $reseller->update(['account_balance' => $balanceAfter]);
+
+            return $allocation;
+        });
+
+        if (! $allocation->wasRecentlyCreated) {
+            return $allocation;
+        }
+
+        $invoice = Invoice::query()->with('customer')->findOrFail($allocation->invoice_id);
+        $customer = $invoice->customer;
+
+        if ((float) Invoice::query()->where('customer_id', $customer->id)->where('due_amount', '>', 0)->sum('due_amount') <= 0) {
+            $this->activatePaidServiceValidity($customer, $paymentDate, $data['note'] ?? 'Paid from reseller wallet.');
+            $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
+
+            if ($subscription) {
+                $subscription->update(['status' => 'active', 'end_date' => null]);
+            }
+
+            try {
+                $this->mikrotikSyncService->sync($customer->refresh());
+            } catch (Throwable $exception) {
+                Log::warning('MikroTik sync failed after reseller wallet payment.', [
+                    'reseller_id' => $reseller->id,
+                    'customer_id' => $customer->id,
+                    'invoice_id' => $invoice->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        return $allocation;
     }
 
     public function applyAdvanceToInvoice(Customer $customer, Invoice $invoice, array $data): PaymentAllocation
@@ -318,9 +450,9 @@ class PaymentService
                 throw new InvalidArgumentException('This invoice does not belong to the selected customer.');
             }
 
-            $amount = (float) $data['amount'];
-            $currentBalance = (float) $customer->account_balance;
-            $currentDue = (float) $invoice->due_amount;
+            $amount = $this->money($data['amount']);
+            $currentBalance = $this->money($customer->account_balance);
+            $currentDue = $this->money($invoice->due_amount);
 
             if ($currentBalance <= 0) {
                 throw new InvalidArgumentException('This customer has no advance balance to apply.');
@@ -349,10 +481,10 @@ class PaymentService
                 'note' => $data['note'] ?? 'Applied from customer advance balance.',
             ]);
 
-            $invoice->paid_amount += $amount;
+            $invoice->paid_amount = $this->money((float) $invoice->paid_amount + $amount);
             $invoice->recalculateSettlement();
 
-            $balanceAfter = max(0, $currentBalance - $amount);
+            $balanceAfter = $this->money(max(0, $currentBalance - $amount));
 
             CustomerBalanceTransaction::create([
                 'entry_by' => $data['entry_by'] ?? null,
@@ -456,5 +588,10 @@ class PaymentService
             'grace_used_at' => null,
             'notes' => trim(implode("\n", array_filter([$customer->notes, $detail]))),
         ]);
+    }
+
+    private function money(mixed $amount): float
+    {
+        return round((float) $amount, 2);
     }
 }

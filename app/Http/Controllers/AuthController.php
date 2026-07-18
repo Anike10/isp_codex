@@ -27,6 +27,11 @@ class AuthController extends Controller
 
         $request->session()->regenerate();
 
+        $user = $request->user();
+        if (! $user->hasPermission('view_dashboard') && $user->hasPermission('use_reseller_portal')) {
+            return redirect()->route('reseller.dashboard');
+        }
+
         return redirect()->intended(route('dashboard'));
     }
 

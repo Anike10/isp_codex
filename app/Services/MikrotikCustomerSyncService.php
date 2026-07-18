@@ -57,11 +57,13 @@ class MikrotikCustomerSyncService
             'moved_inactive' => 0,
             'skipped' => 0,
             'failed' => 0,
+            'active_sessions_captured' => 0,
             'messages' => [],
         ];
 
         try {
             $client->connect($router->ip_address, $router->api_port, $router->username, $router->password);
+            $summary['active_sessions_captured'] = $this->captureActiveSessions($client, $router);
 
             Customer::query()
                 ->with('activeSubscription.package')
@@ -97,6 +99,91 @@ class MikrotikCustomerSyncService
         return $summary;
     }
 
+    public function captureActiveSessions(RouterOsClient $client, MikrotikRouter $router): int
+    {
+        $sessions = collect($client->command('/ppp/active/print', [
+            '.proplist' => '.id,name,address,caller-id,profile,service',
+        ]))->filter(fn (array $session) => ! blank($session['name'] ?? null));
+
+        if ($sessions->isEmpty()) {
+            return 0;
+        }
+
+        $names = $sessions->pluck('name')->map(fn ($name) => trim((string) $name))->filter()->unique()->values();
+        $customers = Customer::query()
+            ->with('activeSubscription.package')
+            ->where(function ($query) use ($router): void {
+                $query->whereNull('mikrotik_router_id')
+                    ->orWhere('mikrotik_router_id', $router->id);
+            })
+            ->where(function ($query) use ($names): void {
+                $query->whereIn('mikrotik_username', $names)
+                    ->orWhereIn('connection_id', $names);
+            })
+            ->get();
+
+        $customersByUsername = collect();
+        foreach ($customers as $customer) {
+            foreach (array_unique(array_filter([$customer->mikrotik_username, $customer->connection_id])) as $username) {
+                $customersByUsername->put((string) $username, $customer);
+            }
+        }
+
+        $captured = 0;
+        foreach ($sessions as $session) {
+            $username = trim((string) $session['name']);
+            /** @var Customer|null $customer */
+            $customer = $customersByUsername->get($username);
+            if (! $customer) {
+                continue;
+            }
+
+            $ipAddress = trim((string) ($session['address'] ?? '')) ?: null;
+            $callerId = trim((string) ($session['caller-id'] ?? '')) ?: null;
+            $package = $customer->activeSubscription?->package;
+            $expectedProfile = $package?->mikrotik_profile ?: $package?->name;
+            $sessionProfile = trim((string) ($session['profile'] ?? '')) ?: null;
+            $isCurrentPackageSession = $package
+                && (! $sessionProfile || $sessionProfile === $expectedProfile);
+
+            $updates = ['last_connected_at' => now()];
+            if ($ipAddress) {
+                $updates['last_connected_ip'] = $ipAddress;
+            }
+            if ($callerId) {
+                $updates['last_connected_mac'] = $this->normalizeMacAddress($callerId);
+            }
+
+            if (! $customer->use_fixed_ip && $isCurrentPackageSession && $ipAddress) {
+                $updates['learned_ip_address'] = $ipAddress;
+                $updates['learned_ip_package_id'] = $package->id;
+            }
+
+            $customer->forceFill($updates)->save();
+
+            $remoteAddress = $customer->use_fixed_ip
+                ? $customer->fixed_ip_address
+                : ($isCurrentPackageSession ? $ipAddress : null);
+
+            if ($remoteAddress) {
+                $secret = $client->command('/ppp/secret/print', [
+                    '?name' => $username,
+                    '.proplist' => '.id,remote-address',
+                ]);
+                if ($secret !== [] && ($secret[0]['remote-address'] ?? null) !== $remoteAddress) {
+                    $client->command('/ppp/secret/set', [
+                        '.id' => $secret[0]['.id'],
+                        'remote-address' => $remoteAddress,
+                    ]);
+                }
+            }
+
+            $captured++;
+        }
+
+        return $captured;
+    }
+
     private function syncPppSecret(RouterOsClient $client, Customer $customer, MikrotikRouter $router): string
     {
         $username = $customer->mikrotik_username ?: $customer->connection_id;
@@ -110,13 +197,19 @@ class MikrotikCustomerSyncService
         $package = $subscription?->package;
         $inactive = $customer->status !== 'active' || ! $subscription || $subscription->status !== 'active' || ! $package;
         $profile = $inactive ? $router->inactive_pppoe_profile : ($package?->mikrotik_profile ?: $package?->name);
+        $remoteAddress = $this->remoteAddressFor($customer, $package?->id);
 
         $existing = $client->command('/ppp/secret/print', [
             '?name' => $username,
-            '.proplist' => '.id,profile,disabled',
+            '.proplist' => '.id,profile,disabled,remote-address',
         ]);
 
-        $this->ensurePppProfile($client, $profile, $inactive ? null : $package?->default_ip_pool);
+        $this->ensurePppProfile(
+            $client,
+            $profile,
+            $inactive ? null : $package?->default_ip_pool,
+            $inactive ? null : $this->rateLimitFromSpeed($package?->speed),
+        );
 
         $payload = [
             'name' => $username,
@@ -126,9 +219,13 @@ class MikrotikCustomerSyncService
             'comment' => $customer->name,
             'disabled' => 'no',
         ];
+        if ($remoteAddress) {
+            $payload['remote-address'] = $remoteAddress;
+        }
 
         $oldProfile = $existing[0]['profile'] ?? null;
         $oldDisabled = $existing[0]['disabled'] ?? null;
+        $oldRemoteAddress = $existing[0]['remote-address'] ?? null;
 
         if ($existing === []) {
             $client->command('/ppp/secret/add', $payload);
@@ -138,32 +235,37 @@ class MikrotikCustomerSyncService
         }
 
         unset($payload['name']);
+        $payload['remote-address'] = $remoteAddress ?: '';
 
         $client->command('/ppp/secret/set', [
             '.id' => $existing[0]['.id'],
             ...$payload,
         ]);
 
-        if ($oldProfile !== $profile || $oldDisabled === 'true') {
+        if ($oldProfile !== $profile || $oldDisabled === 'true' || ($oldRemoteAddress ?: null) !== ($remoteAddress ?: null)) {
             $this->disconnectActiveSession($client, $username);
         }
 
         return $inactive ? 'moved_inactive' : 'updated';
     }
 
-    private function ensurePppProfile(RouterOsClient $client, string $profile, ?string $defaultIpPool = null): void
+    private function ensurePppProfile(RouterOsClient $client, string $profile, ?string $defaultIpPool = null, ?string $rateLimit = null): void
     {
         $existing = $client->command('/ppp/profile/print', [
             '?name' => $profile,
-            '.proplist' => '.id,remote-address',
+            '.proplist' => '.id,remote-address,rate-limit',
         ]);
 
         if ($existing !== []) {
+            $changes = [];
             if ($defaultIpPool && ($existing[0]['remote-address'] ?? null) !== $defaultIpPool) {
-                $client->command('/ppp/profile/set', [
-                    '.id' => $existing[0]['.id'],
-                    'remote-address' => $defaultIpPool,
-                ]);
+                $changes['remote-address'] = $defaultIpPool;
+            }
+            if ($rateLimit && ($existing[0]['rate-limit'] ?? null) !== $rateLimit) {
+                $changes['rate-limit'] = $rateLimit;
+            }
+            if ($changes !== []) {
+                $client->command('/ppp/profile/set', ['.id' => $existing[0]['.id'], ...$changes]);
             }
 
             return;
@@ -175,7 +277,55 @@ class MikrotikCustomerSyncService
         if ($defaultIpPool) {
             $attributes['remote-address'] = $defaultIpPool;
         }
+        if ($rateLimit) {
+            $attributes['rate-limit'] = $rateLimit;
+        }
         $client->command('/ppp/profile/add', $attributes);
+    }
+
+    private function remoteAddressFor(Customer $customer, ?int $packageId): ?string
+    {
+        if ($customer->use_fixed_ip) {
+            return $customer->fixed_ip_address ?: null;
+        }
+
+        if ($packageId && (int) $customer->learned_ip_package_id === $packageId) {
+            return $customer->learned_ip_address ?: null;
+        }
+
+        return null;
+    }
+
+    private function rateLimitFromSpeed(?string $speed): ?string
+    {
+        $speed = trim((string) $speed);
+        if ($speed === '') {
+            return null;
+        }
+        if (str_contains($speed, '/')) {
+            return $speed;
+        }
+        if (! preg_match('/(\d+(?:\.\d+)?)\s*(gbps|g|mbps|m|kbps|k)\b/i', $speed, $matches)) {
+            return null;
+        }
+
+        $unit = strtolower($matches[2]);
+        $suffix = str_starts_with($unit, 'g') ? 'G' : (str_starts_with($unit, 'k') ? 'k' : 'M');
+        $value = rtrim(rtrim(number_format((float) $matches[1], 3, '.', ''), '0'), '.');
+        $rate = $value.$suffix;
+
+        return $rate.'/'.$rate;
+    }
+
+    private function normalizeMacAddress(?string $callerId): ?string
+    {
+        if (! $callerId) {
+            return null;
+        }
+
+        return preg_match('/^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/i', $callerId)
+            ? strtoupper($callerId)
+            : $callerId;
     }
 
     private function disconnectActiveSession(RouterOsClient $client, string $username): void

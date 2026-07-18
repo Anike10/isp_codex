@@ -13,9 +13,11 @@ class PaymentAllocation extends Model
     protected $fillable = [
         'entry_by',
         'customer_id',
+        'funded_by_customer_id',
         'invoice_id',
         'payment_id',
         'source_type',
+        'operation_key',
         'amount',
         'allocated_at',
         'note',
@@ -37,6 +39,11 @@ class PaymentAllocation extends Model
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function fundedByCustomer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class, 'funded_by_customer_id');
     }
 
     public function payment(): BelongsTo

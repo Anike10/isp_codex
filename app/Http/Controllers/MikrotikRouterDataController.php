@@ -309,6 +309,42 @@ class MikrotikRouterDataController extends Controller
         return response()->json(['message' => 'Updated in the available App/MikroTik target(s).']);
     }
 
+    public function deleteAppItem(Request $request, MikrotikRouter $mikrotikRouter)
+    {
+        $data = $request->validate([
+            'type' => ['required', 'in:profile,secret'],
+            'app_id' => ['required', 'integer'],
+        ]);
+
+        if ($data['type'] === 'profile') {
+            $package = InternetPackage::findOrFail($data['app_id']);
+            $profileName = $package->mikrotik_profile ?: $package->name;
+            $package->update([
+                'mikrotik_profile' => null,
+                'default_ip_pool' => null,
+            ]);
+
+            return back()->with('success', "Profile {$profileName} removed from the App comparison. The package and MikroTik profile were not deleted.");
+        }
+
+        $customer = Customer::query()
+            ->whereKey($data['app_id'])
+            ->where(function ($query) use ($mikrotikRouter): void {
+                $query->where('mikrotik_router_id', $mikrotikRouter->id)
+                    ->orWhereNull('mikrotik_router_id');
+            })
+            ->firstOrFail();
+        $connectionId = $customer->connection_id;
+        $customer->update([
+            'connection_id' => null,
+            'mikrotik_username' => null,
+            'mikrotik_password' => null,
+            'mikrotik_router_id' => null,
+        ]);
+
+        return back()->with('success', "PPPoE mapping {$connectionId} removed from the App comparison. The party, billing records, and MikroTik user were not deleted.");
+    }
+
     public function compare(MikrotikRouter $mikrotikRouter, MikrotikImportService $service)
     {
         $liveDataAvailable = true;

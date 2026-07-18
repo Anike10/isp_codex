@@ -536,6 +536,12 @@
 
             return $words.' Only';
         };
+        $grossTotal = (float) ($invoice->gross_total ?: $invoice->total);
+        $netTotal = (float) $invoice->total;
+        $commissionAmount = (float) ($invoice->reseller_commission_amount ?? 0);
+        $netDiscount = (float) $invoice->discount;
+        $fullDiscount = max(0, $netDiscount - $commissionAmount);
+        $fullDue = max(0, $grossTotal - (float) $invoice->paid_amount);
     @endphp
 
     <div class="toolbar">
@@ -547,6 +553,12 @@
             <input type="checkbox" id="noSignatureOption" @checked($selectedOrganization->default_without_signature)>
             Print without signature
         </label>
+        @if($commissionAmount > 0)
+            <label class="print-option">
+                <input type="checkbox" id="totalPayableOption">
+                Total Payable (show full amount)
+            </label>
+        @endif
         @if(filled($selectedOrganization->bank_account_number))
             <label class="print-option">
                 <input type="checkbox" id="showBankInformationOption" @checked($selectedOrganization->show_bank_info_on_invoice)>
@@ -664,21 +676,20 @@
 
             <div class="totals">
                 <div class="total-row"><span>Subtotal</span><span>{{ number_format($invoice->subtotal, 2) }}</span></div>
-                @if ((float) $invoice->discount > 0)
-                    <div class="total-row"><span>Discount</span><span>{{ number_format($invoice->discount, 2) }}</span></div>
-                @endif
+                <div class="total-row" id="invoiceDiscountRow" @if($netDiscount <= 0) style="display:none" @endif><span id="invoiceDiscountLabel">Discount</span><span id="invoiceDiscountAmount">{{ number_format($netDiscount, 2) }}</span></div>
+                @if($commissionAmount > 0)<div class="total-row" id="resellerCommissionRow"><span>Reseller commission ({{ number_format((float)$invoice->reseller_commission_percent, 2) }}%)</span><span>{{ number_format($commissionAmount, 2) }}</span></div>@endif
                 @if ((float) ($invoice->vat ?? 0) > 0)
                     <div class="total-row"><span>VAT</span><span>{{ number_format($invoice->vat, 2) }}</span></div>
                 @endif
-                <div class="total-row grand"><span>Total</span><span>{{ number_format($invoice->total, 2) }}</span></div>
+                <div class="total-row grand"><span>Total</span><span id="invoicePrintTotal">{{ number_format($netTotal, 2) }}</span></div>
                 <div class="total-row"><span>Paid</span><span>{{ number_format($invoice->paid_amount, 2) }}</span></div>
-                <div class="total-row"><span>Due</span><span>{{ number_format($invoice->due_amount, 2) }}</span></div>
+                <div class="total-row"><span>Due</span><span id="invoicePrintDue">{{ number_format($invoice->due_amount, 2) }}</span></div>
             </div>
         </section>
 
         <div class="amount-words">
             <span class="strong">Amount in Words:</span>
-            {{ $amountInWords((float) $invoice->total) }}
+            <span id="invoiceAmountWords">{{ $amountInWords($netTotal) }}</span>
         </div>
 
         <section class="signatures">
@@ -707,6 +718,18 @@
         const showBankInformationOption = document.getElementById('showBankInformationOption');
         showBankInformationOption?.addEventListener('change', function () {
             document.body.classList.toggle('show-bank-information', this.checked);
+        });
+
+        const totalPayableOption = document.getElementById('totalPayableOption');
+        totalPayableOption?.addEventListener('change', function () {
+            const showFull = this.checked;
+            const discount = showFull ? {{ json_encode($fullDiscount) }} : {{ json_encode($netDiscount) }};
+            document.getElementById('invoicePrintTotal').textContent = (showFull ? {{ json_encode($grossTotal) }} : {{ json_encode($netTotal) }}).toFixed(2);
+            document.getElementById('invoicePrintDue').textContent = (showFull ? {{ json_encode($fullDue) }} : {{ json_encode((float)$invoice->due_amount) }}).toFixed(2);
+            document.getElementById('invoiceAmountWords').textContent = showFull ? @json($amountInWords($grossTotal)) : @json($amountInWords($netTotal));
+            document.getElementById('invoiceDiscountAmount').textContent = Number(discount).toFixed(2);
+            document.getElementById('invoiceDiscountRow').style.display = discount > 0 ? 'flex' : 'none';
+            document.getElementById('resellerCommissionRow')?.style.setProperty('display', showFull ? 'none' : 'flex');
         });
 
         document.querySelectorAll('input[name="print_mode"]').forEach((input) => {

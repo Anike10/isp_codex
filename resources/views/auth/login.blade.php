@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}?v=us-20260718">
     <title>Login - {{ $appOrganization?->name ?? config('app.name') }}</title>
     <style>
         :root { --ink:#172033; --muted:#667085; --line:#d8dee9; --bg:#f4f7fb; --brand:#116149; --danger:#b42318; }

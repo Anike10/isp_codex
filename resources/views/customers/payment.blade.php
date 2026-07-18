@@ -129,7 +129,8 @@
     <div class="payment-field-row">
         <div>
             <label>Amount</label>
-            <input type="number" step="0.01" min="1" name="amount" id="amountInput" value="{{ old('amount') }}" required>
+            <input type="text" inputmode="decimal" autocomplete="off" name="amount" id="amountInput" value="{{ old('amount', $totalDue > 0 ? number_format($totalDue, 2, '.', '') : '') }}" required>
+            <div class="muted">The exact current due is filled automatically. This field has no mouse-wheel or arrow-step adjustment.</div>
             <div class="payment-summary muted" id="paymentPreview">Enter amount to preview due and balance update.</div>
         </div>
         <div>

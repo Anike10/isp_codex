@@ -14,6 +14,7 @@ class CustomerBalanceTransaction extends Model
         'entry_by',
         'customer_id',
         'payment_id',
+        'invoice_id',
         'payment_account_id',
         'payment_method',
         'direction',
@@ -21,6 +22,7 @@ class CustomerBalanceTransaction extends Model
         'balance_after',
         'transaction_date',
         'reference',
+        'operation_key',
         'note',
     ];
 
@@ -41,6 +43,11 @@ class CustomerBalanceTransaction extends Model
     public function payment(): BelongsTo
     {
         return $this->belongsTo(Payment::class);
+    }
+
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class);
     }
 
     public function account(): BelongsTo
