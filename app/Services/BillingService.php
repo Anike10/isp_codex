@@ -90,6 +90,41 @@ class BillingService
         return null;
     }
 
+    /**
+     * Remove only the reseller commission discount before a wallet payment.
+     * Cash/bank accounting is intentionally not involved in this operation.
+     */
+    public function makeInvoiceWithoutResellerCommission(Invoice $invoice, Customer $reseller): Invoice
+    {
+        return DB::transaction(function () use ($invoice, $reseller): Invoice {
+            $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+
+            if ((int) $invoice->customer?->reseller_id !== (int) $reseller->id) {
+                throw new \InvalidArgumentException('This invoice does not belong to a party assigned to the reseller.');
+            }
+
+            if ((float) $invoice->paid_amount > 0 || $invoice->allocations()->exists()) {
+                throw new \InvalidArgumentException('Without Commission cannot be applied after an invoice has received a payment.');
+            }
+
+            $grossTotal = round((float) ($invoice->gross_total ?? $invoice->subtotal), 2);
+            $invoice->update([
+                'reseller_id' => $reseller->id,
+                'reseller_commission_percent' => 0,
+                'reseller_commission_amount' => 0,
+                'gross_total' => $grossTotal,
+                'discount' => 0,
+                'discount_type' => 'amount',
+                'discount_value' => 0,
+                'total' => $grossTotal,
+                'due_amount' => $grossTotal,
+                'status' => 'unpaid',
+            ]);
+
+            return $invoice->refresh();
+        });
+    }
+
     private function createServiceInvoice(Subscription $subscription, Carbon $month): Invoice
     {
         return DB::transaction(function () use ($subscription, $month) {

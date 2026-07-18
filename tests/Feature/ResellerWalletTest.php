@@ -170,9 +170,18 @@ class ResellerWalletTest extends TestCase
         $user = User::factory()->create(['reseller_id' => $reseller->id]);
         $user->permissions()->attach(Permission::where('name', 'use_reseller_portal')->firstOrFail());
 
+        $this->actingAs($user)
+            ->get(route('reseller.customers.payments.create', $customer))
+            ->assertOk()
+            ->assertSee('Pay from Reseller Advance')
+            ->assertSee('No cash/bank account entry will be created.')
+            ->assertSee('Without Commission')
+            ->assertDontSee('name="payment_account_id"', false)
+            ->assertDontSee('name="payment_method"', false);
+
         $this->actingAs($user)->post(route('reseller.customers.payments.store', $customer), [
             'amount' => 450,
-            'payment_method' => 'cash',
+            'operation_key' => (string) Str::uuid(),
             'payment_date' => now()->toDateString(),
         ])->assertRedirect(route('reseller.dashboard'));
 
@@ -182,6 +191,60 @@ class ResellerWalletTest extends TestCase
         $this->assertSame(450.0, (float) $invoice->paid_amount);
         $this->assertSame(0.0, (float) $invoice->due_amount);
         $this->assertSame('paid', $invoice->status);
+        $this->assertSame(550.0, (float) $reseller->refresh()->account_balance);
+        $this->assertDatabaseMissing('payments', ['customer_id' => $customer->id]);
+        $this->assertDatabaseHas('payment_allocations', [
+            'customer_id' => $customer->id,
+            'funded_by_customer_id' => $reseller->id,
+            'invoice_id' => $invoice->id,
+            'payment_id' => null,
+            'source_type' => 'reseller_wallet',
+            'amount' => 450,
+        ]);
+        $this->assertDatabaseHas('customer_balance_transactions', [
+            'customer_id' => $reseller->id,
+            'invoice_id' => $invoice->id,
+            'payment_account_id' => null,
+            'payment_method' => 'reseller_wallet',
+            'direction' => 'debit',
+            'amount' => 450,
+            'balance_after' => 550,
+        ]);
+    }
+
+    public function test_reseller_can_pay_full_package_price_without_commission_from_wallet_only(): void
+    {
+        $reseller = $this->createReseller(1000, 1000, 10);
+        $customer = $this->createCustomer($reseller, 'Full Price Customer');
+        $this->assignPackage($customer, 500);
+        $user = User::factory()->create(['reseller_id' => $reseller->id]);
+        $user->permissions()->attach(Permission::where('name', 'use_reseller_portal')->firstOrFail());
+
+        $this->actingAs($user)->post(route('reseller.customers.payments.store', $customer), [
+            'amount' => 500,
+            'operation_key' => (string) Str::uuid(),
+            'payment_date' => now()->toDateString(),
+            'without_commission' => 1,
+        ])->assertRedirect(route('reseller.dashboard'));
+
+        $invoice = Invoice::where('customer_id', $customer->id)->firstOrFail();
+        $this->assertSame($reseller->id, $invoice->reseller_id);
+        $this->assertSame(0.0, (float) $invoice->reseller_commission_percent);
+        $this->assertSame(0.0, (float) $invoice->reseller_commission_amount);
+        $this->assertSame(500.0, (float) $invoice->gross_total);
+        $this->assertSame(500.0, (float) $invoice->total);
+        $this->assertSame(500.0, (float) $invoice->paid_amount);
+        $this->assertSame(0.0, (float) $invoice->due_amount);
+        $this->assertSame(500.0, (float) $reseller->refresh()->account_balance);
+        $this->assertDatabaseMissing('payments', ['customer_id' => $customer->id]);
+        $this->assertDatabaseHas('customer_balance_transactions', [
+            'customer_id' => $reseller->id,
+            'invoice_id' => $invoice->id,
+            'payment_account_id' => null,
+            'payment_method' => 'reseller_wallet',
+            'direction' => 'debit',
+            'amount' => 500,
+        ]);
     }
 
     public function test_commission_change_is_saved_with_effective_time(): void

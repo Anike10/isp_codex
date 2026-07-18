@@ -56,6 +56,7 @@
                     <span>{{ $reseller->email ?: 'No email' }}</span>
                     <span>•</span>
                     <span class="badge {{ $reseller->status }}">{{ ucfirst($reseller->status) }}</span>
+                    @if($isAdminView)<span>•</span><span>Portal login: {{ $reseller->loginUsers->pluck('email')->join(', ') ?: 'Not created' }}</span>@endif
                 </div>
             </div>
             @if ($isAdminView)
@@ -63,7 +64,10 @@
                     <a class="btn light" href="{{ route('resellers.index') }}">All Resellers</a>
                     @if (auth()->user()?->hasPermission('manage_customers'))
                         <a class="btn secondary" href="{{ route('customers.payments.create', $reseller) }}">Add Wallet Balance</a>
-                        <a class="btn light" href="{{ route('customers.edit', $reseller) }}">Settings</a>
+                        <a class="btn light" href="{{ route('customers.edit', $reseller) }}">Edit Reseller</a>
+                    @endif
+                    @if (auth()->user()?->hasPermission('manage_users') && $reseller->loginUsers->isEmpty())
+                        <a class="btn light" href="{{ route('users.create', ['reseller_id' => $reseller->id]) }}">Create Login</a>
                     @endif
                 </div>
             @endif

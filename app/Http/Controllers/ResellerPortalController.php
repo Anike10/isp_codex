@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\CustomerBalanceTransaction;
 use App\Models\Invoice;
-use App\Models\PaymentAccount;
 use App\Services\BillingService;
 use App\Services\PaymentService;
 use App\Services\PrintContextService;
@@ -26,7 +25,7 @@ class ResellerPortalController extends Controller
     public function dashboardFor(Customer $reseller, bool $isAdminView)
     {
         $reseller->loadCount('resellerCustomers');
-        $reseller->load(['commissionHistories.changedByUser']);
+        $reseller->load(['commissionHistories.changedByUser', 'loginUsers.roles']);
         $customers = $reseller->resellerCustomers()
             ->with(['activeSubscription.package', 'latestInvoice'])
             ->withSum('invoices as total_due_amount', 'due_amount')
@@ -109,6 +108,14 @@ class ResellerPortalController extends Controller
         $grossPackagePrice = (float) ($customer->activeSubscription?->package?->monthly_price ?? 0);
         $commissionAmount = round($grossPackagePrice * (float) $reseller->reseller_commission_percent / 100, 2);
         $suggestedAmount = $dueTotal > 0 ? $dueTotal : max(0, $grossPackagePrice - $commissionAmount);
+        $spentToday = $this->spentOn($reseller, now()->toDateString());
+        $dailyRemaining = $reseller->reseller_daily_payment_limit === null
+            ? null
+            : max(0, (float) $reseller->reseller_daily_payment_limit - $spentToday);
+        $walletAvailable = $dailyRemaining === null
+            ? (float) $reseller->account_balance
+            : min((float) $reseller->account_balance, $dailyRemaining);
+        $suggestedAmount = min($suggestedAmount, $walletAvailable);
 
         return view('resellers.customer_payment', [
             'reseller' => $reseller,
@@ -117,50 +124,40 @@ class ResellerPortalController extends Controller
             'grossPackagePrice' => $grossPackagePrice,
             'commissionAmount' => $commissionAmount,
             'suggestedAmount' => $suggestedAmount,
-            'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
+            'spentToday' => $spentToday,
+            'dailyRemaining' => $dailyRemaining,
+            'walletAvailable' => $walletAvailable,
         ]);
     }
 
     public function storePayment(Request $request, Customer $customer, BillingService $billingService, PaymentService $paymentService)
     {
-        $this->authorizedResellerCustomer($request, $customer);
+        $reseller = $this->authorizedResellerCustomer($request, $customer);
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:1'],
-            'payment_method' => ['required', 'in:cash,bkash,nagad,bank'],
-            'payment_account_id' => ['nullable', 'exists:payment_accounts,id'],
+            'operation_key' => ['required', 'uuid'],
             'payment_date' => ['required', 'date'],
+            'without_commission' => ['nullable', 'boolean'],
             'note' => ['nullable', 'string', 'max:2000'],
         ]);
         $data['entry_by'] = $request->user()->id;
 
-        if ($data['payment_method'] === 'cash') {
-            $data['payment_account_id'] = null;
-        } else {
-            $account = PaymentAccount::query()
-                ->whereKey($data['payment_account_id'] ?? null)
-                ->where('payment_method', $data['payment_method'])
-                ->where('status', 'active')
-                ->first();
-
-            if (! $account) {
-                return back()->withInput()->withErrors(['payment_account_id' => 'Select a valid account for the payment method.']);
-            }
-        }
-
-        $billingService->generateCurrentServiceBillForCustomer($customer);
-        $invoice = $customer->invoices()->where('due_amount', '>', 0)->orderBy('due_date')->orderBy('id')->first();
+        $invoice = $billingService->generateNextRenewalServiceBillForCustomer($customer, $data['payment_date']);
 
         try {
             if ($invoice) {
-                $paymentService->recordPayment($invoice, $data);
+                if ((bool) ($data['without_commission'] ?? false)) {
+                    $invoice = $billingService->makeInvoiceWithoutResellerCommission($invoice, $reseller);
+                }
+                $paymentService->applyResellerWalletToInvoice($reseller, $invoice, $data);
             } else {
-                $paymentService->addAdvanceCredit($customer, $data);
+                return back()->withInput()->withErrors(['amount' => 'No payable invoice was found for this party.']);
             }
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
         }
 
-        return redirect()->route('reseller.dashboard')->with('success', 'Party payment recorded; invoice commission snapshot was preserved.');
+        return redirect()->route('reseller.dashboard')->with('success', 'Party invoice paid from reseller advance balance. No cash or bank account was posted again.');
     }
 
     public function printInvoice(Request $request, Invoice $invoice, PrintContextService $printContext)
