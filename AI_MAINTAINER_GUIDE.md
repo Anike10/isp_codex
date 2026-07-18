@@ -1376,10 +1376,11 @@ PPPoE sync:
   live connection checks return `Inactive`, and scheduled/customer PPPoE sync
   excludes it until an operator enables it again.
 - `internet_packages.default_ip_pool` is the App-selected RouterOS PPP profile
-  `remote-address`. Package edit shows this selection beside each router's last
-  imported `mikrotik_imported_profiles.remote_address`; no selection means keep
-  RouterOS/default behavior during customer sync. Explicit package export sets
-  or clears the profile remote-address.
+  `remote-address`. Package edit reads every active router live and shows the
+  current profile pool/default; on a connection failure it falls back to
+  `mikrotik_imported_profiles.remote_address` and labels the result as a
+  snapshot. No selection means keep RouterOS/default behavior during customer
+  sync. Explicit package export sets or clears the profile remote-address.
 
 ### OLT ONU Inventory
 

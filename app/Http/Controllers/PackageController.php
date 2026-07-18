@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\AppIpPool;
 use App\Models\InternetPackage;
 use App\Models\MikrotikImportedProfile;
+use App\Models\MikrotikRouter;
+use App\Services\MikrotikImportService;
 use Illuminate\Http\Request;
+use Throwable;
 
 class PackageController extends Controller
 {
@@ -39,18 +42,14 @@ class PackageController extends Controller
         ]);
     }
 
-    public function edit(InternetPackage $package)
+    public function edit(InternetPackage $package, MikrotikImportService $service)
     {
         $profileName = $package->mikrotik_profile ?: $package->name;
 
         return view('packages.create', [
             'package' => $package,
             'ipPoolNames' => $this->ipPoolNames(),
-            'runningPoolProfiles' => MikrotikImportedProfile::query()
-                ->with('router')
-                ->where('name', $profileName)
-                ->orderBy('mikrotik_router_id')
-                ->get(),
+            'runningPoolProfiles' => $this->runningPoolProfiles($profileName, $service),
         ]);
     }
 
@@ -135,5 +134,49 @@ class PackageController extends Controller
     private function ipPoolNames()
     {
         return AppIpPool::query()->select('name')->distinct()->orderBy('name')->pluck('name');
+    }
+
+    private function runningPoolProfiles(string $profileName, MikrotikImportService $service)
+    {
+        $snapshots = MikrotikImportedProfile::query()
+            ->where('name', $profileName)
+            ->get()
+            ->keyBy('mikrotik_router_id');
+
+        return MikrotikRouter::query()->orderBy('name')->get()->map(function (MikrotikRouter $router) use ($profileName, $service, $snapshots) {
+            $snapshot = $snapshots->get($router->id);
+
+            if ($router->status !== 'active') {
+                return (object) [
+                    'router' => $router,
+                    'remote_address' => $snapshot?->remote_address,
+                    'profile_found' => (bool) $snapshot,
+                    'source_label' => $snapshot ? 'Last imported · router disabled' : 'Router disabled',
+                    'checked_at' => $snapshot?->imported_at,
+                ];
+            }
+
+            try {
+                $live = collect($service->liveRecords($router, '/ppp/profile/print'))->firstWhere('name', $profileName);
+
+                return (object) [
+                    'router' => $router,
+                    'remote_address' => $live['remote-address'] ?? null,
+                    'profile_found' => (bool) $live,
+                    'source_label' => 'Live RouterOS',
+                    'checked_at' => now(),
+                ];
+            } catch (Throwable $exception) {
+                report($exception);
+
+                return (object) [
+                    'router' => $router,
+                    'remote_address' => $snapshot?->remote_address,
+                    'profile_found' => (bool) $snapshot,
+                    'source_label' => $snapshot ? 'Last imported · live unavailable' : 'Live unavailable',
+                    'checked_at' => $snapshot?->imported_at,
+                ];
+            }
+        });
     }
 }

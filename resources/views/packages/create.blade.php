@@ -49,15 +49,15 @@
                 <div style="display:flex;justify-content:space-between;gap:16px;padding:7px 0;border-bottom:1px solid var(--line)">
                     <span>{{ $runningProfile->router?->name ?? 'Unknown router' }}</span>
                     <span>
-                        <strong>{{ $runningProfile->remote_address ?: 'RouterOS default / none' }}</strong>
-                        @if ($package->default_ip_pool && $runningProfile->remote_address === $package->default_ip_pool)
+                        <strong>{{ $runningProfile->profile_found ? ($runningProfile->remote_address ?: 'RouterOS default / none') : 'Profile not found' }}</strong>
+                        @if ($runningProfile->profile_found && $package->default_ip_pool && $runningProfile->remote_address === $package->default_ip_pool)
                             <span class="badge active">Selected default</span>
                         @endif
-                        <span class="muted" style="display:block">Last imported: {{ $runningProfile->imported_at?->format('Y-m-d H:i:s') ?? 'Unknown' }}</span>
+                        <span class="muted" style="display:block">{{ $runningProfile->source_label }} · {{ $runningProfile->checked_at?->format('Y-m-d H:i:s') ?? 'No snapshot' }}</span>
                     </span>
                 </div>
             @empty
-                <div class="muted">এই package profile-এর কোনো imported RouterOS snapshot নেই। Router থেকে Profiles import করলে চলমান pool এখানে দেখা যাবে।</div>
+                <div class="muted">কোনো MikroTik router configured নেই।</div>
             @endforelse
         </div>
     @endif

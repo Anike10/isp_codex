@@ -9,6 +9,7 @@ use App\Models\MikrotikRouter;
 use App\Models\Permission;
 use App\Models\RecordVersion;
 use App\Models\User;
+use App\Services\MikrotikImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -90,11 +91,17 @@ class PackageControllerTest extends TestCase
             'remote_address' => 'home-pool', 'disabled' => false, 'imported_at' => now(),
         ]);
 
+        $service = $this->mock(MikrotikImportService::class);
+        $service->shouldReceive('liveRecords')->once()->withArgs(fn ($givenRouter, $command) =>
+            $givenRouter->id === $router->id && $command === '/ppp/profile/print')
+            ->andReturn([['.id' => '*1', 'name' => 'home20', 'remote-address' => 'home-pool']]);
+
         $this->actingAs($user)->get(route('packages.edit', $package))
             ->assertOk()
             ->assertSee('Default IP Pool')
             ->assertSee('value="home-pool" selected', false)
             ->assertSee('Main Router')
+            ->assertSee('Live RouterOS')
             ->assertSee('Selected default');
 
         $this->actingAs($user)->put(route('packages.update', $package), [
