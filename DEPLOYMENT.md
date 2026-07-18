@@ -10,11 +10,13 @@ credentials are needed.
 
 ```text
 Domain: isp.us.com.bd
-SSH host: 162.4.6.7
-SSH user: anike
-Laravel root: /home/finalaccess.com/public_html
-Runtime user: final4810
-Panel/server: CyberPanel / OpenLiteSpeed
+Proxmox SSH host: 162.4.6.8:22
+SSH user: root
+Production VM: 102 (anike-CyberPanel-Hosting)
+VM private IP: 192.168.8.252
+Laravel root inside VM: /home/isp.us.com.bd/isp_codex
+Runtime user inside VM: ispus3797
+Panel/server: Proxmox VE 9 host + CyberPanel/OpenLiteSpeed VM
 Environment: production
 APP_URL: https://isp.us.com.bd
 ```
@@ -22,8 +24,17 @@ APP_URL: https://isp.us.com.bd
 Known SSH host key fingerprint:
 
 ```text
-SHA256:CL6hp3uAz5yEuUYaRO3G2j5K4sW1UPyLCXmbcovDETQ
+SHA256:ajsC09Yg/+hgcn2YAETDOYavBgcqxEqQDQcyeYRd33c
 ```
+
+The fingerprint is for the Proxmox host on port 22. Never store its root
+password in this repository. Obtain it from the owner/approved secret source.
+
+Important state observed on 2026-07-18: the VM checkout contains many
+production hotfixes as modified/untracked files. Do not run `git pull`, reset,
+checkout, clean, or overwrite the whole tree until those changes have been
+reconciled and committed. Use a timestamped backup and deploy only verified
+target files when an urgent fix is required.
 
 ## What To Deploy
 
@@ -74,60 +85,56 @@ access. Do not deploy unpushed local-only changes unless there is an emergency.
 
 ## Connect To Production
 
-Windows PowerShell with PuTTY:
+Windows PowerShell with PuTTY (connects to the Proxmox host):
 
 ```powershell
-& 'C:\Program Files\PuTTY\plink.exe' -ssh anike@162.4.6.7 -hostkey 'SHA256:CL6hp3uAz5yEuUYaRO3G2j5K4sW1UPyLCXmbcovDETQ'
+& 'C:\Program Files\PuTTY\plink.exe' -P 22 -ssh root@162.4.6.8 -hostkey 'SHA256:ajsC09Yg/+hgcn2YAETDOYavBgcqxEqQDQcyeYRd33c'
 ```
 
 OpenSSH:
 
 ```bash
-ssh anike@162.4.6.7
+ssh root@162.4.6.8
 ```
 
-After login, most app commands should be run as the site runtime user:
+The Laravel app is inside VM 102, not on the Proxmox host filesystem. Run app
+commands through the QEMU guest agent as the site runtime user:
 
 ```bash
-sudo -u final4810 bash
-cd /home/finalaccess.com/public_html
+qm status 102
+qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && php artisan about --only=environment'
 ```
 
 ## Check Server State Before Pulling
 
-Always check for local server edits before updating:
+Always check for VM-local edits before updating:
 
 ```bash
-cd /home/finalaccess.com/public_html
-git status -sb
-git log --oneline -3
-git remote -v
+qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git status -sb && git log --oneline -3 && git remote -v'
 ```
 
 If `git status` shows modified files, do not discard them blindly. Decide whether
 they are expected server-only files, old hotfixes, or changes that must be
 committed first.
 
-Known server-local files/changes seen on 2026-05-18:
+Known state seen on 2026-07-18:
 
 ```text
-M app/Models/InvoiceItem.php
-M database/migrations/2026_05_04_000001_update_invoices_allow_multiple_per_month.php
-M database/migrations/2026_05_04_000002_create_invoice_items_table.php
-?? .htaccess
+The checkout had numerous modified customer, billing, MikroTik, OLT, layout,
+and route files plus untracked MikroTik import controllers/models/views and
+migrations. Inspect the live list again before every deployment; do not assume
+the exact list is unchanged.
 ```
 
-These were not part of the zebra print/list update and should not be reverted
-without review.
+These are live operational changes and must not be reverted without review.
 
 ## Recommended Deploy Command
 
-Run on the server as `final4810`:
+Normal Git pull is currently paused until the dirty VM checkout is reconciled.
+After reconciliation, the intended command is:
 
 ```bash
-cd /home/finalaccess.com/public_html
-git pull --ff-only origin main
-php artisan optimize:clear
+qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git pull --ff-only origin main && php artisan optimize:clear'
 ```
 
 Use `--ff-only` so the deployment stops instead of creating a merge commit on
@@ -195,7 +202,7 @@ Current UI is Blade/CSS only, so no frontend build is normally required.
 Use this only after the code is committed and pushed to GitHub.
 
 ```powershell
-& 'C:\Program Files\PuTTY\plink.exe' -ssh anike@162.4.6.7 -hostkey 'SHA256:CL6hp3uAz5yEuUYaRO3G2j5K4sW1UPyLCXmbcovDETQ' "sudo -u final4810 bash -lc 'cd /home/finalaccess.com/public_html && git pull --ff-only origin main && php artisan optimize:clear'"
+& 'C:\Program Files\PuTTY\plink.exe' -P 22 -ssh root@162.4.6.8 -hostkey 'SHA256:ajsC09Yg/+hgcn2YAETDOYavBgcqxEqQDQcyeYRd33c' "qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git pull --ff-only origin main && php artisan optimize:clear'"
 ```
 
 If the server asks for a sudo password, enter it interactively. Do not place the
@@ -210,15 +217,13 @@ a server backup.
 Code backup:
 
 ```bash
-cd /home/finalaccess.com
-sudo tar -czf deploy_backups/public_html_$(date +%Y%m%d_%H%M%S).tgz public_html
+qm guest exec 102 -- bash -lc 'tar -czf /home/isp.us.com.bd/isp_codex/storage/app/deploy_backups/isp_codex_$(date +%Y%m%d_%H%M%S).tgz -C /home/isp.us.com.bd isp_codex'
 ```
 
 Database backup from the app:
 
 ```bash
-cd /home/finalaccess.com/public_html
-php artisan db:show
+qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && php artisan db:show'
 ```
 
 Use the app's `/backup/database` route when a logged-in admin backup is enough.
@@ -229,11 +234,7 @@ For large databases, prefer `mysqldump` with credentials from `.env`.
 Server checks:
 
 ```bash
-cd /home/finalaccess.com/public_html
-git status -sb
-git log --oneline -1
-php artisan about --only=environment
-php artisan route:list --except-vendor
+qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git status -sb && git log --oneline -1 && php artisan about --only=environment && php artisan route:list --except-vendor'
 ```
 
 HTTP check:
@@ -267,10 +268,7 @@ If the deployment was a normal fast-forward pull and no migration/data change is
 involved, rollback to the previous commit:
 
 ```bash
-cd /home/finalaccess.com/public_html
-git log --oneline -5
-git reset --hard <previous_commit>
-php artisan optimize:clear
+qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git log --oneline -5'
 ```
 
 Only use `git reset --hard` when you are certain server-local modified files do
@@ -288,13 +286,13 @@ php artisan optimize:clear
 Production files are owned by:
 
 ```text
-final4810:final4810
+ispus3797:ispus3797
 ```
 
 If files are uploaded manually, fix ownership:
 
 ```bash
-sudo chown -R final4810:final4810 /home/finalaccess.com/public_html
+qm guest exec 102 -- chown -R ispus3797:ispus3797 /home/isp.us.com.bd/isp_codex
 ```
 
 Writable Laravel directories:
@@ -307,7 +305,7 @@ bootstrap/cache
 If cache/log writes fail:
 
 ```bash
-sudo chown -R final4810:final4810 storage bootstrap/cache
+chown -R ispus3797:ispus3797 storage bootstrap/cache
 find storage bootstrap/cache -type d -exec chmod 775 {} \;
 find storage bootstrap/cache -type f -exec chmod 664 {} \;
 ```
@@ -317,22 +315,22 @@ find storage bootstrap/cache -type f -exec chmod 664 {} \;
 Production Laravel root:
 
 ```text
-/home/finalaccess.com/public_html
+/home/isp.us.com.bd/isp_codex
 ```
 
 Recommended cron entries use this path:
 
 ```cron
-* * * * * cd /home/finalaccess.com/public_html && php artisan mikrotik:sync-router-users >> /dev/null 2>&1
-5 0 * * * cd /home/finalaccess.com/public_html && php artisan billing:disable-overdue-customers >> /dev/null 2>&1
-* * * * * cd /home/finalaccess.com/public_html && php artisan schedule:run >> /dev/null 2>&1
+* * * * * cd /home/isp.us.com.bd/isp_codex && php artisan mikrotik:sync-router-users >> /dev/null 2>&1
+5 0 * * * cd /home/isp.us.com.bd/isp_codex && php artisan billing:disable-overdue-customers >> /dev/null 2>&1
+* * * * * cd /home/isp.us.com.bd/isp_codex && php artisan schedule:run >> /dev/null 2>&1
 ```
 
 Confirm cron is installed for the correct user before changing it:
 
 ```bash
 crontab -l
-sudo -u final4810 crontab -l
+qm guest exec 102 -- runuser -u ispus3797 -- crontab -l
 ```
 
 ## Production SMS Webhook
@@ -361,11 +359,11 @@ Do not write the real token in docs or code.
 
 ### Dubious ownership Git error
 
-This happens when running Git as `anike` inside the `final4810` owned repo.
+This happens when running Git as VM root instead of the `ispus3797` site user.
 Prefer:
 
 ```bash
-sudo -u final4810 bash -lc 'cd /home/finalaccess.com/public_html && git status -sb'
+qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git status -sb'
 ```
 
 ### Pull blocked by local changes

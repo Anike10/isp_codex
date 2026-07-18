@@ -67,7 +67,7 @@ https://isp.us.com.bd
 Production Laravel root:
 
 ```text
-/home/finalaccess.com/public_html
+/home/isp.us.com.bd/isp_codex (inside Proxmox VM 102)
 ```
 
 Read the deployment runbook before updating production:
@@ -81,12 +81,13 @@ Short version:
 ```bash
 php artisan test
 git push origin main
-ssh anike@162.4.6.7
-sudo -u final4810 bash
-cd /home/finalaccess.com/public_html
-git pull --ff-only origin main
-php artisan optimize:clear
+ssh root@162.4.6.8
+qm status 102
+qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git status -sb'
 ```
+
+The VM checkout currently contains production-local hotfixes. Read
+`DEPLOYMENT.md`; do not run a blind pull/reset/clean until they are reconciled.
 
 Do not commit SSH passwords, `.env` secrets, SMS tokens, or database passwords.
 
@@ -344,7 +345,7 @@ MikroTik sync প্রতি মিনিটে:
 Production path for isp.us.com.bd:
 
 ```cron
-* * * * * cd /home/finalaccess.com/public_html && php artisan mikrotik:sync-router-users >> /dev/null 2>&1
+* * * * * cd /home/isp.us.com.bd/isp_codex && php artisan mikrotik:sync-router-users >> /dev/null 2>&1
 ```
 
 Overdue/grace disable প্রতিদিন রাত ১২:০৫:
@@ -356,7 +357,7 @@ Overdue/grace disable প্রতিদিন রাত ১২:০৫:
 Production path for isp.us.com.bd:
 
 ```cron
-5 0 * * * cd /home/finalaccess.com/public_html && php artisan billing:disable-overdue-customers >> /dev/null 2>&1
+5 0 * * * cd /home/isp.us.com.bd/isp_codex && php artisan billing:disable-overdue-customers >> /dev/null 2>&1
 ```
 
 Future CWMP/TR-069 sync প্রতি ৫ মিনিটে:
@@ -374,7 +375,7 @@ Production Laravel scheduler ব্যবহার করলে:
 Production path for isp.us.com.bd:
 
 ```cron
-* * * * * cd /home/finalaccess.com/public_html && php artisan schedule:run >> /dev/null 2>&1
+* * * * * cd /home/isp.us.com.bd/isp_codex && php artisan schedule:run >> /dev/null 2>&1
 ```
 
 তারপর commands `routes/console.php` বা scheduler config-এ schedule করতে হবে।

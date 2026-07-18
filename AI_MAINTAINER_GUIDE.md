@@ -244,10 +244,11 @@ https://isp.us.com.bd
 Production server/app details:
 
 ```text
-SSH host: 162.4.6.7
-SSH user: anike
-Laravel root: /home/finalaccess.com/public_html
-Runtime user: final4810
+Proxmox SSH host: 162.4.6.8:22
+SSH user: root (credential from approved secret source only)
+Production VM: 102
+Laravel root inside VM: /home/isp.us.com.bd/isp_codex
+Runtime user inside VM: ispus3797
 Git branch: main
 ```
 
@@ -266,12 +267,15 @@ Minimum deploy flow:
 ```bash
 php artisan test
 git push origin main
-ssh anike@162.4.6.7
-sudo -u final4810 bash
-cd /home/finalaccess.com/public_html
-git pull --ff-only origin main
-php artisan optimize:clear
+ssh root@162.4.6.8
+qm status 102
+qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git status -sb'
 ```
+
+As of 2026-07-18 the VM checkout has many modified/untracked production
+hotfixes. Do not pull/reset/clean the tree until it is reconciled. For urgent
+changes, back up and deploy only verified target files, then clear caches and
+render/test the affected pages inside VM 102.
 
 If migrations are included:
 
@@ -283,8 +287,7 @@ php artisan optimize:clear
 Always check server-local changes before pulling:
 
 ```bash
-cd /home/finalaccess.com/public_html
-git status -sb
+qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git status -sb'
 ```
 
 ## Important Files
