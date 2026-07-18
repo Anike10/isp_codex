@@ -1335,12 +1335,25 @@ Important files:
 - `app/Models/MikrotikRouter.php`
 - `app/Http/Controllers/MikrotikRouterController.php`
 - `app/Services/RouterOsClient.php`
+- `app/Services/RouterOsConnectionDiagnostic.php`
 - `app/Services/MikrotikCustomerSyncService.php`
 - `resources/views/mikrotik_routers/*`
 
 Router records include API login details, ping/API status history, PPPoE sync interval, inactive PPPoE profile, and last sync summary.
 
 `/mikrotik-routers` checks both API login and ping. Ping online but API offline is valid, for example when the router responds to ICMP but TCP 8728 is blocked, refused, or not reachable through NAT.
+
+Connection failures must be shown visibly, not only in a badge tooltip. Keep
+credential rejection, TCP/API-port reachability, and unexpected RouterOS
+protocol responses as separate diagnostic categories. Never expose the saved
+password in an error, log, response, or view.
+
+RouterOS API credentials use the form names `router_api_username` and
+`router_api_password`, with decoy browser-login fields and locked edit inputs.
+This is intentional: browser password managers previously displayed/submitted
+the web-login email in the RouterOS username field and could overwrite the API
+password. When the operator does not explicitly unlock a credential field, the
+saved username must be restored and the password submission must remain blank.
 
 PPPoE sync:
 

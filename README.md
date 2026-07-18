@@ -7,7 +7,7 @@ A Laravel 12 application for an ISP and computer service business.
 - Dashboard with customers, income, due, tickets, and stock summary
 - Customer and internet package management
 - Product-only customers can be saved without an ISP Connection ID
-- MikroTik router management and PPPoE user sync
+- MikroTik router management and PPPoE user sync, with visible credential/network/API-port diagnostics and autofill-safe RouterOS credential forms
 - OLT ONU/ONT live polling with status, optical power, profile-command mismatch repair, PON-wise cached counts, timestamped running-config backup downloads, non-destructive refresh-error clearing, and safe OLT deletion
 - Full Power/VLAN/MAC polling runs as a background process with stage-based percentage progress and duplicate-run protection; fast status refresh remains synchronous
 - ONU/ONT rows show power beside online/offline status with `Update Now`, plus a separate Ethernet-port column. The selected port is green when enabled, red when disabled, and uses one state-aware Enable/Disable toggle; the HSGQ GPON profile saves `ont port attribute {onu_id} eth {port} admin-status {state}` to the OLT configuration

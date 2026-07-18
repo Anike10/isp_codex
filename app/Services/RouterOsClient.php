@@ -9,12 +9,14 @@ class RouterOsClient
     /** @var resource|null */
     private $socket = null;
 
+    private ?string $plainLoginFailure = null;
+
     public function connect(string $host, int $port, string $username, string $password, int $timeout = 5): void
     {
         $this->socket = @stream_socket_client("tcp://{$host}:{$port}", $errno, $errstr, $timeout);
 
         if (! $this->socket) {
-            throw new RuntimeException("Cannot connect to MikroTik {$host}:{$port}. {$errstr}");
+            throw new RuntimeException("Network/port failure: cannot connect to MikroTik {$host}:{$port}. {$errstr}");
         }
 
         stream_set_timeout($this->socket, $timeout);
@@ -84,12 +86,14 @@ class RouterOsClient
             }
 
             $reply = array_shift($sentence);
+            $data = $this->parseAttributes($sentence);
 
             if ($reply === '!done') {
                 return true;
             }
 
             if ($reply === '!trap') {
+                $this->plainLoginFailure = $data['message'] ?? null;
                 return false;
             }
         }
@@ -111,7 +115,7 @@ class RouterOsClient
             $data = $this->parseAttributes($sentence);
 
             if ($reply === '!trap') {
-                throw new RuntimeException($data['message'] ?? 'MikroTik login failed.');
+                throw new RuntimeException('Authentication failed: '.($data['message'] ?? 'RouterOS rejected the saved username or password.'));
             }
 
             if (isset($data['ret'])) {
@@ -124,7 +128,8 @@ class RouterOsClient
         }
 
         if (! $challenge) {
-            throw new RuntimeException('MikroTik login challenge was not returned.');
+            $detail = $this->plainLoginFailure ? ' RouterOS said: '.$this->plainLoginFailure : '';
+            throw new RuntimeException('Authentication failed: RouterOS rejected the saved username or password.'.$detail);
         }
 
         $response = '00'.md5(chr(0).$password.hex2bin($challenge));
@@ -141,7 +146,7 @@ class RouterOsClient
             $data = $this->parseAttributes($sentence);
 
             if ($reply === '!trap') {
-                throw new RuntimeException($data['message'] ?? 'MikroTik login failed.');
+                throw new RuntimeException('Authentication failed: '.($data['message'] ?? 'RouterOS rejected the saved username or password.'));
             }
 
             if ($reply === '!done') {
@@ -234,6 +239,12 @@ class RouterOsClient
             $chunk = fread($this->socket, $length - strlen($value));
 
             if ($chunk === false || $chunk === '') {
+                $meta = stream_get_meta_data($this->socket);
+
+                if ($meta['timed_out'] ?? false) {
+                    throw new RuntimeException('Network timeout while waiting for the RouterOS API response.');
+                }
+
                 throw new RuntimeException('MikroTik connection closed unexpectedly.');
             }
 

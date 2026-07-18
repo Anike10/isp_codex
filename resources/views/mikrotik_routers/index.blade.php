@@ -41,6 +41,7 @@
                         data-status-url="{{ route('mikrotik-routers.connection-status', $router) }}"
                         title="Waiting for first check"
                     >{{ ucfirst($router->last_api_status ?? 'Checking') }} {{ $router->api_status_since ? $router->api_status_since->diffForHumans(null, true) : '' }}</span>
+                    <div class="muted router-diagnostic" style="margin-top:4px;max-width:300px">{{ $router->last_connection_message ?: 'Waiting for connection diagnosis.' }}</div>
                 </td>
                 <td class="connection-cell">
                     <span
@@ -91,6 +92,10 @@ function setRouterStatus(badge, data) {
     setStatusBadge(badge, apiStatusClass, apiLabel, data.message);
 
     const row = badge.closest('tr');
+    const diagnostic = row.querySelector('.router-diagnostic');
+    if (diagnostic) {
+        diagnostic.textContent = data.message || 'No connection diagnosis returned.';
+    }
     const pingBadge = row.querySelector('.router-ping');
     const pingStatusClass = data.ping_label === 'Inactive' ? 'inactive' : (data.ping_online ? 'online' : 'offline');
     const pingLabel = data.ping_duration ? `${data.ping_label} ${data.ping_duration}` : data.ping_label;

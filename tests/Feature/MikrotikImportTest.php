@@ -65,4 +65,34 @@ class MikrotikImportTest extends TestCase
             ->assertSee('MikroTik live data is unavailable')
             ->assertSee('Live-dependent actions are temporarily disabled.');
     }
+
+    public function test_router_edit_ignores_browser_login_autofill_fields(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Main Router', 'ip_address' => '10.0.0.3', 'api_port' => 8787,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'admin', 'password' => 'router-secret', 'status' => 'active',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('mikrotik-routers.edit', $router))
+            ->assertOk()
+            ->assertSee('name="router_api_username"', false)
+            ->assertSee('data-saved-username="admin"', false)
+            ->assertSee('name="router_api_password"', false);
+
+        $this->actingAs($user)->put(route('mikrotik-routers.update', $router), [
+            'name' => 'Main Router', 'ip_address' => '10.0.0.3', 'api_port' => 8787,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'router_api_username' => 'admin', 'router_api_password' => '',
+            'username' => 'anike10@gmail.com', 'password' => 'website-login-password',
+            'status' => 'active', 'notes' => null,
+        ])->assertRedirect(route('mikrotik-routers.show', $router));
+
+        $router->refresh();
+        $this->assertSame('admin', $router->username);
+        $this->assertSame('router-secret', $router->password);
+    }
 }

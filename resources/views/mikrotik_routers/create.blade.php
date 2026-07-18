@@ -9,8 +9,12 @@
     <a class="btn light" href="{{ route('mikrotik-routers.index') }}">Back</a>
 </div>
 
-<form method="post" action="{{ route('mikrotik-routers.store') }}" class="card form-grid">
+<form method="post" action="{{ route('mikrotik-routers.store') }}" class="card form-grid" autocomplete="off">
     @csrf
+    <div aria-hidden="true" style="position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;overflow:hidden">
+        <input name="browser_login_hint" autocomplete="username" tabindex="-1">
+        <input type="password" name="browser_password_hint" autocomplete="current-password" tabindex="-1">
+    </div>
     <div>
         <label>Router Name</label>
         <input name="name" value="{{ old('name', 'Main MikroTik') }}" required>
@@ -35,11 +39,11 @@
     </div>
     <div>
         <label>Username</label>
-        <input name="username" value="{{ old('username', 'admin') }}" required>
+        <input name="router_api_username" value="{{ old('router_api_username', old('username', 'admin')) }}" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" required>
     </div>
     <div>
         <label>Password</label>
-        <input type="password" name="password" value="{{ old('password') }}" required>
+        <input type="password" name="router_api_password" autocomplete="new-password" required>
     </div>
     <div>
         <label>Status</label>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\MikrotikRouter;
 use App\Services\RouterOsClient;
+use App\Services\RouterOsConnectionDiagnostic;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Throwable;
@@ -27,17 +28,27 @@ class MikrotikRouterController extends Controller
 
     public function store(Request $request)
     {
-        MikrotikRouter::create($request->validate([
+        $request->merge([
+            'router_api_username' => $request->input('router_api_username', $request->input('username')),
+            'router_api_password' => $request->input('router_api_password', $request->input('password')),
+        ]);
+
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'ip_address' => ['required', 'ip', 'max:45', 'unique:mikrotik_routers,ip_address'],
             'api_port' => ['required', 'integer', 'min:1', 'max:65535'],
             'pppoe_sync_interval_minutes' => ['required', 'integer', 'min:1', 'max:1440'],
             'inactive_pppoe_profile' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:255'],
-            'password' => ['required', 'string', 'max:255'],
+            'router_api_username' => ['required', 'string', 'max:255'],
+            'router_api_password' => ['required', 'string', 'max:255'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
             'notes' => ['nullable', 'string'],
-        ]));
+        ]);
+        $data['username'] = $data['router_api_username'];
+        $data['password'] = $data['router_api_password'];
+        unset($data['router_api_username'], $data['router_api_password']);
+
+        MikrotikRouter::create($data);
 
         return redirect()->route('mikrotik-routers.index')->with('success', 'MikroTik router added successfully.');
     }
@@ -47,7 +58,7 @@ class MikrotikRouterController extends Controller
         return view('mikrotik_routers.show', compact('mikrotikRouter'));
     }
 
-    public function connectionStatus(MikrotikRouter $mikrotikRouter)
+    public function connectionStatus(MikrotikRouter $mikrotikRouter, RouterOsConnectionDiagnostic $diagnostic)
     {
         $checkedAt = now();
 
@@ -71,6 +82,7 @@ class MikrotikRouterController extends Controller
         $client = new RouterOsClient();
         $apiOnline = false;
         $apiMessage = null;
+        $apiException = null;
         $apiLatency = null;
 
         try {
@@ -83,16 +95,20 @@ class MikrotikRouterController extends Controller
             );
 
             $apiOnline = true;
-            $apiMessage = 'MikroTik API login successful.';
+            $apiMessage = "Connected: RouterOS accepted the saved username '{$mikrotikRouter->username}'.";
             $apiLatency = (int) round((microtime(true) - $startedAt) * 1000);
         } catch (Throwable $exception) {
-            $apiMessage = $exception->getMessage();
+            $apiException = $exception;
             $apiLatency = (int) round((microtime(true) - $startedAt) * 1000);
         } finally {
             $client->close();
         }
 
         $ping = $this->pingHost($mikrotikRouter->ip_address);
+        $apiDiagnostic = $apiOnline
+            ? ['type' => 'connected', 'label' => 'Login successful', 'message' => $apiMessage, 'guidance' => null]
+            : $diagnostic->describe($apiException, $mikrotikRouter, $ping['online']);
+        $apiMessage = trim($apiDiagnostic['label'].': '.$apiDiagnostic['message'].' '.($apiDiagnostic['guidance'] ?? ''));
 
         $update = [
             'last_api_status' => $apiOnline ? 'online' : 'offline',
@@ -130,6 +146,9 @@ class MikrotikRouterController extends Controller
             ...$this->routerStatusPayload($mikrotikRouter->refresh()),
             'message' => $apiMessage,
             'ping_message' => $ping['message'],
+            'diagnostic_type' => $apiDiagnostic['type'],
+            'diagnostic_label' => $apiDiagnostic['label'],
+            'guidance' => $apiDiagnostic['guidance'],
         ]);
     }
 
@@ -211,20 +230,31 @@ class MikrotikRouterController extends Controller
 
     public function update(Request $request, MikrotikRouter $mikrotikRouter)
     {
+        $request->merge([
+            'router_api_username' => $request->input('router_api_username', $request->input('username')),
+            'router_api_password' => $request->input('router_api_password', $request->input('password')),
+        ]);
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'ip_address' => ['required', 'ip', 'max:45', Rule::unique('mikrotik_routers', 'ip_address')->ignore($mikrotikRouter->id)],
             'api_port' => ['required', 'integer', 'min:1', 'max:65535'],
             'pppoe_sync_interval_minutes' => ['required', 'integer', 'min:1', 'max:1440'],
             'inactive_pppoe_profile' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:255'],
-            'password' => ['nullable', 'string', 'max:255'],
+            'router_api_username' => ['required', 'string', 'max:255'],
+            'router_api_password' => ['nullable', 'string', 'max:255'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
             'notes' => ['nullable', 'string'],
         ]);
 
-        if (blank($data['password'])) {
-            unset($data['password']);
+        $data['username'] = $data['router_api_username'];
+        unset($data['router_api_username']);
+
+        if (blank($data['router_api_password'])) {
+            unset($data['router_api_password']);
+        } else {
+            $data['password'] = $data['router_api_password'];
+            unset($data['router_api_password']);
         }
 
         $mikrotikRouter->update($data);
