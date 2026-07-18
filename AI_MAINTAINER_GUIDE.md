@@ -5,6 +5,10 @@ This guide is for another AI agent or developer who needs to update this Laravel
 ## Working Style
 
 - Work like a highly skilled Laravel, PHP, and OLT engineer.
+- The canonical live application is `https://isp.us.com.bd`. When the owner says
+  "live", always treat this domain as the target unless they explicitly name a
+  different environment. The `/home/finalaccess.com/public_html` directory is a
+  legacy hosting path, not the public application name.
 - Keep token and cost use low: inspect only the files needed, make focused changes, avoid repeated broad searches, and prefer concise verification.
 - Keep every production or code update traceable in Git: review `git status`,
   make focused commits with detailed messages, and include what changed, why it
@@ -152,6 +156,28 @@ Network-map linking rules:
 - Keep the documentation practical for the next maintainer: file names, routes,
   permissions, commands, and test names are more useful than vague summaries.
 
+### Living Expertise Register
+
+The expert roles in this guide are mandatory and intentionally living. Every AI
+maintainer must review the task for a domain that is not adequately covered
+here. If safe implementation requires new expertise, add or expand an expert
+role in this guide during the same task, including its responsibilities, data
+risks, operational risks, and required verification. Never leave newly learned
+project knowledge only in chat context or personal memory.
+
+At minimum, this project must always be approached with senior capability in:
+
+- Laravel/PHP architecture, MySQL schema and query design, Blade UX, automated
+  testing, Git, and production deployment/recovery;
+- ISP operations, MikroTik RouterOS API, OLT/ONU access, Ethernet/VLAN/MAC/PON
+  behavior, and safe network automation;
+- billing, double-entry-aware ledgers, payment allocation, decimal currency,
+  audit trails, reconciliation, and financially safe data repair;
+- inventory, serial lifecycle, purchasing, sales, returns, warranty/service,
+  employee assets, and fleet operations;
+- authentication, authorization, secrets, privacy, backups, observability, and
+  incident diagnosis.
+
 ### Default Decision Order
 
 When roles disagree, use this priority:
@@ -212,7 +238,7 @@ php artisan serve
 Live production site:
 
 ```text
-https://finalaccess.com
+https://isp.us.com.bd
 ```
 
 Production server/app details:
@@ -263,7 +289,7 @@ git status -sb
 
 ## Important Files
 
-- `DEPLOYMENT.md`: finalaccess.com production deployment runbook
+- `DEPLOYMENT.md`: isp.us.com.bd production deployment runbook
 - `routes/web.php`: all browser routes and permission middleware
 - `resources/views/layouts/app.blade.php`: main authenticated layout and sidebar
 - `resources/views/auth/login.blade.php`: login page
@@ -294,12 +320,14 @@ git status -sb
 ## Documentation Maintenance
 
 Every AI agent or developer must update the Markdown docs whenever a change affects behavior, setup, deployment, or operations. Do this in the same task before saying the work is done.
+If a task reveals that another specialist discipline is required, update the
+Living Expertise Register or add a new expert role before completing the task.
 
 Update these files as needed:
 
 - `README.md`: user-facing feature list, routes, setup, commands, and basic operations
 - `AI_MAINTAINER_GUIDE.md`: architecture, important files, business rules, route/permission model, implementation notes, limitations, and testing guidance
-- `DEPLOYMENT.md`: finalaccess.com deployment steps, server paths, migrations, cache clearing, cron, rollback, and troubleshooting
+- `DEPLOYMENT.md`: isp.us.com.bd deployment steps, server paths, migrations, cache clearing, cron, rollback, and troubleshooting
 - `PROJECT_ROADMAP.md`: future plans, larger module direction, or roadmap-level decisions
 
 Documentation must be updated when changing:
@@ -552,6 +580,15 @@ Current rules:
 - Payment amount may be greater than the selected invoice due.
 - Oldest due invoices must be cleared first.
 - Any extra amount after all due invoices are cleared stays in customer advance balance.
+- `/payments` shows both invoice-linked `payments` and direct advance
+  collections (`customer_balance_transactions` credits where `payment_id` is
+  null), so a valid collection never appears to be missing merely because the
+  party had no due invoice.
+- Payment lists and details show both the business payment date and the exact
+  database entry timestamp/operator. The detail page separately explains the
+  amount allocated to invoices and the remainder automatically added to advance
+  balance; for example, a 500.00 receipt against 0.04 due correctly leaves
+  499.96 advance.
 - Recording a payment updates:
   - `paid_amount`
   - `due_amount`
@@ -1447,7 +1484,7 @@ Important limitation:
 - `OltOnuController::firstUnsafeContextCommand()` only permits CLI navigation needed for reading HSGQ data: `enable`, `config`/`configure`, `interface epon 1-8`, and `exit`.
 - Full EPON refresh loops through the selected `pon_ports` and runs `interface epon N`, `show onu-info all`, then `show optical-info` for each selected PON. Prefer the UI PON selector for day-to-day optical updates.
 - Do not add pager/helper/config commands that change OLT state. `OltSshClient` handles `--More--` pagination interactively without sending persistent config.
-- The PHP server running the app must reach `192.168.10.111:22`. If production `finalaccess.com` is outside the LAN without VPN/routing, live OLT polling will fail from production.
+- The PHP server running the app must reach `192.168.10.111:22`. If production `isp.us.com.bd` is outside the LAN without VPN/routing, live OLT polling will fail from production.
 - HSGQ command names vary by firmware; keep commands configurable on the OLT record.
 
 HSGQ GPON ONU add/name caveat:

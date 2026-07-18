@@ -25,7 +25,7 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Date</th><th>Party</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Account</th><th></th></tr></thead>
+    <thead><tr><th>Payment Date</th><th>Party</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Account</th><th>Entered By</th><th>Entered At</th><th></th></tr></thead>
     <tbody>
     @forelse ($payments as $payment)
         <tr data-href="{{ route('payments.show', $payment) }}">
@@ -63,6 +63,8 @@
                     N/A
                 @endif
             </td>
+            <td>{{ $payment->entered_by_label }}</td>
+            <td>{{ $payment->created_at?->format('Y-m-d h:i:s A') }}</td>
             <td>
                 <div class="action-group">
                     <a class="btn light" href="{{ route('payments.show', $payment) }}">Details</a>
@@ -72,9 +74,49 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="7">No payments recorded.</td></tr>
+        <tr><td colspan="9">No invoice payments recorded.</td></tr>
     @endforelse
     </tbody>
 </table>
 <div style="margin-top:16px">{{ $payments->links() }}</div>
+
+<section class="card" style="margin-top:24px">
+    <h2>Advance Collections</h2>
+    <div class="muted" style="margin-bottom:12px">Collections received when no due invoice was available. These amounts were saved directly in the party advance ledger.</div>
+    <table>
+        <thead><tr><th>Payment Date</th><th>Party</th><th>Amount</th><th>Method</th><th>Account</th><th>Balance After</th><th>Entered By</th><th>Entered At</th><th>Reference / Note</th></tr></thead>
+        <tbody>
+        @forelse($advanceCredits as $credit)
+            <tr>
+                <td>{{ $credit->transaction_date?->format('Y-m-d') }}</td>
+                <td>
+                    @if($canOpenPartyLedger)
+                        <a href="{{ route('accounting.ledger', ['customer_id' => $credit->customer_id]) }}">{{ $credit->customer->name }}</a>
+                    @else
+                        {{ $credit->customer->name }}
+                    @endif
+                </td>
+                <td>{{ number_format($credit->amount, 2) }}</td>
+                <td>{{ ucfirst((string) $credit->payment_method) }}</td>
+                <td>
+                    @if($credit->account)
+                        @if($canOpenPaymentAccountLedger)<a href="{{ route('payment-accounts.show', $credit->account) }}">{{ $credit->account->account_name.' - '.$credit->account->account_number }}</a>@else{{ $credit->account->account_name.' - '.$credit->account->account_number }}@endif
+                    @elseif($credit->payment_method === 'cash')
+                        @if($canOpenPaymentAccountLedger)<a href="{{ route('payment-accounts.cash-ledger') }}">Cash Ledger</a>@else Cash @endif
+                    @else
+                        N/A
+                    @endif
+                </td>
+                <td>{{ number_format($credit->balance_after, 2) }}</td>
+                <td>{{ $credit->entered_by_label }}</td>
+                <td>{{ $credit->created_at?->format('Y-m-d h:i:s A') }}</td>
+                <td>{{ collect([$credit->reference, $credit->note])->filter()->implode(' · ') ?: '—' }}</td>
+            </tr>
+        @empty
+            <tr><td colspan="9">No direct advance collections recorded.</td></tr>
+        @endforelse
+        </tbody>
+    </table>
+    <div style="margin-top:16px">{{ $advanceCredits->links() }}</div>
+</section>
 @endsection

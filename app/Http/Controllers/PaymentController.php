@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Invoice;
+use App\Models\CustomerBalanceTransaction;
 use App\Models\Payment;
 use App\Models\PaymentAccount;
 use App\Services\PaymentService;
@@ -15,7 +16,7 @@ class PaymentController extends Controller
     public function index(Request $request)
     {
         return view('payments.index', [
-            'payments' => Payment::with(['customer', 'invoice', 'account'])
+            'payments' => Payment::with(['customer', 'invoice', 'account', 'entryByUser'])
                 ->when($request->filled('search'), function ($query) use ($request) {
                     $search = trim((string) $request->query('search'));
                     $query->where(function ($query) use ($search) {
@@ -41,6 +42,32 @@ class PaymentController extends Controller
                 ->latest()
                 ->paginate($this->perPage($request))
                 ->appends($request->query()),
+            'advanceCredits' => CustomerBalanceTransaction::with(['customer', 'account', 'entryByUser'])
+                ->where('direction', 'credit')
+                ->whereNull('payment_id')
+                ->when($request->filled('search'), function ($query) use ($request) {
+                    $search = trim((string) $request->query('search'));
+                    $query->where(function ($query) use ($search) {
+                        $query->where('note', 'like', "%{$search}%")
+                            ->orWhere('reference', 'like', "%{$search}%")
+                            ->orWhereHas('customer', fn ($query) => $query
+                                ->where('name', 'like', "%{$search}%")
+                                ->orWhere('phone', 'like', "%{$search}%")
+                                ->orWhere('connection_id', 'like', "%{$search}%"))
+                            ->orWhereHas('account', fn ($query) => $query
+                                ->where('account_name', 'like', "%{$search}%")
+                                ->orWhere('account_number', 'like', "%{$search}%"));
+                    });
+                })
+                ->when($request->filled('payment_method'), fn ($query) => $query->where('payment_method', $request->query('payment_method')))
+                ->when($request->filled('payment_account_id'), fn ($query) => $query->where('payment_account_id', $request->integer('payment_account_id')))
+                ->when($request->filled('from'), fn ($query) => $query->whereDate('transaction_date', '>=', $request->date('from')))
+                ->when($request->filled('to'), fn ($query) => $query->whereDate('transaction_date', '<=', $request->date('to')))
+                ->when($request->filled('min_amount'), fn ($query) => $query->where('amount', '>=', (float) $request->query('min_amount')))
+                ->when($request->filled('max_amount'), fn ($query) => $query->where('amount', '<=', (float) $request->query('max_amount')))
+                ->latest()
+                ->paginate($this->perPage($request), ['*'], 'advance_page')
+                ->appends($request->query()),
             'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
         ]);
     }
@@ -55,7 +82,7 @@ class PaymentController extends Controller
 
     public function show(Payment $payment)
     {
-        $payment->load(['customer', 'invoice', 'account', 'allocations.invoice']);
+        $payment->load(['customer', 'invoice', 'account', 'allocations.invoice', 'balanceTransactions', 'entryByUser']);
         $versions = $payment->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
         return view('payments.show', compact('payment', 'versions'));

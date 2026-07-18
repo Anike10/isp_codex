@@ -50,6 +50,25 @@ class Payment extends Model
         return $this->hasMany(PaymentAllocation::class);
     }
 
+    public function balanceTransactions(): HasMany
+    {
+        return $this->hasMany(CustomerBalanceTransaction::class);
+    }
+
+    public function entryByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'entry_by');
+    }
+
+    public function getEnteredByLabelAttribute(): string
+    {
+        if ($this->entry_by_type === 'user') {
+            return $this->entryByUser?->name ?? 'User #'.$this->entry_by;
+        }
+
+        return filled($this->entry_by) ? (string) $this->entry_by : 'system';
+    }
+
     public function versions(): MorphMany
     {
         return $this->morphMany(RecordVersion::class, 'versionable')->latest('id');

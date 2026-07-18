@@ -23,6 +23,8 @@ A Laravel 12 application for an ISP and computer service business.
 - Customer direct payment and due tracking
 - bKash SMS payment parsing with duplicate TrxID protection
 - Advance balance and payment allocation ledger
+- Payments page includes invoice payments and direct advance collections, with
+  entry operator/time and a clear invoice-versus-advance breakdown.
 - Payment account and cash ledgers use database-level merged pagination and include payment credits, direct advance receipts, and expense debits without double-counting payment remainders
 - Edit history/audit snapshots for invoices, quotations, parties, payments, roles, permissions, and other tracked operator-editable records through the shared `record_versions` table, including invoice finalization changes
 - Payment accounts for cash, bKash, Nagad, and bank
@@ -56,10 +58,10 @@ http://localhost/isp_codex/public
 
 ## Production Deployment
 
-Live site:
+Canonical live site:
 
 ```text
-https://finalaccess.com
+https://isp.us.com.bd
 ```
 
 Production Laravel root:
@@ -339,7 +341,7 @@ MikroTik sync প্রতি মিনিটে:
 * * * * * cd /var/www/isp_codex && php artisan mikrotik:sync-router-users >> /dev/null 2>&1
 ```
 
-Production path for finalaccess.com:
+Production path for isp.us.com.bd:
 
 ```cron
 * * * * * cd /home/finalaccess.com/public_html && php artisan mikrotik:sync-router-users >> /dev/null 2>&1
@@ -351,7 +353,7 @@ Overdue/grace disable প্রতিদিন রাত ১২:০৫:
 5 0 * * * cd /var/www/isp_codex && php artisan billing:disable-overdue-customers >> /dev/null 2>&1
 ```
 
-Production path for finalaccess.com:
+Production path for isp.us.com.bd:
 
 ```cron
 5 0 * * * cd /home/finalaccess.com/public_html && php artisan billing:disable-overdue-customers >> /dev/null 2>&1
@@ -369,7 +371,7 @@ Production Laravel scheduler ব্যবহার করলে:
 * * * * * cd /var/www/isp_codex && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-Production path for finalaccess.com:
+Production path for isp.us.com.bd:
 
 ```cron
 * * * * * cd /home/finalaccess.com/public_html && php artisan schedule:run >> /dev/null 2>&1
@@ -479,7 +481,7 @@ EPON refresh speed note:
 Network requirement:
 
 - The PHP server running this app must be able to reach `192.168.10.111:22`.
-- If `finalaccess.com` is hosted outside your LAN and has no VPN/route to the OLT, live polling will fail from production. In that case run the app inside the LAN or connect the production server to the management network through VPN.
+- If `isp.us.com.bd` is hosted outside your LAN and has no VPN/route to the OLT, live polling will fail from production. In that case run the app inside the LAN or connect the production server to the management network through VPN.
 
 ## CWMP / TR-069 Note
 
@@ -493,7 +495,7 @@ AI_MAINTAINER_GUIDE.md
 
 ## Important Files
 
-- `DEPLOYMENT.md`: Production deployment, backup, rollback, cron, and finalaccess.com server notes.
+- `DEPLOYMENT.md`: Production deployment, backup, rollback, cron, and isp.us.com.bd server notes.
 - `AI_MAINTAINER_GUIDE.md`: Read this first before asking another AI to modify billing, bKash SMS, customer status, MikroTik sync, or CWMP/TR-069 logic.
 - `routes/web.php`: Browser routes
 - `routes/api.php`: API/webhook routes
@@ -519,7 +521,7 @@ After any code or production change, update the relevant Markdown files in the s
 
 - `README.md`: user-facing features, routes, setup, commands, and operational notes
 - `AI_MAINTAINER_GUIDE.md`: architecture, business rules, important files, route/permission rules, limitations, and safe-change notes
-- `DEPLOYMENT.md`: production server path, deploy steps, migrations, cache commands, cron, rollback, and finalaccess.com operational details
+- `DEPLOYMENT.md`: production server path, deploy steps, migrations, cache commands, cron, rollback, and isp.us.com.bd operational details
 - `PROJECT_ROADMAP.md`: longer-term plans or module roadmap changes
 
 Always update docs when changing:

@@ -145,6 +145,82 @@ class PaymentServiceTest extends TestCase
             ->assertDontSee(route('payments.voucher', $payment), false);
     }
 
+    public function test_payment_pages_show_entry_operator_and_exact_entry_time(): void
+    {
+        $this->travelTo(Carbon::parse('2026-07-18 10:45:30'));
+        $user = User::factory()->create(['name' => 'Payment Operator']);
+        $user->permissions()->attach(Permission::where('name', 'manage_payments')->firstOrFail());
+        $customer = $this->createCustomer();
+        $invoice = $this->createInvoice($customer, '2026-07', 500, '2026-07-18');
+
+        $this->actingAs($user);
+        $payment = $this->paymentService()->recordPayment($invoice, [
+            'amount' => 500,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-07-18',
+        ]);
+
+        $this->get(route('payments.index'))
+            ->assertOk()
+            ->assertSee('Payment Operator')
+            ->assertSee('2026-07-18 10:45:30 AM');
+
+        $this->get(route('payments.show', $payment))
+            ->assertOk()
+            ->assertSee('Entered By:')
+            ->assertSee('Payment Operator')
+            ->assertSee('Entered At:')
+            ->assertSee('2026-07-18 10:45:30 AM');
+    }
+
+    public function test_direct_advance_collections_are_visible_on_the_payment_index(): void
+    {
+        $this->travelTo(Carbon::parse('2026-07-18 11:15:00'));
+        $user = User::factory()->create(['name' => 'Advance Operator']);
+        $user->permissions()->attach(Permission::where('name', 'manage_payments')->firstOrFail());
+        $customer = $this->createCustomer();
+
+        $this->actingAs($user);
+        $this->paymentService()->addAdvanceCredit($customer, [
+            'amount' => 500,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-07-18',
+            'note' => 'Advance collected at office.',
+        ]);
+
+        $this->get(route('payments.index'))
+            ->assertOk()
+            ->assertSee('Advance Collections')
+            ->assertSee('Rahim Ahmed')
+            ->assertSee('500.00')
+            ->assertSee('Advance Operator')
+            ->assertSee('2026-07-18 11:15:00 AM')
+            ->assertSee('Advance collected at office.');
+    }
+
+    public function test_payment_detail_explains_fractional_advance_remainder(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payments')->firstOrFail());
+        $customer = $this->createCustomer();
+        $invoice = $this->createInvoice($customer, '2026-07', 0.04, '2026-07-18');
+
+        $payment = $this->paymentService()->recordPayment($invoice, [
+            'amount' => 500,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-07-18',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('payments.show', $payment))
+            ->assertOk()
+            ->assertSee('Applied to Invoice(s):')
+            ->assertSee('0.04')
+            ->assertSee('Added to Advance:')
+            ->assertSee('499.96')
+            ->assertSee('The payment exceeded the invoice amount by 499.96');
+    }
+
     public function test_payment_index_hides_ledger_links_without_account_permissions(): void
     {
         $user = User::factory()->create();

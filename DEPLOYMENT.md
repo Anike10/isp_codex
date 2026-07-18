@@ -1,6 +1,6 @@
 # Deployment Runbook
 
-This file documents how to update the live Laravel app on **finalaccess.com**.
+This file documents how to update the live Laravel app on **isp.us.com.bd**.
 
 Keep passwords, API keys, database credentials, and SSH private keys out of this
 repository. Use the server owner, password manager, or approved secure note when
@@ -9,14 +9,14 @@ credentials are needed.
 ## Production Server
 
 ```text
-Domain: finalaccess.com
+Domain: isp.us.com.bd
 SSH host: 162.4.6.7
 SSH user: anike
 Laravel root: /home/finalaccess.com/public_html
 Runtime user: final4810
 Panel/server: CyberPanel / OpenLiteSpeed
 Environment: production
-APP_URL: finalaccess.com
+APP_URL: https://isp.us.com.bd
 ```
 
 Known SSH host key fingerprint:
@@ -239,20 +239,20 @@ php artisan route:list --except-vendor
 HTTP check:
 
 ```bash
-curl -I -L https://finalaccess.com
+curl -I -L https://isp.us.com.bd
 ```
 
 If the local machine does not trust the certificate chain, this command may fail
 with a certificate warning. For a quick status-only check:
 
 ```bash
-curl -k -I -L https://finalaccess.com
+curl -k -I -L https://isp.us.com.bd
 ```
 
 Expected behavior for a guest request:
 
 ```text
-https://finalaccess.com -> 302 redirect to /login -> 200 OK
+https://isp.us.com.bd -> 302 redirect to /login -> 200 OK
 ```
 
 App log check:
@@ -340,7 +340,7 @@ sudo -u final4810 crontab -l
 SmsForwarder production URL:
 
 ```text
-https://finalaccess.com/api/bkash/sms
+https://isp.us.com.bd/api/bkash/sms
 ```
 
 Method:
@@ -434,4 +434,4 @@ OLT production note:
 - HSGQ context commands are limited to CLI navigation (`enable`, `config`/`configure`, `interface epon 1-8`, `exit`) before read-only show commands.
 - The refresh job polls selected `pon_ports` one by one to collect all PON ONU status and optical power.
 - The app supports legacy SSH OLT access through phpseclib because the HSGQ OLT offers `ssh-rsa`/`ssh-dss` host keys.
-- `finalaccess.com` must have network reachability to the OLT management IP (`192.168.10.111:22`) through LAN/VPN/routing; otherwise live polling cannot work from production.
+- `isp.us.com.bd` must have network reachability to the OLT management IP (`192.168.10.111:22`) through LAN/VPN/routing; otherwise live polling cannot work from production.

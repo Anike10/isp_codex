@@ -7,6 +7,8 @@
         ['invoice.due_date', 'asc'],
         ['invoice.id', 'asc'],
     ]);
+    $invoiceApplied = (float) $allocations->where('source_type', 'payment')->sum('amount');
+    $advanceAdded = (float) $payment->balanceTransactions->where('direction', 'credit')->sum('amount');
 @endphp
 
 <div class="topbar">
@@ -26,6 +28,8 @@
         <h2>Payment Details</h2>
         <p><strong>Amount:</strong> {{ number_format($payment->amount, 2) }}</p>
         <p><strong>Date:</strong> {{ $payment->payment_date?->format('Y-m-d') }}</p>
+        <p><strong>Entered By:</strong> {{ $payment->entered_by_label }}</p>
+        <p><strong>Entered At:</strong> {{ $payment->created_at?->format('Y-m-d h:i:s A') }}</p>
         <p><strong>Method:</strong> {{ ucfirst($payment->payment_method) }}</p>
         <p><strong>Account:</strong> {{ $payment->account ? $payment->account->account_name.' - '.$payment->account->account_number : 'Cash Ledger' }}</p>
         <p><strong>Reference:</strong> Payment #{{ $payment->id }}</p>
@@ -43,7 +47,12 @@
         <p><strong>Name:</strong> {{ $payment->customer->name }}</p>
         <p><strong>Phone:</strong> {{ $payment->customer->phone }}</p>
         <p><strong>Connection:</strong> {{ $payment->customer->connection_id ?: 'N/A' }}</p>
-        <p><strong>Account Balance:</strong> {{ number_format($payment->customer->account_balance, 2) }}</p>
+        <p><strong>Applied to Invoice(s):</strong> {{ number_format($invoiceApplied, 2) }}</p>
+        <p><strong>Added to Advance:</strong> {{ number_format($advanceAdded, 2) }}</p>
+        <p><strong>Current Advance Balance:</strong> {{ number_format($payment->customer->account_balance, 2) }}</p>
+        @if($advanceAdded > 0)
+            <p class="muted">The payment exceeded the invoice amount by {{ number_format($advanceAdded, 2) }}; that remainder was added automatically to the party advance balance.</p>
+        @endif
     </section>
 </div>
 
