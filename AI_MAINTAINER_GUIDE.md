@@ -550,6 +550,7 @@ us.com.bd | info@us.com.bd
 
 Print behavior:
 
+- Every printable document and report must always show an Organization selector in its screen-only print toolbar. Do not add a setting that can hide this selector.
 - A toolbar appears before printing.
 - Toolbar is hidden in print via CSS.
 - There is a checkbox: `Signature ছাড়াই print`
@@ -663,7 +664,9 @@ Ledger page shows:
 - Expense debit rows
 - Payment allocation summary, so one payment can be audited across multiple invoices.
 - Advance balance credits and advance-used memo rows.
-- Accounting/party ledger rows include `SL` and a full date/time. Date-only business fields (`payment_date`, `transaction_date`, and `expense_date`) use their business date plus the record creation time for deterministic chronological ordering and running balances.
+- Accounting/party ledger rows display `SL` and the business date only; do not show time or a Reference column in the row table. Internally, date-only business fields (`payment_date`, `transaction_date`, and `expense_date`) still use their business date plus the record creation time for deterministic chronological ordering and running balances.
+- The accounting ledger paginates only after calculating serial numbers and cumulative balances across the complete filtered result, so page 2 must continue both values instead of restarting them. A party-specific ledger must show the selected party in the report heading and omit the repeated Party column from its rows. `/accounting/ledger/print` is a separate A4 portrait report with organization, Black & white/Color, and inclusive date-range selection. Both print modes keep zebra-striped rows. The report renders every filtered row, repeats the table header, and relies on natural browser pagination instead of clipping content inside a fixed-height sheet.
+- Every new paginated operator page must use `Controller::perPage(...)`, show the shared rows-per-page selector with `Set as Default`, render a visible `Showing rows ... | Total rows: ...` summary, and preserve filters in pagination links. Keep this rule in shared partials/components instead of creating inconsistent page-specific controls.
 
 Important accounting rule:
 

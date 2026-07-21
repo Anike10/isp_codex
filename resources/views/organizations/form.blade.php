@@ -12,9 +12,8 @@
 <div class="full"><label>Address</label><textarea name="address">{{ old('address', $organization->address) }}</textarea></div>
 <div class="full"><label>Print Footer Note</label><textarea name="footer_note">{{ old('footer_note', $organization->footer_note) }}</textarea></div>
 <div class="full"><h2 style="margin-top:8px">Print Preferences</h2></div>
-<div class="full muted">These settings control which options start selected on the print page. The operator can still change them before printing.</div>
+<div class="full muted">The Organization selector is always available on every print page. These settings control the other options that start selected.</div>
 <div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="default_without_signature" value="1" style="width:auto" @checked(old('default_without_signature', $organization->default_without_signature))> Default: Print without signature</label></div>
-<div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="show_organization_selector" value="1" style="width:auto" @checked(old('show_organization_selector', $organization->exists ? $organization->show_organization_selector : true))> Show Organization selector on print pages</label></div>
 <div class="full"><h2 style="margin-top:8px">Bank Account Information</h2></div>
 <div><label>Bank Name</label><input name="bank_name" value="{{ old('bank_name', $organization->bank_name) }}"></div>
 <div><label>Account Name</label><input name="bank_account_name" value="{{ old('bank_account_name', $organization->bank_account_name) }}"></div>

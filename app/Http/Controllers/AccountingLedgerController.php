@@ -7,11 +7,47 @@ use App\Models\CustomerBalanceTransaction;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Services\PrintContextService;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 class AccountingLedgerController extends Controller
 {
     public function index(Request $request)
+    {
+        $data = $this->ledgerData($request);
+        $allEntries = $data['entries'];
+        $perPageDefault = 50;
+        $perPageOptions = [25, 50, 100, 200];
+        $perPage = $this->perPage($request, $perPageDefault, $perPageOptions);
+        $page = max(1, LengthAwarePaginator::resolveCurrentPage());
+        $data['entries'] = new LengthAwarePaginator(
+            $allEntries->forPage($page, $perPage)->values(),
+            $allEntries->count(),
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->except(['page', 'make_per_page_default']),
+            ],
+        );
+
+        return view('accounting.ledger', array_merge($data, compact(
+            'perPage',
+            'perPageDefault',
+            'perPageOptions',
+        )));
+    }
+
+    public function print(Request $request, PrintContextService $printContext)
+    {
+        return view('accounting.ledger_print', array_merge(
+            $this->ledgerData($request),
+            $printContext->for($request),
+        ));
+    }
+
+    private function ledgerData(Request $request): array
     {
         $from = $request->date('from');
         $to = $request->date('to');
@@ -139,8 +175,23 @@ class AccountingLedgerController extends Controller
             ->values();
         $totalDebit = $entries->sum('debit');
         $totalCredit = $entries->sum('credit');
+        $runningBalance = 0.0;
+        $entries = $entries->map(function (array $entry, int $index) use (&$runningBalance): array {
+            $runningBalance += $entry['debit'] - $entry['credit'];
+            $entry['serial'] = $index + 1;
+            $entry['balance'] = $runningBalance;
 
-        return view('accounting.ledger', compact('entries', 'totalDebit', 'totalCredit', 'selectedCustomer'));
+            return $entry;
+        });
+
+        return compact(
+            'entries',
+            'totalDebit',
+            'totalCredit',
+            'selectedCustomer',
+            'from',
+            'to',
+        );
     }
 
     private function ledgerDateTime($businessDate, $createdAt)

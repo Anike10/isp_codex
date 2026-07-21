@@ -1,7 +1,7 @@
 <div class="pagination-wrap" data-pagination-summary>
     <div class="pagination-summary">
         @if (method_exists($paginator, 'total'))
-            Showing {{ number_format($paginator->firstItem() ?? 0) }} to {{ number_format($paginator->lastItem() ?? 0) }} of {{ number_format($paginator->total()) }} entries
+            Showing rows {{ number_format($paginator->firstItem() ?? 0) }} to {{ number_format($paginator->lastItem() ?? 0) }} | Total rows: {{ number_format($paginator->total()) }}
         @else
             Page {{ number_format($paginator->currentPage()) }}
         @endif

@@ -4,6 +4,7 @@
 @php
     $canOpenPaymentAccounts = auth()->user()?->hasPermission('manage_payment_accounts');
     $canOpenCustomers = auth()->user()?->hasPermission('manage_customers');
+    $printUrl = route('accounting.ledger.print', request()->except(['page', 'per_page', 'make_per_page_default']));
 @endphp
 <div class="topbar">
     <div>
@@ -16,11 +17,14 @@
             @endif
         </div>
     </div>
-    @if ($canOpenPaymentAccounts)
-        <a class="btn light" href="{{ route('payment-accounts.index') }}">Back</a>
-    @elseif ($canOpenCustomers)
-        <a class="btn light" href="{{ route('customers.index') }}">Back</a>
-    @endif
+    <div class="actions">
+        <a class="btn secondary" href="{{ $printUrl }}" target="_blank">Print</a>
+        @if ($canOpenPaymentAccounts)
+            <a class="btn light" href="{{ route('payment-accounts.index') }}">Back</a>
+        @elseif ($canOpenCustomers)
+            <a class="btn light" href="{{ route('customers.index') }}">Back</a>
+        @endif
+    </div>
 </div>
 
 <form method="get" class="card filter-form" style="margin-bottom:16px">
@@ -50,32 +54,26 @@
     <div class="card stat"><span class="muted">Net</span><strong>{{ number_format($totalDebit - $totalCredit, 2) }}</strong></div>
 </div>
 
+@include('partials.per_page')
+
 <table>
-    <thead><tr><th>SL</th><th>Date &amp; Time</th><th>Type</th><th>Party</th><th>Reference</th><th>Note</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
+    <thead><tr><th>SL</th><th>Date</th><th>Type</th>@unless ($selectedCustomer)<th>Party</th>@endunless<th>Note</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
     <tbody>
-        @php $running = 0; @endphp
         @forelse ($entries as $entry)
-            @php $running += $entry['debit'] - $entry['credit']; @endphp
             <tr @if ($entry['url']) data-href="{{ $entry['url'] }}" @endif>
-                <td>{{ $loop->iteration }}</td>
-                <td>{{ $entry['date']?->format('Y-m-d h:i:s A') }}</td>
+                <td>{{ $entry['serial'] }}</td>
+                <td>{{ $entry['date']?->format('Y-m-d') }}</td>
                 <td>{{ $entry['type'] }}</td>
-                <td>{{ $entry['customer'] }}</td>
-                <td>
-                    @if ($entry['url'])
-                        <a href="{{ $entry['url'] }}">{{ $entry['reference'] }}</a>
-                    @else
-                        {{ $entry['reference'] }}
-                    @endif
-                </td>
+                @unless ($selectedCustomer)<td>{{ $entry['customer'] }}</td>@endunless
                 <td>{{ $entry['note'] }}</td>
                 <td>{{ number_format($entry['debit'], 2) }}</td>
                 <td>{{ number_format($entry['credit'], 2) }}</td>
-                <td>{{ number_format($running, 2) }}</td>
+                <td>{{ number_format($entry['balance'], 2) }}</td>
             </tr>
         @empty
-            <tr><td colspan="9">No ledger entries found.</td></tr>
+            <tr><td colspan="{{ $selectedCustomer ? 7 : 8 }}">No ledger entries found.</td></tr>
         @endforelse
     </tbody>
 </table>
+<div style="margin-top:16px">{{ $entries->links() }}</div>
 @endsection

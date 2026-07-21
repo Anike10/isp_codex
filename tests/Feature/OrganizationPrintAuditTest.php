@@ -34,7 +34,7 @@ class OrganizationPrintAuditTest extends TestCase
             ->assertSee('01900000000')
             ->assertSee('class="bw-print no-signature', false)
             ->assertSee('id="noSignatureOption" checked', false)
-            ->assertDontSee('id="printOrganization"', false)
+            ->assertSee('id="printOrganization"', false)
             ->assertSee('id="showBankInformationOption" checked', false)
             ->assertSee('show-bank-information')
             ->assertSee('Test Bank')->assertSee('123456789')->assertSee('987654');
@@ -59,7 +59,7 @@ class OrganizationPrintAuditTest extends TestCase
         $this->actingAs($user)->post(route('organizations.store'), ['name' => 'New Default', 'address' => 'Dhaka', 'mobile' => '01800000000', 'is_default' => 1, 'is_active' => 1])->assertRedirect(route('organizations.index'));
 
         $this->assertFalse($first->fresh()->is_default);
-        $this->assertDatabaseHas('organizations', ['name' => 'New Default', 'is_default' => true, 'is_active' => true]);
+        $this->assertDatabaseHas('organizations', ['name' => 'New Default', 'is_default' => true, 'is_active' => true, 'show_organization_selector' => true]);
         $this->assertSame(1, Organization::where('is_default', true)->count());
     }
 }

@@ -40,14 +40,14 @@ class OrganizationController extends Controller
             'email' => ['nullable', 'email', 'max:255'], 'website' => ['nullable', 'string', 'max:255'],
             'tax_id' => ['nullable', 'string', 'max:100'], 'logo_url' => ['nullable', 'string', 'max:255'],
             'footer_note' => ['nullable', 'string'],
-            'default_without_signature' => ['nullable', 'boolean'], 'show_organization_selector' => ['nullable', 'boolean'],
+            'default_without_signature' => ['nullable', 'boolean'],
             'bank_name' => ['nullable', 'string', 'max:255'], 'bank_account_name' => ['nullable', 'string', 'max:255'],
             'bank_account_number' => ['nullable', 'string', 'max:100'], 'bank_branch' => ['nullable', 'string', 'max:255'],
             'bank_routing_number' => ['nullable', 'string', 'max:100'], 'show_bank_info_on_invoice' => ['nullable', 'boolean'],
             'is_default' => ['nullable', 'boolean'], 'is_active' => ['nullable', 'boolean'],
         ]);
         $data['default_without_signature'] = $request->boolean('default_without_signature');
-        $data['show_organization_selector'] = $request->boolean('show_organization_selector');
+        $data['show_organization_selector'] = true;
         $data['show_bank_info_on_invoice'] = $request->boolean('show_bank_info_on_invoice');
         $data['is_default'] = $request->boolean('is_default');
         $data['is_active'] = $request->boolean('is_active');
