@@ -103,7 +103,7 @@ Do not commit SSH passwords, `.env` secrets, SMS tokens, or database passwords.
 - `/invoices`
 - `/quotations`
 - `/payments`
-- Invoice, party, and payment detail pages include an `Edit History` section when old versions exist.
+- Invoice detail pages show the creator user and exact creation time, and include the paginated `Edit History` section backed by JSON snapshots in `record_versions` (or a clear empty-history message).
 - `/bkash-sms-payments`
 - `/payment-accounts`
 - `/accounting/ledger`

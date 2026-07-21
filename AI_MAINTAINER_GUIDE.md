@@ -355,6 +355,7 @@ Never commit real secrets to Markdown. Use placeholders and tell maintainers to 
 ### Record Version / Edit History Notes
 
 - Edited records are preserved in `record_versions` with `old_values`, `new_values`, `changed_fields`, `edited_by`, `edited_by_type`, and `edited_by_name`.
+- Invoice detail pages resolve `invoices.entry_by` to the creator user and display the exact `created_at` date/time. System/backfilled entries use a clear `System` fallback.
 - Invoice and quotation edits use `RecordVersionService` to snapshot the document, party, and line items before and after the edit. This is intentional because document line items are deleted/recreated during draft edits.
 - Invoice finalization, including bulk finalization, must also create full invoice snapshots. Avoid query-builder `update(...)` for operator-facing invoice state changes unless you manually write a `record_versions` row.
 - Party edits update party fields, package/subscription changes, and the version row inside one DB transaction so history cannot drift from the actual party state.
@@ -365,6 +366,7 @@ Never commit real secrets to Markdown. Use placeholders and tell maintainers to 
 - Do not attach the generic observer to high-churn generated records such as live OLT polling rows, payment allocations, customer balance transactions, stock movements, or SMS status rows unless you also suppress system/background updates. Otherwise normal refresh/accounting work can create excessive history noise.
 - Product stock-only updates are represented by stock movements and are excluded from generic record versions. Initial purchase-bill subtotal calculation is also suppressed because it is creation, not an operator edit.
 - Operator pages should not show raw JSON as the primary history view. `resources/views/partials/record_versions.blade.php` renders invoice old versions in a full-width invoice-like preview with a distinct history background. Do not add fake action labels such as `History Copy`, and do not place the old-version preview inside a narrow table column; it must use the full content width so the historical invoice/record is readable. Keep future history UI readable first, with raw data only as a secondary/debug option if needed.
+- Keep the shared record-version partial included on invoice details even when the history collection is empty; it provides both the empty-state explanation and the old-version controls when edits exist.
 - Detail pages paginate edit history with the `history_page` query parameter and order by descending record-version ID so same-second edits remain deterministic.
 
 ## Route And Permission Model

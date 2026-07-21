@@ -334,6 +334,8 @@ refreshInvoiceAccounts();
 </script>
 @endif
 
+@include('partials.record_versions', ['versions' => $versions])
+
 <section class="card" style="margin-top:16px">
     <div class="topbar" style="margin-bottom:12px">
         <div><h2 style="margin:0">Print History</h2><div class="muted">Organization and user recorded when Print was pressed.</div></div>
