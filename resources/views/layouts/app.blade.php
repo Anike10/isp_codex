@@ -244,7 +244,9 @@
                         @endif
                         @if (auth()->user()?->hasPermission('manage_mikrotik_routers'))
                             <a href="{{ route('mikrotik-routers.index') }}">MikroTik Routers</a>
-                            <a href="{{ route('ip-pools.index') }}">IP Pools</a>
+                            @if (Route::has('ip-pools.index'))
+                                <a href="{{ route('ip-pools.index') }}">IP Pools</a>
+                            @endif
                             <a href="{{ route('network-map.index') }}">FTTX Network Map</a>
                             <a href="{{ route('olt-onus.index') }}">OLT ONUs</a>
                             <a href="{{ route('olt-onus.deny-list') }}">ONU Deny List</a>
