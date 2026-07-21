@@ -346,6 +346,7 @@
             @if ($canBulkSelectInvoices)
                 <th class="invoice-select-cell">Select</th>
             @endif
+            <th>SL</th>
             <th>Invoice</th>
             <th>Party</th>
             <th>Mobile</th>
@@ -386,6 +387,7 @@
                     @endif
                 </td>
             @endif
+            <td>{{ $invoices->firstItem() + $loop->index }}</td>
             <td>
                 <a href="{{ route('invoices.show', $invoice) }}"><strong>{{ $invoice->invoice_no }}</strong></a>
                 @if ($isOverdue)
@@ -440,7 +442,7 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="{{ $canBulkSelectInvoices ? 13 : 12 }}">No invoices found.</td></tr>
+        <tr><td colspan="{{ $canBulkSelectInvoices ? 14 : 13 }}">No invoices found.</td></tr>
     @endforelse
     </tbody>
 </table>
