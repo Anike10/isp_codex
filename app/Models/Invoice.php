@@ -91,6 +91,22 @@ class Invoice extends Model
         return $this->belongsTo(Customer::class, 'reseller_id');
     }
 
+    public function entryByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'entry_by');
+    }
+
+    public function getEnteredByLabelAttribute(): string
+    {
+        $entryBy = (string) $this->entry_by;
+
+        if ($this->entry_by_type === 'user' || ctype_digit($entryBy)) {
+            return $this->entryByUser?->name ?? 'User #'.$entryBy;
+        }
+
+        return filled($entryBy) ? ucfirst($entryBy) : 'System';
+    }
+
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);

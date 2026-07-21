@@ -854,7 +854,7 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice)
     {
-        $relations = ['customer', 'reseller', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items', 'printLogs.organization', 'printLogs.user'];
+        $relations = ['customer', 'reseller', 'entryByUser', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items', 'printLogs.organization', 'printLogs.user'];
 
         if (method_exists(InvoiceItem::class, 'saleReturnItems')) {
             $relations[] = 'items.saleReturnItems.saleReturn';

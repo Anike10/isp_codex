@@ -73,6 +73,8 @@
         <p class="invoice-total-row invoice-due-row"><strong>Due:</strong> <span>{{ number_format($invoice->due_amount, 2) }}</span></p>
         <p class="invoice-total-row"><strong>Status:</strong> <span class="badge {{ $invoice->status }}">{{ $invoice->status }}</span></p>
         <p class="invoice-total-row"><strong>Finalized:</strong> <span>{{ $invoice->finalized_at?->format('Y-m-d H:i') ?? 'Not finalized' }}</span></p>
+        <p class="invoice-total-row"><strong>Created By:</strong> <span>{{ $invoice->entered_by_label }}</span></p>
+        <p class="invoice-total-row"><strong>Created At:</strong> <span>{{ $invoice->created_at?->format('d M Y, h:i:s A') ?? 'N/A' }}</span></p>
     </section>
     <section class="card invoice-summary-card invoice-party-card">
         <h2>Party</h2>
