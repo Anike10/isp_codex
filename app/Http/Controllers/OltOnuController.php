@@ -202,7 +202,20 @@ class OltOnuController extends Controller
 
         $oltDevice->update($data);
 
-        return redirect()->route('olt-onus.index')->with('success', 'OLT settings updated successfully.');
+        if ($oltDevice->status !== 'active') {
+            return redirect()->route('olt-onus.index')
+                ->with('success', 'OLT settings updated. Connection test was skipped because this OLT is inactive.');
+        }
+
+        try {
+            $this->testOltConnection($oltDevice);
+        } catch (Throwable $exception) {
+            return redirect()->route('olt-onus.index')
+                ->with('error', 'OLT settings were saved, but the connection test failed: '.(Utf8Text::clean($exception->getMessage()) ?? 'Unknown error'));
+        }
+
+        return redirect()->route('olt-onus.index')
+            ->with('success', 'OLT settings updated and connection verified successfully.');
     }
 
     public function downloadConfigBackup(OltDevice $oltDevice)
@@ -1231,7 +1244,6 @@ class OltOnuController extends Controller
 
             $oltDevice->update([
                 'last_error' => $error,
-                'last_polled_at' => now(),
             ]);
 
             $this->failRefreshProgress('OLT live refresh failed: '.$error);
@@ -1377,7 +1389,6 @@ class OltOnuController extends Controller
 
             $oltOnu->oltDevice?->update([
                 'last_error' => $error,
-                'last_polled_at' => now(),
             ]);
 
             if ($request->expectsJson()) {
@@ -1820,14 +1831,18 @@ class OltOnuController extends Controller
             }
 
             [$ponPort, $sourceOnuId] = $ponOnu;
+            $autoAssignOnuId = $type === 'deny' && $this->usesHsgqEpon($oltDevice);
 
             $rows[] = [
                 'olt_device_id' => $oltDevice->id,
                 'olt_name' => $oltDevice->name,
                 'olt_protocol_profile' => $oltDevice->protocol_profile,
                 'pon_port' => $ponPort,
-                'onu_id' => $type === 'discovery' ? $this->nextOnuId($oltDevice, $ponPort) : $sourceOnuId,
+                'onu_id' => $autoAssignOnuId
+                    ? 0
+                    : ($type === 'discovery' ? $this->nextOnuId($oltDevice, $ponPort) : $sourceOnuId),
                 'source_onu_id' => $sourceOnuId,
+                'auto_assign_onu_id' => $autoAssignOnuId,
                 'serial' => $serial,
                 'status' => $type === 'deny' ? 'deny' : 'discovered',
                 'raw' => $line,
@@ -2232,15 +2247,22 @@ class OltOnuController extends Controller
             ? 23
             : (int) $oltDevice->port;
 
-        $output = $this->runOltUtilityCommandsWithMethod($oltDevice, $commands, $accessMethod, $port);
+        try {
+            $output = $this->runOltUtilityCommandsWithMethod($oltDevice, $commands, $accessMethod, $port);
 
-        if ($this->shouldRetryUtilityOverTelnet($oltDevice, $output)) {
-            $telnetOutput = $this->runOltUtilityCommandsWithMethod($oltDevice, $commands, 'telnet', 23);
+            if ($this->shouldRetryUtilityOverTelnet($oltDevice, $output)) {
+                $telnetOutput = $this->runOltUtilityCommandsWithMethod($oltDevice, $commands, 'telnet', 23);
+                $output .= "\n\nRetried over telnet:\n".$telnetOutput;
+            }
 
-            return $output."\n\nRetried over telnet:\n".$telnetOutput;
+            $this->markOltConnectionSucceeded($oltDevice);
+
+            return $output;
+        } catch (Throwable $exception) {
+            $this->markOltOperationFailed($oltDevice, $exception);
+
+            throw $exception;
         }
-
-        return $output;
     }
 
     private function utilityAccessMethod(OltDevice $oltDevice): string
@@ -3003,16 +3025,15 @@ class OltOnuController extends Controller
             : (int) $oltDevice->port;
 
         try {
-            return $this->runOltWriteCommandsWithMethod($oltDevice, $commands, $accessMethod, $port);
+            $output = $this->runOltWriteCommandsWithMethod($oltDevice, $commands, $accessMethod, $port);
+            $this->markOltConnectionSucceeded($oltDevice);
+
+            return $output;
         } catch (Throwable $exception) {
             if ($this->shouldRetryWriteOverTelnet($oltDevice, $exception)) {
                 try {
                     $output = $this->runOltWriteCommandsWithMethod($oltDevice, $commands, 'telnet', 23);
-
-                    $oltDevice->update([
-                        'last_error' => null,
-                        'last_polled_at' => now(),
-                    ]);
+                    $this->markOltConnectionSucceeded($oltDevice);
 
                     return $output;
                 } catch (Throwable $telnetException) {
@@ -3020,10 +3041,7 @@ class OltOnuController extends Controller
                 }
             }
 
-            $oltDevice->update([
-                'last_error' => Utf8Text::clean($exception->getMessage()) ?? 'Unknown error',
-                'last_polled_at' => now(),
-            ]);
+            $this->markOltOperationFailed($oltDevice, $exception);
 
             throw $exception;
         }
@@ -3134,10 +3152,76 @@ class OltOnuController extends Controller
                 $outputs[] = $client->command($command);
             }
 
-            return implode("\n", $outputs ?? []);
+            $output = implode("\n", $outputs ?? []);
+            $this->markOltConnectionSucceeded($oltDevice);
+
+            return $output;
+        } catch (Throwable $exception) {
+            $this->markOltOperationFailed($oltDevice, $exception);
+
+            throw $exception;
         } finally {
             $client->close();
         }
+    }
+
+    private function markOltConnectionSucceeded(OltDevice $oltDevice): void
+    {
+        $oltDevice->update([
+            'last_error' => null,
+            'last_polled_at' => now(),
+        ]);
+    }
+
+    private function testOltConnection(OltDevice $oltDevice): void
+    {
+        $client = $oltDevice->access_method === 'telnet'
+            ? app(OltTelnetClient::class)
+            : app(OltSshClient::class);
+
+        try {
+            if ($client instanceof OltTelnetClient) {
+                $client->connect(
+                    $oltDevice->host,
+                    (int) $oltDevice->port,
+                    $oltDevice->username,
+                    $oltDevice->password,
+                    $oltDevice->enable_password,
+                );
+            } else {
+                $client->connect(
+                    $oltDevice->host,
+                    (int) $oltDevice->port,
+                    $oltDevice->username,
+                    $oltDevice->password,
+                );
+            }
+
+            $this->markOltConnectionSucceeded($oltDevice);
+        } catch (Throwable $exception) {
+            $this->markOltOperationFailed($oltDevice, $exception);
+
+            throw $exception;
+        } finally {
+            $client->close();
+        }
+    }
+
+    private function markOltOperationFailed(OltDevice $oltDevice, Throwable $exception): void
+    {
+        $message = Utf8Text::clean($exception->getMessage()) ?? 'Unknown error';
+        $values = ['last_error' => $message];
+
+        if (! $this->isOltConnectionFailure($message)) {
+            $values['last_polled_at'] = now();
+        }
+
+        $oltDevice->update($values);
+    }
+
+    private function isOltConnectionFailure(string $message): bool
+    {
+        return preg_match('/(?:authentication|login failed|credential|cannot connect|connection (?:failed|refused|reset)|socket|timed? out|timeout|host unreachable|network is unreachable|no route to host|not connected|broken pipe)/i', $message) === 1;
     }
 
     private function denyListDeleteCommands(int $ponPort, string $serial, ?OltProtocolProfile $profile): array

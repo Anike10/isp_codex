@@ -94,7 +94,13 @@
                                 <input type="hidden" name="pon_port" value="{{ $row['pon_port'] }}">
                                 <input type="hidden" name="serial" value="{{ $row['serial'] }}">
                                 <div style="display:grid; gap:8px; min-width:240px">
-                                    @if ($row['source_onu_id'] !== null)
+                                    @if ($row['auto_assign_onu_id'] ?? false)
+                                        <input type="hidden" name="onu_id" value="0">
+                                        <div style="font-size:0.9em; color:#555;">
+                                            <strong>ONU ID</strong><br>
+                                            Automatic — OLT will assign the next free ID
+                                        </div>
+                                    @elseif ($row['source_onu_id'] !== null)
                                         <label style="display:flex; flex-direction:column; gap:4px; font-size:0.9em;">
                                             ONU ID
                                             <input autocomplete="off" name="onu_id" type="number" min="{{ ($row['olt_protocol_profile'] ?? null) === 'hsgq_epon' ? 0 : 1 }}" max="256" value="{{ $row['onu_id'] }}" required>

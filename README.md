@@ -26,6 +26,7 @@ A Laravel 12 application for an ISP and computer service business.
 - Payments page includes invoice payments and direct advance collections, with
   entry operator/time and a clear invoice-versus-advance breakdown.
 - Payment account and cash ledgers use database-level merged pagination and include payment credits, direct advance receipts, and expense debits without double-counting payment remainders
+- Party/accounting ledger rows show a serial number and full date/time, and running balances follow that deterministic chronological order.
 - Edit history/audit snapshots for invoices, quotations, parties, payments, roles, permissions, and other tracked operator-editable records through the shared `record_versions` table, including invoice finalization changes
 - Payment accounts for cash, bKash, Nagad, and bank
 - Support ticket management
@@ -463,7 +464,14 @@ EPON deny-list note:
 - The deny-list page scans all configured EPON ports in one OLT session for speed.
 - For this EPON firmware, SSH command entry can lose spaces (`bind-onu 0 mac ...` becomes `bind-onu 0mac...`), so EPON deny-list reads and ONU add/write commands use Telnet port `23`.
 - Adding from the deny-list first removes the MAC with `blacklist delete mac {mac}`, then binds the ONU and writes VLAN/name/description.
+- HSGQ blacklist row numbers such as `7/1` are deny-list sequence values, not guaranteed free ONU IDs. `Allow ONU` submits ID `0`, lets the OLT assign the next free ID, reads the assigned ID back, then writes the selected VLAN.
 - The deny-list `Delete` action only runs `blacklist delete mac {mac}` in the selected EPON PON context and saves the OLT config; it does not bind or authorize the ONU.
+
+OLT connection status note:
+
+- `Edit OLT` uses `Update & Test Connection`. Saving an active OLT immediately performs a login-only SSH/Telnet test; it does not poll ONUs or write OLT configuration.
+- A successful edit test, read, utility action, or write clears stale connection errors and updates the connected time. Authentication, refused connection, timeout, and command/action failures have separate operator-facing messages.
+- `Save OLT Config` is only for permanently saving changes on the OLT and is not required to make the App show `Connected` after editing credentials.
 
 EPON refresh speed note:
 

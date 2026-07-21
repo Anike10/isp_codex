@@ -31,9 +31,25 @@
                         $connectionBadgeClass = 'inactive';
                         $connectionMessage = 'This OLT is configured inactive, so no connection attempt will run.';
                     } elseif ($oltDevice->last_error) {
-                        $connectionBadge = 'Connection failed';
                         $connectionBadgeClass = 'failed';
-                        $connectionMessage = 'OLT could not be reached: '.$oltDevice->last_error;
+                        $connectionError = (string) $oltDevice->last_error;
+
+                        if (preg_match('/(?:authentication|login failed|credential)/i', $connectionError)) {
+                            $connectionBadge = 'Login failed';
+                            $connectionMessage = 'OLT-এর IP/Port-এ সংযোগ হয়েছে, কিন্তু Username বা Password গ্রহণ করেনি। Edit OLT থেকে Username ও Password ঠিক করে Save করুন, তারপর Fast Status Refresh দিন।';
+                        } elseif (preg_match('/connection refused/i', $connectionError)) {
+                            $connectionBadge = 'Connection refused';
+                            $connectionMessage = 'OLT সংযোগ গ্রহণ করছে না। IP, Port এবং OLT-এর SSH/Telnet service চালু আছে কি না যাচাই করুন।';
+                        } elseif (preg_match('/(?:timed? out|timeout)/i', $connectionError)) {
+                            $connectionBadge = 'Connection timeout';
+                            $connectionMessage = 'নির্ধারিত সময়ের মধ্যে OLT থেকে উত্তর পাওয়া যায়নি। Network, IP, Port এবং OLT চালু আছে কি না যাচাই করুন।';
+                        } elseif (preg_match('/(?:cannot connect|connection (?:failed|reset)|socket|host unreachable|network is unreachable|no route to host|not connected|broken pipe)/i', $connectionError)) {
+                            $connectionBadge = 'Connection failed';
+                            $connectionMessage = 'OLT-এর IP/Port-এ সংযোগ করা যায়নি। Network, IP, Port এবং access method যাচাই করুন। বিস্তারিত: '.$connectionError;
+                        } else {
+                            $connectionBadge = 'Refresh/action failed';
+                            $connectionMessage = 'OLT-তে সংযোগ হয়েছিল, কিন্তু সর্বশেষ কাজটি সম্পন্ন হয়নি। বিস্তারিত: '.$connectionError;
+                        }
                     } elseif ($oltDevice->last_polled_at) {
                         $connectionBadge = 'Connected';
                         $connectionBadgeClass = 'active';
@@ -62,7 +78,7 @@
                                 none
                             @endforelse
                             | <span class="badge {{ $connectionBadgeClass }}">{{ $connectionBadge }}</span>
-                            <span style="margin-left:5px">{{ $connectionMessage }}</span>
+                            <span style="display:block; margin-top:6px; white-space:normal">{{ $connectionMessage }}</span>
                         </div>
                         @if ($commandWarnings !== [])
                             <div class="badge failed" style="margin-top:8px">Profile mismatch: {{ implode(', ', $commandWarnings) }}</div>
@@ -891,6 +907,7 @@ async function pollOltRefreshProgress(panel) {
                 button.disabled = false;
                 button.textContent = 'Power/VLAN + MAC Refresh';
             }
+            setTimeout(() => window.location.reload(), 2500);
         }
     } catch (error) {
         panel.querySelector('[data-progress-message]').textContent = error.message;

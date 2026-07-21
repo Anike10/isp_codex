@@ -206,7 +206,7 @@ class OltOnuControllerCommandTest extends TestCase
     public function test_hsgq_epon_finds_auto_assigned_onu_id_from_output(): void
     {
         $onuId = $this->callPrivateCommandBuilder('findEponOnuIdInOutput', [
-            "1/6  70:a8:e3:f3:75:47 Online TRUE TRUE 2026/05/21 15:00:00 alom",
+            '1/6  70:a8:e3:f3:75:47 Online TRUE TRUE 2026/05/21 15:00:00 alom',
             new OltDevice([
                 'id' => 1,
                 'name' => 'US_EPON',
@@ -248,7 +248,8 @@ class OltOnuControllerCommandTest extends TestCase
         $this->assertCount(1, $rows);
         $this->assertSame(1, $rows[0]['pon_port']);
         $this->assertNull($rows[0]['source_onu_id']);
-        $this->assertNull($rows[0]['onu_id']);
+        $this->assertSame(0, $rows[0]['onu_id']);
+        $this->assertTrue($rows[0]['auto_assign_onu_id']);
         $this->assertSame('80:af:ca:72:d3:d1', $rows[0]['serial']);
         $this->assertSame('deny', $rows[0]['status']);
     }
@@ -274,6 +275,8 @@ class OltOnuControllerCommandTest extends TestCase
 
         $this->assertCount(1, $rows);
         $this->assertSame(44, $rows[0]['source_onu_id']);
+        $this->assertSame(0, $rows[0]['onu_id']);
+        $this->assertTrue($rows[0]['auto_assign_onu_id']);
         $this->assertSame('84:74:2a:1d:64:6f', $rows[0]['serial']);
     }
 
@@ -295,7 +298,19 @@ class OltOnuControllerCommandTest extends TestCase
         $this->assertCount(1, $rows);
         $this->assertSame(7, $rows[0]['pon_port']);
         $this->assertSame(1, $rows[0]['source_onu_id']);
+        $this->assertSame(0, $rows[0]['onu_id']);
+        $this->assertTrue($rows[0]['auto_assign_onu_id']);
         $this->assertSame('70:a8:e3:f3:75:47', $rows[0]['serial']);
+    }
+
+    public function test_connection_errors_are_distinguished_from_olt_command_errors(): void
+    {
+        $this->assertTrue($this->callPrivateCommandBuilder('isOltConnectionFailure', [
+            'OLT SSH authentication failed. Check the configured username and password.',
+        ]));
+        $this->assertFalse($this->callPrivateCommandBuilder('isOltConnectionFailure', [
+            'OLT rejected status command: Unknown command',
+        ]));
     }
 
     public function test_hsgq_epon_deny_commands_scan_configured_pons_in_one_session(): void
@@ -416,7 +431,7 @@ class OltOnuControllerCommandTest extends TestCase
                 ['pon_port' => 2, 'onu_id' => 7],
                 ['pon_port' => 3, 'onu_id' => 1],
             ],
-            new OltDevice(),
+            new OltDevice,
             2,
             true,
         ]);
@@ -468,7 +483,7 @@ class OltOnuControllerCommandTest extends TestCase
         $reflection = new ReflectionMethod(OltOnuController::class, $method);
         $reflection->setAccessible(true);
 
-        return $reflection->invokeArgs(new OltOnuController(), $arguments);
+        return $reflection->invokeArgs(new OltOnuController, $arguments);
     }
 
     private function onuData(): array

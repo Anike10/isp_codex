@@ -432,4 +432,6 @@ OLT production note:
 - HSGQ context commands are limited to CLI navigation (`enable`, `config`/`configure`, `interface epon 1-8`, `exit`) before read-only show commands.
 - The refresh job polls selected `pon_ports` one by one to collect all PON ONU status and optical power.
 - The app supports legacy SSH OLT access through phpseclib because the HSGQ OLT offers `ssh-rsa`/`ssh-dss` host keys.
+- Saving an active OLT from `Edit OLT` now performs a login-only connection test. It updates the connection badge without requiring `Save OLT Config` and does not send polling or configuration commands.
+- HSGQ EPON deny-list authorization uses OLT automatic ONU-ID assignment because blacklist row numbers are not guaranteed free ONU IDs.
 - `isp.us.com.bd` must have network reachability to the OLT management IP (`192.168.10.111:22`) through LAN/VPN/routing; otherwise live polling cannot work from production.

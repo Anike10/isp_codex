@@ -2,15 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\EnsureUserHasPermission;
 use App\Jobs\RunOltFullRefresh;
 use App\Models\OltDevice;
 use App\Models\OltOnu;
 use App\Models\OltProtocolProfile;
 use App\Models\OltRefreshRun;
 use App\Models\User;
-use App\Http\Middleware\EnsureUserHasPermission;
+use App\Services\OltSshClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Mockery;
 use Tests\TestCase;
 
 class OltManagementTest extends TestCase
@@ -148,7 +150,7 @@ class OltManagementTest extends TestCase
         $this->assertNull($olt->fresh()->last_raw_output);
     }
 
-    public function test_index_distinguishes_configured_active_from_a_failed_olt_connection(): void
+    public function test_index_explains_a_refused_olt_connection(): void
     {
         $olt = $this->gponOltWithEponCommands();
         $olt->update([
@@ -161,8 +163,113 @@ class OltManagementTest extends TestCase
             ->get(route('olt-onus.index', ['olt_device_id' => $olt->id]))
             ->assertOk()
             ->assertSee('Configured Active')
-            ->assertSee('Connection failed')
-            ->assertSee('OLT could not be reached: Cannot connect to OLT 103.133.200.180:23. Connection refused');
+            ->assertSee('Connection refused')
+            ->assertSee('OLT সংযোগ গ্রহণ করছে না। IP, Port এবং OLT-এর SSH/Telnet service চালু আছে কি না যাচাই করুন।');
+    }
+
+    public function test_index_explains_how_to_fix_failed_olt_login(): void
+    {
+        $olt = $this->gponOltWithEponCommands();
+        $olt->update([
+            'status' => 'active',
+            'last_error' => 'OLT SSH authentication failed. Check the configured username and password.',
+        ]);
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs(User::factory()->create())
+            ->get(route('olt-onus.index', ['olt_device_id' => $olt->id]))
+            ->assertOk()
+            ->assertSee('Login failed')
+            ->assertSee('OLT-এর IP/Port-এ সংযোগ হয়েছে, কিন্তু Username বা Password গ্রহণ করেনি।')
+            ->assertSee('Edit OLT থেকে Username ও Password ঠিক করে Save করুন, তারপর Fast Status Refresh দিন।');
+    }
+
+    public function test_editing_an_active_olt_immediately_tests_and_updates_connection_status(): void
+    {
+        $olt = $this->gponOltWithEponCommands();
+        $olt->update([
+            'last_error' => 'OLT SSH authentication failed.',
+            'last_polled_at' => null,
+        ]);
+
+        $sshClient = Mockery::mock(OltSshClient::class);
+        $sshClient->shouldReceive('connect')
+            ->once()
+            ->with('192.0.2.10', 22, 'updated-user', 'updated-secret');
+        $sshClient->shouldReceive('close')->once();
+        $this->app->instance(OltSshClient::class, $sshClient);
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs(User::factory()->create())
+            ->put(route('olt-onus.olts.update', $olt), $this->oltUpdatePayload($olt, [
+                'username' => 'updated-user',
+                'password' => 'updated-secret',
+            ]))
+            ->assertRedirect(route('olt-onus.index'))
+            ->assertSessionHas('success', 'OLT settings updated and connection verified successfully.');
+
+        $olt->refresh();
+        $this->assertSame('updated-user', $olt->username);
+        $this->assertSame('updated-secret', $olt->password);
+        $this->assertNull($olt->last_error);
+        $this->assertNotNull($olt->last_polled_at);
+    }
+
+    public function test_editing_an_active_olt_saves_settings_and_reports_failed_connection_test(): void
+    {
+        $olt = $this->gponOltWithEponCommands();
+
+        $sshClient = Mockery::mock(OltSshClient::class);
+        $sshClient->shouldReceive('connect')
+            ->once()
+            ->andThrow(new \RuntimeException('OLT SSH authentication failed. Check the configured username and password.'));
+        $sshClient->shouldReceive('close')->once();
+        $this->app->instance(OltSshClient::class, $sshClient);
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs(User::factory()->create())
+            ->put(route('olt-onus.olts.update', $olt), $this->oltUpdatePayload($olt, [
+                'username' => 'wrong-user',
+                'password' => 'wrong-secret',
+            ]))
+            ->assertRedirect(route('olt-onus.index'))
+            ->assertSessionHas('error', 'OLT settings were saved, but the connection test failed: OLT SSH authentication failed. Check the configured username and password.');
+
+        $olt->refresh();
+        $this->assertSame('wrong-user', $olt->username);
+        $this->assertSame('OLT SSH authentication failed. Check the configured username and password.', $olt->last_error);
+        $this->assertNull($olt->last_polled_at);
+    }
+
+    public function test_hsgq_deny_list_uses_automatic_onu_id_and_marks_successful_connection(): void
+    {
+        $olt = $this->gponOltWithEponCommands();
+        $olt->update([
+            'protocol_profile' => 'hsgq_epon',
+            'last_error' => 'OLT SSH authentication failed.',
+            'last_polled_at' => null,
+        ]);
+
+        $sshClient = Mockery::mock(OltSshClient::class);
+        $sshClient->shouldReceive('connect')->once();
+        $sshClient->shouldReceive('command')->andReturnUsing(
+            fn (string $command): string => $command === 'show blacklist onu-info all'
+                ? '7/1 00:d5:9f:3c:09:94 81 B_ONU07/01'
+                : ''
+        );
+        $sshClient->shouldReceive('close')->once();
+        $this->app->instance(OltSshClient::class, $sshClient);
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs(User::factory()->create())
+            ->get(route('olt-onus.deny-list', ['olt_device_id' => $olt->id]))
+            ->assertOk()
+            ->assertSee('name="onu_id" value="0"', false)
+            ->assertSee('Automatic — OLT will assign the next free ID');
+
+        $olt->refresh();
+        $this->assertNull($olt->last_error);
+        $this->assertNotNull($olt->last_polled_at);
     }
 
     public function test_deleting_an_olt_also_deletes_its_cached_onus(): void
@@ -318,5 +425,38 @@ class OltManagementTest extends TestCase
             'onu_id' => $onuId,
             'status' => $status,
         ]);
+    }
+
+    private function oltUpdatePayload(OltDevice $olt, array $overrides = []): array
+    {
+        return array_replace([
+            'name' => $olt->name,
+            'brand' => $olt->brand,
+            'protocol_profile' => $olt->protocol_profile,
+            'host' => $olt->host,
+            'access_method' => $olt->access_method,
+            'port' => $olt->port,
+            'username' => $olt->username,
+            'password' => null,
+            'enable_password' => null,
+            'snmp_enabled' => false,
+            'snmp_version' => '2c',
+            'snmp_port' => 161,
+            'snmp_community' => null,
+            'snmp_timeout_ms' => 800,
+            'snmp_retries' => 1,
+            'snmp_status_oid_template' => null,
+            'snmp_power_oid_template' => null,
+            'snmp_power_divisor' => 1,
+            'read_context_commands' => $olt->read_context_commands,
+            'pon_ports' => $olt->pon_ports,
+            'onu_status_command' => $olt->onu_status_command,
+            'onu_power_command' => $olt->onu_power_command,
+            'onu_alarm_command' => $olt->onu_alarm_command,
+            'onu_vlan_command' => $olt->onu_vlan_command,
+            'onu_mac_command' => $olt->onu_mac_command,
+            'status' => $olt->status,
+            'notes' => $olt->notes,
+        ], $overrides);
     }
 }

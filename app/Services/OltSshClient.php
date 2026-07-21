@@ -19,7 +19,7 @@ class OltSshClient
         ]);
 
         if (! $this->ssh->login($username, $password)) {
-            throw new RuntimeException('OLT SSH login failed.');
+            throw new RuntimeException('OLT SSH authentication failed. Check the configured username and password.');
         }
 
         $this->ssh->enablePTY();

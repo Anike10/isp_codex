@@ -661,6 +661,7 @@ Ledger page shows:
 - Expense debit rows
 - Payment allocation summary, so one payment can be audited across multiple invoices.
 - Advance balance credits and advance-used memo rows.
+- Accounting/party ledger rows include `SL` and a full date/time. Date-only business fields (`payment_date`, `transaction_date`, and `expense_date`) use their business date plus the record creation time for deterministic chronological ordering and running balances.
 
 Important accounting rule:
 
@@ -1515,7 +1516,10 @@ port-vlan {ethernet_port} mode tag {vlan} pri 0
 save
 ```
 
+- Treat the `PON/ONU` number printed by `show blacklist onu-info all` as a blacklist row sequence, not a guaranteed free configured ONU ID. For HSGQ EPON deny authorization, submit ONU ID `0`, use the firmware's auto-bind syntax, read the assigned ID from `show onu-info all`, and only then apply VLAN/config save commands.
 - The deny-list also has a standalone `Delete` action. It removes only the blacklist MAC in the selected PON and saves; it must not bind, authorize, or create a cached ONU row.
+- Editing an active OLT must save the App settings and immediately run a login-only connection test. Success clears stale errors and updates the connected time; failure keeps the edited settings but stores and shows a specific authentication/connection error. This test must not poll ONU data or write/save OLT configuration.
+- Successful OLT read, utility, and write sessions clear stale connection errors. Failed authentication/transport attempts must not overwrite the last successful connection time. The UI distinguishes authentication, refused connection, timeout, transport, and connected-but-command-failed states.
 
 The live parser tries to extract:
 

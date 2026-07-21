@@ -51,13 +51,14 @@
 </div>
 
 <table>
-    <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Reference</th><th>Note</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
+    <thead><tr><th>SL</th><th>Date &amp; Time</th><th>Type</th><th>Party</th><th>Reference</th><th>Note</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
     <tbody>
         @php $running = 0; @endphp
         @forelse ($entries as $entry)
             @php $running += $entry['debit'] - $entry['credit']; @endphp
             <tr @if ($entry['url']) data-href="{{ $entry['url'] }}" @endif>
-                <td>{{ $entry['date']?->format('Y-m-d') }}</td>
+                <td>{{ $loop->iteration }}</td>
+                <td>{{ $entry['date']?->format('Y-m-d h:i:s A') }}</td>
                 <td>{{ $entry['type'] }}</td>
                 <td>{{ $entry['customer'] }}</td>
                 <td>
@@ -73,7 +74,7 @@
                 <td>{{ number_format($running, 2) }}</td>
             </tr>
         @empty
-            <tr><td colspan="8">No ledger entries found.</td></tr>
+            <tr><td colspan="9">No ledger entries found.</td></tr>
         @endforelse
     </tbody>
 </table>

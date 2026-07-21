@@ -37,7 +37,9 @@ class AccountingLedgerController extends Controller
             ->when($to, fn ($query) => $query->whereDate('created_at', '<=', $to))
             ->get()
             ->map(fn (Invoice $invoice) => [
-                'date' => $invoice->created_at,
+                'date' => $this->ledgerDateTime($invoice->created_at, $invoice->created_at),
+                'sort_order' => 10,
+                'source_id' => $invoice->id,
                 'type' => 'Invoice',
                 'customer' => $invoice->customer->name,
                 'reference' => $invoice->invoice_no,
@@ -58,7 +60,9 @@ class AccountingLedgerController extends Controller
                     ->join(', ');
 
                 return [
-                    'date' => $payment->payment_date,
+                    'date' => $this->ledgerDateTime($payment->payment_date, $payment->created_at),
+                    'sort_order' => 20,
+                    'source_id' => $payment->id,
                     'type' => 'Payment',
                     'customer' => $payment->customer->name,
                     'reference' => 'Payment #'.$payment->id,
@@ -88,7 +92,9 @@ class AccountingLedgerController extends Controller
                 $isCredit = $transaction->direction === 'credit';
 
                 return [
-                    'date' => $transaction->transaction_date,
+                    'date' => $this->ledgerDateTime($transaction->transaction_date, $transaction->created_at),
+                    'sort_order' => 30,
+                    'source_id' => $transaction->id,
                     'type' => $isCredit ? 'Advance' : 'Advance Used',
                     'customer' => $transaction->customer->name,
                     'reference' => $transaction->reference ?: 'Advance #'.$transaction->id,
@@ -107,7 +113,9 @@ class AccountingLedgerController extends Controller
             ->when($to, fn ($query) => $query->whereDate('expense_date', '<=', $to))
             ->get()
             ->map(fn (Expense $expense) => [
-                'date' => $expense->expense_date,
+                'date' => $this->ledgerDateTime($expense->expense_date, $expense->created_at),
+                'sort_order' => 40,
+                'source_id' => $expense->id,
                 'type' => $expense->expense_type === 'salary' ? 'Salary' : 'Expense',
                 'customer' => $expense->employee_name ?: 'Business Expense',
                 'reference' => $expense->reference ?: 'Expense #'.$expense->id,
@@ -119,10 +127,29 @@ class AccountingLedgerController extends Controller
                 'url' => $canOpenExpenses ? route('expenses.show', $expense) : null,
             ]);
 
-        $entries = $invoices->concat($payments)->concat($balanceEntries)->concat($expenses)->sortBy('date')->values();
+        $entries = $invoices
+            ->concat($payments)
+            ->concat($balanceEntries)
+            ->concat($expenses)
+            ->sortBy([
+                ['date', 'asc'],
+                ['sort_order', 'asc'],
+                ['source_id', 'asc'],
+            ])
+            ->values();
         $totalDebit = $entries->sum('debit');
         $totalCredit = $entries->sum('credit');
 
         return view('accounting.ledger', compact('entries', 'totalDebit', 'totalCredit', 'selectedCustomer'));
+    }
+
+    private function ledgerDateTime($businessDate, $createdAt)
+    {
+        return $businessDate->copy()->setTime(
+            $createdAt->hour,
+            $createdAt->minute,
+            $createdAt->second,
+            $createdAt->micro,
+        );
     }
 }

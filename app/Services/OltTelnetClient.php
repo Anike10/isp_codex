@@ -29,11 +29,19 @@ class OltTelnetClient
         if (preg_match('/(?:login|username|user name)\s*:/i', $banner)) {
             $this->writeLine($username);
             $banner = $this->readUntilPrompt();
+
+            if ($this->showsAuthenticationFailure($banner) && ! preg_match('/password\s*:/i', $banner)) {
+                throw new RuntimeException('OLT Telnet authentication failed. Check the configured username and password.');
+            }
         }
 
         if (preg_match('/password\s*:/i', $banner)) {
             $this->writeLine($password);
             $banner = $this->readUntilPrompt();
+
+            if ($this->showsAuthenticationFailure($banner)) {
+                throw new RuntimeException('OLT Telnet authentication failed. Check the configured username and password.');
+            }
         }
 
         if (! preg_match('/[#>]\s*$/', $banner)) {
@@ -46,7 +54,11 @@ class OltTelnetClient
 
             if (preg_match('/password\s*:/i', $enablePrompt)) {
                 $this->writeLine($enablePassword);
-                $this->readUntilPrompt();
+                $enableOutput = $this->readUntilPrompt();
+
+                if ($this->showsAuthenticationFailure($enableOutput) || ! preg_match('/#\s*$/', $enableOutput)) {
+                    throw new RuntimeException('OLT enable authentication failed. Check the configured enable password.');
+                }
             }
         }
 
@@ -141,11 +153,16 @@ class OltTelnetClient
         fwrite($this->socket, $value);
     }
 
+    private function showsAuthenticationFailure(string $output): bool
+    {
+        return preg_match('/(?:login incorrect|authentication failed|access denied|invalid (?:user|username|password)|bad password|(?:login|username|user name|password)\s*:\s*$)/i', $output) === 1;
+    }
+
     private function stripTelnetNegotiation(string $value): string
     {
         $value = preg_replace('/\xFF[\xFB-\xFE]./s', '', $value) ?? $value;
 
-        $value = str_replace(["--More--", "\x08", "\r"], ['', '', ''], $value);
+        $value = str_replace(['--More--', "\x08", "\r"], ['', '', ''], $value);
 
         return Utf8Text::clean($value) ?? '';
     }

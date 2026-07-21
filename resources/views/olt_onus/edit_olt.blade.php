@@ -12,6 +12,6 @@
 @include('olt_onus.partials.olt_form', [
     'action' => route('olt-onus.olts.update', $oltDevice),
     'method' => 'put',
-    'submitLabel' => 'Update OLT',
+    'submitLabel' => 'Update & Test Connection',
 ])
 @endsection
