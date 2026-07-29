@@ -17,16 +17,16 @@
 
 <section class="card">
     <table>
-        <thead><tr><th>SL</th><th>Product</th><th>SKU</th><th>Warehouse</th><th>Used Qty</th><th>Available Used Serials</th><th>Serial-less Used Qty</th><th>Action</th></tr></thead>
+        <thead><tr><th>Product</th><th>SKU</th><th>Warehouse</th><th>Used Qty</th><th>Available Used Serials</th><th>Serial-less Used Qty</th><th>Action</th></tr></thead>
         <tbody>
         @forelse($usedStocks as $stock)
             @php
                 $serials = $stock->product->serials->where('warehouse_id', $stock->warehouse_id)->pluck('serial_number');
                 $serialless = max(0, $stock->quantity - $serials->count());
             @endphp
-            <tr><td>{{ $loop->iteration }}</td><td>{{ $stock->product->name }}</td><td>{{ $stock->product->sku }}</td><td>{{ $stock->warehouse->name }}</td><td><strong>{{ $stock->quantity }}</strong></td><td>{{ $serials->isNotEmpty() ? app(\App\Support\SerialNumberParser::class)->formatCompact($serials->implode(', ')) : 'N/A' }}</td><td>{{ $serialless }}</td><td><a class="btn light" href="{{ route('in-house-use.index', ['product_id' => $stock->product_id, 'source_condition' => 'used']) }}">Issue to Employee</a></td></tr>
+            <tr><td>{{ $stock->product->name }}</td><td>{{ $stock->product->sku }}</td><td>{{ $stock->warehouse->name }}</td><td><strong>{{ $stock->quantity }}</strong></td><td>{{ $serials->isNotEmpty() ? app(\App\Support\SerialNumberParser::class)->formatCompact($serials->implode(', ')) : 'N/A' }}</td><td>{{ $serialless }}</td><td><a class="btn light" href="{{ route('in-house-use.index', ['product_id' => $stock->product_id, 'source_condition' => 'used']) }}">Issue to Employee</a></td></tr>
         @empty
-            <tr><td colspan="8">No returned used stock available.</td></tr>
+            <tr><td colspan="7">No returned used stock available.</td></tr>
         @endforelse
         </tbody>
     </table>

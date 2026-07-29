@@ -1,6 +1,6 @@
 @include('partials.per_page')
 <table>
-    <thead><tr><th>SL</th><th>Vehicle</th><th>Maintenance Item</th><th>Type</th><th>Interval</th><th>Last Done</th><th>Next Due</th><th>Remaining</th><th>Status</th><th>Action</th></tr></thead>
+    <thead><tr><th>Vehicle</th><th>Maintenance Item</th><th>Type</th><th>Interval</th><th>Last Done</th><th>Next Due</th><th>Remaining</th><th>Status</th><th>Action</th></tr></thead>
     <tbody>
     @forelse($schedules as $item)
         @php
@@ -9,7 +9,6 @@
             $km = $item->mileageRemaining($item->vehicle->current_mileage);
         @endphp
         <tr>
-            <td>{{ $schedules->firstItem() + $loop->index }}</td>
             <td><a href="{{ route('fleet.show',$item->vehicle) }}"><strong>{{ $item->vehicle->registration_no }}</strong></a><div class="muted">{{ $item->vehicle->name }} | {{ number_format($item->vehicle->current_mileage) }} km</div></td>
             <td><strong>{{ $item->name }}</strong>@if($item->note)<div class="muted">{{ $item->note }}</div>@endif</td>
             <td>{{ \App\Models\VehicleMaintenanceItem::TYPES[$item->maintenance_type] }}</td>
@@ -23,7 +22,7 @@
             <td><span class="badge {{ $status === 'overdue' ? 'overdue' : ($status === 'due' ? 'due' : ($status === 'upcoming' ? 'active' : 'inactive')) }}">{{ ucfirst($status) }}</span></td>
             <td><a class="btn light" href="{{ route('fleet.maintenance.logs.create',['vehicle_id'=>$item->vehicle_id,'maintenance_item_id'=>$item->id]) }}">Log Work</a></td>
         </tr>
-    @empty<tr><td colspan="10">No maintenance schedule found.</td></tr>@endforelse
+    @empty<tr><td colspan="9">No maintenance schedule found.</td></tr>@endforelse
     </tbody>
 </table>
 <div style="margin-top:16px">{{ $schedules->links() }}</div>
