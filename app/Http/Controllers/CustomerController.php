@@ -305,6 +305,49 @@ class CustomerController extends Controller
             ->with('warning', $syncResult['warning']);
     }
 
+    public function activateUntilNextDate(Customer $customer)
+    {
+        $subscription = $customer->activeSubscription ?: $customer->subscriptions()->with('package')->latest()->first();
+
+        if (! $subscription || ! $subscription->package) {
+            return back()->withErrors(['active_until' => 'No package found for this customer to activate.']);
+        }
+
+        $nextDate = now()->addMonthNoOverflow()->toDateString();
+        $detail = sprintf(
+            '[%s] Activated package to %s via quick-activate action.',
+            now()->format('Y-m-d H:i'),
+            $nextDate
+        );
+
+        DB::transaction(function () use ($customer, $subscription, $nextDate, $detail): void {
+            $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+            $subscription = Subscription::query()->whereKey($subscription->id)->lockForUpdate()->firstOrFail();
+
+            $customer->update([
+                'status' => 'active',
+                'service_valid_from' => now()->toDateString(),
+                'service_valid_until' => $nextDate,
+                'service_validity_note' => $detail,
+                'notes' => trim(implode("\n", array_filter([$customer->notes, $detail]))),
+                'grace_until' => null,
+                'grace_days' => null,
+                'grace_used_at' => null,
+            ]);
+
+            $subscription->update([
+                'status' => 'active',
+                'end_date' => null,
+            ]);
+        });
+
+        $syncResult = $this->syncMikrotikCustomer($customer->refresh());
+
+        return back()
+            ->with('success', "Package has been activated until {$nextDate}. MikroTik user {$syncResult['status']}.")
+            ->with('warning', $syncResult['warning']);
+    }
+
     public function updateServiceValidity(Request $request, Customer $customer)
     {
         $data = $request->validate([

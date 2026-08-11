@@ -85,6 +85,15 @@
                     @endif
                 @elseif ($customer->status === 'active')
                     <span class="muted">No paid month</span>
+                    @if ($customer->subscriptions_exists)
+                        @php $nextActiveDate = now()->addMonthNoOverflow()->toDateString(); @endphp
+                        <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
+                            @csrf
+                            <button class="btn secondary" type="submit">Activate until {{ $nextActiveDate }}</button>
+                        </form>
+                    @else
+                        <a class="btn light" style="margin-top:6px" href="{{ route('customers.edit', $customer) }}">Assign package for activation</a>
+                    @endif
                 @elseif (! $customer->grace_used_at)
                     @if ($customer->subscriptions_exists)
                         <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="gap:6px">

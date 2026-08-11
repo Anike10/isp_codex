@@ -66,6 +66,75 @@ class CustomerControllerTest extends TestCase
         ])->assertSessionHasErrors('connection_id');
     }
 
+    public function test_active_customer_without_paid_month_can_be_activated_until_next_month_date(): void
+    {
+        Carbon::setTestNow('2026-08-11 10:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $package = InternetPackage::create([
+                'name' => 'Quick Activate',
+                'speed' => '15 Mbps',
+                'mikrotik_profile' => 'Quick Activate',
+                'monthly_price' => 1000,
+                'status' => 'active',
+            ]);
+
+            $customer = Customer::create([
+                'name' => 'Quick Activation Customer',
+                'phone' => '01788888888',
+                'connection_id' => 'QACT-001',
+                'address' => 'Kushtia',
+                'status' => 'active',
+                'is_customer' => true,
+            ]);
+
+            $subscription = Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-07-01',
+                'status' => 'active',
+            ]);
+
+            $this->actingAs($user)
+                ->from(route('customers.index'))
+                ->post(route('customers.activate-next-date', $customer))
+                ->assertRedirect(route('customers.index'))
+                ->assertSessionHasNoErrors();
+
+            $customer->refresh();
+            $subscription->refresh();
+
+            $this->assertSame('active', $customer->status);
+            $this->assertSame('2026-09-11', $customer->service_valid_until?->format('Y-m-d'));
+            $this->assertSame('2026-08-11', $customer->service_valid_from?->format('Y-m-d'));
+            $this->assertSame('active', $subscription->status);
+            $this->assertNull($subscription->end_date);
+            $this->assertNull($customer->grace_used_at);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_quick_activation_without_package_returns_error(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'No package customer',
+            'phone' => '01799999999',
+            'connection_id' => 'NOPKG-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('customers.activate-next-date', $customer))
+            ->assertSessionHasErrors('active_until');
+    }
+
     public function test_expired_paid_period_shows_elapsed_days_and_null_due_date_is_disabled(): void
     {
         Carbon::setTestNow('2026-06-20 12:00:00');
