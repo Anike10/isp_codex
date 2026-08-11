@@ -29,7 +29,7 @@
             $activeUntil = $customer->activeUntil();
             $daysRemaining = $customer->activeDaysRemaining();
         @endphp
-        <tr data-href="{{ route('customers.show', $customer) }}">
+        <tr class="{{ $customer->never_suspend ? 'customer-row-special' : '' }}" data-href="{{ route('customers.show', $customer) }}">
             <td>{{ $customers->firstItem() + $loop->index }}</td>
             <td><a href="{{ route('customers.show', $customer) }}">{{ $customer->name }}</a></td>
             <td>{{ $customer->phone }}</td>
@@ -37,6 +37,9 @@
                 @if ($customer->is_customer)<span class="badge active">Customer</span>@endif
                 @if ($customer->is_vendor)<span class="badge pending">Vendor</span>@endif
                 @if ($customer->is_reseller)<span class="badge active">Reseller</span>@endif
+                @if ($customer->never_suspend)
+                    <span class="badge special">Special ISP</span>
+                @endif
             </td>
             <td>{{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}</td>
             <td>

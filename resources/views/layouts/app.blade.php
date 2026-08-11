@@ -74,6 +74,10 @@
         tbody tr.invoice-row-due:nth-child(even) td { background:#fff7e8; }
         tbody tr.invoice-row-overdue:nth-child(even) td { background:#ffecec; }
         tbody tr.invoice-row-paid:nth-child(even) td { background:#edf8f2; }
+        tr.customer-row-special td { background:#eff8ff; }
+        tr.customer-row-special:nth-child(even) td { background:#e2f0ff; }
+        tr.customer-row-special:hover td { background:#d7eaff; }
+        .badge.special { background:#1d76c9; color:#ecfeff; }
         th, td { padding:12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
         th { background:#edf2f7; font-size:13px; text-transform:uppercase; color:#475467; }
         tr:last-child td { border-bottom:0; }
