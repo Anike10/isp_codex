@@ -29,7 +29,7 @@
             $activeUntil = $customer->activeUntil();
             $daysRemaining = $customer->activeDaysRemaining();
             $nextActiveDate = now()->addMonthNoOverflow()->toDateString();
-            $canQuickActivate = ($customer->imported_secret_exists ?? false) && ! ($customer->invoices_exists ?? false);
+            $canQuickActivate = ($hasImportedSecretTable ?? false) && ($customer->imported_secret_exists ?? false) && ! ($customer->invoices_exists ?? false);
         @endphp
         <tr class="{{ $customer->never_suspend ? 'customer-row-special' : '' }}" data-href="{{ route('customers.show', $customer) }}">
             <td>{{ $customers->firstItem() + $loop->index }}</td>

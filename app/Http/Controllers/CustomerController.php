@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -22,9 +23,10 @@ class CustomerController extends Controller
 {
     public function index(Request $request)
     {
+        $hasImportedSecretTable = Schema::hasTable('mikrotik_imported_secrets');
+
         $customers = Customer::query()
             ->with('activeSubscription.package')
-            ->withExists('importedSecret')
             ->withExists('subscriptions')
             ->withExists('invoices')
             ->withSum('invoices as total_due_amount', 'due_amount')
@@ -51,12 +53,16 @@ class CustomerController extends Controller
             ->when($request->filled('package_id'), fn ($query) => $query->whereHas('activeSubscription', fn ($query) => $query->where('internet_package_id', $request->integer('package_id'))))
             ->when($request->query('due_state') === 'due', fn ($query) => $query->whereHas('invoices', fn ($query) => $query->where('due_amount', '>', 0)))
             ->when($request->query('due_state') === 'advance', fn ($query) => $query->where('account_balance', '>', 0))
+            ->when($hasImportedSecretTable, function ($query) {
+                return $query->withExists('importedSecret');
+            })
             ->latest()
             ->paginate($this->perPage($request))
             ->appends($request->query());
 
         return view('customers.index', [
             'customers' => $customers,
+            'hasImportedSecretTable' => $hasImportedSecretTable,
             'packages' => InternetPackage::where('status', 'active')->orderBy('name')->get(),
         ]);
     }
