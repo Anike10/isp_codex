@@ -343,4 +343,47 @@ class CustomerControllerTest extends TestCase
         $this->assertNull($subscription->end_date);
         $this->assertDatabaseHas('invoices', ['customer_id' => $customer->id, 'billing_month' => '2026-07', 'due_amount' => 0]);
     }
+
+    public function test_inactive_customer_with_no_paid_month_and_used_grace_still_shows_activate_button(): void
+    {
+        Carbon::setTestNow('2026-08-11 10:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $package = InternetPackage::create([
+                'name' => 'Activate after used grace',
+                'speed' => '25 Mbps',
+                'mikrotik_profile' => 'Activate after used grace',
+                'monthly_price' => 500,
+                'status' => 'active',
+            ]);
+
+            $customer = Customer::create([
+                'name' => 'No paid month used grace',
+                'phone' => '01890000001',
+                'connection_id' => 'NO-PAID-GRACE',
+                'address' => 'Kushtia',
+                'status' => 'inactive',
+                'is_customer' => true,
+                'grace_used_at' => '2026-08-01 10:00:00',
+            ]);
+
+            Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-07-01',
+                'status' => 'inactive',
+            ]);
+
+            $this->actingAs($user)
+                ->get(route('customers.index'))
+                ->assertOk()
+                ->assertSee('No paid month')
+                ->assertSee('Activate until 2026-09-11')
+                ->assertSee('Grace already used');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
 }
