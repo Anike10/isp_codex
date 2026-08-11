@@ -27,8 +27,10 @@ class UserController extends Controller
     public function create()
     {
         return view('users.create', [
-            'roles' => Role::orderBy('label')->get(),
+            'roles' => Role::with('permissions:id')->orderBy('label')->get(),
             'permissions' => Permission::orderBy('label')->get(),
+            'permissionGroups' => config('user_access.groups', []),
+            'menuGroups' => config('user_access.menu_groups', []),
             'resellers' => Customer::where('is_reseller', true)->where('status', 'active')->orderBy('name')->get(),
         ]);
     }
@@ -44,29 +46,46 @@ class UserController extends Controller
             'roles.*' => ['exists:roles,id'],
             'permissions' => ['nullable', 'array'],
             'permissions.*' => ['exists:permissions,id'],
+            'menus' => ['nullable', 'array'],
+            'menus.*' => ['string', 'in:'.implode(',', $this->menuKeys())],
+            'menu_access_present' => ['sometimes', 'accepted'],
         ]);
 
-        $user = User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => Hash::make($data['password']),
-            'reseller_id' => $this->validatedResellerId($data['reseller_id'] ?? null),
-        ]);
+        $hasMenuAccess = $request->boolean('menu_access_present');
+        $selectedMenus = $data['menus'] ?? [];
+        $selectedPermissions = $hasMenuAccess
+            ? $this->permissionsWithMenuRequirements($data['permissions'] ?? [], $selectedMenus)
+            : ($data['permissions'] ?? []);
 
-        $user->roles()->sync($data['roles'] ?? []);
-        $user->permissions()->sync($data['permissions'] ?? []);
+        DB::transaction(function () use ($data, $hasMenuAccess, $selectedMenus, $selectedPermissions): void {
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => Hash::make($data['password']),
+                'reseller_id' => $this->validatedResellerId($data['reseller_id'] ?? null),
+            ]);
+
+            $user->roles()->sync($data['roles'] ?? []);
+            $this->syncExactPermissions($user, $selectedPermissions);
+
+            if ($hasMenuAccess) {
+                $this->syncExactMenuAccess($user, $selectedMenus);
+            }
+        });
 
         return redirect()->route('users.index')->with('success', 'User created successfully.');
     }
 
     public function edit(User $user)
     {
-        $user->load(['roles', 'permissions']);
+        $user->load(['roles.permissions', 'permissions', 'deniedPermissions', 'menuAccesses']);
 
         return view('users.edit', [
             'user' => $user,
-            'roles' => Role::orderBy('label')->get(),
+            'roles' => Role::with('permissions:id')->orderBy('label')->get(),
             'permissions' => Permission::orderBy('label')->get(),
+            'permissionGroups' => config('user_access.groups', []),
+            'menuGroups' => config('user_access.menu_groups', []),
             'resellers' => Customer::where('is_reseller', true)->where('status', 'active')->orderBy('name')->get(),
         ]);
     }
@@ -82,7 +101,16 @@ class UserController extends Controller
             'roles.*' => ['exists:roles,id'],
             'permissions' => ['nullable', 'array'],
             'permissions.*' => ['exists:permissions,id'],
+            'menus' => ['nullable', 'array'],
+            'menus.*' => ['string', 'in:'.implode(',', $this->menuKeys())],
+            'menu_access_present' => ['sometimes', 'accepted'],
         ]);
+
+        $hasMenuAccess = $request->boolean('menu_access_present');
+        $selectedMenus = $data['menus'] ?? [];
+        $selectedPermissions = $hasMenuAccess
+            ? $this->permissionsWithMenuRequirements($data['permissions'] ?? [], $selectedMenus)
+            : ($data['permissions'] ?? []);
 
         $payload = [
             'name' => $data['name'],
@@ -94,9 +122,9 @@ class UserController extends Controller
             $payload['password'] = Hash::make($data['password']);
         }
 
-        DB::transaction(function () use ($user, $payload, $data, $recordVersionService): void {
+        DB::transaction(function () use ($user, $payload, $data, $recordVersionService, $hasMenuAccess, $selectedMenus, $selectedPermissions): void {
             $user = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
-            $oldSnapshot = $recordVersionService->snapshot($user, ['roles', 'permissions']);
+            $oldSnapshot = $recordVersionService->snapshot($user, ['roles', 'permissions', 'deniedPermissions', 'menuAccesses']);
 
             if (array_key_exists('password', $payload)) {
                 $oldSnapshot['login_credential_changed'] = false;
@@ -104,11 +132,17 @@ class UserController extends Controller
 
             RecordVersionObserver::withoutRecording(fn () => $user->update($payload));
             $user->roles()->sync($data['roles'] ?? []);
-            $user->permissions()->sync($data['permissions'] ?? []);
+            $this->syncExactPermissions($user, $selectedPermissions);
+
+            if ($hasMenuAccess) {
+                $this->syncExactMenuAccess($user, $selectedMenus);
+            }
 
             $user->unsetRelation('roles');
             $user->unsetRelation('permissions');
-            $newSnapshot = $recordVersionService->snapshot($user->refresh(), ['roles', 'permissions']);
+            $user->unsetRelation('deniedPermissions');
+            $user->unsetRelation('menuAccesses');
+            $newSnapshot = $recordVersionService->snapshot($user->refresh(), ['roles', 'permissions', 'deniedPermissions', 'menuAccesses']);
 
             if (array_key_exists('password', $payload)) {
                 $newSnapshot['login_credential_changed'] = true;
@@ -121,6 +155,79 @@ class UserController extends Controller
         });
 
         return redirect()->route('users.index')->with('success', 'User updated successfully.');
+    }
+
+    /**
+     * Persist the form as an exact per-user access list. Unchecked permissions are
+     * explicitly denied so a role cannot silently re-enable them for this user.
+     *
+     * @param  array<int, int|string>  $selectedPermissionIds
+     */
+    private function syncExactPermissions(User $user, array $selectedPermissionIds): void
+    {
+        $selectedIds = collect($selectedPermissionIds)
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $allIds = Permission::query()->pluck('id');
+
+        $user->permissions()->sync($selectedIds->all());
+        $user->deniedPermissions()->sync($allIds->diff($selectedIds)->all());
+    }
+
+    /** @return array<int, string> */
+    private function menuKeys(): array
+    {
+        return collect(config('user_access.menu_groups', []))
+            ->flatMap(fn ($group) => array_keys($group['items'] ?? []))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Ensure a checked menu also receives its underlying security capability.
+     *
+     * @param  array<int, int|string>  $selectedPermissionIds
+     * @param  array<int, string>  $selectedMenuKeys
+     * @return array<int, int>
+     */
+    private function permissionsWithMenuRequirements(array $selectedPermissionIds, array $selectedMenuKeys): array
+    {
+        $items = collect(config('user_access.menu_groups', []))->pluck('items')->collapse();
+        $requiredNames = collect($selectedMenuKeys)
+            ->map(fn (string $key) => $items->get($key)['permission'] ?? null)
+            ->filter()
+            ->unique();
+
+        $requiredIds = Permission::query()->whereIn('name', $requiredNames)->pluck('id');
+
+        return collect($selectedPermissionIds)
+            ->map(fn ($id) => (int) $id)
+            ->merge($requiredIds)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /** @param  array<int, string>  $selectedMenuKeys */
+    private function syncExactMenuAccess(User $user, array $selectedMenuKeys): void
+    {
+        $selected = collect($selectedMenuKeys)->unique();
+        $now = now();
+        $rows = collect($this->menuKeys())->map(fn (string $key): array => [
+            'user_id' => $user->id,
+            'menu_key' => $key,
+            'allowed' => $selected->contains($key),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->all();
+
+        DB::table('user_menu_accesses')->upsert(
+            $rows,
+            ['user_id', 'menu_key'],
+            ['allowed', 'updated_at']
+        );
     }
 
     private function validatedResellerId(mixed $resellerId): ?int

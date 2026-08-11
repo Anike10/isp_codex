@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -61,6 +62,16 @@ class User extends Authenticatable
         return $this->belongsToMany(Permission::class);
     }
 
+    public function deniedPermissions(): BelongsToMany
+    {
+        return $this->belongsToMany(Permission::class, 'permission_user_denials');
+    }
+
+    public function menuAccesses(): HasMany
+    {
+        return $this->hasMany(UserMenuAccess::class);
+    }
+
     public function reseller(): BelongsTo
     {
         return $this->belongsTo(Customer::class, 'reseller_id');
@@ -68,6 +79,14 @@ class User extends Authenticatable
 
     public function hasPermission(string $permission): bool
     {
+        if (! $this->relationLoaded('deniedPermissions')) {
+            $this->load('deniedPermissions');
+        }
+
+        if ($this->deniedPermissions->contains('name', $permission)) {
+            return false;
+        }
+
         if (! $this->relationLoaded('permissions')) {
             $this->load('permissions');
         }
@@ -83,5 +102,31 @@ class User extends Authenticatable
         }
 
         return $this->roles->contains(fn (Role $role) => $role->permissions->contains('name', $permission));
+    }
+
+    public function canAccessMenu(string $menuKey): bool
+    {
+        $definition = collect(config('user_access.menu_groups', []))
+            ->pluck('items')
+            ->collapse()
+            ->get($menuKey);
+
+        if (! is_array($definition) || empty($definition['permission'])) {
+            return false;
+        }
+
+        if (! $this->relationLoaded('menuAccesses')) {
+            $this->load('menuAccesses');
+        }
+
+        $override = $this->menuAccesses->firstWhere('menu_key', $menuKey);
+
+        if ($override && ! $override->allowed) {
+            return false;
+        }
+
+        $permissionNames = $definition['permissions'] ?? [$definition['permission']];
+
+        return collect($permissionNames)->contains(fn (string $permission): bool => $this->hasPermission($permission));
     }
 }

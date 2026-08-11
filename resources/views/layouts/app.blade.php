@@ -217,26 +217,19 @@
         </button>
         <nav class="nav" id="app-nav">
             @php
-                $canManageNetwork = auth()->user()?->hasPermission('manage_packages')
-                    || auth()->user()?->hasPermission('manage_mikrotik_routers');
-                $canManageBilling = auth()->user()?->hasPermission('manage_invoices')
-                    || auth()->user()?->hasPermission('manage_payments')
-                    || auth()->user()?->hasPermission('manage_payment_accounts')
-                    || auth()->user()?->hasPermission('manage_customers')
-                    || auth()->user()?->hasPermission('manage_resellers')
-                    || auth()->user()?->hasPermission('manage_expenses');
-                $canManageWarranty = auth()->user()?->hasPermission('view_warranty_claims')
-                    || auth()->user()?->hasPermission('manage_warranty_claims')
-                    || auth()->user()?->hasPermission('manage_products');
-                $canManageAdmin = auth()->user()?->hasPermission('manage_users')
-                    || auth()->user()?->hasPermission('download_backup');
-                $canManageFleet = auth()->user()?->hasPermission('manage_fleet')
+                $currentUser = auth()->user();
+                $canMenu = fn (string $key): bool => (bool) $currentUser?->canAccessMenu($key);
+                $canManageNetwork = collect(['packages', 'mikrotik_routers', 'ip_pools', 'network_map', 'olt_onus', 'onu_deny_list', 'onu_auto_discovery', 'olt_protocol_profiles'])->contains($canMenu);
+                $canManageBilling = collect(['parties', 'resellers', 'invoices', 'create_invoice', 'sale_returns', 'quotations', 'create_quotation', 'payment_note_default', 'organizations', 'print_history', 'payments', 'bkash_sms', 'payment_accounts', 'accounting_ledger', 'employees', 'expenses'])->contains($canMenu);
+                $canManageWarranty = collect(['warranty_claims', 'new_warranty_claim'])->contains($canMenu);
+                $canManageAdmin = collect(['users', 'roles', 'database_backup'])->contains($canMenu);
+                $canManageFleet = collect(['fleet_vehicles', 'fleet_add_vehicle', 'fleet_maintenance_schedules', 'fleet_log_maintenance', 'fleet_settings', 'fleet_reports', 'fleet_expense_report', 'fleet_maintenance_report', 'fleet_due_report', 'fleet_duty_history'])->contains($canMenu)
                     && Route::has('fleet.index');
             @endphp
-            @if (auth()->user()?->hasPermission('view_dashboard'))
+            @if ($canMenu('dashboard'))
                 <a href="{{ route('dashboard') }}">Dashboard</a>
             @endif
-            @if (auth()->user()?->hasPermission('use_reseller_portal') && auth()->user()?->reseller_id)
+            @if ($canMenu('reseller_portal') && $currentUser?->reseller_id)
                 <a href="{{ route('reseller.dashboard') }}">Reseller Portal</a>
             @endif
 
@@ -244,18 +237,28 @@
                 <details class="nav-group">
                     <summary>Network</summary>
                     <div class="nav-menu">
-                        @if (auth()->user()?->hasPermission('manage_packages'))
+                        @if ($canMenu('packages'))
                             <a href="{{ route('packages.index') }}">Packages</a>
                         @endif
-                        @if (auth()->user()?->hasPermission('manage_mikrotik_routers'))
+                        @if ($canMenu('mikrotik_routers'))
                             <a href="{{ route('mikrotik-routers.index') }}">MikroTik Routers</a>
-                            @if (Route::has('ip-pools.index'))
-                                <a href="{{ route('ip-pools.index') }}">IP Pools</a>
-                            @endif
+                        @endif
+                        @if ($canMenu('ip_pools') && Route::has('ip-pools.index'))
+                            <a href="{{ route('ip-pools.index') }}">IP Pools</a>
+                        @endif
+                        @if ($canMenu('network_map'))
                             <a href="{{ route('network-map.index') }}">FTTX Network Map</a>
+                        @endif
+                        @if ($canMenu('olt_onus'))
                             <a href="{{ route('olt-onus.index') }}">OLT ONUs</a>
+                        @endif
+                        @if ($canMenu('onu_deny_list'))
                             <a href="{{ route('olt-onus.deny-list') }}">ONU Deny List</a>
+                        @endif
+                        @if ($canMenu('onu_auto_discovery'))
                             <a href="{{ route('olt-onus.auto-discovery') }}">Auto Discovery List</a>
+                        @endif
+                        @if ($canMenu('olt_protocol_profiles'))
                             <a href="{{ route('olt-onus.protocol-profiles.index') }}">OLT Protocol/Profile</a>
                         @endif
                     </div>
@@ -266,59 +269,85 @@
                 <details class="nav-group">
                     <summary>Billing</summary>
                     <div class="nav-menu">
-                        @if (auth()->user()?->hasPermission('manage_customers'))
+                        @if ($canMenu('parties'))
                             <a href="{{ route('customers.index') }}">Parties</a>
                         @endif
-                        @if (auth()->user()?->hasPermission('manage_resellers'))
+                        @if ($canMenu('resellers'))
                             <a href="{{ route('resellers.index') }}">Resellers</a>
                         @endif
-                        @if (auth()->user()?->hasPermission('manage_invoices'))
+                        @if ($canMenu('invoices'))
                             <a href="{{ route('invoices.index') }}">Invoices</a>
+                        @endif
+                        @if ($canMenu('create_invoice'))
                             <a href="{{ route('invoices.create') }}">Create Invoice</a>
-                            @if (Route::has('sale-returns.index'))
-                                <a href="{{ route('sale-returns.index') }}">Sale Returns</a>
-                            @endif
+                        @endif
+                        @if ($canMenu('sale_returns') && Route::has('sale-returns.index'))
+                            <a href="{{ route('sale-returns.index') }}">Sale Returns</a>
+                        @endif
+                        @if ($canMenu('quotations'))
                             <a href="{{ route('quotations.index') }}">Quotations</a>
+                        @endif
+                        @if ($canMenu('create_quotation'))
                             <a href="{{ route('quotations.create') }}">Create Quotation</a>
+                        @endif
+                        @if ($canMenu('payment_note_default'))
                             <a href="{{ route('invoices.payment-note-default.edit') }}">Payment Note Default</a>
+                        @endif
+                        @if ($canMenu('organizations'))
                             <a href="{{ route('organizations.index') }}">Organizations</a>
+                        @endif
+                        @if ($canMenu('print_history'))
                             <a href="{{ route('print-logs.index') }}">Print History</a>
                         @endif
-                        @if (auth()->user()?->hasPermission('manage_payments'))
+                        @if ($canMenu('payments'))
                             <a href="{{ route('payments.index') }}">Payments</a>
+                        @endif
+                        @if ($canMenu('bkash_sms'))
                             <a href="{{ route('bkash-sms-payments.index') }}">bKash SMS</a>
                         @endif
-                        @if (auth()->user()?->hasPermission('manage_payment_accounts'))
+                        @if ($canMenu('payment_accounts'))
                             <a href="{{ route('payment-accounts.index') }}">Payment Accounts</a>
+                        @endif
+                        @if ($canMenu('accounting_ledger'))
                             <a href="{{ route('accounting.ledger') }}">Accounting Ledger</a>
                         @endif
-                        @if (auth()->user()?->hasPermission('manage_expenses'))
+                        @if ($canMenu('employees'))
                             <a href="{{ route('employees.index') }}">Employees</a>
+                        @endif
+                        @if ($canMenu('expenses'))
                             <a href="{{ route('expenses.index') }}">Salary & Expenses</a>
                         @endif
                     </div>
                 </details>
             @endif
 
-            @if (auth()->user()?->hasPermission('manage_tickets'))
+            @if ($canMenu('tickets'))
                 <a href="{{ route('tickets.index') }}">Tickets</a>
             @endif
-            @if (auth()->user()?->hasPermission('manage_products'))
+            @if (collect(['products', 'in_house_use', 'employee_asset_report', 'returned_used_stock', 'in_house_history', 'warehouses', 'stock_transfer', 'stock_history', 'product_categories', 'purchase_bills'])->contains($canMenu))
                 <details class="nav-group">
                     <summary>Inventory</summary>
                     <div class="nav-menu">
-                        <a href="{{ route('products.index') }}">Products</a>
-                        @if (Route::has('in-house-use.index'))
+                        @if ($canMenu('products'))
+                            <a href="{{ route('products.index') }}">Products</a>
+                        @endif
+                        @if ($canMenu('in_house_use') && Route::has('in-house-use.index'))
                             <a href="{{ route('in-house-use.index') }}">In-house Use</a>
+                        @endif
+                        @if ($canMenu('employee_asset_report') && Route::has('in-house-use.report.employees'))
                             <a href="{{ route('in-house-use.report.employees') }}">Employee Asset Report</a>
+                        @endif
+                        @if ($canMenu('returned_used_stock') && Route::has('in-house-use.report.used-stock'))
                             <a href="{{ route('in-house-use.report.used-stock') }}">Returned Used Stock</a>
+                        @endif
+                        @if ($canMenu('in_house_history') && Route::has('in-house-use.report.history'))
                             <a href="{{ route('in-house-use.report.history') }}">In-house History</a>
                         @endif
-                        <a href="{{ route('warehouses.index') }}">Warehouses</a>
-                        <a href="{{ route('warehouse-transfers.create') }}">Stock Transfer</a>
-                        <a href="{{ route('warehouse-movements.index') }}">Stock History</a>
-                        <a href="{{ route('product-categories.index') }}">Product Categories</a>
-                        <a href="{{ route('purchase-bills.index') }}">Purchase Bills</a>
+                        @if ($canMenu('warehouses')) <a href="{{ route('warehouses.index') }}">Warehouses</a> @endif
+                        @if ($canMenu('stock_transfer')) <a href="{{ route('warehouse-transfers.create') }}">Stock Transfer</a> @endif
+                        @if ($canMenu('stock_history')) <a href="{{ route('warehouse-movements.index') }}">Stock History</a> @endif
+                        @if ($canMenu('product_categories')) <a href="{{ route('product-categories.index') }}">Product Categories</a> @endif
+                        @if ($canMenu('purchase_bills')) <a href="{{ route('purchase-bills.index') }}">Purchase Bills</a> @endif
                     </div>
                 </details>
             @endif
@@ -327,32 +356,32 @@
                 <details class="nav-group">
                     <summary>Warranty</summary>
                     <div class="nav-menu">
-                        @if (auth()->user()?->hasPermission('view_warranty_claims') || auth()->user()?->hasPermission('manage_products'))
+                        @if ($canMenu('warranty_claims'))
                             <a href="{{ route('warranty-claims.index') }}">Warranty Claims</a>
                         @endif
-                        @if (auth()->user()?->hasPermission('manage_warranty_claims') || auth()->user()?->hasPermission('manage_products'))
+                        @if ($canMenu('new_warranty_claim'))
                             <a href="{{ route('warranty-claims.create') }}">New Claim</a>
                         @endif
                     </div>
                 </details>
             @endif
-            @if (auth()->user()?->hasPermission('manage_expenses'))
+            @if ($canMenu('expenses'))
                 <a href="{{ route('expenses.index') }}">Expenses</a>
             @endif
             @if ($canManageFleet)
                 <details class="nav-group">
                     <summary>Fleet</summary>
                     <div class="nav-menu">
-                        <a href="{{ route('fleet.index') }}">Vehicles</a>
-                        <a href="{{ route('fleet.create') }}">Add Vehicle</a>
-                        <a href="{{ route('fleet.maintenance.schedules') }}">Maintenance Schedules</a>
-                        <a href="{{ route('fleet.maintenance.logs.create') }}">Log Repair / Maintenance</a>
-                        <a href="{{ route('fleet.settings') }}">Fleet Settings</a>
-                        <a href="{{ route('fleet.reports') }}">All Fleet Reports</a>
-                        <a href="{{ route('fleet.reports.expenses') }}">Vehicle Expense Report</a>
-                        <a href="{{ route('fleet.reports.maintenance') }}">Maintenance Report</a>
-                        <a href="{{ route('fleet.reports.maintenance-due') }}">Due & Overdue Report</a>
-                        <a href="{{ route('fleet.reports.duty-history') }}">Staff Duty History</a>
+                        @if ($canMenu('fleet_vehicles')) <a href="{{ route('fleet.index') }}">Vehicles</a> @endif
+                        @if ($canMenu('fleet_add_vehicle')) <a href="{{ route('fleet.create') }}">Add Vehicle</a> @endif
+                        @if ($canMenu('fleet_maintenance_schedules')) <a href="{{ route('fleet.maintenance.schedules') }}">Maintenance Schedules</a> @endif
+                        @if ($canMenu('fleet_log_maintenance')) <a href="{{ route('fleet.maintenance.logs.create') }}">Log Repair / Maintenance</a> @endif
+                        @if ($canMenu('fleet_settings')) <a href="{{ route('fleet.settings') }}">Fleet Settings</a> @endif
+                        @if ($canMenu('fleet_reports')) <a href="{{ route('fleet.reports') }}">All Fleet Reports</a> @endif
+                        @if ($canMenu('fleet_expense_report')) <a href="{{ route('fleet.reports.expenses') }}">Vehicle Expense Report</a> @endif
+                        @if ($canMenu('fleet_maintenance_report')) <a href="{{ route('fleet.reports.maintenance') }}">Maintenance Report</a> @endif
+                        @if ($canMenu('fleet_due_report')) <a href="{{ route('fleet.reports.maintenance-due') }}">Due & Overdue Report</a> @endif
+                        @if ($canMenu('fleet_duty_history')) <a href="{{ route('fleet.reports.duty-history') }}">Staff Duty History</a> @endif
                     </div>
                 </details>
             @endif
@@ -361,11 +390,13 @@
                 <details class="nav-group">
                     <summary>Admin</summary>
                     <div class="nav-menu">
-                        @if (auth()->user()?->hasPermission('manage_users'))
+                        @if ($canMenu('users'))
                             <a href="{{ route('users.index') }}">Users</a>
+                        @endif
+                        @if ($canMenu('roles'))
                             <a href="{{ route('roles.index') }}">Roles</a>
                         @endif
-                        @if (auth()->user()?->hasPermission('download_backup'))
+                        @if ($canMenu('database_backup'))
                             <a href="{{ route('backup.database') }}">Download Backup</a>
                         @endif
                     </div>
