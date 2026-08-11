@@ -21,6 +21,7 @@
         .powered-by { margin-top:18px; color:var(--muted); font-size:13px; text-align:center; }
     </style>
     <link rel="stylesheet" href="{{ asset('css/gorgeous-theme.css') }}?v=20260719-17">
+    <link rel="stylesheet" href="{{ asset('css/page-help.css') }}?v=20260811-1">
 </head>
 <body class="login-theme">
     <form method="post" action="{{ route('login.store') }}" class="login">
@@ -48,6 +49,7 @@
         </label>
 
         <button class="btn" type="submit">Login</button>
+        @include('partials.page_help', ['variant' => 'login'])
         <div class="powered-by">Powered by Ultimate Solution</div>
     </form>
 </body>

@@ -5,6 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $selectedCustomer ? 'Party Ledger' : 'Accounting Ledger' }} - {{ $selectedOrganization->name }}</title>
+    <link rel="stylesheet" href="{{ asset('css/page-help.css') }}?v=20260811-1">
     <style>
         :root { --ink:#172033; --muted:#667085; --line:#b9c4d2; --brand:#116149; --soft:#eef7f3; }
         * { box-sizing:border-box; }
@@ -130,6 +131,8 @@
         'to' => request('to'),
     ])) }}">Back to Ledger</a>
 </div>
+
+@include('partials.page_help', ['variant' => 'print'])
 
 <main class="report">
     <header class="report-header">

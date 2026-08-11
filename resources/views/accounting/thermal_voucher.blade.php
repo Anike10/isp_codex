@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Thermal {{ $voucher['title'] }} - {{ $voucher['voucher_no'] }}</title>
+    <link rel="stylesheet" href="{{ asset('css/page-help.css') }}?v=20260811-1">
     <style>
         :root { --paper-width:80mm; --ink:#111827; --muted:#4b5563; --line:#d1d5db; }
         * { box-sizing:border-box; }
@@ -67,6 +68,8 @@
     <button class="btn" type="button" onclick="recordPrint('{{ $documentType }}', {{ $printable->id }})">Print Thermal</button>
     <a class="btn light" href="{{ $voucher['back_url'] }}">Back</a>
 </div>
+
+@include('partials.page_help', ['variant' => 'print'])
 
 <main class="preview-shell">
     <section class="receipt">

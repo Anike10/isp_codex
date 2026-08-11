@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $voucher['title'] }} - {{ $voucher['voucher_no'] }}</title>
+    <link rel="stylesheet" href="{{ asset('css/page-help.css') }}?v=20260811-1">
     <style>
         :root { --ink:#172033; --muted:#667085; --line:#cfd7e3; --brand:#116149; --soft:#eef7f3; }
         * { box-sizing:border-box; }
@@ -61,6 +62,8 @@
     <button class="btn" type="button" onclick="recordPrint('{{ $documentType }}', {{ $printable->id }})">Print Voucher</button>
     <a class="btn light" href="{{ $voucher['back_url'] }}">Back</a>
 </div>
+
+@include('partials.page_help', ['variant' => 'print'])
 
 <main class="page">
     <div class="brand-bar">

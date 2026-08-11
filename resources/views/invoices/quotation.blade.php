@@ -11,6 +11,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Quotation - {{ $quotationNumber }}</title>
+    <link rel="stylesheet" href="{{ asset('css/page-help.css') }}?v=20260811-1">
     <style>
         :root { --ink:#172033; --muted:#667085; --line:#cfd7e3; --brand:#116149; --brand-dark:#0b3f31; --soft:#eef7f3; }
         * { box-sizing:border-box; }
@@ -173,6 +174,8 @@
         <button onclick="recordPrint('{{ $isStandaloneQuotation ? 'quotation' : 'invoice_quotation' }}', {{ $invoice->id }})" class="btn">Print Quotation</button>
         <a href="{{ $backUrl }}" class="btn light">Back to {{ $isStandaloneQuotation ? 'Quotation' : 'Invoice' }}</a>
     </div>
+
+    @include('partials.page_help', ['variant' => 'print'])
 
     <main class="page">
         <section class="brand-bar">

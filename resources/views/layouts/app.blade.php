@@ -201,6 +201,7 @@
         }
     </style>
     <link rel="stylesheet" href="{{ asset('css/gorgeous-theme.css') }}?v=20260719-17">
+    <link rel="stylesheet" href="{{ asset('css/page-help.css') }}?v=20260811-1">
 </head>
 <body class="app-theme">
 <div class="shell">
@@ -399,6 +400,8 @@
                 @endforeach
             </div>
         @endif
+
+        @include('partials.page_help')
 
         @yield('content')
     </main>

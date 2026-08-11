@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Invoice - {{ $invoice->invoice_no }}</title>
+    <link rel="stylesheet" href="{{ asset('css/page-help.css') }}?v=20260811-1">
     <style>
         :root {
             --ink: #172033;
@@ -582,6 +583,8 @@
         <a href="{{ route('invoices.delivery-challan', ['invoice' => $invoice, 'organization_id' => $selectedOrganization->id]) }}" target="_blank" class="btn secondary">Challan</a>
         <a href="{{ route('invoices.show', $invoice) }}" class="btn light">Back to Invoice</a>
     </div>
+
+    @include('partials.page_help', ['variant' => 'print'])
 
     <main class="page">
         <div class="print-document-label">INVOICE</div>
