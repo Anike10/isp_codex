@@ -24,7 +24,9 @@ class CustomerController extends Controller
     {
         $customers = Customer::query()
             ->with('activeSubscription.package')
+            ->withExists('importedSecret')
             ->withExists('subscriptions')
+            ->withExists('invoices')
             ->withSum('invoices as total_due_amount', 'due_amount')
             ->withMax(['invoices as latest_paid_billing_month' => function ($query) {
                 $query->where('invoice_type', 'service')
@@ -305,15 +307,18 @@ class CustomerController extends Controller
             ->with('warning', $syncResult['warning']);
     }
 
-    public function activateUntilNextDate(Customer $customer)
+    public function activateUntilNextDate(Request $request, Customer $customer)
     {
         $subscription = $customer->activeSubscription ?: $customer->subscriptions()->with('package')->latest()->first();
+        $data = $request->validate([
+            'active_until' => ['nullable', 'date', 'after_or_equal:today'],
+        ]);
 
         if (! $subscription || ! $subscription->package) {
             return back()->withErrors(['active_until' => 'No package found for this customer to activate.']);
         }
 
-        $nextDate = now()->addMonthNoOverflow()->toDateString();
+        $nextDate = $data['active_until'] ?? now()->addMonthNoOverflow()->toDateString();
         $detail = sprintf(
             '[%s] Activated package to %s via quick-activate action.',
             now()->format('Y-m-d H:i'),

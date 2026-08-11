@@ -221,4 +221,9 @@ class Customer extends Model
     {
         return $this->morphMany(RecordVersion::class, 'versionable')->latest('id');
     }
+
+    public function importedSecret(): HasOne
+    {
+        return $this->hasOne(MikrotikImportedSecret::class);
+    }
 }

@@ -29,6 +29,7 @@
             $activeUntil = $customer->activeUntil();
             $daysRemaining = $customer->activeDaysRemaining();
             $nextActiveDate = now()->addMonthNoOverflow()->toDateString();
+            $canQuickActivate = ($customer->imported_secret_exists ?? false) && ! ($customer->invoices_exists ?? false);
         @endphp
         <tr class="{{ $customer->never_suspend ? 'customer-row-special' : '' }}" data-href="{{ route('customers.show', $customer) }}">
             <td>{{ $customers->firstItem() + $loop->index }}</td>
@@ -86,23 +87,25 @@
                     @endif
                 @elseif ($customer->status === 'active')
                     <span class="muted">No paid month</span>
-                    @if ($customer->subscriptions_exists)
+                    @if ($customer->subscriptions_exists && $canQuickActivate)
                         <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
                             @csrf
+                            <input type="date" name="active_until" value="{{ $nextActiveDate }}" min="{{ now()->toDateString() }}" style="width:165px">
                             <button class="btn secondary" type="submit">Activate until {{ $nextActiveDate }}</button>
                         </form>
-                    @else
-                        <a class="btn light" style="margin-top:6px" href="{{ route('customers.edit', $customer) }}">Assign package for activation</a>
                     @endif
                 @elseif ($customer->subscriptions_exists && $activeUntil === null)
                     <span class="muted">No paid month</span>
                     @if ($customer->grace_used_at)
                         <div class="muted" style="font-size:12px;">Grace already used</div>
                     @endif
-                    <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
-                        @csrf
-                        <button class="btn secondary" type="submit">Activate until {{ $nextActiveDate }}</button>
-                    </form>
+                    @if ($customer->subscriptions_exists && $canQuickActivate)
+                        <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
+                            @csrf
+                            <input type="date" name="active_until" value="{{ $nextActiveDate }}" min="{{ now()->toDateString() }}" style="width:165px">
+                            <button class="btn secondary" type="submit">Activate until {{ $nextActiveDate }}</button>
+                        </form>
+                    @endif
                 @elseif ($customer->subscriptions_exists)
                     @if (! $customer->grace_used_at)
                         <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="gap:6px">

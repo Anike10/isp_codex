@@ -6,6 +6,8 @@ use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\Invoice;
 use App\Models\Permission;
+use App\Models\MikrotikImportedSecret;
+use App\Models\MikrotikRouter;
 use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -89,6 +91,7 @@ class CustomerControllerTest extends TestCase
                 'status' => 'active',
                 'is_customer' => true,
             ]);
+            $this->makeImportedSecretForCustomer($customer, 'QACT-001');
 
             $subscription = Subscription::create([
                 'customer_id' => $customer->id,
@@ -117,6 +120,52 @@ class CustomerControllerTest extends TestCase
         }
     }
 
+    public function test_active_customer_without_paid_month_can_be_activated_until_selected_date(): void
+    {
+        Carbon::setTestNow('2026-08-11 10:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $package = InternetPackage::create([
+                'name' => 'Quick Activate Custom',
+                'speed' => '15 Mbps',
+                'mikrotik_profile' => 'Quick Activate Custom',
+                'monthly_price' => 1000,
+                'status' => 'active',
+            ]);
+
+            $customer = Customer::create([
+                'name' => 'Quick Activation With Custom Date',
+                'phone' => '01788999999',
+                'connection_id' => 'QACT-002',
+                'address' => 'Kushtia',
+                'status' => 'active',
+                'is_customer' => true,
+            ]);
+            $this->makeImportedSecretForCustomer($customer, 'QACT-002');
+
+            Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-07-01',
+                'status' => 'active',
+            ]);
+
+            $this->actingAs($user)
+                ->from(route('customers.index'))
+                ->post(route('customers.activate-next-date', $customer), ['active_until' => '2026-10-01'])
+                ->assertRedirect(route('customers.index'))
+                ->assertSessionHasNoErrors();
+
+            $customer->refresh();
+
+            $this->assertSame('2026-10-01', $customer->service_valid_until?->format('Y-m-d'));
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_inactive_customer_with_no_paid_month_shows_activate_action(): void
     {
         Carbon::setTestNow('2026-08-11 10:00:00');
@@ -140,6 +189,7 @@ class CustomerControllerTest extends TestCase
                 'status' => 'inactive',
                 'is_customer' => true,
             ]);
+            $this->makeImportedSecretForCustomer($customer, 'IACT-001');
             Subscription::create([
                 'customer_id' => $customer->id,
                 'internet_package_id' => $package->id,
@@ -153,6 +203,95 @@ class CustomerControllerTest extends TestCase
         } finally {
             Carbon::setTestNow();
         }
+    }
+
+    public function test_non_imported_customer_with_no_paid_month_does_not_show_activate_action(): void
+    {
+        Carbon::setTestNow('2026-08-11 10:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $package = InternetPackage::create([
+                'name' => 'Inactive Non Imported',
+                'speed' => '10 Mbps',
+                'mikrotik_profile' => 'Inactive Non Imported',
+                'monthly_price' => 1000,
+                'status' => 'active',
+            ]);
+
+            $customer = Customer::create([
+                'name' => 'Non-Imported Quick Activation',
+                'phone' => '01713131313',
+                'connection_id' => 'NIACT-001',
+                'address' => 'Kushtia',
+                'status' => 'inactive',
+                'is_customer' => true,
+            ]);
+            Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-07-01',
+                'status' => 'inactive',
+            ]);
+
+            $this->actingAs($user)->get(route('customers.index'))
+                ->assertOk()
+                ->assertDontSee('Activate until 2026-09-11')
+                ->assertDontSee('name="active_until"');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_imported_customer_with_non_service_invoice_still_follows_normal_flow(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $package = InternetPackage::create([
+            'name' => 'Imported With Invoice',
+            'speed' => '12 Mbps',
+            'mikrotik_profile' => 'Imported With Invoice',
+            'monthly_price' => 500,
+            'status' => 'active',
+        ]);
+
+        $customer = Customer::create([
+            'name' => 'Imported customer with invoice',
+            'phone' => '01714141414',
+            'connection_id' => 'IMP-INV-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+        $this->makeImportedSecretForCustomer($customer, 'IMP-INV-001');
+
+        Subscription::create([
+            'customer_id' => $customer->id,
+            'internet_package_id' => $package->id,
+            'start_date' => '2026-07-01',
+            'status' => 'active',
+        ]);
+
+        Invoice::create([
+            'customer_id' => $customer->id,
+            'invoice_no' => 'INV-IMP-INV-001',
+            'billing_month' => '2026-08',
+            'invoice_type' => 'other',
+            'subtotal' => 0,
+            'discount' => 0,
+            'vat' => 0,
+            'total' => 0,
+            'paid_amount' => 0,
+            'due_amount' => 0,
+            'status' => 'paid',
+            'due_date' => now()->toDateString(),
+        ]);
+
+        $this->actingAs($user)->get(route('customers.index'))
+            ->assertOk()
+            ->assertDontSee('Activate until 2026-09-11')
+            ->assertDontSee('name="active_until"');
     }
 
     public function test_quick_activation_without_package_returns_error(): void
@@ -374,6 +513,7 @@ class CustomerControllerTest extends TestCase
                 'is_customer' => true,
                 'grace_used_at' => '2026-08-01 10:00:00',
             ]);
+            $this->makeImportedSecretForCustomer($customer, 'NO-PAID-GRACE');
 
             Subscription::create([
                 'customer_id' => $customer->id,
@@ -391,5 +531,33 @@ class CustomerControllerTest extends TestCase
         } finally {
             Carbon::setTestNow();
         }
+    }
+
+    private function makeImportedSecretForCustomer(Customer $customer, string $key): MikrotikImportedSecret
+    {
+        $router = MikrotikRouter::create([
+            'name' => 'Import Router '.$key,
+            'ip_address' => '10.0.0.'.str_pad((string) ($customer->id + 10), 3, '0', STR_PAD_LEFT),
+            'username' => 'admin',
+            'password' => 'admin123',
+            'status' => 'active',
+            'api_port' => 8728,
+        ]);
+
+        return MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $router->id,
+            'customer_id' => $customer->id,
+            'routeros_id' => 'routeros-'.$customer->id.'-'.$key,
+            'name' => $customer->connection_id,
+            'password' => null,
+            'service' => 'pppoe',
+            'profile' => null,
+            'local_address' => null,
+            'remote_address' => null,
+            'disabled' => false,
+            'router_comment' => null,
+            'notes' => null,
+            'imported_at' => now(),
+        ]);
     }
 }
