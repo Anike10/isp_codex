@@ -64,6 +64,7 @@ class MikrotikCustomerSyncService
         try {
             $client->connect($router->ip_address, $router->api_port, $router->username, $router->password);
             $summary['active_sessions_captured'] = $this->captureActiveSessions($client, $router);
+            $this->ensurePppProfile($client, $router->inactive_pppoe_profile);
 
             Customer::query()
                 ->with('activeSubscription.package')
@@ -249,7 +250,7 @@ class MikrotikCustomerSyncService
         return $inactive ? 'moved_inactive' : 'updated';
     }
 
-    private function ensurePppProfile(RouterOsClient $client, string $profile, ?string $defaultIpPool = null, ?string $rateLimit = null): void
+    public function ensurePppProfile(RouterOsClient $client, string $profile, ?string $defaultIpPool = null, ?string $rateLimit = null): void
     {
         $existing = $client->command('/ppp/profile/print', [
             '?name' => $profile,
