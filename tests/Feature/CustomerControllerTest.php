@@ -199,7 +199,7 @@ class CustomerControllerTest extends TestCase
 
             $this->actingAs($user)->get(route('customers.index'))
                 ->assertOk()
-                ->assertSee('Activate until 2026-09-11');
+                ->assertSee('Activate until');
         } finally {
             Carbon::setTestNow();
         }
@@ -526,7 +526,7 @@ class CustomerControllerTest extends TestCase
                 ->get(route('customers.index'))
                 ->assertOk()
                 ->assertSee('No paid month')
-                ->assertSee('Activate until 2026-09-11')
+                ->assertSee('Activate until')
                 ->assertSee('Grace already used');
         } finally {
             Carbon::setTestNow();

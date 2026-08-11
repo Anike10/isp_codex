@@ -91,7 +91,7 @@
                         <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
                             @csrf
                             <input type="date" name="active_until" value="{{ $nextActiveDate }}" min="{{ now()->toDateString() }}" style="width:165px">
-                            <button class="btn secondary" type="submit">Activate until {{ $nextActiveDate }}</button>
+                            <button class="btn secondary" type="submit">Activate until</button>
                         </form>
                     @endif
                 @elseif ($customer->subscriptions_exists && $activeUntil === null)
@@ -103,7 +103,7 @@
                         <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
                             @csrf
                             <input type="date" name="active_until" value="{{ $nextActiveDate }}" min="{{ now()->toDateString() }}" style="width:165px">
-                            <button class="btn secondary" type="submit">Activate until {{ $nextActiveDate }}</button>
+                            <button class="btn secondary" type="submit">Activate until</button>
                         </form>
                     @endif
                 @elseif ($customer->subscriptions_exists)
