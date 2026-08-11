@@ -13,19 +13,19 @@
     </div>
 </div>
 
-@if ($inactiveProfileExists === false)
+@if ($inactiveProfileExists !== true)
     <div class="alert error">
-        <strong>Inactive profile not found on this MikroTik.</strong>
-        <div class="muted" style="margin-top:4px">Profile "{{ $mikrotikRouter->inactive_pppoe_profile }}" is missing on this router.</div>
+        @if ($inactiveProfileExists === false)
+            <strong>Inactive profile not found on this MikroTik.</strong>
+            <div class="muted" style="margin-top:4px">Profile "{{ $mikrotikRouter->inactive_pppoe_profile }}" is missing on this router.</div>
+        @else
+            <strong>Could not verify inactive profile.</strong>
+            <div class="muted" style="margin-top:4px">{{ $inactiveProfileError ?? 'Could not verify the inactive profile on this MikroTik right now.' }}</div>
+        @endif
         <form method="post" action="{{ route('mikrotik-routers.inactive-profile.create', $mikrotikRouter) }}" onsubmit="return confirm('Create inactive profile on this router now?')">
             @csrf
             <button class="btn danger" style="margin-top:10px" type="submit">Create Inactive Profile</button>
         </form>
-    </div>
-@elseif($inactiveProfileError)
-    <div class="alert warning">
-        <strong>Could not verify inactive profile.</strong>
-        <div class="muted" style="margin-top:4px">{{ $inactiveProfileError }}</div>
     </div>
 @endif
 
