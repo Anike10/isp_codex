@@ -157,6 +157,30 @@ class UserController extends Controller
         return redirect()->route('users.index')->with('success', 'User updated successfully.');
     }
 
+    public function destroy(Request $request, User $user)
+    {
+        if ($request->user()?->is($user)) {
+            return back()->withErrors(['user' => 'You cannot delete your own logged-in account.']);
+        }
+
+        $anotherManagerExists = User::query()
+            ->whereKeyNot($user->id)
+            ->with(['deniedPermissions', 'permissions', 'roles.permissions'])
+            ->get()
+            ->contains(fn (User $candidate): bool => $candidate->hasPermission('manage_users'));
+
+        if (! $anotherManagerExists) {
+            return back()->withErrors(['user' => 'This is the last user who can manage users. Assign access to another user before deleting it.']);
+        }
+
+        DB::transaction(function () use ($user): void {
+            DB::table('sessions')->where('user_id', $user->id)->delete();
+            $user->delete();
+        });
+
+        return redirect()->route('users.index')->with('success', 'User deleted successfully.');
+    }
+
     /**
      * Persist the form as an exact per-user access list. Unchecked permissions are
      * explicitly denied so a role cannot silently re-enable them for this user.

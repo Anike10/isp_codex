@@ -34,7 +34,19 @@
                     <span class="badge {{ $profile->supports_vlan_polling ? 'active' : 'inactive' }}">VLAN</span>
                     <span class="badge {{ $profile->supports_mac_polling ? 'active' : 'inactive' }}">MAC</span>
                 </td>
-                <td><a class="btn light" href="{{ route('olt-onus.protocol-profiles.edit', $profile) }}">Edit</a></td>
+                <td>
+                    <div class="actions">
+                        <a class="btn light" href="{{ route('olt-onus.protocol-profiles.edit', $profile) }}">Edit</a>
+                        @if (in_array($profile->key, ['hsgq_epon', 'hsgq_gpon', 'generic_epon'], true))
+                            <span class="badge active">Built-in</span>
+                        @else
+                            <form method="post" action="{{ route('olt-onus.protocol-profiles.destroy', $profile) }}" onsubmit="return confirm('Delete this OLT protocol/profile?')">
+                                @csrf @method('DELETE')
+                                <button class="btn danger" type="submit">Delete</button>
+                            </form>
+                        @endif
+                    </div>
+                </td>
             </tr>
         @empty
             <tr><td colspan="6">No protocol profiles found.</td></tr>

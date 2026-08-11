@@ -16,7 +16,20 @@
             <td>{{ $user->name }}</td>
             <td>{{ $user->email }}</td>
             <td>{{ $user->roles->pluck('label')->join(', ') ?: 'No role' }}</td>
-            <td><a class="btn light" href="{{ route('users.edit', $user) }}">Edit</a></td>
+            <td>
+                <div class="actions">
+                    <a class="btn light" href="{{ route('users.edit', $user) }}">Edit</a>
+                    @if (auth()->id() === $user->id)
+                        <span class="badge active">Current user</span>
+                    @else
+                        <form method="post" action="{{ route('users.destroy', $user) }}" onsubmit="return confirm('Delete user {{ addslashes($user->name) }}? This login will stop working immediately.')">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn danger" type="submit">Delete</button>
+                        </form>
+                    @endif
+                </div>
+            </td>
         </tr>
     @empty
         <tr><td colspan="4">No users found.</td></tr>

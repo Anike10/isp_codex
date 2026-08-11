@@ -77,7 +77,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_invoices')->group(function () {
-        Route::resource('organizations', OrganizationController::class)->only(['index', 'create', 'store', 'edit', 'update']);
+        Route::resource('organizations', OrganizationController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
         Route::get('quotations/{quotation}/print', [QuotationController::class, 'print'])->name('quotations.print');
         Route::post('quotations/{quotation}/make-invoice', [InvoiceController::class, 'makeFromQuotation'])->name('quotations.make-invoice');
         Route::resource('quotations', QuotationController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
@@ -127,7 +127,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('permission:manage_payment_accounts')->group(function () {
         Route::get('payment-accounts/cash/ledger', [PaymentAccountController::class, 'cashLedger'])->name('payment-accounts.cash-ledger');
-        Route::resource('payment-accounts', PaymentAccountController::class)->only(['index', 'show', 'create', 'store']);
+        Route::resource('payment-accounts', PaymentAccountController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update', 'destroy']);
     });
 
     Route::middleware('permission:manage_expenses')->group(function () {
@@ -196,6 +196,7 @@ Route::middleware('auth')->group(function () {
         Route::post('olt-onus/protocol-profiles', [OltOnuController::class, 'storeProtocolProfile'])->name('olt-onus.protocol-profiles.store');
         Route::get('olt-onus/protocol-profiles/{oltProtocolProfile}/edit', [OltOnuController::class, 'editProtocolProfile'])->name('olt-onus.protocol-profiles.edit');
         Route::put('olt-onus/protocol-profiles/{oltProtocolProfile}', [OltOnuController::class, 'updateProtocolProfile'])->name('olt-onus.protocol-profiles.update');
+        Route::delete('olt-onus/protocol-profiles/{oltProtocolProfile}', [OltOnuController::class, 'destroyProtocolProfile'])->name('olt-onus.protocol-profiles.destroy');
         Route::post('olt-onus/notes/current-laser', [OltOnuController::class, 'appendCurrentLaserToAllNotes'])->name('olt-onus.notes.current-laser.store');
         Route::patch('olt-onus/{oltOnu}/vlan', [OltOnuController::class, 'updateVlan'])->name('olt-onus.vlan.update');
         Route::patch('olt-onus/{oltOnu}/ethernet-port-state', [OltOnuController::class, 'updateEthernetPortState'])->name('olt-onus.ethernet-port-state.update');
@@ -249,8 +250,8 @@ Route::middleware('auth')->group(function () {
         Route::get('warehouse-movements', [WarehouseController::class, 'movements'])->name('warehouse-movements.index');
         Route::get('warehouse-transfers/create', [WarehouseController::class, 'createTransfer'])->name('warehouse-transfers.create');
         Route::post('warehouse-transfers', [WarehouseController::class, 'storeTransfer'])->name('warehouse-transfers.store');
-        Route::resource('warehouses', WarehouseController::class)->only(['index', 'store', 'show']);
-        Route::resource('product-categories', ProductCategoryController::class)->only(['index', 'store']);
+        Route::resource('warehouses', WarehouseController::class)->only(['index', 'store', 'show', 'edit', 'update', 'destroy']);
+        Route::resource('product-categories', ProductCategoryController::class)->only(['index', 'store', 'update', 'destroy']);
         Route::post('purchase-bills/{purchaseBill}/finalize', [PurchaseBillController::class, 'finalize'])->name('purchase-bills.finalize');
         Route::get('purchase-bills/{purchaseBill}/document', [PurchaseBillController::class, 'document'])->name('purchase-bills.document');
         Route::resource('purchase-bills', PurchaseBillController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
@@ -275,8 +276,8 @@ Route::middleware('auth')->group(function () {
         ->name('warranty-claims.show');
 
     Route::middleware('permission:manage_users')->group(function () {
-        Route::resource('users', UserController::class)->only(['index', 'create', 'store', 'edit', 'update']);
-        Route::resource('roles', RoleController::class)->only(['index', 'create', 'store', 'edit', 'update']);
+        Route::resource('users', UserController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
+        Route::resource('roles', RoleController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     });
 
     Route::middleware('permission:manage_resellers')->group(function () {

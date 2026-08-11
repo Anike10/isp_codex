@@ -331,6 +331,21 @@ class OltOnuController extends Controller
         return redirect()->route('olt-onus.protocol-profiles.index')->with('success', 'OLT protocol/profile updated.');
     }
 
+    public function destroyProtocolProfile(OltProtocolProfile $oltProtocolProfile)
+    {
+        if (in_array($oltProtocolProfile->key, ['hsgq_epon', 'hsgq_gpon', 'generic_epon'], true)) {
+            return back()->withErrors(['profile' => 'Built-in OLT protocol profiles cannot be deleted.']);
+        }
+
+        if (OltDevice::query()->where('protocol_profile', $oltProtocolProfile->key)->exists()) {
+            return back()->withErrors(['profile' => 'This profile is assigned to an OLT. Change that OLT profile before deleting it.']);
+        }
+
+        $oltProtocolProfile->delete();
+
+        return redirect()->route('olt-onus.protocol-profiles.index')->with('success', 'OLT protocol/profile deleted.');
+    }
+
     public function updateVlan(Request $request, OltOnu $oltOnu)
     {
         $request->merge(['mode' => $request->input('mode', 'tag')]);

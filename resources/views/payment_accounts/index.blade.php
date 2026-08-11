@@ -87,7 +87,16 @@
                 <td>{{ number_format($spent, 2) }}</td>
                 <td>{{ number_format($currentBalance, 2) }}</td>
                 <td><span class="badge {{ $account->status }}">{{ $account->status }}</span></td>
-                <td><a class="btn light" href="{{ route('payment-accounts.show', $account) }}">Ledger</a></td>
+                <td>
+                    <div class="actions">
+                        <a class="btn light" href="{{ route('payment-accounts.show', $account) }}">Ledger</a>
+                        <a class="btn secondary" href="{{ route('payment-accounts.edit', $account) }}">Edit</a>
+                        <form method="post" action="{{ route('payment-accounts.destroy', $account) }}" onsubmit="return confirm('Delete this payment account? Accounts with transaction history cannot be deleted.')">
+                            @csrf @method('DELETE')
+                            <button class="btn danger" type="submit">Delete</button>
+                        </form>
+                    </div>
+                </td>
             </tr>
         @empty
             <tr>

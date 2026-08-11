@@ -31,6 +31,11 @@
         @if ($canRecordPayments)
             <a class="btn secondary" href="{{ route('payments.create') }}">Record Payment</a>
         @endif
+        <a class="btn secondary" href="{{ route('payment-accounts.edit', $paymentAccount) }}">Edit Account</a>
+        <form method="post" action="{{ route('payment-accounts.destroy', $paymentAccount) }}" onsubmit="return confirm('Delete this payment account? Accounts with transaction history cannot be deleted.')">
+            @csrf @method('DELETE')
+            <button class="btn danger" type="submit">Delete</button>
+        </form>
         <a class="btn light" href="{{ route('payment-accounts.index') }}">Back</a>
     </div>
 </div>

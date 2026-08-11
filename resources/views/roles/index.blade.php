@@ -16,7 +16,20 @@
             <td>{{ $role->label }}<br><span class="muted">{{ $role->name }}</span></td>
             <td>{{ $role->users_count }}</td>
             <td>{{ $role->permissions->pluck('label')->join(', ') ?: 'No permissions' }}</td>
-            <td><a class="btn light" href="{{ route('roles.edit', $role) }}">Edit</a></td>
+            <td>
+                <div class="actions">
+                    <a class="btn light" href="{{ route('roles.edit', $role) }}">Edit</a>
+                    @if ($role->name === 'admin')
+                        <span class="badge active">Protected</span>
+                    @else
+                        <form method="post" action="{{ route('roles.destroy', $role) }}" onsubmit="return confirm('Delete role {{ addslashes($role->label) }}?')">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn danger" type="submit">Delete</button>
+                        </form>
+                    @endif
+                </div>
+            </td>
         </tr>
     @empty
         <tr><td colspan="4">No roles found.</td></tr>

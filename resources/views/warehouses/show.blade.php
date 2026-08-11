@@ -5,8 +5,15 @@
     <div><h1>{{ $warehouse->name }}</h1><div class="muted">{{ $warehouse->code }} · {{ $warehouse->address ?: 'No address' }}</div></div>
     <div class="actions">
         <a class="btn" href="{{ route('warehouse-transfers.create', ['from_warehouse_id' => $warehouse->id]) }}">Transfer Stock</a>
+        <a class="btn secondary" href="{{ route('warehouses.edit', $warehouse) }}">Edit Warehouse</a>
         <a class="btn light" href="{{ route('warehouse-movements.index', ['warehouse_id' => $warehouse->id]) }}">Full History</a>
         <a class="btn light" href="{{ route('warehouses.index') }}">Back</a>
+        @unless ($warehouse->is_default)
+            <form method="post" action="{{ route('warehouses.destroy', $warehouse) }}" onsubmit="return confirm('Delete this warehouse? Only an unused empty warehouse can be deleted.')">
+                @csrf @method('DELETE')
+                <button class="btn danger" type="submit">Delete</button>
+            </form>
+        @endunless
     </div>
 </div>
 

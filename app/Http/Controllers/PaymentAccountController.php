@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class PaymentAccountController extends Controller
 {
@@ -62,7 +63,12 @@ class PaymentAccountController extends Controller
 
     public function create()
     {
-        return view('payment_accounts.create');
+        return view('payment_accounts.create', ['paymentAccount' => new PaymentAccount]);
+    }
+
+    public function edit(PaymentAccount $paymentAccount)
+    {
+        return view('payment_accounts.create', compact('paymentAccount'));
     }
 
     public function show(Request $request, PaymentAccount $paymentAccount)
@@ -165,15 +171,54 @@ class PaymentAccountController extends Controller
 
     public function store(Request $request)
     {
-        PaymentAccount::create($request->validate([
+        PaymentAccount::create($this->validatedAccount($request));
+
+        return redirect()->route('payment-accounts.index')->with('success', 'Payment account created successfully.');
+    }
+
+    public function update(Request $request, PaymentAccount $paymentAccount)
+    {
+        $data = $this->validatedAccount($request);
+
+        if ($this->hasTransactions($paymentAccount)
+            && abs((float) $data['opening_balance'] - (float) $paymentAccount->opening_balance) >= 0.005) {
+            throw ValidationException::withMessages([
+                'opening_balance' => 'Opening balance cannot be changed after transactions have been recorded.',
+            ]);
+        }
+
+        $paymentAccount->update($data);
+
+        return redirect()->route('payment-accounts.index')->with('success', 'Payment account updated successfully.');
+    }
+
+    public function destroy(PaymentAccount $paymentAccount)
+    {
+        if ($this->hasTransactions($paymentAccount)) {
+            return back()->withErrors(['payment_account' => 'An account with payments, advances, or expenses cannot be deleted. Set it to inactive instead.']);
+        }
+
+        $paymentAccount->delete();
+
+        return redirect()->route('payment-accounts.index')->with('success', 'Payment account deleted successfully.');
+    }
+
+    private function validatedAccount(Request $request): array
+    {
+        return $request->validate([
             'payment_method' => ['required', 'in:bkash,nagad,bank'],
             'account_name' => ['required', 'string', 'max:255'],
             'account_number' => ['required', 'string', 'max:100'],
             'opening_balance' => ['required', 'numeric', 'min:0'],
             'status' => ['required', 'in:active,inactive'],
-        ]));
+        ]);
+    }
 
-        return redirect()->route('payment-accounts.index')->with('success', 'Payment account created successfully.');
+    private function hasTransactions(PaymentAccount $paymentAccount): bool
+    {
+        return $paymentAccount->payments()->exists()
+            || $paymentAccount->expenses()->exists()
+            || $paymentAccount->balanceTransactions()->exists();
     }
 
     private function filteredPaymentQuery($query, Request $request)

@@ -32,6 +32,21 @@ class OrganizationController extends Controller
         return redirect()->route('organizations.index')->with('success', 'Organization updated successfully.');
     }
 
+    public function destroy(Organization $organization)
+    {
+        if ($organization->is_default) {
+            return back()->withErrors(['organization' => 'The default organization cannot be deleted. Make another organization default first.']);
+        }
+
+        if ($organization->printLogs()->exists()) {
+            return back()->withErrors(['organization' => 'This organization has print history and cannot be deleted. Set it to inactive instead.']);
+        }
+
+        $organization->delete();
+
+        return redirect()->route('organizations.index')->with('success', 'Organization deleted successfully.');
+    }
+
     private function validated(Request $request): array
     {
         $data = $request->validate([

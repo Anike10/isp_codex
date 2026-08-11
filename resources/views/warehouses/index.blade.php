@@ -34,7 +34,19 @@
             <td>{{ $warehouse->stocked_products_count }}</td>
             <td>{{ (int) $warehouse->stocks_sum_quantity }}</td>
             <td>{{ $warehouse->is_active ? 'Active' : 'Inactive' }}</td>
-            <td><a class="btn light" href="{{ route('warehouses.show', $warehouse) }}">View Stock</a></td>
+            <td>
+                <div class="actions">
+                    <a class="btn light" href="{{ route('warehouses.show', $warehouse) }}">View Stock</a>
+                    <a class="btn secondary" href="{{ route('warehouses.edit', $warehouse) }}">Edit</a>
+                    @unless ($warehouse->is_default)
+                        <form method="post" action="{{ route('warehouses.destroy', $warehouse) }}" onsubmit="return confirm('Delete warehouse {{ addslashes($warehouse->name) }}? Only an unused empty warehouse can be deleted.')">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn danger" type="submit">Delete</button>
+                        </form>
+                    @endunless
+                </div>
+            </td>
         </tr>
     @endforeach
     </tbody>

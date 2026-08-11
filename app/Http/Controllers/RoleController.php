@@ -87,4 +87,19 @@ class RoleController extends Controller
 
         return redirect()->route('roles.index')->with('success', 'Role updated successfully.');
     }
+
+    public function destroy(Role $role)
+    {
+        if ($role->name === 'admin') {
+            return back()->withErrors(['role' => 'The built-in Administrator role cannot be deleted.']);
+        }
+
+        if ($role->users()->exists()) {
+            return back()->withErrors(['role' => 'Remove this role from all users before deleting it.']);
+        }
+
+        $role->delete();
+
+        return redirect()->route('roles.index')->with('success', 'Role deleted successfully.');
+    }
 }

@@ -12,6 +12,7 @@ use App\Models\Warehouse;
 use App\Services\InventoryService;
 use App\Support\SerialNumberParser;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
@@ -52,6 +53,61 @@ class WarehouseController extends Controller
         Warehouse::create($data);
 
         return redirect()->route('warehouses.index')->with('success', 'Warehouse created successfully.');
+    }
+
+    public function edit(Warehouse $warehouse)
+    {
+        return view('warehouses.edit', compact('warehouse'));
+    }
+
+    public function update(Request $request, Warehouse $warehouse)
+    {
+        $request->merge(['code' => Str::upper(trim((string) $request->input('code')))]);
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:150'],
+            'code' => ['required', 'string', 'max:30', Rule::unique('warehouses', 'code')->ignore($warehouse->id)],
+            'address' => ['nullable', 'string', 'max:255'],
+            'is_active' => ['required', 'boolean'],
+            'is_default' => ['nullable', 'boolean'],
+        ]);
+        $data['is_default'] = $request->boolean('is_default');
+
+        if ($data['is_default']) {
+            $data['is_active'] = true;
+        }
+
+        DB::transaction(function () use ($warehouse, $data): void {
+            if ($data['is_default']) {
+                Warehouse::query()->whereKeyNot($warehouse->id)->update(['is_default' => false]);
+            }
+
+            $warehouse->update($data);
+        });
+
+        return redirect()->route('warehouses.index')->with('success', 'Warehouse updated successfully.');
+    }
+
+    public function destroy(Warehouse $warehouse)
+    {
+        if ($warehouse->is_default) {
+            return back()->withErrors(['warehouse' => 'The default warehouse cannot be deleted. Make another warehouse default first.']);
+        }
+
+        $hasDependencies = $warehouse->stocks()->where('quantity', '>', 0)->exists()
+            || $warehouse->usedStocks()->exists()
+            || $warehouse->serials()->exists()
+            || $warehouse->movements()->exists()
+            || StockMovement::query()->where('related_warehouse_id', $warehouse->id)->exists()
+            || DB::table('employee_asset_assignments')->where('warehouse_id', $warehouse->id)->exists()
+            || DB::table('employee_asset_returns')->where('warehouse_id', $warehouse->id)->exists();
+
+        if ($hasDependencies) {
+            return back()->withErrors(['warehouse' => 'A warehouse with stock, serials, asset records, or movement history cannot be deleted. Set it to inactive instead.']);
+        }
+
+        $warehouse->delete();
+
+        return redirect()->route('warehouses.index')->with('success', 'Warehouse deleted successfully.');
     }
 
     public function show(Request $request, Warehouse $warehouse)
