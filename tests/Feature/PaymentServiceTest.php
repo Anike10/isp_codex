@@ -739,6 +739,49 @@ class PaymentServiceTest extends TestCase
         $this->assertDatabaseCount('payments', 0);
     }
 
+    public function test_keep_as_advance_avoids_auto_adjusting_due_invoices(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = $this->createCustomer();
+        $invoice = $this->createInvoice($customer, '2026-05', 800, '2026-05-10');
+
+        $this->actingAs($user)->post(route('customers.payments.store', $customer), [
+            'amount' => 1000,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-06-01',
+            'keep_as_advance' => '1',
+        ])->assertRedirect(route('customers.show', $customer));
+
+        $this->assertSame(800.0, (float) $invoice->refresh()->due_amount);
+        $this->assertSame('unpaid', $invoice->status);
+        $this->assertSame(1000.0, (float) $customer->refresh()->account_balance);
+    }
+
+    public function test_keep_as_advance_allows_optional_invoice_allocation_from_payment(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = $this->createCustomer();
+        $olderInvoice = $this->createInvoice($customer, '2026-04', 800, '2026-04-10');
+        $currentInvoice = $this->createInvoice($customer, '2026-05', 500, '2026-05-10');
+
+        $this->actingAs($user)->post(route('customers.payments.store', $customer), [
+            'amount' => 900,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-06-01',
+            'keep_as_advance' => '1',
+            'invoice_allocations' => [
+                $olderInvoice->id => 300,
+                $currentInvoice->id => 0,
+            ],
+        ])->assertRedirect(route('customers.show', $customer));
+
+        $this->assertSame(500.0, (float) $olderInvoice->refresh()->due_amount);
+        $this->assertSame(500.0, (float) $currentInvoice->refresh()->due_amount);
+        $this->assertSame(600.0, (float) $customer->refresh()->account_balance);
+    }
+
     public function test_cash_advance_route_discards_a_forged_payment_account_id(): void
     {
         $user = User::factory()->create();

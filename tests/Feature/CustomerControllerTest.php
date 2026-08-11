@@ -326,22 +326,28 @@ class CustomerControllerTest extends TestCase
 
     public function test_expired_party_payment_renews_the_remembered_package(): void
     {
-        $user = User::factory()->create();
-        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
-        $package = InternetPackage::create(['name' => 'Remembered 30 MB', 'speed' => '30 Mbps', 'mikrotik_profile' => 'Remembered 30 MB', 'monthly_price' => 1000, 'status' => 'active']);
-        $customer = Customer::create(['name' => 'Renew Customer', 'phone' => '01777777777', 'connection_id' => 'RENEW-001', 'address' => 'Kushtia', 'status' => 'inactive', 'is_customer' => true]);
-        $subscription = Subscription::create(['customer_id' => $customer->id, 'internet_package_id' => $package->id, 'start_date' => '2026-06-01', 'end_date' => '2026-07-01', 'status' => 'inactive']);
+        Carbon::setTestNow('2026-07-18 10:00:00');
 
-        $this->actingAs($user)->post(route('customers.payments.store', $customer), [
-            'amount' => 1000,
-            'payment_method' => 'cash',
-            'payment_date' => '2026-07-18',
-        ])->assertRedirect(route('customers.show', $customer));
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $package = InternetPackage::create(['name' => 'Remembered 30 MB', 'speed' => '30 Mbps', 'mikrotik_profile' => 'Remembered 30 MB', 'monthly_price' => 1000, 'status' => 'active']);
+            $customer = Customer::create(['name' => 'Renew Customer', 'phone' => '01777777777', 'connection_id' => 'RENEW-001', 'address' => 'Kushtia', 'status' => 'inactive', 'is_customer' => true]);
+            $subscription = Subscription::create(['customer_id' => $customer->id, 'internet_package_id' => $package->id, 'start_date' => '2026-06-01', 'end_date' => '2026-07-01', 'status' => 'inactive']);
 
-        $this->assertSame('active', $customer->refresh()->status);
-        $this->assertSame('active', $subscription->refresh()->status);
-        $this->assertNull($subscription->end_date);
-        $this->assertDatabaseHas('invoices', ['customer_id' => $customer->id, 'billing_month' => '2026-07', 'due_amount' => 0]);
+            $this->actingAs($user)->post(route('customers.payments.store', $customer), [
+                'amount' => 1000,
+                'payment_method' => 'cash',
+                'payment_date' => '2026-07-18',
+            ])->assertRedirect(route('customers.show', $customer));
+
+            $this->assertSame('active', $customer->refresh()->status);
+            $this->assertSame('active', $subscription->refresh()->status);
+            $this->assertNull($subscription->end_date);
+            $this->assertDatabaseHas('invoices', ['customer_id' => $customer->id, 'billing_month' => '2026-07', 'due_amount' => 0]);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_inactive_customer_with_no_paid_month_and_used_grace_still_shows_activate_button(): void

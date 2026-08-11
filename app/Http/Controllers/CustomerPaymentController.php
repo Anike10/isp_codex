@@ -38,9 +38,17 @@ class CustomerPaymentController extends Controller
             'payment_account_id' => ['nullable', 'exists:payment_accounts,id'],
             'payment_date' => ['required', 'date'],
             'note' => ['nullable', 'string'],
+            'keep_as_advance' => ['nullable', 'in:1'],
+            'invoice_allocations' => ['nullable', 'array'],
+            'invoice_allocations.*' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $this->logSubmittedAmount($request, $customer, $data, 'customer_payment');
+        $keepAsAdvance = (string) ($data['keep_as_advance'] ?? '') === '1';
+        $invoiceAllocations = array_filter(
+            $request->input('invoice_allocations', []),
+            static fn ($amount) => (float) $amount > 0
+        );
 
         if ($data['payment_method'] === 'cash') {
             $data['payment_account_id'] = null;
@@ -60,8 +68,21 @@ class CustomerPaymentController extends Controller
         }
 
         $billingService->generateCurrentServiceBillForCustomer($customer);
-
         $invoice = $customer->invoices()->where('due_amount', '>', 0)->orderBy('due_date')->orderBy('id')->first();
+
+        if ($keepAsAdvance) {
+            try {
+                if ($invoiceAllocations) {
+                    $paymentService->addAdvanceCreditAndApplyToInvoices($customer, $data, $invoiceAllocations);
+                } else {
+                    $paymentService->addAdvanceCredit($customer, $data);
+                }
+            } catch (InvalidArgumentException $exception) {
+                return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
+            }
+
+            return redirect()->route('customers.show', $customer)->with('success', 'Payment was saved as advance.');
+        }
 
         if (! $invoice) {
             try {
