@@ -117,6 +117,44 @@ class CustomerControllerTest extends TestCase
         }
     }
 
+    public function test_inactive_customer_with_no_paid_month_shows_activate_action(): void
+    {
+        Carbon::setTestNow('2026-08-11 10:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $package = InternetPackage::create([
+                'name' => 'Inactive Activate',
+                'speed' => '10 Mbps',
+                'mikrotik_profile' => 'Inactive Activate',
+                'monthly_price' => 1000,
+                'status' => 'active',
+            ]);
+
+            $customer = Customer::create([
+                'name' => 'Inactive Quick Activation',
+                'phone' => '01712121212',
+                'connection_id' => 'IACT-001',
+                'address' => 'Kushtia',
+                'status' => 'inactive',
+                'is_customer' => true,
+            ]);
+            Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-07-01',
+                'status' => 'inactive',
+            ]);
+
+            $this->actingAs($user)->get(route('customers.index'))
+                ->assertOk()
+                ->assertSee('Activate until 2026-09-11');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_quick_activation_without_package_returns_error(): void
     {
         $user = User::factory()->create();

@@ -28,6 +28,7 @@
             $netBalance = (float) $customer->account_balance - (float) ($customer->total_due_amount ?? 0);
             $activeUntil = $customer->activeUntil();
             $daysRemaining = $customer->activeDaysRemaining();
+            $nextActiveDate = now()->addMonthNoOverflow()->toDateString();
         @endphp
         <tr class="{{ $customer->never_suspend ? 'customer-row-special' : '' }}" data-href="{{ route('customers.show', $customer) }}">
             <td>{{ $customers->firstItem() + $loop->index }}</td>
@@ -86,7 +87,6 @@
                 @elseif ($customer->status === 'active')
                     <span class="muted">No paid month</span>
                     @if ($customer->subscriptions_exists)
-                        @php $nextActiveDate = now()->addMonthNoOverflow()->toDateString(); @endphp
                         <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
                             @csrf
                             <button class="btn secondary" type="submit">Activate until {{ $nextActiveDate }}</button>
@@ -95,7 +95,13 @@
                         <a class="btn light" style="margin-top:6px" href="{{ route('customers.edit', $customer) }}">Assign package for activation</a>
                     @endif
                 @elseif (! $customer->grace_used_at)
-                    @if ($customer->subscriptions_exists)
+                    @if ($activeUntil === null && $customer->subscriptions_exists)
+                        <span class="muted">No paid month</span>
+                        <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
+                            @csrf
+                            <button class="btn secondary" type="submit">Activate until {{ $nextActiveDate }}</button>
+                        </form>
+                    @elseif ($customer->subscriptions_exists)
                         <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="gap:6px">
                             @csrf
                             <input type="number" name="grace_days" min="1" max="365" placeholder="Days" style="width:78px" required>
