@@ -41,19 +41,17 @@
     </div>
     <div>
         <label>Username</label>
-        <div class="actions" style="gap:6px">
-            <input id="router-username" name="router_api_username" value="{{ old('router_api_username', old('username', $mikrotikRouter->username)) }}" data-saved-username="{{ $mikrotikRouter->username }}" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" readonly required>
-            <button class="btn light" type="button" id="unlock-router-username">Change Username</button>
+        <div>
+            <input id="router-username" name="router_api_username" value="{{ old('router_api_username', old('username', $mikrotikRouter->username)) }}" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" required>
         </div>
-        <span class="muted">Locked by default so browser autofill cannot change it accidentally.</span>
+        <span class="muted">Update as needed; keep a valid username.</span>
     </div>
     <div>
-        <label>New Password</label>
-        <div class="actions" style="gap:6px">
-            <input id="router-password" type="password" name="router_api_password" autocomplete="new-password" readonly>
-            <button class="btn light" type="button" id="unlock-router-password">Change Password</button>
+        <label>API Password</label>
+        <div>
+            <input id="router-password" type="password" name="router_api_password" autocomplete="new-password">
         </div>
-        <span class="muted">Locked and blank by default. Unlock only when the RouterOS API password must change.</span>
+        <span class="muted">Leave blank to keep current password.</span>
     </div>
     <div>
         <label>Status</label>
@@ -70,36 +68,4 @@
         <button class="btn" type="submit">Update Router</button>
     </div>
 </form>
-<script>
-const routerEditForm = document.getElementById('router-edit-form');
-const routerUsername = document.getElementById('router-username');
-const routerPassword = document.getElementById('router-password');
-let routerUsernameUnlocked = false;
-let routerPasswordUnlocked = false;
-
-document.getElementById('unlock-router-username')?.addEventListener('click', function () {
-    routerUsernameUnlocked = true;
-    routerUsername.readOnly = false;
-    routerUsername.focus();
-    routerUsername.select();
-    this.textContent = 'Username Editable';
-});
-
-document.getElementById('unlock-router-password')?.addEventListener('click', function () {
-    routerPasswordUnlocked = true;
-    routerPassword.readOnly = false;
-    routerPassword.value = '';
-    routerPassword.focus();
-    this.textContent = 'Password Editable';
-});
-
-function restoreLockedRouterCredentials() {
-    if (!routerUsernameUnlocked) routerUsername.value = routerUsername.dataset.savedUsername;
-    if (!routerPasswordUnlocked) routerPassword.value = '';
-}
-
-window.addEventListener('pageshow', restoreLockedRouterCredentials);
-[100, 500, 1500].forEach(delay => setTimeout(restoreLockedRouterCredentials, delay));
-routerEditForm.addEventListener('submit', restoreLockedRouterCredentials);
-</script>
 @endsection
