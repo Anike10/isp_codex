@@ -58,8 +58,14 @@ class BillingService
     /**
      * Create the next unpaid renewal for the Party's remembered package.
      * If the current billing month is already paid, the next month is used.
+     * When an available balance is supplied, do not create a future invoice
+     * unless that balance can pay the invoice in full.
      */
-    public function generateNextRenewalServiceBillForCustomer(Customer $customer, string $paymentDate): ?Invoice
+    public function generateNextRenewalServiceBillForCustomer(
+        Customer $customer,
+        string $paymentDate,
+        ?float $availableBalance = null
+    ): ?Invoice
     {
         $customer->loadMissing(['activeSubscription.package', 'subscriptions.package']);
         $subscription = $customer->activeSubscription
@@ -80,8 +86,22 @@ class BillingService
                 ->where('invoice_type', 'service')
                 ->first();
 
-            if (! $existing || (float) $existing->due_amount > 0) {
-                return $existing ?: $this->createServiceInvoice($subscription, $month);
+            if (! $existing) {
+                $commission = $this->resellerCommissionService->calculate(
+                    $subscription->customer,
+                    (float) $subscription->package->monthly_price
+                );
+                $requiredAmount = round((float) $commission['net_total'], 2);
+
+                if ($availableBalance !== null && round($availableBalance, 2) < $requiredAmount) {
+                    return null;
+                }
+
+                return $this->createServiceInvoice($subscription, $month, $commission);
+            }
+
+            if ((float) $existing->due_amount > 0) {
+                return $existing;
             }
 
             $month->addMonthNoOverflow();
@@ -125,11 +145,11 @@ class BillingService
         });
     }
 
-    private function createServiceInvoice(Subscription $subscription, Carbon $month): Invoice
+    private function createServiceInvoice(Subscription $subscription, Carbon $month, ?array $commission = null): Invoice
     {
-        return DB::transaction(function () use ($subscription, $month) {
+        return DB::transaction(function () use ($subscription, $month, $commission) {
             $subscription->loadMissing(['customer', 'package']);
-            $commission = $this->resellerCommissionService->calculate(
+            $commission ??= $this->resellerCommissionService->calculate(
                 $subscription->customer,
                 (float) $subscription->package->monthly_price
             );

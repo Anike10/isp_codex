@@ -709,6 +709,12 @@ class PaymentServiceTest extends TestCase
                 $this->assertSame(0.0, (float) $invoice->due_amount);
                 $this->assertSame('paid', $invoice->status);
             }
+
+            $this->assertDatabaseMissing('invoices', [
+                'customer_id' => $customer->id,
+                'billing_month' => '2027-01',
+                'invoice_type' => 'service',
+            ]);
         } finally {
             Carbon::setTestNow();
         }

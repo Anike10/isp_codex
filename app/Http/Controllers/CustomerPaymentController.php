@@ -211,7 +211,12 @@ class CustomerPaymentController extends Controller
                 break;
             }
 
-            $renewalInvoice = $billingService->generateNextRenewalServiceBillForCustomer($customer, $paymentDate);
+            $availableBalance = (float) $customer->refresh()->account_balance;
+            $renewalInvoice = $billingService->generateNextRenewalServiceBillForCustomer(
+                $customer,
+                $paymentDate,
+                $availableBalance
+            );
             if (! $renewalInvoice || (float) $renewalInvoice->due_amount <= 0) {
                 break;
             }
