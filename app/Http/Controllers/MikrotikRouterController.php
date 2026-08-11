@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\MikrotikRouter;
+use App\Services\MikrotikImportService;
 use App\Services\RouterOsClient;
 use App\Services\RouterOsConnectionDiagnostic;
 use Illuminate\Http\Request;
@@ -53,9 +54,37 @@ class MikrotikRouterController extends Controller
         return redirect()->route('mikrotik-routers.index')->with('success', 'MikroTik router added successfully.');
     }
 
-    public function show(MikrotikRouter $mikrotikRouter)
+    public function show(MikrotikRouter $mikrotikRouter, MikrotikImportService $importService)
     {
-        return view('mikrotik_routers.show', compact('mikrotikRouter'));
+        $inactiveProfileExists = null;
+        $inactiveProfileError = null;
+
+        try {
+            $inactiveProfileExists = trim((string) $mikrotikRouter->inactive_pppoe_profile) !== ''
+                ? $importService->hasPppProfile($mikrotikRouter, (string) $mikrotikRouter->inactive_pppoe_profile)
+                : false;
+        } catch (Throwable $exception) {
+            $inactiveProfileExists = null;
+            $inactiveProfileError = 'Could not verify the inactive profile on this MikroTik right now.';
+        }
+
+        return view('mikrotik_routers.show', compact('mikrotikRouter', 'inactiveProfileExists', 'inactiveProfileError'));
+    }
+
+    public function ensureInactivePppProfile(MikrotikRouter $mikrotikRouter, MikrotikImportService $importService)
+    {
+        try {
+            $created = $importService->createPppProfile($mikrotikRouter, $mikrotikRouter->inactive_pppoe_profile);
+            $importService->importProfiles($mikrotikRouter);
+
+            if ($created) {
+                return back()->with('success', "Inactive profile {$mikrotikRouter->inactive_pppoe_profile} created on {$mikrotikRouter->name}.");
+            }
+
+            return back()->with('success', "Inactive profile {$mikrotikRouter->inactive_pppoe_profile} already exists on {$mikrotikRouter->name}.");
+        } catch (Throwable $exception) {
+            return back()->with('error', 'Could not create inactive profile: '.$exception->getMessage());
+        }
     }
 
     public function connectionStatus(MikrotikRouter $mikrotikRouter, RouterOsConnectionDiagnostic $diagnostic)

@@ -16,6 +16,37 @@ class MikrotikImportService
         return $this->read($router, $command);
     }
 
+    public function hasPppProfile(MikrotikRouter $router, string $profile): bool
+    {
+        $profile = trim((string) $profile);
+        if ($profile === '') {
+            return false;
+        }
+
+        $existing = $this->read($router, '/ppp/profile/print', [
+            '?name' => $profile,
+            '.proplist' => '.id',
+        ]);
+
+        return $existing !== [];
+    }
+
+    public function createPppProfile(MikrotikRouter $router, string $profile): bool
+    {
+        $profile = trim((string) $profile);
+        if ($profile === '') {
+            throw new \InvalidArgumentException('Profile name is required.');
+        }
+
+        if ($this->hasPppProfile($router, $profile)) {
+            return false;
+        }
+
+        $this->write($router, '/ppp/profile/add', ['name' => $profile]);
+
+        return true;
+    }
+
     public function write(MikrotikRouter $router, string $command, array $attributes): array
     {
         $client = new RouterOsClient();
@@ -134,14 +165,14 @@ class MikrotikImportService
         return count($records);
     }
 
-    private function read(MikrotikRouter $router, string $command): array
+    private function read(MikrotikRouter $router, string $command, array $attributes = []): array
     {
         $client = new RouterOsClient();
 
         try {
             $client->connect($router->ip_address, $router->api_port, $router->username, $router->password, 10);
 
-            return $client->command($command);
+            return $client->command($command, $attributes);
         } finally {
             $client->close();
         }

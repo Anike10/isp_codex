@@ -211,6 +211,7 @@ Route::middleware('auth')->group(function () {
         Route::post('mikrotik-routers/{mikrotikRouter}/import/profiles', [MikrotikImportController::class, 'importProfiles'])->name('mikrotik-routers.import.profiles');
         Route::post('mikrotik-routers/{mikrotikRouter}/import/ip-pools', [MikrotikImportController::class, 'importIpPools'])->name('mikrotik-routers.import.ip-pools');
         Route::post('mikrotik-routers/{mikrotikRouter}/import/secrets', [MikrotikImportController::class, 'importSecrets'])->name('mikrotik-routers.import.secrets');
+        Route::post('mikrotik-routers/{mikrotikRouter}/inactive-profile/create', [MikrotikRouterController::class, 'ensureInactivePppProfile'])->name('mikrotik-routers.inactive-profile.create');
         Route::get('mikrotik-routers/{mikrotikRouter}/profiles', [MikrotikRouterDataController::class, 'profiles'])->name('mikrotik-routers.profiles.index');
         Route::get('mikrotik-routers/{mikrotikRouter}/pools', [MikrotikRouterDataController::class, 'pools'])->name('mikrotik-routers.pools.index');
         Route::post('mikrotik-routers/{mikrotikRouter}/pools', [MikrotikRouterDataController::class, 'createPool'])->name('mikrotik-routers.pools.store');
