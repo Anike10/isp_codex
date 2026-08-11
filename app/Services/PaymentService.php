@@ -436,7 +436,7 @@ class PaymentService
         return $allocation;
     }
 
-    public function applyAdvanceToInvoice(Customer $customer, Invoice $invoice, array $data): PaymentAllocation
+    public function applyAdvanceToInvoice(Customer $customer, Invoice $invoice, array $data, bool $skipValidityActivation = false): PaymentAllocation
     {
         if ((float) $data['amount'] <= 0) {
             throw new InvalidArgumentException('Applied amount must be greater than zero.');
@@ -507,6 +507,10 @@ class PaymentService
 
         $customer->refresh();
 
+        if ($skipValidityActivation) {
+            return $allocation;
+        }
+
         if ((float) Invoice::where('customer_id', $customer->id)->where('due_amount', '>', 0)->sum('due_amount') <= 0) {
             $this->activatePaidServiceValidity($customer, $data['payment_date'] ?? now()->toDateString(), $data['note'] ?? null);
 
@@ -531,6 +535,50 @@ class PaymentService
         }
 
         return $allocation;
+    }
+
+    public function extendPaidServiceValidityFromCurrent(Customer $customer, string $paymentDate, int $monthsToAdd, ?string $paymentNote = null): void
+    {
+        $monthsToAdd = max(1, $monthsToAdd);
+        $periodStart = $customer->service_valid_until && $customer->service_valid_until->copy()->startOfDay()->gte(Carbon::parse($paymentDate)->startOfDay())
+            ? $customer->service_valid_until->copy()->startOfDay()->addDay()
+            : Carbon::parse($paymentDate)->startOfDay();
+
+        $firstPeriodStart = $periodStart->copy();
+        $periodEnd = $periodStart->copy();
+        $graceDays = max(0, (int) ($customer->grace_days ?? 0));
+
+        for ($month = 1; $month <= $monthsToAdd; $month++) {
+            $periodDays = max(1, $periodStart->copy()->diffInDays($periodStart->copy()->addMonthNoOverflow()));
+            $usedGraceDays = 0;
+
+            if ($month === 1 && $graceDays > 0) {
+                $usedGraceDays = min($graceDays, max(0, $periodDays - 1));
+            }
+
+            $periodEnd = $periodStart->copy()->addDays($periodDays - $usedGraceDays - 1);
+            $periodStart = $periodEnd->copy()->addDay();
+        }
+
+        $detail = sprintf(
+            '[%s] Paid validity extended for %d month(s): %s to %s.%s',
+            now()->format('Y-m-d H:i'),
+            $monthsToAdd,
+            $firstPeriodStart->format('Y-m-d'),
+            $periodEnd->format('Y-m-d'),
+            $paymentNote ? ' Note: '.trim($paymentNote) : ''
+        );
+
+        $customer->update([
+            'status' => 'active',
+            'service_valid_from' => $firstPeriodStart->toDateString(),
+            'service_valid_until' => $periodEnd->toDateString(),
+            'service_validity_note' => $detail,
+            'grace_until' => null,
+            'grace_days' => null,
+            'grace_used_at' => null,
+            'notes' => trim(implode("\n", array_filter([$customer->notes, $detail]))),
+        ]);
     }
 
     public function addAdvanceCreditAndApplyToInvoices(Customer $customer, array $data, array $invoiceAmounts): CustomerBalanceTransaction

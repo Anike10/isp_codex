@@ -659,6 +659,61 @@ class PaymentServiceTest extends TestCase
         $this->assertSame('unpaid', $currentInvoice->status);
     }
 
+    public function test_customer_payment_auto_renews_future_months_until_advance_runs_out(): void
+    {
+        Carbon::setTestNow('2026-08-11 10:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $package = InternetPackage::create([
+                'name' => 'Future Bundle',
+                'speed' => '30 Mbps',
+                'mikrotik_profile' => 'Future Bundle',
+                'monthly_price' => 1000,
+                'description' => 'Future bundle package',
+                'status' => 'active',
+            ]);
+
+            $customer = $this->createCustomer();
+            $customer->update([
+                'status' => 'inactive',
+                'service_valid_until' => null,
+            ]);
+            Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-07-01',
+                'status' => 'inactive',
+            ]);
+
+            $this->actingAs($user)->post(route('customers.payments.store', $customer), [
+                'amount' => 5000,
+                'payment_method' => 'cash',
+                'payment_date' => '2026-08-11',
+            ])->assertRedirect(route('customers.show', $customer));
+
+            $customer->refresh();
+            $this->assertSame('active', $customer->status);
+            $this->assertSame('2027-01-10', $customer->service_valid_until?->format('Y-m-d'));
+            $this->assertSame('2026-09-11', $customer->service_valid_from?->format('Y-m-d'));
+            $this->assertSame(0.0, (float) $customer->account_balance);
+
+            foreach (['2026-08', '2026-09', '2026-10', '2026-11', '2026-12'] as $month) {
+                $invoice = Invoice::query()
+                    ->where('customer_id', $customer->id)
+                    ->where('billing_month', $month)
+                    ->where('invoice_type', 'service')
+                    ->firstOrFail();
+
+                $this->assertSame(0.0, (float) $invoice->due_amount);
+                $this->assertSame('paid', $invoice->status);
+            }
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_customer_payment_rejects_account_from_another_payment_method(): void
     {
         $user = User::factory()->create();

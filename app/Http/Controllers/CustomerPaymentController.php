@@ -6,11 +6,13 @@ use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\PaymentAccount;
 use App\Services\BillingService;
+use App\Services\MikrotikCustomerSyncService;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
+use Throwable;
 
 class CustomerPaymentController extends Controller
 {
@@ -64,21 +66,26 @@ class CustomerPaymentController extends Controller
         if (! $invoice) {
             try {
                 $paymentService->addAdvanceCredit($customer, $data);
-                $renewed = $this->renewExpiredPartyFromAdvance($customer, $billingService, $paymentService, $data);
+                $renewedMonths = $this->renewExpiredPartyFromAdvance($customer, $billingService, $paymentService, $data);
             } catch (InvalidArgumentException $exception) {
                 return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
             }
 
-            return redirect()->route('customers.show', $customer)->with('success', $renewed ? 'Payment saved and the remembered package was renewed on MikroTik.' : 'No due invoice found. Payment was added to party advance balance.');
+            return redirect()->route('customers.show', $customer)->with('success', $renewedMonths > 0
+                ? "Payment saved and {$renewedMonths} future month(s) was renewed on MikroTik."
+                : 'No due invoice found. Payment was added to party advance balance.');
         }
 
         try {
             $paymentService->recordPayment($invoice, $data);
+            $renewedMonths = $this->renewExpiredPartyFromAdvance($customer, $billingService, $paymentService, $data);
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
         }
 
-        return redirect()->route('customers.show', $customer)->with('success', 'Party payment recorded successfully.');
+        return redirect()->route('customers.show', $customer)->with('success', $renewedMonths > 0
+            ? "Party payment recorded successfully and {$renewedMonths} future month(s) was renewed on MikroTik."
+            : 'Party payment recorded successfully.');
     }
 
     public function createAdvance(Customer $customer)
@@ -123,6 +130,7 @@ class CustomerPaymentController extends Controller
             $invoiceAllocations = collect($data['invoice_allocations'] ?? [])
                 ->filter(fn ($amount) => (float) $amount > 0)
                 ->all();
+            $renewedMonths = 0;
 
             if ($invoiceAllocations) {
                 $paymentService->addAdvanceCreditAndApplyToInvoices($customer, $data, $invoiceAllocations);
@@ -132,14 +140,17 @@ class CustomerPaymentController extends Controller
                 // An expired Party may pay into advance first. If there were no
                 // old unpaid bills and the saved balance covers its remembered
                 // package, use that balance for a new monthly renewal at once.
-                $renewed = $dueBeforeAdvance <= 0
-                    && $this->renewExpiredPartyFromAdvance($customer, $billingService, $paymentService, $data);
+                $renewedMonths = $dueBeforeAdvance <= 0
+                    ? $this->renewExpiredPartyFromAdvance($customer, $billingService, $paymentService, $data)
+                    : 0;
             }
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
         }
 
-        return redirect()->route('customers.payments.create', $customer)->with('success', ($renewed ?? false) ? 'Advance saved and the remembered package was renewed on MikroTik.' : 'Advance payment saved successfully.');
+        return redirect()->route('customers.payments.create', $customer)->with('success', $renewedMonths > 0
+            ? "Advance payment saved and {$renewedMonths} future month(s) was renewed on MikroTik."
+            : 'Advance payment saved successfully.');
     }
 
     public function applyAdvance(Request $request, Customer $customer, PaymentService $paymentService)
@@ -165,29 +176,69 @@ class CustomerPaymentController extends Controller
         return redirect()->route('customers.advance-payments.create', $customer)->with('success', 'Advance balance applied to invoice successfully.');
     }
 
-    private function renewExpiredPartyFromAdvance(Customer $customer, BillingService $billingService, PaymentService $paymentService, array $data): bool
+    private function renewExpiredPartyFromAdvance(Customer $customer, BillingService $billingService, PaymentService $paymentService, array $data): int
     {
-        $customer->refresh();
-        $validityExpired = $customer->service_valid_until?->copy()->endOfDay()->lt(now()) ?? false;
-        $needsRenewal = $customer->status !== 'active' || $validityExpired || $customer->grace_used_at !== null;
+        $renewedMonths = 0;
+        $maxRenewals = 24;
+        $paymentDate = $data['payment_date'];
 
-        if (! $needsRenewal) {
-            return false;
+        for ($step = 0; $step < $maxRenewals; $step++) {
+            $customer->refresh();
+
+            $dueExists = (float) $customer->invoices()->where('due_amount', '>', 0)->sum('due_amount') > 0;
+            if ($dueExists) {
+                break;
+            }
+
+            $renewalInvoice = $billingService->generateNextRenewalServiceBillForCustomer($customer, $paymentDate);
+            if (! $renewalInvoice || (float) $renewalInvoice->due_amount <= 0) {
+                break;
+            }
+
+            if ((float) $customer->refresh()->account_balance < (float) $renewalInvoice->due_amount) {
+                break;
+            }
+
+            $paymentService->applyAdvanceToInvoice($customer->refresh(), $renewalInvoice, [
+                'amount' => $renewalInvoice->due_amount,
+                'payment_date' => $paymentDate,
+                'note' => 'Automatic renewal from advance balance for remembered package.',
+            ], true);
+
+            $renewedMonths++;
         }
 
-        $renewalInvoice = $billingService->generateNextRenewalServiceBillForCustomer($customer, $data['payment_date']);
-
-        if (! $renewalInvoice || (float) $renewalInvoice->due_amount <= 0 || (float) $customer->refresh()->account_balance < (float) $renewalInvoice->due_amount) {
-            return false;
+        if ($renewedMonths <= 0) {
+            return 0;
         }
 
-        $paymentService->applyAdvanceToInvoice($customer, $renewalInvoice, [
-            'amount' => $renewalInvoice->due_amount,
-            'payment_date' => $data['payment_date'],
-            'note' => 'Automatic renewal from advance balance for remembered package.',
-        ]);
+        $customer = $customer->refresh();
+        $paymentService->extendPaidServiceValidityFromCurrent(
+            $customer,
+            $paymentDate,
+            $renewedMonths,
+            'Automatic renewal from advance balance for remembered package.'
+        );
 
-        return $customer->refresh()->status === 'active';
+        $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
+        if ($subscription) {
+            $subscription->update([
+                'status' => 'active',
+                'end_date' => null,
+            ]);
+        }
+
+        try {
+            app(MikrotikCustomerSyncService::class)->sync($customer->refresh());
+        } catch (Throwable $exception) {
+            Log::warning('MikroTik sync failed after automatic advance renewal.', [
+                'customer_id' => $customer->id,
+                'renewed_months' => $renewedMonths,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        return $renewedMonths;
     }
 
     private function logSubmittedAmount(Request $request, Customer $customer, array $data, string $source): void
