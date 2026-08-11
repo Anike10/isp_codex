@@ -60,9 +60,15 @@ class MikrotikRouterController extends Controller
         $inactiveProfileError = null;
 
         try {
-            $inactiveProfileExists = trim((string) $mikrotikRouter->inactive_pppoe_profile) !== ''
-                ? $importService->hasPppProfile($mikrotikRouter, (string) $mikrotikRouter->inactive_pppoe_profile)
-                : false;
+            $inactiveProfile = trim((string) $mikrotikRouter->inactive_pppoe_profile);
+            if ($inactiveProfile === '') {
+                $inactiveProfileExists = false;
+            } else {
+                $inactiveProfileExists = $mikrotikRouter->importedProfiles()->where('name', $inactiveProfile)->exists();
+                if (! $inactiveProfileExists) {
+                    $inactiveProfileExists = $importService->hasPppProfile($mikrotikRouter, $inactiveProfile);
+                }
+            }
         } catch (Throwable $exception) {
             $inactiveProfileExists = null;
             $inactiveProfileError = 'Could not verify the inactive profile on this MikroTik right now.';
