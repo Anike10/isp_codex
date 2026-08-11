@@ -64,10 +64,7 @@ class MikrotikRouterController extends Controller
             if ($inactiveProfile === '') {
                 $inactiveProfileExists = false;
             } else {
-                $inactiveProfileExists = $mikrotikRouter->importedProfiles()->where('name', $inactiveProfile)->exists();
-                if (! $inactiveProfileExists) {
-                    $inactiveProfileExists = $importService->hasPppProfile($mikrotikRouter, $inactiveProfile);
-                }
+                $inactiveProfileExists = $importService->hasPppProfile($mikrotikRouter, $inactiveProfile);
             }
         } catch (Throwable $exception) {
             $inactiveProfileExists = null;
