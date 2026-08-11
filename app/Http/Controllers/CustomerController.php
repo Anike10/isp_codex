@@ -23,7 +23,13 @@ class CustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $hasImportedSecretTable = Schema::hasTable('mikrotik_imported_secrets');
+        try {
+            $hasImportedSecretTable = Schema::hasTable('mikrotik_imported_secrets');
+        } catch (\Throwable) {
+            // In deployments where the migration is not present (or DB privileges differ),
+            // keep the page functional without importing-related features.
+            $hasImportedSecretTable = false;
+        }
 
         $customers = Customer::query()
             ->with('activeSubscription.package')
