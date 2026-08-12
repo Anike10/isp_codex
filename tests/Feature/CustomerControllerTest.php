@@ -14,11 +14,76 @@ use App\Services\MikrotikCustomerSyncService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class CustomerControllerTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_customer_update_does_not_decrypt_an_unchanged_mikrotik_password(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $package = InternetPackage::create([
+            'name' => 'Imported Key Package',
+            'speed' => '30 Mbps',
+            'monthly_price' => 1000,
+            'status' => 'active',
+        ]);
+        $router = MikrotikRouter::create([
+            'name' => 'Imported Router',
+            'ip_address' => '10.10.10.1',
+            'api_port' => 8728,
+            'username' => 'admin',
+            'password' => 'router-password',
+            'status' => 'active',
+        ]);
+        $customer = Customer::create([
+            'name' => 'Imported Customer',
+            'phone' => '01700000347',
+            'connection_id' => 'IMPORTED-347',
+            'mikrotik_username' => 'IMPORTED-347',
+            'mikrotik_password' => 'original-password',
+            'mikrotik_router_id' => $router->id,
+            'address' => 'Imported address',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+        $customer->mikrotikRouters()->attach($router);
+        Subscription::create([
+            'customer_id' => $customer->id,
+            'internet_package_id' => $package->id,
+            'start_date' => '2026-08-10',
+            'status' => 'active',
+        ]);
+
+        $foreignCiphertext = 'ciphertext-created-with-another-app-key';
+        DB::table('customers')->where('id', $customer->id)->update([
+            'mikrotik_password' => $foreignCiphertext,
+        ]);
+
+        $syncService = \Mockery::mock(MikrotikCustomerSyncService::class);
+        $syncService->shouldReceive('sync')->once()->andReturn('updated');
+        $this->app->instance(MikrotikCustomerSyncService::class, $syncService);
+
+        $this->actingAs($user)->put(route('customers.update', $customer), [
+            'name' => 'Imported Customer Updated',
+            'phone' => '01700000347',
+            'connection_id' => 'IMPORTED-347',
+            'mikrotik_router_ids' => [$router->id],
+            'address' => 'Imported address updated',
+            'status' => 'active',
+            'is_customer' => '1',
+            'internet_package_id' => $package->id,
+            'start_date' => '2026-08-10',
+        ])->assertRedirect(route('customers.show', $customer))
+            ->assertSessionHasNoErrors();
+
+        $updatedCustomer = Customer::query()->findOrFail($customer->id);
+        $this->assertSame('Imported Customer Updated', $updatedCustomer->name);
+        $this->assertSame($foreignCiphertext, $updatedCustomer->getRawOriginal('mikrotik_password'));
+    }
 
     public function test_product_only_customer_can_be_created_without_connection_id(): void
     {

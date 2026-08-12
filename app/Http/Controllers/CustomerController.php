@@ -557,9 +557,19 @@ class CustomerController extends Controller
 
         $data['connection_id'] = $connectionId;
         $data['mikrotik_username'] = $connectionId;
-        $data['mikrotik_password'] = $connectionId
-            ? ($customer?->mikrotik_password ?: MikrotikCustomerSyncService::DEFAULT_PASSWORD)
-            : null;
+
+        if (! $connectionId) {
+            $data['mikrotik_password'] = null;
+        } elseif (! $customer || $customer->connection_id !== $connectionId) {
+            // A new PPPoE identity starts with the configured default. When an
+            // existing identity is unchanged, omit this attribute completely:
+            // decrypting and re-encrypting it is unnecessary and can fail when
+            // a database was imported from an installation with another APP_KEY.
+            $data['mikrotik_password'] = MikrotikCustomerSyncService::DEFAULT_PASSWORD;
+        } else {
+            unset($data['mikrotik_password']);
+        }
+
         $data['mikrotik_router_ids'] = $connectionId ? $routerIds : [];
         $data['mikrotik_router_id'] = $connectionId ? ($routerIds[0] ?? null) : null;
 
