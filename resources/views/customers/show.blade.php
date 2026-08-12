@@ -574,6 +574,10 @@
                 <dd class="kv-grid__value kv-grid__note">
                     {{ $customer->notes ?: 'No note' }}
                 </dd>
+                <dt class="kv-grid__label">MikroTik comment</dt>
+                <dd class="kv-grid__value kv-grid__note">
+                    {{ $customer->importedSecret?->router_comment ?: 'No comment' }}
+                </dd>
             </dl>
         </article>
 

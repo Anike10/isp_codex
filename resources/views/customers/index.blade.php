@@ -1,9 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-@php
-    $canOpenPackages = auth()->user()?->hasPermission('manage_packages');
-@endphp
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <div class="topbar">
     <div><h1>Parties</h1><div class="muted">Customers, vendors, resellers, and product-only buyers</div></div>
     <a class="btn" href="{{ route('customers.create') }}">Add Party</a>
@@ -33,8 +31,12 @@
         @endphp
         <tr class="{{ $customer->never_suspend ? 'customer-row-special' : '' }}" data-href="{{ route('customers.show', $customer) }}">
             <td>{{ $customers->firstItem() + $loop->index }}</td>
-            <td><a href="{{ route('customers.show', $customer) }}">{{ $customer->name }}</a></td>
-            <td>{{ $customer->phone }}</td>
+            <td data-inline-field="name" data-inline-url="{{ route('customers.inline-update', $customer) }}">
+                <span data-inline-value>{{ $customer->name }}</span>
+            </td>
+            <td data-inline-field="phone" data-inline-url="{{ route('customers.inline-update', $customer) }}">
+                <span data-inline-value>{{ $customer->phone }}</span>
+            </td>
             <td>
                 @if ($customer->is_customer)<span class="badge active">Customer</span>@endif
                 @if ($customer->is_vendor)<span class="badge pending">Vendor</span>@endif
@@ -44,16 +46,9 @@
                 @endif
             </td>
             <td>{{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}</td>
-            <td>
-                @if ($customer->activeSubscription?->package)
-                    @if ($canOpenPackages)
-                        <a href="{{ route('packages.show', $customer->activeSubscription->package) }}">{{ $customer->activeSubscription->package->name }}</a>
-                    @else
-                        {{ $customer->activeSubscription->package->name }}
-                    @endif
-                @else
-                    No package
-                @endif
+            <td data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" data-package-id="{{ $customer->activeSubscription?->internet_package_id }}">
+                @php $currentPackageName = $customer->activeSubscription?->package?->name ?: 'No package'; @endphp
+                <span data-inline-value>{{ $currentPackageName }}</span>
             </td>
             <td>
                 <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span>
@@ -134,4 +129,139 @@
 </table>
 
 <div style="margin-top:16px">{{ $customers->links() }}</div>
+
+<script>
+const customerCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
+const customerPackages = @json($packages->mapWithKeys(fn ($package) => [$package->id => $package->name])->toArray());
+
+function editCustomerInlineCell(cell, event) {
+    if (cell.querySelector('input, select')) return;
+    const valueNode = cell.querySelector('[data-inline-value]');
+    const field = cell.dataset.inlineField;
+    const originalValue = valueNode ? valueNode.textContent.trim() : '';
+
+    if (field === 'package') {
+        const select = document.createElement('select');
+        const option = new Option('No package', '');
+        option.selected = !(cell.dataset.packageId || cell.getAttribute('data-package-id'));
+        select.append(option);
+
+        Object.entries(customerPackages).forEach(([id, packageName]) => {
+            const packageOption = new Option(packageName, id, false, String((cell.dataset.packageId || '').trim()) === String(id));
+            select.append(packageOption);
+        });
+
+        select.style.width = '100%';
+        cell.replaceChildren(select);
+        select.focus();
+
+        select.dataset.value = cell.dataset.packageId || '';
+        let saving = false;
+
+        const restoreCell = () => {
+            cell.innerHTML = '';
+            cell.append(valueNode);
+        };
+
+        const savePackage = async () => {
+            if (saving) return;
+            saving = true;
+            select.disabled = true;
+            try {
+                const response = await fetch(cell.dataset.inlineUrl, {
+                    method: 'PATCH',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': customerCsrfToken,
+                    },
+                    body: JSON.stringify({ field, value: select.value }),
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || 'Could not update package');
+                valueNode.textContent = data.value;
+                cell.dataset.packageId = data.package_id ? String(data.package_id) : '';
+            } catch (error) {
+                alert(error.message);
+            } finally {
+                saving = false;
+                select.disabled = false;
+                restoreCell();
+            }
+        };
+
+        select.addEventListener('blur', savePackage);
+        select.addEventListener('change', savePackage);
+        select.addEventListener('keydown', function (keyEvent) {
+            if (keyEvent.key === 'Escape') {
+                restoreCell();
+            }
+        });
+
+        return;
+    }
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = originalValue;
+    input.style.width = '100%';
+
+    cell.replaceChildren(input);
+    input.focus();
+    input.select();
+
+    let saving = false;
+    const restoreCell = () => {
+        cell.replaceChildren(valueNode);
+    };
+    const saveField = async () => {
+        if (saving) return;
+        saving = true;
+        input.disabled = true;
+        try {
+            const response = await fetch(cell.dataset.inlineUrl, {
+                method: 'PATCH',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': customerCsrfToken,
+                },
+                body: JSON.stringify({ field, value: input.value }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Could not update');
+            valueNode.textContent = data.value;
+        } catch (error) {
+            alert(error.message);
+        } finally {
+            saving = false;
+            input.disabled = false;
+            restoreCell();
+        }
+    };
+
+    input.addEventListener('blur', saveField);
+    input.addEventListener('keydown', function (keyEvent) {
+        if (keyEvent.key === 'Enter') {
+            keyEvent.preventDefault();
+            saveField();
+        }
+        if (keyEvent.key === 'Escape') {
+            restoreCell();
+        }
+    });
+}
+
+document.querySelectorAll('[data-inline-field="name"], [data-inline-field="phone"]').forEach((cell) => {
+    cell.addEventListener('dblclick', function () {
+        editCustomerInlineCell(this);
+    });
+});
+
+document.querySelectorAll('td[data-inline-field="package"]').forEach((cell) => {
+    cell.addEventListener('dblclick', function () {
+        editCustomerInlineCell(this);
+    });
+});
+</script>
 @endsection

@@ -59,10 +59,12 @@ class MikrotikImportTest extends TestCase
         ])->assertRedirect();
 
         $customer = Customer::where('connection_id', 'pppoe-100')->firstOrFail();
+        $this->assertSame('pppoe-100', $customer->name);
         $this->assertSame($router->id, $customer->mikrotik_router_id);
         $this->assertSame('pppoe-pass', $customer->mikrotik_password);
         $this->assertTrue($customer->never_suspend);
         $this->assertStringContainsString('Imported from MikroTik: Core Router', $customer->notes);
+        $this->assertStringContainsString('Imported Customer', $customer->notes);
         $this->assertDatabaseHas('subscriptions', ['customer_id' => $customer->id]);
         $this->assertDatabaseHas('mikrotik_imported_secrets', ['id' => $secret->id, 'customer_id' => $customer->id]);
     }

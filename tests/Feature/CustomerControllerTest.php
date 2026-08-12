@@ -110,6 +110,116 @@ class CustomerControllerTest extends TestCase
         ]);
     }
 
+    public function test_party_inline_update_supports_name_and_phone_fields(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Live Inline Party',
+            'phone' => '01710101010',
+            'connection_id' => 'INLINE-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+
+        $this->actingAs($user)->patchJson(route('customers.inline-update', $customer), [
+            'field' => 'name',
+            'value' => 'Live Inline Updated',
+        ])->assertOk()->assertJsonPath('value', 'Live Inline Updated');
+
+        $this->actingAs($user)->patchJson(route('customers.inline-update', $customer), [
+            'field' => 'phone',
+            'value' => '01820202020',
+        ])->assertOk()->assertJsonPath('value', '01820202020');
+
+        $customer->refresh();
+        $this->assertSame('Live Inline Updated', $customer->name);
+        $this->assertSame('01820202020', $customer->phone);
+    }
+
+    public function test_party_inline_update_changes_active_package(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $packageOne = InternetPackage::create([
+            'name' => 'Starter',
+            'speed' => '10 Mbps',
+            'monthly_price' => 500,
+            'status' => 'active',
+        ]);
+        $packageTwo = InternetPackage::create([
+            'name' => 'Pro',
+            'speed' => '20 Mbps',
+            'monthly_price' => 800,
+            'status' => 'active',
+        ]);
+        $customer = Customer::create([
+            'name' => 'Package Inline Party',
+            'phone' => '01722222222',
+            'connection_id' => 'INLINE-PKG',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+        $subscription = Subscription::create([
+            'customer_id' => $customer->id,
+            'internet_package_id' => $packageOne->id,
+            'start_date' => '2026-07-01',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($user)->patchJson(route('customers.inline-update', $customer), [
+            'field' => 'package',
+            'value' => (string) $packageTwo->id,
+        ])->assertOk()->assertJsonPath('value', $packageTwo->name);
+
+        $subscription->refresh();
+        $this->assertSame($packageTwo->id, $subscription->internet_package_id);
+        $this->assertSame('active', $subscription->status);
+        $this->assertNull($subscription->end_date);
+    }
+
+    public function test_customer_show_displays_mikrotik_comment_from_imported_secret(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Profile Router',
+            'ip_address' => '10.10.10.100',
+            'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 60,
+            'inactive_pppoe_profile' => 'inactive',
+            'username' => 'admin',
+            'password' => 'secret',
+            'status' => 'active',
+        ]);
+        $customer = Customer::create([
+            'name' => 'Comment Customer',
+            'phone' => '01733333333',
+            'connection_id' => 'COM-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+        MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $router->id,
+            'customer_id' => $customer->id,
+            'routeros_id' => '*ROUTE-1',
+            'name' => $customer->connection_id,
+            'password' => 'secret',
+            'service' => 'pppoe',
+            'disabled' => false,
+            'router_comment' => 'Imported comment only',
+            'imported_at' => now(),
+        ]);
+
+        $this->actingAs($user)->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('MikroTik comment')
+            ->assertSee('Imported comment only');
+    }
+
     public function test_connection_id_is_required_when_assigning_internet_package(): void
     {
         $user = User::factory()->create();

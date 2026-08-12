@@ -67,6 +67,7 @@ Route::middleware('auth')->group(function () {
         Route::post('customers/{customer}/advance-payments/renew', [CustomerPaymentController::class, 'renewFromAdvance'])->name('customers.advance-renewal.store');
         Route::post('customers/{customer}/grace-period', [CustomerController::class, 'grantGracePeriod'])->name('customers.grace-period');
         Route::post('customers/{customer}/activate-next-date', [CustomerController::class, 'activateUntilNextDate'])->name('customers.activate-next-date');
+        Route::patch('customers/{customer}/inline', [CustomerController::class, 'inlineUpdate'])->name('customers.inline-update');
         Route::post('customers/{customer}/service-validity', [CustomerController::class, 'updateServiceValidity'])->name('customers.service-validity.update');
         Route::post('customers/{customer}/mikrotik-targets', [CustomerController::class, 'updateMikrotikTargets'])->name('customers.mikrotik-targets.update');
         Route::post('customers/{customer}/force-inactive', [CustomerController::class, 'forceInactive'])->name('customers.force-inactive');

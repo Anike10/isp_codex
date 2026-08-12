@@ -107,7 +107,7 @@ class MikrotikImportController extends Controller
                 $package = $this->packageFor($secret->profile, $mikrotikRouter);
                 $note = $this->sourceNote($mikrotikRouter, $secret);
                 $customerData = [
-                    'name' => trim((string) ($secret->router_comment ?: $secret->name)),
+                    'name' => trim((string) $secret->name),
                     'phone' => $customer?->phone ?: 'Not provided',
                     'connection_id' => $secret->name,
                     'mikrotik_username' => $secret->name,

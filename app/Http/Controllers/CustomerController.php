@@ -277,6 +277,7 @@ class CustomerController extends Controller
             'subscriptions.package',
             'mikrotikRouter',
             'mikrotikRouters',
+            'importedSecret',
             'reseller',
             'resellerCustomers',
             'loginUsers.roles',
@@ -292,6 +293,80 @@ class CustomerController extends Controller
         $routers = MikrotikRouter::query()->orderBy('name')->get();
 
         return view('customers.show', compact('customer', 'routers'));
+    }
+
+    public function inlineUpdate(Request $request, Customer $customer)
+    {
+        $field = $request->validate([
+            'field' => ['required', 'in:name,phone,package'],
+            'value' => ['nullable'],
+        ])['field'];
+
+        $validationRules = [
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['required', 'string', 'max:30'],
+            'package' => ['nullable', 'integer', 'exists:internet_packages,id'],
+        ];
+
+        $validated = $request->validate([
+            'value' => $validationRules[$field],
+        ], [
+            'value.required' => $field === 'name'
+                ? 'Customer name is required.'
+                : 'Phone is required.',
+        ]);
+
+        $value = $validated['value'];
+
+        if ($field === 'package') {
+            $packageId = blank($value) ? null : (int) $value;
+            $package = $packageId ? InternetPackage::query()->find($packageId) : null;
+
+            DB::transaction(function () use ($customer, $packageId): void {
+                $activeSubscription = $customer->subscriptions()
+                    ->where('status', 'active')
+                    ->lockForUpdate()
+                    ->latest('id')
+                    ->first();
+
+                if ($packageId) {
+                    if ($activeSubscription) {
+                        $activeSubscription->update([
+                            'internet_package_id' => $packageId,
+                            'start_date' => $activeSubscription->start_date ?: now()->toDateString(),
+                            'end_date' => null,
+                        ]);
+                    } else {
+                        $customer->subscriptions()->create([
+                            'internet_package_id' => $packageId,
+                            'start_date' => now()->toDateString(),
+                            'status' => 'active',
+                        ]);
+                    }
+                } elseif ($activeSubscription) {
+                    $activeSubscription->update([
+                        'status' => 'inactive',
+                        'end_date' => now()->toDateString(),
+                    ]);
+                }
+            });
+
+            $freshCustomer = $customer->fresh(['activeSubscription.package']);
+            $currentPackage = $freshCustomer->activeSubscription?->package;
+
+            return response()->json([
+                'message' => 'Party updated.',
+                'value' => $currentPackage?->name ?? 'No package',
+                'package_id' => $currentPackage?->id,
+            ]);
+        }
+
+        $customer->update([$field => $value]);
+
+        return response()->json([
+            'message' => 'Party updated.',
+            'value' => $customer->fresh()->{$field},
+        ]);
     }
 
     public function history(Customer $customer)
