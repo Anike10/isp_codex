@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\PaymentAccount;
-use App\Services\AdvanceRenewalService;
 use App\Services\BillingService;
 use App\Services\PaymentAccountPreferenceService;
 use App\Services\PaymentService;
@@ -25,7 +24,11 @@ class CustomerPaymentController extends Controller
                 ->orderBy('due_date')
                 ->orderBy('id')
                 ->get(),
-            'balanceTransactions' => $customer->balanceTransactions()->latest()->limit(20)->get(),
+            'balanceTransactions' => $customer->balanceTransactions()
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->limit(20)
+                ->get(),
             'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
             'paymentDefault' => $preferenceService->forUser($request->user()),
         ]);
@@ -134,7 +137,7 @@ class CustomerPaymentController extends Controller
         return redirect()->route('customers.payments.create', $customer);
     }
 
-    public function storeAdvance(Request $request, Customer $customer, PaymentService $paymentService, AdvanceRenewalService $advanceRenewalService, PaymentAccountPreferenceService $preferenceService)
+    public function storeAdvance(Request $request, Customer $customer, PaymentService $paymentService, PaymentAccountPreferenceService $preferenceService)
     {
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:1'],
@@ -170,28 +173,14 @@ class CustomerPaymentController extends Controller
         }
 
         try {
-            $dueBeforeAdvance = (float) $customer->invoices()->where('due_amount', '>', 0)->sum('due_amount');
             $invoiceAllocations = collect($data['invoice_allocations'] ?? [])
                 ->filter(fn ($amount) => (float) $amount > 0)
                 ->all();
-            $renewedMonths = 0;
 
             if ($invoiceAllocations) {
                 $paymentService->addAdvanceCreditAndApplyToInvoices($customer, $data, $invoiceAllocations);
             } else {
                 $paymentService->addAdvanceCredit($customer, $data);
-
-                // An expired Party may pay into advance first. If there were no
-                // old unpaid bills and the saved balance covers its remembered
-                // package, use that balance for a new monthly renewal at once.
-                $renewedMonths = $dueBeforeAdvance <= 0
-                    ? $advanceRenewalService->renew(
-                        $customer,
-                        $data['payment_date'],
-                        24,
-                        'Automatic renewal from advance balance for remembered package.',
-                    )
-                    : 0;
             }
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
@@ -199,9 +188,7 @@ class CustomerPaymentController extends Controller
 
         $preferenceService->remember($request->user(), $rememberAsDefault, $data['payment_method'], $data['payment_account_id']);
 
-        return redirect()->route('customers.payments.create', $customer)->with('success', $renewedMonths > 0
-            ? "Advance payment saved and {$renewedMonths} future month(s) was renewed on MikroTik."
-            : 'Advance payment saved successfully.');
+        return redirect()->route('customers.payments.create', $customer)->with('success', 'Advance payment saved successfully.');
     }
 
     public function applyAdvance(Request $request, Customer $customer, PaymentService $paymentService)

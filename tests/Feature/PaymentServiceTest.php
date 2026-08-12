@@ -788,6 +788,40 @@ class PaymentServiceTest extends TestCase
         $this->assertSame(600.0, (float) $customer->refresh()->account_balance);
     }
 
+    public function test_keep_as_advance_route_does_not_auto_renew_from_saved_balance(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = $this->createCustomer();
+        $package = InternetPackage::create([
+            'name' => 'Manual Renewal Test',
+            'speed' => '10 Mbps',
+            'mikrotik_profile' => 'Manual Renewal Test',
+            'monthly_price' => 10,
+            'description' => 'Used for keep-as-advance route check',
+            'status' => 'active',
+        ]);
+        Subscription::create([
+            'customer_id' => $customer->id,
+            'internet_package_id' => $package->id,
+            'start_date' => '2026-08-01',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($user)->post(route('customers.advance-payments.store', $customer), [
+            'amount' => 20,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-08-13',
+        ])->assertRedirect(route('customers.payments.create', $customer));
+
+        $this->assertSame(20.0, (float) $customer->refresh()->account_balance);
+        $this->assertDatabaseCount('customer_balance_transactions', 1);
+        $this->assertDatabaseMissing('invoices', [
+            'customer_id' => $customer->id,
+            'invoice_type' => 'service',
+        ]);
+    }
+
     public function test_cash_advance_route_discards_a_forged_payment_account_id(): void
     {
         $user = User::factory()->create();
