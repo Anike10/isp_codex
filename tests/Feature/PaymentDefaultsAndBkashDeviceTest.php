@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\InternetPackage;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentAccount;
 use App\Models\Permission;
+use App\Models\Subscription;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -95,6 +98,129 @@ class PaymentDefaultsAndBkashDeviceTest extends TestCase
         $this->assertSame('2026-08-12', \Carbon\Carbon::parse(
             DB::table('bkash_sms_payments')->where('trx_id', 'ABC123XYZ')->value('payment_date')
         )->format('Y-m-d'));
+    }
+
+    public function test_bkash_advance_automatically_creates_the_next_invoice_and_renews_validity(): void
+    {
+        Carbon::setTestNow('2026-08-13 00:30:00');
+
+        try {
+            config(['services.bkash_sms.token' => null]);
+
+            $customer = $this->createCustomer();
+            $customer->update([
+                'never_suspend' => true,
+                'account_balance' => 2,
+                'service_valid_from' => '2026-08-12',
+                'service_valid_until' => '2026-09-11',
+            ]);
+            $package = InternetPackage::create([
+                'name' => '30 Mb Star',
+                'speed' => '30 Mbps',
+                'monthly_price' => 10,
+                'status' => 'active',
+            ]);
+            Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-08-10',
+                'status' => 'active',
+            ]);
+            $paidInvoice = $this->createInvoice($customer, 10);
+            $paidInvoice->update([
+                'paid_amount' => 10,
+                'due_amount' => 0,
+                'status' => 'paid',
+            ]);
+
+            $this->postJson(route('api.bkash-sms.store'), [
+                'message' => 'You have received Tk 10.00 from 01700000000. TrxID AUTORENEW10 Ref KPS-1001 at 13/08/2026 12:15 AM',
+                'sender' => 'bKash',
+                'sender_device' => 'Renewal Phone',
+            ])->assertOk()->assertJson([
+                'status' => 'processed',
+                'trx_id' => 'AUTORENEW10',
+            ]);
+
+            $renewalInvoice = Invoice::query()
+                ->where('customer_id', $customer->id)
+                ->where('billing_month', '2026-09')
+                ->firstOrFail();
+
+            $this->assertSame('paid', $renewalInvoice->status);
+            $this->assertSame(0.0, (float) $renewalInvoice->due_amount);
+            $this->assertSame(2.0, (float) $customer->refresh()->account_balance);
+            $this->assertSame('2026-10-11', $customer->service_valid_until?->format('Y-m-d'));
+            $this->assertDatabaseHas('payment_allocations', [
+                'customer_id' => $customer->id,
+                'invoice_id' => $renewalInvoice->id,
+                'source_type' => 'advance',
+                'amount' => 10,
+            ]);
+            $this->assertDatabaseHas('bkash_sms_payments', [
+                'trx_id' => 'AUTORENEW10',
+                'status' => 'processed',
+                'customer_id' => $customer->id,
+                'invoice_id' => $renewalInvoice->id,
+            ]);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_customer_can_renew_one_month_from_advance_on_the_profile_page(): void
+    {
+        Carbon::setTestNow('2026-08-13 00:30:00');
+
+        try {
+            $user = $this->userWithPermission('manage_customers');
+            $customer = $this->createCustomer();
+            $customer->update([
+                'account_balance' => 12,
+                'service_valid_from' => '2026-08-12',
+                'service_valid_until' => '2026-09-11',
+            ]);
+            $package = InternetPackage::create([
+                'name' => '30 Mb Star',
+                'speed' => '30 Mbps',
+                'monthly_price' => 10,
+                'status' => 'active',
+            ]);
+            Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-08-10',
+                'status' => 'active',
+            ]);
+            $paidInvoice = $this->createInvoice($customer, 10);
+            $paidInvoice->update([
+                'paid_amount' => 10,
+                'due_amount' => 0,
+                'status' => 'paid',
+            ]);
+
+            $this->actingAs($user)
+                ->get(route('customers.show', $customer))
+                ->assertOk()
+                ->assertSee('Renew 1 month from advance', false)
+                ->assertSee(route('customers.advance-renewal.store', $customer), false);
+
+            $this->actingAs($user)
+                ->post(route('customers.advance-renewal.store', $customer))
+                ->assertRedirect(route('customers.show', $customer))
+                ->assertSessionHas('success');
+
+            $renewalInvoice = Invoice::query()
+                ->where('customer_id', $customer->id)
+                ->where('billing_month', '2026-09')
+                ->firstOrFail();
+
+            $this->assertSame('paid', $renewalInvoice->status);
+            $this->assertSame(2.0, (float) $customer->refresh()->account_balance);
+            $this->assertSame('2026-10-11', $customer->service_valid_until?->format('Y-m-d'));
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_bkash_date_repair_updates_linked_ledgers_and_paid_validity(): void

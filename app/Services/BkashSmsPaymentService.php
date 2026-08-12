@@ -17,6 +17,7 @@ class BkashSmsPaymentService
     public function __construct(
         private readonly PaymentService $paymentService,
         private readonly BillingService $billingService,
+        private readonly AdvanceRenewalService $advanceRenewalService,
     )
     {
     }
@@ -121,15 +122,41 @@ class BkashSmsPaymentService
                 ->first();
 
             if (! $invoice) {
+                $paymentDate = $parsed['payment_date']?->toDateString() ?? now()->toDateString();
                 $this->paymentService->addAdvanceCredit($customer, [
                     'amount' => $parsed['amount'],
                     'payment_method' => 'bkash',
                     'payment_account_id' => $paymentAccount?->id,
-                    'payment_date' => $parsed['payment_date']?->toDateString() ?? now()->toDateString(),
+                    'payment_date' => $paymentDate,
                     'reference' => $parsed['trx_id'],
                     'entry_by' => $entryBy,
                     'note' => 'Auto bKash SMS advance TrxID: '.$parsed['trx_id'],
                 ]);
+
+                $renewedMonths = $this->advanceRenewalService->renew(
+                    $customer,
+                    $paymentDate,
+                    24,
+                    'Automatic bKash renewal from advance balance. TrxID: '.$parsed['trx_id'],
+                );
+
+                if ($renewedMonths > 0) {
+                    $renewalInvoice = Invoice::query()
+                        ->where('customer_id', $customer->id)
+                        ->where('invoice_type', 'service')
+                        ->where('due_amount', '<=', 0)
+                        ->latest('id')
+                        ->first();
+
+                    $smsPayment->update([
+                        'status' => 'processed',
+                        'customer_id' => $customer->id,
+                        'invoice_id' => $renewalInvoice?->id,
+                        'message' => $matchMessage." Amount credited and {$renewedMonths} package month(s) renewed automatically from advance balance.",
+                    ]);
+
+                    return $smsPayment;
+                }
 
                 $smsPayment->update([
                     'status' => 'balance',

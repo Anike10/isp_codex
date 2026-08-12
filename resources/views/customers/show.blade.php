@@ -81,6 +81,16 @@
                 <span class="badge {{ $daysRemaining !== null && $daysRemaining < 0 ? 'overdue' : 'active' }}">{{ $daysRemaining === null ? 'No paid period' : ($daysRemaining < 0 ? 'Expired '.abs($daysRemaining).' days ago' : ($daysRemaining === 0 ? 'Last day' : $daysRemaining.' days left')) }}</span>
                 @if ($customer->hasActiveGracePeriod()) <span class="badge pending">Grace period active</span> @endif
                 <div class="validity-details">{!! $customer->service_validity_note ? nl2br(e($customer->service_validity_note)) : 'No payment-based validity calculation recorded yet.' !!}</div>
+                @if($serviceSubscription?->package && (float) $customer->account_balance > 0)
+                    @php
+                        $renewalPrice = (float) $serviceSubscription->package->monthly_price;
+                    @endphp
+                    <form method="post" action="{{ route('customers.advance-renewal.store', $customer) }}" style="margin-top:12px" onsubmit="return confirm('Create the next package invoice and renew one month from advance balance?')">
+                        @csrf
+                        <button class="btn secondary" type="submit" @disabled((float) $totalDue > 0 || (float) $customer->account_balance < $renewalPrice)>Renew 1 month from advance (&#2547; {{ number_format($renewalPrice, 2) }})</button>
+                        <div class="muted" style="margin-top:7px">Available: &#2547; {{ number_format((float) $customer->account_balance, 2) }}. This creates and pays the next package invoice.</div>
+                    </form>
+                @endif
                 <details class="validity-editor"><summary>Force validity date (note required)</summary><form method="post" action="{{ route('customers.service-validity.update', $customer) }}" class="validity-form">@csrf <div><label>New validity date</label><input type="date" name="service_valid_until" value="{{ old('service_valid_until', $customer->service_valid_until?->format('Y-m-d')) }}" required></div><div><label>Reason / note</label><input type="text" name="validity_note" value="{{ old('validity_note') }}" placeholder="Reason is required" required></div><button class="btn secondary" type="submit">Save</button></form></details>
                 @if($customer->status === 'active')
                     <details class="validity-editor danger" id="temporary-inactive"><summary>Temporary inactive (keep validity &amp; grace)</summary><form method="post" action="{{ route('customers.force-inactive', $customer) }}" class="validity-form" onsubmit="return confirm('Temporarily make this service inactive now? Validity and grace data will remain unchanged.')">@csrf <div style="grid-column:span 2"><label>Reason / note</label><input type="text" name="inactive_note" value="{{ old('inactive_note') }}" placeholder="Reason is required" required></div><button class="btn danger" type="submit">Temporary inactive</button></form></details>

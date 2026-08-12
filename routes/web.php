@@ -64,6 +64,7 @@ Route::middleware('auth')->group(function () {
         Route::get('customers/{customer}/advance-payments/create', [CustomerPaymentController::class, 'createAdvance'])->name('customers.advance-payments.create');
         Route::post('customers/{customer}/advance-payments', [CustomerPaymentController::class, 'storeAdvance'])->name('customers.advance-payments.store');
         Route::post('customers/{customer}/advance-payments/apply', [CustomerPaymentController::class, 'applyAdvance'])->name('customers.advance-payments.apply');
+        Route::post('customers/{customer}/advance-payments/renew', [CustomerPaymentController::class, 'renewFromAdvance'])->name('customers.advance-renewal.store');
         Route::post('customers/{customer}/grace-period', [CustomerController::class, 'grantGracePeriod'])->name('customers.grace-period');
         Route::post('customers/{customer}/activate-next-date', [CustomerController::class, 'activateUntilNextDate'])->name('customers.activate-next-date');
         Route::post('customers/{customer}/service-validity', [CustomerController::class, 'updateServiceValidity'])->name('customers.service-validity.update');

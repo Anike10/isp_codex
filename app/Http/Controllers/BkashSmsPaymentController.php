@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\BkashSmsPayment;
 use App\Models\Customer;
 use App\Models\Invoice;
+use App\Services\AdvanceRenewalService;
 use App\Services\BillingService;
 use App\Services\BkashSmsPaymentService;
 use App\Services\PaymentService;
@@ -83,7 +84,7 @@ class BkashSmsPaymentController extends Controller
         ]);
     }
 
-    public function approve(Request $request, BkashSmsPayment $bkashSmsPayment, BillingService $billingService, PaymentService $paymentService, BkashSmsPaymentService $smsPaymentService)
+    public function approve(Request $request, BkashSmsPayment $bkashSmsPayment, BillingService $billingService, PaymentService $paymentService, AdvanceRenewalService $advanceRenewalService, BkashSmsPaymentService $smsPaymentService)
     {
         $data = $request->validate([
             'customer_id' => ['required', 'exists:customers,id'],
@@ -136,15 +137,42 @@ class BkashSmsPaymentController extends Controller
                 ->first();
 
             if (! $invoice) {
+                $paymentDate = $smsPayment->payment_date?->toDateString() ?? now()->toDateString();
                 $paymentService->addAdvanceCredit($customer, [
                     'amount' => $smsPayment->amount,
                     'payment_method' => 'bkash',
                     'payment_account_id' => $prepared['payment_account_id'],
-                    'payment_date' => $smsPayment->payment_date?->toDateString() ?? now()->toDateString(),
+                    'payment_date' => $paymentDate,
                     'reference' => $smsPayment->trx_id,
                     'entry_by' => $prepared['entry_by'],
                     'note' => 'Manual approve bKash SMS advance TrxID: '.$smsPayment->trx_id,
                 ]);
+
+                $renewedMonths = $advanceRenewalService->renew(
+                    $customer,
+                    $paymentDate,
+                    24,
+                    'Approved bKash renewal from advance balance. TrxID: '.$smsPayment->trx_id,
+                );
+
+                if ($renewedMonths > 0) {
+                    $renewalInvoice = Invoice::query()
+                        ->where('customer_id', $customer->id)
+                        ->where('invoice_type', 'service')
+                        ->where('due_amount', '<=', 0)
+                        ->latest('id')
+                        ->first();
+
+                    $smsPayment->update([
+                        'status' => 'processed',
+                        'customer_id' => $customer->id,
+                        'invoice_id' => $renewalInvoice?->id,
+                        'message' => "Manually approved and {$renewedMonths} package month(s) renewed automatically from advance balance.",
+                    ]);
+
+                    return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)
+                        ->with('success', "SMS approved and {$renewedMonths} package month(s) renewed.");
+                }
 
                 $smsPayment->update([
                     'status' => 'balance',
