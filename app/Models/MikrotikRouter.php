@@ -2,14 +2,18 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use RuntimeException;
 
 class MikrotikRouter extends Model
 {
     use HasFactory;
+
+    public const API_PASSWORD_REENTRY_MESSAGE = 'The saved RouterOS API password cannot be decrypted with this app key. Re-enter the API password from Edit MikroTik Router.';
 
     protected $fillable = [
         'entry_by',
@@ -57,6 +61,32 @@ class MikrotikRouter extends Model
             'api_status_since' => 'datetime',
             'ping_status_since' => 'datetime',
         ];
+    }
+
+    public function apiPassword(): string
+    {
+        try {
+            $password = (string) $this->password;
+        } catch (DecryptException $exception) {
+            throw new RuntimeException(self::API_PASSWORD_REENTRY_MESSAGE, previous: $exception);
+        }
+
+        if ($password === '') {
+            throw new RuntimeException(self::API_PASSWORD_REENTRY_MESSAGE);
+        }
+
+        return $password;
+    }
+
+    public function requiresApiPasswordReentry(): bool
+    {
+        try {
+            $this->apiPassword();
+
+            return false;
+        } catch (RuntimeException) {
+            return true;
+        }
     }
 
     public function importedProfiles(): HasMany

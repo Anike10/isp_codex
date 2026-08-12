@@ -33,7 +33,7 @@ class MikrotikCustomerSyncService
             $routerLabel = "{$router->name} ({$router->ip_address}:{$router->api_port})";
 
             try {
-                $client->connect($router->ip_address, $router->api_port, $router->username, $router->password);
+                $client->connect($router->ip_address, $router->api_port, $router->username, $router->apiPassword());
 
                 $results[] = "{$routerLabel}: ".$this->syncPppSecret($client, $customer, $router);
             } catch (Throwable $exception) {
@@ -64,7 +64,7 @@ class MikrotikCustomerSyncService
         ];
 
         try {
-            $client->connect($router->ip_address, $router->api_port, $router->username, $router->password);
+            $client->connect($router->ip_address, $router->api_port, $router->username, $router->apiPassword());
             $summary['active_sessions_captured'] = $this->captureActiveSessions($client, $router);
             $this->ensurePppProfile($client, $router->inactive_pppoe_profile);
 

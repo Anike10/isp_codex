@@ -9,8 +9,10 @@ use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
 use App\Models\Permission;
 use App\Models\User;
+use App\Services\MikrotikCustomerSyncService;
 use App\Services\MikrotikImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -100,8 +102,7 @@ class MikrotikImportTest extends TestCase
         $service = $this->partialMock(MikrotikImportService::class);
         $service->shouldReceive('liveRecords')
             ->once()
-            ->withArgs(fn (MikrotikRouter $givenRouter, string $command) =>
-                $givenRouter->is($router) && $command === '/ip/pool/print')
+            ->withArgs(fn (MikrotikRouter $givenRouter, string $command) => $givenRouter->is($router) && $command === '/ip/pool/print')
             ->andReturn([
                 ['.id' => '*1', 'name' => 'customers', 'ranges' => '10.10.0.2-10.10.0.254', 'next-pool' => 'overflow'],
                 ['.id' => '*2', 'name' => 'overflow', 'ranges' => '10.10.1.2-10.10.1.254', 'comment' => 'Backup pool'],
@@ -139,8 +140,7 @@ class MikrotikImportTest extends TestCase
         $service = $this->mock(MikrotikImportService::class);
         $service->shouldReceive('liveRecords')
             ->once()
-            ->withArgs(fn (MikrotikRouter $givenRouter, string $command) =>
-                $givenRouter->is($router) && $command === '/ip/pool/print')
+            ->withArgs(fn (MikrotikRouter $givenRouter, string $command) => $givenRouter->is($router) && $command === '/ip/pool/print')
             ->andReturn([
                 ['.id' => '*A', 'name' => 'staff', 'ranges' => '172.16.1.2-172.16.1.100'],
             ]);
@@ -185,6 +185,70 @@ class MikrotikImportTest extends TestCase
         $this->assertSame('router-secret', $router->password);
     }
 
+    public function test_router_edit_requires_a_new_api_password_when_the_imported_password_cannot_be_decrypted(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $router = MikrotikRouter::create([
+            'name' => 'Imported Router', 'ip_address' => '103.133.200.180', 'api_port' => 8787,
+            'pppoe_sync_interval_minutes' => 60, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'admin', 'password' => 'original-secret', 'status' => 'active',
+        ]);
+        DB::table('mikrotik_routers')->where('id', $router->id)->update([
+            'password' => 'ciphertext-created-with-another-app-key',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('mikrotik-routers.edit', $router))
+            ->assertOk()
+            ->assertSee('The saved RouterOS API password cannot be decrypted by this local app.')
+            ->assertSee('name="router_api_password" autocomplete="new-password" required', false);
+
+        $update = [
+            'name' => 'Imported Router', 'ip_address' => '103.133.200.180', 'api_port' => 8787,
+            'pppoe_sync_interval_minutes' => 60, 'inactive_pppoe_profile' => 'inactive',
+            'router_api_username' => 'admin', 'router_api_password' => '',
+            'status' => 'active', 'notes' => null,
+        ];
+
+        $this->actingAs($user)
+            ->from(route('mikrotik-routers.edit', $router))
+            ->put(route('mikrotik-routers.update', $router), $update)
+            ->assertRedirect(route('mikrotik-routers.edit', $router))
+            ->assertSessionHasErrors('router_api_password');
+
+        $update['router_api_password'] = 'replacement-secret';
+        $this->actingAs($user)
+            ->put(route('mikrotik-routers.update', $router), $update)
+            ->assertRedirect(route('mikrotik-routers.show', $router))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('replacement-secret', $router->refresh()->apiPassword());
+        $this->assertFalse($router->requiresApiPasswordReentry());
+    }
+
+    public function test_customer_sync_explains_when_router_password_must_be_reentered(): void
+    {
+        $router = MikrotikRouter::create([
+            'name' => 'Imported Router', 'ip_address' => '103.133.200.180', 'api_port' => 8787,
+            'pppoe_sync_interval_minutes' => 60, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'admin', 'password' => 'original-secret', 'status' => 'active',
+        ]);
+        DB::table('mikrotik_routers')->where('id', $router->id)->update([
+            'password' => 'ciphertext-created-with-another-app-key',
+        ]);
+        $customer = Customer::create([
+            'name' => 'Imported Customer', 'phone' => '01700000305',
+            'connection_id' => 'IMPORTED-305', 'mikrotik_router_id' => $router->id,
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage(MikrotikRouter::API_PASSWORD_REENTRY_MESSAGE);
+
+        app(MikrotikCustomerSyncService::class)->sync($customer);
+    }
+
     public function test_router_can_be_temporarily_disabled_and_enabled_from_list_action(): void
     {
         $user = User::factory()->create();
@@ -226,12 +290,10 @@ class MikrotikImportTest extends TestCase
         ]);
 
         $service = $this->mock(MikrotikImportService::class);
-        $service->shouldReceive('liveRecords')->twice()->andReturnUsing(fn ($givenRouter, $command) =>
-            $command === '/ppp/profile/print'
+        $service->shouldReceive('liveRecords')->twice()->andReturnUsing(fn ($givenRouter, $command) => $command === '/ppp/profile/print'
                 ? [['.id' => '*P1', 'name' => 'home50']]
                 : [['.id' => '*POOL1', 'name' => 'customer-pool']]);
-        $service->shouldReceive('write')->once()->withArgs(fn ($givenRouter, $command, $attributes) =>
-            $givenRouter->id === $router->id
+        $service->shouldReceive('write')->once()->withArgs(fn ($givenRouter, $command, $attributes) => $givenRouter->id === $router->id
             && $command === '/ppp/profile/set'
             && $attributes['.id'] === '*P1'
             && $attributes['remote-address'] === 'customer-pool')
@@ -258,11 +320,9 @@ class MikrotikImportTest extends TestCase
         ]);
 
         $service = $this->mock(MikrotikImportService::class);
-        $service->shouldReceive('liveRecords')->once()->withArgs(fn ($givenRouter, $command) =>
-            $givenRouter->id === $router->id && $command === '/ppp/profile/print')
+        $service->shouldReceive('liveRecords')->once()->withArgs(fn ($givenRouter, $command) => $givenRouter->id === $router->id && $command === '/ppp/profile/print')
             ->andReturn([['.id' => '*P2', 'name' => 'home100', 'remote-address' => 'existing-pool']]);
-        $service->shouldReceive('write')->once()->withArgs(fn ($givenRouter, $command, $attributes) =>
-            $command === '/ppp/profile/set'
+        $service->shouldReceive('write')->once()->withArgs(fn ($givenRouter, $command, $attributes) => $command === '/ppp/profile/set'
             && $attributes['.id'] === '*P2'
             && $attributes['name'] === 'home100'
             && ! array_key_exists('remote-address', $attributes))
@@ -272,8 +332,7 @@ class MikrotikImportTest extends TestCase
             ->from(route('mikrotik-routers.compare', $router))
             ->post(route('mikrotik-routers.profiles.export', [$router, $package]))
             ->assertRedirect(route('mikrotik-routers.compare', $router))
-            ->assertSessionHas('error', fn ($message) =>
-                str_contains($message, 'Profile export failed on Main Router')
+            ->assertSessionHas('error', fn ($message) => str_contains($message, 'Profile export failed on Main Router')
                 && str_contains($message, 'RouterOS rejected this profile value'));
     }
 

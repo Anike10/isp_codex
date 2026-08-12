@@ -9,6 +9,12 @@
     <a class="btn light" href="{{ route('mikrotik-routers.show', $mikrotikRouter) }}">Back</a>
 </div>
 
+@if($passwordNeedsReentry)
+    <div class="alert error" style="margin-bottom:16px">
+        The saved RouterOS API password cannot be decrypted by this local app. Enter the router API password again to save it with the current app key.
+    </div>
+@endif
+
 <form method="post" action="{{ route('mikrotik-routers.update', $mikrotikRouter) }}" class="card form-grid" id="router-edit-form" autocomplete="off">
     @csrf
     @method('PUT')
@@ -49,9 +55,9 @@
     <div>
         <label>API Password</label>
         <div>
-            <input id="router-password" type="password" name="router_api_password" autocomplete="new-password">
+            <input id="router-password" type="password" name="router_api_password" autocomplete="new-password" @required($passwordNeedsReentry)>
         </div>
-        <span class="muted">Leave blank to keep current password.</span>
+        <span class="muted">{{ $passwordNeedsReentry ? 'Required because the saved password cannot be decrypted.' : 'Leave blank to keep current password.' }}</span>
     </div>
     <div>
         <label>Status</label>

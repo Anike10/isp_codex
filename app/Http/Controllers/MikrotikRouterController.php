@@ -7,6 +7,7 @@ use App\Services\MikrotikImportService;
 use App\Services\RouterOsClient;
 use App\Services\RouterOsConnectionDiagnostic;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Throwable;
 
@@ -111,7 +112,7 @@ class MikrotikRouterController extends Controller
         }
 
         $startedAt = microtime(true);
-        $client = new RouterOsClient();
+        $client = new RouterOsClient;
         $apiOnline = false;
         $apiMessage = null;
         $apiException = null;
@@ -122,7 +123,7 @@ class MikrotikRouterController extends Controller
                 $mikrotikRouter->ip_address,
                 $mikrotikRouter->api_port,
                 $mikrotikRouter->username,
-                $mikrotikRouter->password,
+                $mikrotikRouter->apiPassword(),
                 3
             );
 
@@ -278,11 +279,15 @@ class MikrotikRouterController extends Controller
 
     public function edit(MikrotikRouter $mikrotikRouter)
     {
-        return view('mikrotik_routers.edit', compact('mikrotikRouter'));
+        $passwordNeedsReentry = $mikrotikRouter->requiresApiPasswordReentry();
+
+        return view('mikrotik_routers.edit', compact('mikrotikRouter', 'passwordNeedsReentry'));
     }
 
     public function update(Request $request, MikrotikRouter $mikrotikRouter)
     {
+        $passwordNeedsReentry = $mikrotikRouter->requiresApiPasswordReentry();
+
         $request->merge([
             'router_api_username' => $request->input('router_api_username', $request->input('username')),
             'router_api_password' => $request->input('router_api_password', $request->input('password')),
@@ -295,7 +300,9 @@ class MikrotikRouterController extends Controller
             'pppoe_sync_interval_minutes' => ['required', 'integer', 'min:60', 'max:1440', 'multiple_of:60'],
             'inactive_pppoe_profile' => ['required', 'string', 'max:255'],
             'router_api_username' => ['required', 'string', 'max:255'],
-            'router_api_password' => ['nullable', 'string', 'max:255'],
+            'router_api_password' => $passwordNeedsReentry
+                ? ['required', 'string', 'max:255']
+                : ['nullable', 'string', 'max:255'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
             'notes' => ['nullable', 'string'],
         ]);
@@ -308,6 +315,13 @@ class MikrotikRouterController extends Controller
         } else {
             $data['password'] = $data['router_api_password'];
             unset($data['router_api_password']);
+        }
+
+        if ($passwordNeedsReentry && isset($data['password'])) {
+            // Eloquent compares encrypted casts with the original value while saving.
+            // Replace the undecryptable in-memory original so the new password can be persisted.
+            $mikrotikRouter->password = Str::random(64);
+            $mikrotikRouter->syncOriginalAttribute('password');
         }
 
         $mikrotikRouter->update($data);

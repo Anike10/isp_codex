@@ -12,6 +12,16 @@ class RouterOsConnectionDiagnostic
         $rawMessage = trim($exception->getMessage());
         $message = strtolower($rawMessage);
 
+        if (str_contains($message, 'cannot be decrypted')
+            || str_contains($message, 're-enter the api password')) {
+            return [
+                'type' => 'credentials',
+                'label' => 'API password must be re-entered',
+                'message' => 'The saved RouterOS API password is not readable with the current app key.',
+                'guidance' => 'Open Edit MikroTik Router, enter the API password again, and save the router.',
+            ];
+        }
+
         if (str_contains($message, 'authentication failed')
             || str_contains($message, 'invalid user')
             || str_contains($message, 'username or password')

@@ -49,10 +49,10 @@ class MikrotikImportService
 
     public function write(MikrotikRouter $router, string $command, array $attributes): array
     {
-        $client = new RouterOsClient();
+        $client = new RouterOsClient;
 
         try {
-            $client->connect($router->ip_address, $router->api_port, $router->username, $router->password, 10);
+            $client->connect($router->ip_address, $router->api_port, $router->username, $router->apiPassword(), 10);
 
             return $client->command($command, $attributes);
         } finally {
@@ -167,10 +167,10 @@ class MikrotikImportService
 
     private function read(MikrotikRouter $router, string $command, array $attributes = []): array
     {
-        $client = new RouterOsClient();
+        $client = new RouterOsClient;
 
         try {
-            $client->connect($router->ip_address, $router->api_port, $router->username, $router->password, 10);
+            $client->connect($router->ip_address, $router->api_port, $router->username, $router->apiPassword(), 10);
 
             return $client->command($command, $attributes);
         } finally {
