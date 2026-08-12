@@ -95,6 +95,10 @@ class BkashSmsPaymentService
                 ]);
             }
 
+            // Ensure every valid incoming bKash SMS has a device ledger account,
+            // even when the customer still needs to be matched manually.
+            $paymentAccount = $this->resolveSmsDeviceAccount($rawSms, $smsSender, $deviceName);
+
             [$customer, $matchMessage] = $this->findCustomer($parsed['reference'], $parsed['customer_number']);
 
             if (! $customer) {
@@ -117,7 +121,6 @@ class BkashSmsPaymentService
                 ->first();
 
             if (! $invoice) {
-                $paymentAccount = $this->resolveSmsDeviceAccount($rawSms, $smsSender, $deviceName);
                 $this->paymentService->addAdvanceCredit($customer, [
                     'amount' => $parsed['amount'],
                     'payment_method' => 'bkash',
@@ -138,8 +141,6 @@ class BkashSmsPaymentService
             }
 
             try {
-                $paymentAccount = $this->resolveSmsDeviceAccount($rawSms, $smsSender, $deviceName);
-
                 $payment = $this->paymentService->recordPayment($invoice, [
                     'amount' => $parsed['amount'],
                     'payment_method' => 'bkash',
@@ -184,11 +185,7 @@ class BkashSmsPaymentService
         $paymentDate = null;
 
         if (preg_match('/(?:at|on)\s+([0-9]{1,2}\/[0-9]{1,2}\/[0-9]{2,4})\s+([0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?\s*(?:AM|PM)?)/i', $normalized, $dateMatch)) {
-            try {
-                $paymentDate = Carbon::parse($dateMatch[1].' '.$dateMatch[2]);
-            } catch (\Throwable) {
-                $paymentDate = null;
-            }
+            $paymentDate = $this->parseBkashDate($dateMatch[1], $dateMatch[2]);
         }
 
         return [
@@ -198,6 +195,25 @@ class BkashSmsPaymentService
             'customer_number' => isset($numberMatch[2]) ? $this->normalizePhone($numberMatch[2]) : null,
             'payment_date' => $paymentDate,
         ];
+    }
+
+    /** bKash timestamps are day-first; never let Carbon guess month/day order. */
+    private function parseBkashDate(string $date, string $time): ?Carbon
+    {
+        $value = preg_replace('/\s+/', ' ', strtoupper(trim($date.' '.$time)));
+        $yearFormat = strlen((string) last(explode('/', $date))) === 2 ? 'y' : 'Y';
+        $hasMeridiem = preg_match('/\s(?:AM|PM)$/', $value) === 1;
+        $hasSeconds = preg_match('/\d{1,2}:\d{2}:\d{2}/', $value) === 1;
+        $timeFormat = $hasMeridiem
+            ? ($hasSeconds ? 'h:i:s A' : 'h:i A')
+            : ($hasSeconds ? 'H:i:s' : 'H:i');
+        $format = '!d/m/'.$yearFormat.' '.$timeFormat;
+
+        try {
+            return Carbon::createFromFormat($format, $value, config('app.timezone'));
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function findCustomer(?string $reference, ?string $phone): array
@@ -260,18 +276,46 @@ class BkashSmsPaymentService
             return null;
         }
 
-        $account = PaymentAccount::firstOrCreate(
-            [
-                'payment_method' => 'bkash',
-                'account_number' => 'sms-device:'.Str::slug($deviceName),
-            ],
-            [
-                'account_name' => $deviceName,
-                'opening_balance' => 0,
-                'status' => 'active',
-                'entry_by' => $deviceName,
-            ]
-        );
+        $deviceName = preg_replace('/\s+/u', ' ', trim($deviceName));
+
+        $account = PaymentAccount::query()
+            ->where('payment_method', 'bkash')
+            ->where('account_name', $deviceName)
+            ->first();
+
+        if (! $account) {
+            $deviceKey = Str::slug($deviceName);
+
+            if ($deviceKey === '') {
+                $deviceKey = substr(hash('sha256', mb_strtolower($deviceName)), 0, 20);
+            }
+
+            try {
+                $account = PaymentAccount::firstOrCreate(
+                    [
+                        'payment_method' => 'bkash',
+                        'account_number' => 'sms-device:'.$deviceKey,
+                    ],
+                    [
+                        'account_name' => $deviceName,
+                        'opening_balance' => 0,
+                        'status' => 'active',
+                        'entry_by' => $deviceName,
+                    ]
+                );
+            } catch (QueryException $exception) {
+                // A second webhook for the same new device may create the
+                // unique account between firstOrCreate's read and insert.
+                $account = PaymentAccount::query()
+                    ->where('payment_method', 'bkash')
+                    ->where('account_number', 'sms-device:'.$deviceKey)
+                    ->first();
+
+                if (! $account) {
+                    throw $exception;
+                }
+            }
+        }
 
         if (! $account->entry_by) {
             $account->forceFill(['entry_by' => $deviceName])->save();

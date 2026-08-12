@@ -13,11 +13,13 @@ class MikrotikCustomerSyncService
 
     public function sync(Customer $customer): string
     {
-        $customer->loadMissing('activeSubscription.package');
+        $customer->loadMissing(['activeSubscription.package', 'mikrotikRouters']);
 
-        $routers = $customer->mikrotik_router_id
-            ? MikrotikRouter::whereKey($customer->mikrotik_router_id)->where('status', 'active')->get()
-            : MikrotikRouter::where('status', 'active')->orderBy('id')->get();
+        $routers = $customer->mikrotikRouters->isNotEmpty()
+            ? $customer->mikrotikRouters->where('status', 'active')->sortBy('id')->values()
+            : ($customer->mikrotik_router_id
+                ? MikrotikRouter::whereKey($customer->mikrotik_router_id)->where('status', 'active')->get()
+                : MikrotikRouter::where('status', 'active')->orderBy('id')->get());
 
         if ($routers->isEmpty()) {
             throw new RuntimeException('No active MikroTik router configured.');
@@ -27,7 +29,7 @@ class MikrotikCustomerSyncService
         $failures = [];
 
         foreach ($routers as $router) {
-            $client = new RouterOsClient();
+            $client = new RouterOsClient;
             $routerLabel = "{$router->name} ({$router->ip_address}:{$router->api_port})";
 
             try {
@@ -50,7 +52,7 @@ class MikrotikCustomerSyncService
 
     public function syncRouter(MikrotikRouter $router): array
     {
-        $client = new RouterOsClient();
+        $client = new RouterOsClient;
         $summary = [
             'created' => 0,
             'updated' => 0,
@@ -68,10 +70,7 @@ class MikrotikCustomerSyncService
 
             Customer::query()
                 ->with('activeSubscription.package')
-                ->where(function ($query) use ($router) {
-                    $query->whereNull('mikrotik_router_id')
-                        ->orWhere('mikrotik_router_id', $router->id);
-                })
+                ->assignedToMikrotikRouter($router->id)
                 ->orderBy('id')
                 ->chunkById(100, function ($customers) use ($client, $router, &$summary): void {
                     foreach ($customers as $customer) {
@@ -113,10 +112,7 @@ class MikrotikCustomerSyncService
         $names = $sessions->pluck('name')->map(fn ($name) => trim((string) $name))->filter()->unique()->values();
         $customers = Customer::query()
             ->with('activeSubscription.package')
-            ->where(function ($query) use ($router): void {
-                $query->whereNull('mikrotik_router_id')
-                    ->orWhere('mikrotik_router_id', $router->id);
-            })
+            ->assignedToMikrotikRouter($router->id)
             ->where(function ($query) use ($names): void {
                 $query->whereIn('mikrotik_username', $names)
                     ->orWhereIn('connection_id', $names);
@@ -236,7 +232,9 @@ class MikrotikCustomerSyncService
         }
 
         unset($payload['name']);
-        $payload['remote-address'] = $remoteAddress ?: '';
+        if (! $remoteAddress && $oldRemoteAddress) {
+            $payload['remote-address'] = '';
+        }
 
         $client->command('/ppp/secret/set', [
             '.id' => $existing[0]['.id'],

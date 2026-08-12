@@ -77,6 +77,11 @@ class User extends Authenticatable
         return $this->belongsTo(Customer::class, 'reseller_id');
     }
 
+    public function defaultPaymentAccount(): BelongsTo
+    {
+        return $this->belongsTo(PaymentAccount::class, 'default_payment_account_id');
+    }
+
     public function hasPermission(string $permission): bool
     {
         if (! $this->relationLoaded('deniedPermissions')) {

@@ -13,6 +13,8 @@
     $totalDue = (float) $dueInvoices->sum('due_amount');
     $advanceBalance = (float) $customer->account_balance;
     $netBalance = $advanceBalance - $totalDue;
+    $selectedPaymentMethod = old('payment_method', $paymentDefault['payment_method'] ?? 'cash');
+    $selectedPaymentAccountId = old('payment_account_id', $paymentDefault['payment_account_id'] ?? null);
 @endphp
 
 <style>
@@ -140,12 +142,15 @@
     </div>
     <div class="payment-field-row">
         <div>
-            <label>Method</label>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <label>Method</label>
+                @include('partials.payment_default_checkbox')
+            </div>
             <select name="payment_method" id="paymentMethod" required>
-                <option value="cash" @selected(old('payment_method', 'cash') === 'cash')>Cash</option>
-                <option value="bkash" @selected(old('payment_method') === 'bkash')>bKash</option>
-                <option value="nagad" @selected(old('payment_method') === 'nagad')>Nagad</option>
-                <option value="bank" @selected(old('payment_method') === 'bank')>Bank</option>
+                <option value="cash" @selected($selectedPaymentMethod === 'cash')>Cash</option>
+                <option value="bkash" @selected($selectedPaymentMethod === 'bkash')>bKash</option>
+                <option value="nagad" @selected($selectedPaymentMethod === 'nagad')>Nagad</option>
+                <option value="bank" @selected($selectedPaymentMethod === 'bank')>Bank</option>
             </select>
         </div>
         <div id="accountSelectWrap">
@@ -174,7 +179,7 @@
                             @else
                                 {{ $invoice->invoice_no }}
                             @endif
-                            <div class="muted">{{ $invoice->formatted_billing_month }} - {{ $invoice->due_date?->format('Y-m-d') ?? 'No due date' }}</div>
+                            <div class="muted">{{ $invoice->formatted_billing_month }} - {{ $invoice->due_date?->format('d/m/Y') ?? 'No due date' }}</div>
                         </td>
                         <td>{{ number_format($invoice->due_amount, 2) }}</td>
                         <td>
@@ -207,7 +212,7 @@
         <tbody>
             @forelse ($balanceTransactions as $transaction)
                 <tr>
-                    <td>{{ $transaction->transaction_date?->format('Y-m-d') }}</td>
+                    <td>{{ $transaction->transaction_date?->format('d/m/Y') }}</td>
                     <td><span class="badge {{ $transaction->direction === 'credit' ? 'active' : 'due' }}">{{ $transaction->direction }}</span></td>
                     <td>{{ number_format($transaction->amount, 2) }}</td>
                     <td>{{ number_format($transaction->balance_after, 2) }}</td>
@@ -223,7 +228,7 @@
 
 <script>
 const accountsByMethod = @json($accountsByMethod);
-const oldAccountId = @json(old('payment_account_id'));
+const oldAccountId = @json($selectedPaymentAccountId);
 const totalDue = Number(@json($totalDue));
 const advanceBalance = Number(@json($advanceBalance));
 const paymentUrl = @json(route('customers.payments.store', $customer));

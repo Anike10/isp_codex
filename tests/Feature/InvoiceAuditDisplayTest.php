@@ -48,6 +48,6 @@ class InvoiceAuditDisplayTest extends TestCase
             ->assertSee('Created By:')
             ->assertSee('Invoice Creator')
             ->assertSee('Created At:')
-            ->assertSee('21 Jul 2026, 02:35:42 PM');
+            ->assertSee('21/07/2026, 02:35:42 PM');
     }
 }

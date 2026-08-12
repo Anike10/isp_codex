@@ -20,7 +20,7 @@
 <div class="topbar">
     <div>
         <h1>Edit User</h1>
-        <div class="muted">{{ $user->email }} | Last updated {{ $user->updated_at?->format('Y-m-d H:i') }}</div>
+        <div class="muted">{{ $user->email }} | Last updated {{ $user->updated_at?->format('d/m/Y H:i') }}</div>
     </div>
     <a class="btn light" href="{{ route('users.index') }}">Back</a>
 </div>

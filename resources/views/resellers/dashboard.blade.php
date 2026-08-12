@@ -99,7 +99,7 @@
                         <td><strong>{{ $invoice->customer->name }}</strong><div class="muted">{{ $invoice->customer->connection_id ?? $invoice->customer->phone }}</div></td>
                         <td>{{ $invoice->invoice_no }}</td>
                         <td>{{ $invoice->formatted_billing_month }}</td>
-                        <td>{{ $invoice->due_date?->format('d M Y') ?? 'N/A' }}</td>
+                        <td>{{ $invoice->due_date?->format('d/m/Y') ?? 'N/A' }}</td>
                         <td class="money due">৳ {{ number_format((float) $invoice->due_amount, 2) }}</td>
                         <td>
                             <form method="post" action="{{ $isAdminView ? route('resellers.invoices.pay', [$reseller, $invoice]) : route('reseller.invoices.pay', $invoice) }}" class="payment-form">
@@ -164,7 +164,7 @@
                 @forelse ($transactions as $transaction)
                     <tr>
                         <td>{{ $loop->iteration }}</td>
-                        <td>{{ $transaction->transaction_date?->format('d M Y') }}</td>
+                        <td>{{ $transaction->transaction_date?->format('d/m/Y') }}</td>
                         <td>{{ $transaction->payment_method === 'reseller_wallet' ? 'Customer payment' : 'Wallet top-up' }}</td>
                         <td>{{ $transaction->invoice?->customer?->name ?? '—' }}@if($transaction->invoice)<div class="muted">{{ $transaction->invoice->invoice_no }}</div>@endif</td>
                         <td>{{ $transaction->reference ?? '—' }}</td>
@@ -190,7 +190,7 @@
                 <thead><tr><th>#</th><th>Changed At</th><th>Previous</th><th>New</th><th>Changed By</th><th>Note</th></tr></thead>
                 <tbody>
                 @forelse($reseller->commissionHistories as $history)
-                    <tr><td>{{ $loop->iteration }}</td><td>{{ $history->changed_at?->format('d M Y, h:i A') }}</td><td>{{ $history->old_percent === null ? 'Initial' : number_format((float)$history->old_percent, 2).'%' }}</td><td><strong>{{ number_format((float)$history->new_percent, 2) }}%</strong></td><td>{{ $history->changedByUser?->name ?? 'System' }}</td><td>{{ $history->note ?: '—' }}</td></tr>
+                    <tr><td>{{ $loop->iteration }}</td><td>{{ $history->changed_at?->format('d/m/Y, h:i A') }}</td><td>{{ $history->old_percent === null ? 'Initial' : number_format((float)$history->old_percent, 2).'%' }}</td><td><strong>{{ number_format((float)$history->new_percent, 2) }}%</strong></td><td>{{ $history->changedByUser?->name ?? 'System' }}</td><td>{{ $history->note ?: '—' }}</td></tr>
                 @empty
                     <tr><td class="empty-state" colspan="6">No commission changes recorded.</td></tr>
                 @endforelse

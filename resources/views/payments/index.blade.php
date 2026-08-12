@@ -29,7 +29,7 @@
     <tbody>
     @forelse ($payments as $payment)
         <tr data-href="{{ route('payments.show', $payment) }}">
-            <td>{{ $payment->payment_date->format('Y-m-d') }}</td>
+            <td>{{ $payment->payment_date->format('d/m/Y') }}</td>
             <td>
                 @if ($canOpenPartyLedger)
                     <a href="{{ route('accounting.ledger', ['customer_id' => $payment->customer_id]) }}">{{ $payment->customer->name }}</a>
@@ -64,7 +64,7 @@
                 @endif
             </td>
             <td>{{ $payment->entered_by_label }}</td>
-            <td>{{ $payment->created_at?->format('Y-m-d h:i:s A') }}</td>
+            <td>{{ $payment->created_at?->format('d/m/Y h:i:s A') }}</td>
             <td>
                 <div class="action-group">
                     <a class="btn light" href="{{ route('payments.show', $payment) }}">Details</a>
@@ -88,7 +88,7 @@
         <tbody>
         @forelse($advanceCredits as $credit)
             <tr>
-                <td>{{ $credit->transaction_date?->format('Y-m-d') }}</td>
+                <td>{{ $credit->transaction_date?->format('d/m/Y') }}</td>
                 <td>
                     @if($canOpenPartyLedger)
                         <a href="{{ route('accounting.ledger', ['customer_id' => $credit->customer_id]) }}">{{ $credit->customer->name }}</a>
@@ -109,7 +109,7 @@
                 </td>
                 <td>{{ number_format($credit->balance_after, 2) }}</td>
                 <td>{{ $credit->entered_by_label }}</td>
-                <td>{{ $credit->created_at?->format('Y-m-d h:i:s A') }}</td>
+                <td>{{ $credit->created_at?->format('d/m/Y h:i:s A') }}</td>
                 <td>{{ collect([$credit->reference, $credit->note])->filter()->implode(' · ') ?: '—' }}</td>
             </tr>
         @empty

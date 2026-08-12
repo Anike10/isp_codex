@@ -37,7 +37,7 @@
             <div><span class="muted">Ping</span><br><span class="badge {{ $mikrotikRouter->last_ping_status ?? 'checking' }}">{{ ucfirst($mikrotikRouter->last_ping_status ?? 'Unknown') }}</span></div>
             <div><span class="muted">App status</span><br><span class="badge {{ $mikrotikRouter->status }}">{{ ucfirst($mikrotikRouter->status) }}</span></div>
         </div>
-        <div class="muted">Last checked: {{ $mikrotikRouter->last_checked_at?->format('Y-m-d H:i:s') ?? 'Never' }}</div>
+        <div class="muted">Last checked: {{ $mikrotikRouter->last_checked_at?->format('d/m/Y H:i:s') ?? 'Never' }}</div>
     </div>
 </div>
 
@@ -82,8 +82,8 @@
             <div><span class="muted">Password</span><br><strong>********</strong></div>
             <div><span class="muted">PPPoE sync interval</span><br><strong>Every {{ $mikrotikRouter->pppoe_sync_interval_minutes }} minute(s)</strong></div>
             <div><span class="muted">Inactive profile</span><br><strong>{{ $mikrotikRouter->inactive_pppoe_profile }}</strong></div>
-            <div><span class="muted">Last PPPoE sync</span><br><strong>{{ $mikrotikRouter->last_pppoe_sync_at?->format('Y-m-d H:i:s') ?? 'Never' }}</strong></div>
-            <div><span class="muted">Last online</span><br><strong>{{ $mikrotikRouter->last_online_at?->format('Y-m-d H:i:s') ?? 'Never' }}</strong></div>
+            <div><span class="muted">Last PPPoE sync</span><br><strong>{{ $mikrotikRouter->last_pppoe_sync_at?->format('d/m/Y H:i:s') ?? 'Never' }}</strong></div>
+            <div><span class="muted">Last online</span><br><strong>{{ $mikrotikRouter->last_online_at?->format('d/m/Y H:i:s') ?? 'Never' }}</strong></div>
         </div>
     </div>
     <div class="card router-info-card">

@@ -52,10 +52,10 @@
                 </td>
                 <td>
                     <div>Every {{ $router->pppoe_sync_interval_minutes }}m</div>
-                    <div class="muted">{{ $router->last_pppoe_sync_at?->format('Y-m-d H:i:s') ?? 'Never' }}</div>
+                    <div class="muted">{{ $router->last_pppoe_sync_at?->format('d/m/Y H:i:s') ?? 'Never' }}</div>
                 </td>
-                <td class="router-last-online">{{ $router->last_online_at?->format('Y-m-d H:i:s') ?? 'Never' }}</td>
-                <td class="router-last-offline">{{ $router->last_offline_at?->format('Y-m-d H:i:s') ?? 'Never' }}</td>
+                <td class="router-last-online">{{ $router->last_online_at?->format('d/m/Y H:i:s') ?? 'Never' }}</td>
+                <td class="router-last-offline">{{ $router->last_offline_at?->format('d/m/Y H:i:s') ?? 'Never' }}</td>
                 <td>
                     <div class="actions">
                         <form method="post" action="{{ route('mikrotik-routers.toggle-status', $router) }}" onsubmit="return confirm('{{ $router->status === 'active' ? 'Temporarily disable' : 'Enable' }} MikroTik router {{ addslashes($router->name) }}?')">

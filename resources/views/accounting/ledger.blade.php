@@ -62,7 +62,7 @@
         @forelse ($entries as $entry)
             <tr @if ($entry['url']) data-href="{{ $entry['url'] }}" @endif>
                 <td>{{ $entry['serial'] }}</td>
-                <td>{{ $entry['date']?->format('Y-m-d') }}</td>
+                <td>{{ $entry['date']?->format('d/m/Y') }}</td>
                 <td>{{ $entry['type'] }}</td>
                 @unless ($selectedCustomer)<td>{{ $entry['customer'] }}</td>@endunless
                 <td>{{ $entry['note'] }}</td>

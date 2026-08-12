@@ -68,7 +68,7 @@
                             | {{ $oltDevice->host }}:{{ $oltDevice->port }}
                             | {{ $oltDevice->brand ?: 'Unknown Brand' }}
                             | {{ $protocolProfiles[$oltDevice->protocol_profile] ?? $oltDevice->protocol_profile ?? 'Unknown Profile' }}
-                            | Last: {{ $oltDevice->last_polled_at?->format('Y-m-d H:i:s') ?? 'Never' }}
+                            | Last: {{ $oltDevice->last_polled_at?->format('d/m/Y H:i:s') ?? 'Never' }}
                             | Cached: {{ number_format($oltDevice->onus_count) }}
                             | Online: {{ number_format($oltDevice->online_onus_count) }}
                             | PON data:
@@ -177,7 +177,7 @@
     <div class="card stat"><span class="muted">Total ONU</span><strong>{{ $stats['total'] }}</strong></div>
     <div class="card stat"><span class="muted">With Live Power</span><strong>{{ $stats['with_power'] }}</strong></div>
     <div class="card stat"><span class="muted">Weak <= -25 dBm</span><strong>{{ $stats['weak_power'] }}</strong></div>
-    <div class="card stat"><span class="muted">Last Poll</span><strong style="font-size:18px">{{ $stats['last_polled_at'] ? \Carbon\Carbon::parse($stats['last_polled_at'])->format('Y-m-d H:i') : 'Never' }}</strong></div>
+    <div class="card stat"><span class="muted">Last Poll</span><strong style="font-size:18px">{{ $stats['last_polled_at'] ? \Carbon\Carbon::parse($stats['last_polled_at'])->format('d/m/Y H:i') : 'Never' }}</strong></div>
 </div>
 @if (request()->filled('olt_device_id'))
     <div class="muted" style="margin:-6px 0 16px">
@@ -463,10 +463,10 @@
                         </div>
                     </form>
                 </td>
-                <td>{{ $onu->last_registered_at?->format('Y-m-d H:i:s') ?? 'Never' }}</td>
+                <td>{{ $onu->last_registered_at?->format('d/m/Y H:i:s') ?? 'Never' }}</td>
                 <td>
                     @if ($onu->last_deregistered_at)
-                        <div>{{ $onu->last_deregistered_at->format('Y-m-d H:i:s') }}</div>
+                        <div>{{ $onu->last_deregistered_at->format('d/m/Y H:i:s') }}</div>
                         <div class="muted">{{ $onu->last_deregister_reason ?: 'No reason' }}</div>
                     @elseif ($onu->last_deregister_reason)
                         <div class="muted">No time</div>
@@ -475,7 +475,7 @@
                         <span class="muted">Never</span>
                     @endif
                 </td>
-                <td data-field="last_live_polled_at">{{ $onu->last_live_polled_at?->format('Y-m-d H:i:s') ?? 'Never' }}</td>
+                <td data-field="last_live_polled_at">{{ $onu->last_live_polled_at?->format('d/m/Y H:i:s') ?? 'Never' }}</td>
                 <td class="desc-edit-cell" data-desc-cell data-onu-id="{{ $onu->id }}" data-onu-desc="{{ $onu->description }}">
                     <span class="desc-display">{{ $onu->description ?: 'N/A' }}</span>
                     <form class="desc-inline-form" method="post" action="{{ route('olt-onus.description.update', $onu) }}" data-preserve-scroll style="display:none; margin-top:8px">

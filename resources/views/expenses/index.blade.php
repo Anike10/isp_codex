@@ -68,7 +68,7 @@
     <tbody>
         @forelse ($expenses as $expense)
             <tr data-href="{{ route('expenses.show', $expense) }}">
-                <td>{{ $expense->expense_date->format('Y-m-d') }}</td>
+                <td>{{ $expense->expense_date->format('d/m/Y') }}</td>
                 <td><span class="badge {{ $expense->expense_type === 'salary' ? 'active' : 'pending' }}">{{ $types[$expense->expense_type] ?? ucfirst($expense->expense_type) }}</span></td>
                 <td>{{ $categories[$expense->category] ?? ucfirst($expense->category) }}</td>
                 <td>

@@ -133,7 +133,42 @@ class PackageControllerTest extends TestCase
             ->assertSee('<th>SL</th>', false)
             ->assertSee('<th>IP Pool</th>', false)
             ->assertSee('<td>1</td>', false)
-            ->assertSee('business-pool');
+            ->assertSee('business-pool')
+            ->assertSee('class="package-ip-pool-select"', false)
+            ->assertSee('value="business-pool" selected', false);
+    }
+
+    public function test_package_ip_pool_can_be_changed_inline_from_the_index(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_packages')->firstOrFail());
+        AppIpPool::create(['name' => 'home-pool', 'ranges' => '10.20.0.2-10.20.0.254', 'status' => 'active']);
+        AppIpPool::create(['name' => 'business-pool', 'ranges' => '10.30.0.2-10.30.0.254', 'status' => 'active']);
+        $package = InternetPackage::create([
+            'name' => 'Inline Pool Plan', 'speed' => '30 Mbps', 'mikrotik_profile' => 'inline30',
+            'default_ip_pool' => 'home-pool', 'monthly_price' => 1000, 'status' => 'active',
+        ]);
+
+        $this->actingAs($user)->patchJson(route('packages.inline-update', $package), [
+            'field' => 'default_ip_pool',
+            'value' => 'business-pool',
+        ])->assertOk()->assertJson([
+            'message' => 'Package updated.',
+            'value' => 'business-pool',
+        ]);
+        $this->assertSame('business-pool', $package->fresh()->default_ip_pool);
+
+        $this->actingAs($user)->patchJson(route('packages.inline-update', $package), [
+            'field' => 'default_ip_pool',
+            'value' => 'missing-pool',
+        ])->assertUnprocessable();
+        $this->assertSame('business-pool', $package->fresh()->default_ip_pool);
+
+        $this->actingAs($user)->patchJson(route('packages.inline-update', $package), [
+            'field' => 'default_ip_pool',
+            'value' => '',
+        ])->assertOk()->assertJson(['value' => null]);
+        $this->assertNull($package->fresh()->default_ip_pool);
     }
 
     public function test_assigned_package_errors_include_name_and_bulk_force_delete_moves_subscriptions(): void

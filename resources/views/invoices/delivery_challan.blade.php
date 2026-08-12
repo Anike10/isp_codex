@@ -159,7 +159,7 @@
                 <div class="box-body">
                     <div class="kv"><span class="muted">Challan No</span><span>DC-{{ $invoice->invoice_no }}</span></div>
                     <div class="kv"><span class="muted">Invoice Ref</span><span>{{ $invoice->invoice_no }}</span></div>
-                    <div class="kv"><span class="muted">Date</span><span>{{ now()->format('d M Y') }}</span></div>
+                    <div class="kv"><span class="muted">Date</span><span>{{ now()->format('d/m/Y') }}</span></div>
                     <div class="kv"><span class="muted">Bill Month</span><span>{{ $invoice->formatted_billing_month }}</span></div>
                 </div>
             </div>

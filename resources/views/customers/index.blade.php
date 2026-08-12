@@ -66,7 +66,7 @@
             </td>
             <td>
                 @if ($customer->status === 'active' && $activeUntil)
-                    <strong>{{ $activeUntil->format('Y-m-d') }}</strong>
+                    <strong>{{ $activeUntil->format('d/m/Y') }}</strong>
                     @if ($daysRemaining > 0)
                         <div class="muted">{{ $daysRemaining }} days left</div>
                     @elseif ($daysRemaining === 0)
@@ -117,7 +117,7 @@
                         <a class="btn light" href="{{ route('customers.edit', $customer) }}">Assign package for grace</a>
                     @endif
                 @else
-                    <span class="muted">Grace used {{ $customer->grace_until?->format('Y-m-d') }}</span>
+                    <span class="muted">Grace used {{ $customer->grace_until?->format('d/m/Y') }}</span>
                 @endif
             </td>
             <td class="actions">

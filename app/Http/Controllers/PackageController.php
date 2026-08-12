@@ -35,6 +35,7 @@ class PackageController extends Controller
                 ->paginate($this->perPage($request))
                 ->appends($request->query()),
             'replacementPackages' => InternetPackage::query()->orderBy('name')->get(['id', 'name']),
+            'ipPoolNames' => $this->ipPoolNames(),
         ]);
     }
 
@@ -88,7 +89,7 @@ class PackageController extends Controller
     public function inlineUpdate(Request $request, InternetPackage $package)
     {
         $field = $request->validate([
-            'field' => ['required', 'in:name,speed,mikrotik_profile,monthly_price,status'],
+            'field' => ['required', 'in:name,speed,mikrotik_profile,default_ip_pool,monthly_price,status'],
             'value' => ['nullable'],
         ])['field'];
 
@@ -96,6 +97,7 @@ class PackageController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'speed' => ['required', 'string', 'max:100'],
             'mikrotik_profile' => ['nullable', 'string', 'max:255'],
+            'default_ip_pool' => ['nullable', 'string', 'max:255', 'exists:app_ip_pools,name'],
             'monthly_price' => ['required', 'numeric', 'min:0'],
             'status' => ['required', 'in:active,inactive'],
         ];

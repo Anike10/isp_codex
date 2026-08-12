@@ -52,8 +52,8 @@
         @forelse ($quotations as $quotation)
             <tr data-href="{{ route('quotations.show', $quotation) }}">
                 <td><a href="{{ route('quotations.show', $quotation) }}"><strong>{{ $quotation->quotation_no }}</strong></a></td>
-                <td>{{ $quotation->quotation_date?->format('Y-m-d') }}</td>
-                <td>{{ $quotation->valid_until?->format('Y-m-d') ?? 'Open' }}</td>
+                <td>{{ $quotation->quotation_date?->format('d/m/Y') }}</td>
+                <td>{{ $quotation->valid_until?->format('d/m/Y') ?? 'Open' }}</td>
                 <td>
                     @if ($canOpenPartyLedger)
                         <a href="{{ route('accounting.ledger', ['customer_id' => $quotation->customer_id]) }}">{{ $quotation->customer->name }}</a>

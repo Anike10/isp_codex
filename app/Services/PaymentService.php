@@ -562,10 +562,10 @@ class PaymentService
 
         $detail = sprintf(
             '[%s] Paid validity extended for %d month(s): %s to %s.%s',
-            now()->format('Y-m-d H:i'),
+            now()->format('d/m/Y H:i'),
             $monthsToAdd,
-            $firstPeriodStart->format('Y-m-d'),
-            $periodEnd->format('Y-m-d'),
+            $firstPeriodStart->format('d/m/Y'),
+            $periodEnd->format('d/m/Y'),
             $paymentNote ? ' Note: '.trim($paymentNote) : ''
         );
 
@@ -616,13 +616,13 @@ class PaymentService
         $validUntil = $startsOn->copy()->addDays($validDays - 1);
         $detail = sprintf(
             '[%s] Paid validity: payment date %s; one-month period %d day(s); grace deducted %d day(s); validity %d day(s), %s to %s.%s',
-            now()->format('Y-m-d H:i'),
-            $startsOn->format('Y-m-d'),
+            now()->format('d/m/Y H:i'),
+            $startsOn->format('d/m/Y'),
             $monthDays,
             $graceDays,
             $validDays,
-            $startsOn->format('Y-m-d'),
-            $validUntil->format('Y-m-d'),
+            $startsOn->format('d/m/Y'),
+            $validUntil->format('d/m/Y'),
             $paymentNote ? ' Payment note: '.trim($paymentNote) : ''
         );
 

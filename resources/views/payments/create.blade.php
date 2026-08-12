@@ -14,6 +14,8 @@
             'label' => $account->account_name.' - '.$account->account_number,
         ])->values())
         ->toArray();
+    $selectedPaymentMethod = old('payment_method', $paymentDefault['payment_method'] ?? 'cash');
+    $selectedPaymentAccountId = old('payment_account_id', $paymentDefault['payment_account_id'] ?? null);
 @endphp
 
 <form method="post" action="{{ route('payments.store') }}" class="card form-grid">
@@ -35,12 +37,15 @@
         <span class="muted">If amount is more than due, extra money will stay in the party account.</span>
     </div>
     <div>
-        <label>Method</label>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <label>Method</label>
+            @include('partials.payment_default_checkbox')
+        </div>
         <select name="payment_method" id="paymentMethod" required>
-            <option value="cash" @selected(old('payment_method', 'cash') === 'cash')>Cash</option>
-            <option value="bkash" @selected(old('payment_method') === 'bkash')>bKash</option>
-            <option value="nagad" @selected(old('payment_method') === 'nagad')>Nagad</option>
-            <option value="bank" @selected(old('payment_method') === 'bank')>Bank</option>
+            <option value="cash" @selected($selectedPaymentMethod === 'cash')>Cash</option>
+            <option value="bkash" @selected($selectedPaymentMethod === 'bkash')>bKash</option>
+            <option value="nagad" @selected($selectedPaymentMethod === 'nagad')>Nagad</option>
+            <option value="bank" @selected($selectedPaymentMethod === 'bank')>Bank</option>
         </select>
     </div>
     <div id="accountSelectWrap">
@@ -64,7 +69,7 @@
 
 <script>
 const accountsByMethod = @json($accountsByMethod);
-const oldAccountId = @json(old('payment_account_id'));
+const oldAccountId = @json($selectedPaymentAccountId);
 const methodSelect = document.getElementById('paymentMethod');
 const accountWrap = document.getElementById('accountSelectWrap');
 const accountSelect = document.getElementById('paymentAccount');

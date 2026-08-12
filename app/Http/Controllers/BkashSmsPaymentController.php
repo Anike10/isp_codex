@@ -60,9 +60,12 @@ class BkashSmsPaymentController extends Controller
             'device_name' => ['nullable', 'string', 'max:255'],
             'device' => ['nullable', 'string', 'max:255'],
             'phone_name' => ['nullable', 'string', 'max:255'],
+            'sender_device' => ['nullable', 'string', 'max:255'],
+            'senderDevice' => ['nullable', 'string', 'max:255'],
+            'deviceName' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $deviceName = $data['device_name'] ?? $data['device'] ?? $data['phone_name'] ?? null;
+        $deviceName = $this->deviceNameFrom($data);
         $smsPayment = $smsPaymentService->handle($data['message'], $data['sender'] ?? 'bKash', $deviceName);
 
         return redirect()
@@ -86,7 +89,7 @@ class BkashSmsPaymentController extends Controller
             'customer_id' => ['required', 'exists:customers,id'],
         ]);
 
-        $deviceName = $request->input('device_name') ?: $request->input('device') ?: $request->input('phone_name');
+        $deviceName = $this->deviceNameFrom($request->all());
 
         $prepared = DB::transaction(function () use ($bkashSmsPayment, $smsPaymentService, $data, $deviceName) {
             $smsPayment = BkashSmsPayment::whereKey($bkashSmsPayment->id)->lockForUpdate()->firstOrFail();
@@ -208,9 +211,12 @@ class BkashSmsPaymentController extends Controller
             'device_name' => ['nullable', 'string', 'max:255'],
             'device' => ['nullable', 'string', 'max:255'],
             'phone_name' => ['nullable', 'string', 'max:255'],
+            'sender_device' => ['nullable', 'string', 'max:255'],
+            'senderDevice' => ['nullable', 'string', 'max:255'],
+            'deviceName' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $deviceName = $data['device_name'] ?? $data['device'] ?? $data['phone_name'] ?? null;
+        $deviceName = $this->deviceNameFrom($data);
         $smsPayment = $smsPaymentService->handle($data['message'] ?? $data['sms'], $data['sender'] ?? null, $deviceName);
 
         return response()->json([
@@ -221,5 +227,18 @@ class BkashSmsPaymentController extends Controller
             'amount' => $smsPayment->amount,
             'message' => $smsPayment->message,
         ]);
+    }
+
+    private function deviceNameFrom(array $data): ?string
+    {
+        foreach (['device_name', 'sender_device', 'senderDevice', 'deviceName', 'device', 'phone_name'] as $key) {
+            $value = trim((string) ($data[$key] ?? ''));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 }

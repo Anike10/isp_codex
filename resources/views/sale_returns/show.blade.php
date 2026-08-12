@@ -3,7 +3,7 @@
 @section('content')
 @php($serialFormatter = app(\App\Support\SerialNumberParser::class))
 <div class="topbar">
-    <div><h1>{{ $saleReturn->return_no }}</h1><div class="muted">{{ $saleReturn->return_date->format('Y-m-d') }} - {{ $saleReturn->customer->name }}</div></div>
+    <div><h1>{{ $saleReturn->return_no }}</h1><div class="muted">{{ $saleReturn->return_date->format('d/m/Y') }} - {{ $saleReturn->customer->name }}</div></div>
     <div class="actions">
         <a class="btn light" href="{{ route('invoices.show', $saleReturn->invoice) }}">Invoice</a>
         <a class="btn light" href="{{ route('sale-returns.index') }}">Back</a>

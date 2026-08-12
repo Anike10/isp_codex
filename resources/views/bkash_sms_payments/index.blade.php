@@ -56,7 +56,7 @@
     <tbody>
         @forelse ($smsPayments as $smsPayment)
             <tr data-href="{{ route('bkash-sms-payments.show', $smsPayment) }}">
-                <td>{{ $smsPayment->created_at->format('Y-m-d H:i') }}</td>
+                <td>{{ $smsPayment->created_at->format('d/m/Y H:i') }}</td>
                 <td><span class="badge {{ $smsPayment->status }}">{{ $smsPayment->status }}</span></td>
                 <td>{{ $smsPayment->trx_id ?? 'N/A' }}</td>
                 <td>{{ $smsPayment->reference ?? 'N/A' }}</td>

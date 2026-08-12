@@ -13,8 +13,8 @@
             <td><strong>{{ $item->name }}</strong>@if($item->note)<div class="muted">{{ $item->note }}</div>@endif</td>
             <td>{{ \App\Models\VehicleMaintenanceItem::TYPES[$item->maintenance_type] }}</td>
             <td>{{ $item->interval_days ? $item->interval_days.' days' : 'No date interval' }}<div class="muted">{{ $item->interval_mileage ? number_format($item->interval_mileage).' km' : 'No mileage interval' }}</div></td>
-            <td>{{ $item->last_changed_at?->format('Y-m-d') ?? $item->last_checked_at?->format('Y-m-d') ?? 'Never' }}<div class="muted">{{ $item->last_service_mileage ? number_format($item->last_service_mileage).' km' : 'Mileage N/A' }}</div></td>
-            <td>{{ $item->next_due_date?->format('Y-m-d') ?? 'N/A' }}<div class="muted">{{ $item->next_due_mileage ? number_format($item->next_due_mileage).' km' : 'N/A' }}</div></td>
+            <td>{{ $item->last_changed_at?->format('d/m/Y') ?? $item->last_checked_at?->format('d/m/Y') ?? 'Never' }}<div class="muted">{{ $item->last_service_mileage ? number_format($item->last_service_mileage).' km' : 'Mileage N/A' }}</div></td>
+            <td>{{ $item->next_due_date?->format('d/m/Y') ?? 'N/A' }}<div class="muted">{{ $item->next_due_mileage ? number_format($item->next_due_mileage).' km' : 'N/A' }}</div></td>
             <td>
                 @if($days === null) Date N/A @elseif($days < 0)<strong>{{ abs($days) }} days overdue</strong>@elseif($days === 0)<strong>Due today</strong>@else {{ $days }} days left @endif
                 <div class="muted">@if($km === null) Mileage N/A @elseif($km < 0){{ number_format(abs($km)) }} km overdue @elseif($km === 0)Due at current mileage @else{{ number_format($km) }} km left @endif</div>

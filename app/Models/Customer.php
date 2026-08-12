@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -135,6 +137,25 @@ class Customer extends Model
     public function mikrotikRouter(): BelongsTo
     {
         return $this->belongsTo(MikrotikRouter::class);
+    }
+
+    public function mikrotikRouters(): BelongsToMany
+    {
+        return $this->belongsToMany(MikrotikRouter::class)->withTimestamps();
+    }
+
+    public function scopeAssignedToMikrotikRouter(Builder $query, int $routerId): Builder
+    {
+        return $query->where(function (Builder $query) use ($routerId): void {
+            $query->whereHas('mikrotikRouters', fn (Builder $query) => $query->whereKey($routerId))
+                ->orWhere(function (Builder $query) use ($routerId): void {
+                    $query->whereDoesntHave('mikrotikRouters')
+                        ->where(function (Builder $query) use ($routerId): void {
+                            $query->whereNull('mikrotik_router_id')
+                                ->orWhere('mikrotik_router_id', $routerId);
+                        });
+                });
+        });
     }
 
     public function invoices(): HasMany

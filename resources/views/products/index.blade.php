@@ -114,7 +114,7 @@
                     <td>
                         @if ($serial->purchaseBill)
                             <a href="{{ route('purchase-bills.show', $serial->purchaseBill) }}">{{ $serial->purchaseBill->bill_no }}</a>
-                            <div class="muted">{{ $serial->purchaseBill->purchase_date?->format('Y-m-d') ?? 'No date' }}{{ $serial->purchaseBill->party ? ' - '.$serial->purchaseBill->party->name : '' }}</div>
+                            <div class="muted">{{ $serial->purchaseBill->purchase_date?->format('d/m/Y') ?? 'No date' }}{{ $serial->purchaseBill->party ? ' - '.$serial->purchaseBill->party->name : '' }}</div>
                         @else
                             N/A
                         @endif
@@ -130,7 +130,7 @@
                     <td>
                         @if ($serial->invoice)
                             <a href="{{ route('invoices.show', $serial->invoice) }}">{{ $serial->invoice->invoice_no }}</a>
-                            <div class="muted">{{ $serial->sold_at?->format('Y-m-d H:i') ?? $serial->invoice->created_at?->format('Y-m-d H:i') }}{{ $serial->invoice->customer ? ' - '.$serial->invoice->customer->name : '' }}</div>
+                            <div class="muted">{{ $serial->sold_at?->format('d/m/Y H:i') ?? $serial->invoice->created_at?->format('d/m/Y H:i') }}{{ $serial->invoice->customer ? ' - '.$serial->invoice->customer->name : '' }}</div>
                         @else
                             N/A
                         @endif
@@ -156,7 +156,7 @@
                 <tbody>
                 @foreach ($serialTraceMovements as $movement)
                     <tr>
-                        <td>{{ $movement->created_at->format('Y-m-d H:i') }}</td>
+                        <td>{{ $movement->created_at->format('d/m/Y H:i') }}</td>
                         <td>{{ $movement->product?->name ?? 'N/A' }}</td>
                         <td>
                             {{ $movement->warehouse?->name ?? 'N/A' }}

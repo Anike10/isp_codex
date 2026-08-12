@@ -24,7 +24,7 @@
             <td><strong>{{ $saleReturn->return_no }}</strong></td>
             <td><a href="{{ route('invoices.show', $saleReturn->invoice) }}">{{ $saleReturn->invoice->invoice_no }}</a></td>
             <td>{{ $saleReturn->customer->name }}</td>
-            <td>{{ $saleReturn->return_date->format('Y-m-d') }}</td>
+            <td>{{ $saleReturn->return_date->format('d/m/Y') }}</td>
             <td>{{ number_format($saleReturn->subtotal, 2) }}</td>
             <td>{{ number_format($saleReturn->credit_total, 2) }}</td>
             <td>{{ number_format($saleReturn->invoice_credit_amount, 2) }}</td>

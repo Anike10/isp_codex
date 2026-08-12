@@ -9,7 +9,7 @@
         }
 
         try {
-            return \Illuminate\Support\Carbon::parse($value)->format('Y-m-d');
+            return \Illuminate\Support\Carbon::parse($value)->format('d/m/Y');
         } catch (\Throwable) {
             return (string) $value;
         }
@@ -173,7 +173,7 @@
                     <div class="version-history-summary">
                         <div class="version-history-cell">
                             <span>Date</span>
-                            <strong>{{ $version->created_at?->format('Y-m-d H:i') }}</strong>
+                            <strong>{{ $version->created_at?->format('d/m/Y H:i') }}</strong>
                         </div>
                         <div class="version-history-cell">
                             <span>Edited By</span>
@@ -222,7 +222,7 @@
                                     <div class="version-preview-header">
                                         <div class="version-preview-title">
                                             <strong>{{ $documentNo }}</strong>
-                                            <span class="muted">Old version saved {{ $version->created_at?->format('Y-m-d H:i') }}</span>
+                                            <span class="muted">Old version saved {{ $version->created_at?->format('d/m/Y H:i') }}</span>
                                             <span class="muted">Edited by {{ $version->edited_by_name ?? $version->edited_by ?? 'System' }}</span>
                                         </div>
                                     </div>
@@ -325,7 +325,7 @@
                                     <div class="version-preview-header">
                                         <div class="version-preview-title">
                                             <strong>Old Version</strong>
-                                            <span class="muted">Saved {{ $version->created_at?->format('Y-m-d H:i') }}</span>
+                                            <span class="muted">Saved {{ $version->created_at?->format('d/m/Y H:i') }}</span>
                                         </div>
                                     </div>
                                     <div class="version-preview-fallback">

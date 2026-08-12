@@ -94,8 +94,8 @@
         <div class="claim-facts">
             <div class="claim-fact"><span>Product</span><strong>{{ $claim->product?->name ?? 'Manual claim' }}</strong></div>
             <div class="claim-fact"><span>Serial</span><strong>{{ $claim->productSerial?->serial_number ?? 'N/A' }}</strong></div>
-            <div class="claim-fact"><span>Claim Date</span><strong>{{ $claim->claim_date?->format('Y-m-d') }}</strong></div>
-            <div class="claim-fact"><span>Warranty Until</span><strong>{{ $claim->productSerial?->warranty_until?->format('Y-m-d') ?? 'No warranty' }}</strong></div>
+            <div class="claim-fact"><span>Claim Date</span><strong>{{ $claim->claim_date?->format('d/m/Y') }}</strong></div>
+            <div class="claim-fact"><span>Warranty Until</span><strong>{{ $claim->productSerial?->warranty_until?->format('d/m/Y') ?? 'No warranty' }}</strong></div>
             <div class="claim-fact"><span>Assigned</span><strong>{{ $claim->assignedUser?->name ?? 'Not assigned' }}</strong></div>
             <div class="claim-fact"><span>Vendor</span><strong>{{ $claim->vendor?->name ?? 'N/A' }}</strong></div>
             <div class="claim-fact"><span>Service Charge</span><strong>{{ number_format($claim->service_charge, 2) }}</strong></div>
@@ -238,8 +238,8 @@
     <section class="card">
         <h2>Final Details</h2>
         <div class="info-list">
-            <div class="info-row"><span class="muted">Received</span><span>{{ $claim->received_at?->format('Y-m-d H:i') ?? 'Not received' }}</span></div>
-            <div class="info-row"><span class="muted">Closed</span><span>{{ $claim->closed_at?->format('Y-m-d H:i') ?? 'Open' }}</span></div>
+            <div class="info-row"><span class="muted">Received</span><span>{{ $claim->received_at?->format('d/m/Y H:i') ?? 'Not received' }}</span></div>
+            <div class="info-row"><span class="muted">Closed</span><span>{{ $claim->closed_at?->format('d/m/Y H:i') ?? 'Open' }}</span></div>
             <div class="info-row"><span class="muted">Service Charge</span><span>{{ number_format($claim->service_charge, 2) }}</span></div>
             <div class="info-row"><span class="muted">Delivery</span><span style="white-space:pre-line">{{ $claim->delivery_note ?: 'N/A' }}</span></div>
         </div>
@@ -273,7 +273,7 @@
         @forelse ($timelineEvents as $event)
             <article class="history-row">
                 <div class="history-time">
-                    <strong>{{ $event['date']?->format('Y-m-d H:i') ?? 'N/A' }}</strong>
+                    <strong>{{ $event['date']?->format('d/m/Y H:i') ?? 'N/A' }}</strong>
                     <div>{{ $event['actor'] }}</div>
                     <span class="badge pending">{{ $event['status'] }}</span>
                 </div>

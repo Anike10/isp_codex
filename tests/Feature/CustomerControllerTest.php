@@ -5,14 +5,15 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\Invoice;
-use App\Models\Permission;
 use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
+use App\Models\Permission;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\MikrotikCustomerSyncService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class CustomerControllerTest extends TestCase
@@ -441,7 +442,7 @@ class CustomerControllerTest extends TestCase
 
         $customer->refresh();
         $this->assertSame('2026-07-15', $customer->service_valid_until?->format('Y-m-d'));
-        $this->assertStringContainsString('2026-06-30 → 2026-07-15', $customer->service_validity_note);
+        $this->assertStringContainsString('30/06/2026 → 15/07/2026', $customer->service_validity_note);
         $this->assertStringContainsString('manager approved extension', $customer->notes);
     }
 
@@ -461,6 +462,157 @@ class CustomerControllerTest extends TestCase
         $this->assertSame('inactive', $customer->refresh()->status);
         $this->assertSame('inactive', $subscription->refresh()->status);
         $this->assertSame(now()->subDay()->toDateString(), $subscription->end_date?->format('Y-m-d'));
+    }
+
+    public function test_customer_can_be_assigned_and_synced_to_multiple_mikrotik_targets(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Multi Router Customer',
+            'phone' => '01760000001',
+            'connection_id' => 'MULTI-001',
+            'mikrotik_username' => 'MULTI-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+        $routerOne = MikrotikRouter::create([
+            'name' => 'Router 1036',
+            'ip_address' => '103.133.200.180',
+            'api_port' => 8787,
+            'username' => 'admin',
+            'password' => 'secret',
+            'status' => 'active',
+        ]);
+        $routerTwo = MikrotikRouter::create([
+            'name' => 'Router 1037',
+            'ip_address' => '103.133.200.181',
+            'api_port' => 8787,
+            'username' => 'admin',
+            'password' => 'secret',
+            'status' => 'active',
+        ]);
+        $syncService = \Mockery::mock(MikrotikCustomerSyncService::class);
+        $syncService->shouldReceive('sync')->once()->andReturn('synced');
+        $this->app->instance(MikrotikCustomerSyncService::class, $syncService);
+
+        $this->actingAs($user)->post(route('customers.mikrotik-targets.update', $customer), [
+            'mikrotik_router_ids' => [$routerOne->id, $routerTwo->id],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame($routerOne->id, $customer->refresh()->mikrotik_router_id);
+        $this->assertEqualsCanonicalizing(
+            [$routerOne->id, $routerTwo->id],
+            $customer->mikrotikRouters()->pluck('mikrotik_routers.id')->all()
+        );
+
+        $this->actingAs($user)->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Router 1036')
+            ->assertSee('Router 1037')
+            ->assertSee('Save &amp; sync targets', false);
+    }
+
+    public function test_force_inactive_keeps_validity_and_inactivates_the_subscription(): void
+    {
+        Carbon::setTestNow('2026-08-12 10:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $package = InternetPackage::create(['name' => 'Force Plan', 'speed' => '10 Mbps', 'monthly_price' => 500, 'status' => 'active']);
+            $customer = Customer::create([
+                'name' => 'Force Inactive Customer',
+                'phone' => '01760000002',
+                'connection_id' => 'FORCE-001',
+                'mikrotik_username' => 'FORCE-001',
+                'address' => 'Kushtia',
+                'status' => 'active',
+                'is_customer' => true,
+                'service_valid_until' => '2026-09-10',
+                'grace_until' => '2026-08-20',
+                'grace_days' => 8,
+            ]);
+            $subscription = Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-08-01',
+                'status' => 'active',
+            ]);
+            $syncService = \Mockery::mock(MikrotikCustomerSyncService::class);
+            $syncService->shouldReceive('sync')->once()->andReturn('moved_inactive');
+            $this->app->instance(MikrotikCustomerSyncService::class, $syncService);
+
+            $this->actingAs($user)->post(route('customers.force-inactive', $customer), [
+                'inactive_note' => 'Customer requested a temporary line suspension.',
+            ])->assertRedirect()->assertSessionHasNoErrors();
+
+            $customer->refresh();
+            $subscription->refresh();
+            $this->assertSame('inactive', $customer->status);
+            $this->assertSame('2026-09-10', $customer->service_valid_until?->format('Y-m-d'));
+            $this->assertSame('2026-08-20', $customer->grace_until?->format('Y-m-d'));
+            $this->assertSame(8, $customer->grace_days);
+            $this->assertSame('inactive', $subscription->status);
+            $this->assertSame('2026-08-12', $subscription->end_date?->format('Y-m-d'));
+            $this->assertStringContainsString('temporary line suspension', $customer->notes);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_temporary_active_reverses_inactive_without_changing_validity_or_grace(): void
+    {
+        Carbon::setTestNow('2026-08-12 10:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $package = InternetPackage::create(['name' => 'Temporary Plan', 'speed' => '20 Mbps', 'monthly_price' => 700, 'status' => 'active']);
+            $customer = Customer::create([
+                'name' => 'Temporary Active Customer',
+                'phone' => '01760000003',
+                'connection_id' => 'TEMP-001',
+                'mikrotik_username' => 'TEMP-001',
+                'address' => 'Kushtia',
+                'status' => 'inactive',
+                'is_customer' => true,
+                'service_valid_until' => '2026-09-10',
+                'grace_until' => '2026-08-20',
+                'grace_days' => 8,
+            ]);
+            $subscription = Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-08-01',
+                'end_date' => '2026-08-12',
+                'status' => 'inactive',
+            ]);
+            $syncService = \Mockery::mock(MikrotikCustomerSyncService::class);
+            $syncService->shouldReceive('sync')->once()->andReturn('updated');
+            $this->app->instance(MikrotikCustomerSyncService::class, $syncService);
+
+            $this->actingAs($user)->get(route('customers.show', $customer))
+                ->assertOk()
+                ->assertSee('Temporary active');
+
+            $this->actingAs($user)->post(route('customers.force-active', $customer), [
+                'active_note' => 'Manager approved a temporary reconnection.',
+            ])->assertRedirect()->assertSessionHasNoErrors();
+
+            $customer->refresh();
+            $subscription->refresh();
+            $this->assertSame('active', $customer->status);
+            $this->assertSame('2026-09-10', $customer->service_valid_until?->format('Y-m-d'));
+            $this->assertSame('2026-08-20', $customer->grace_until?->format('Y-m-d'));
+            $this->assertSame(8, $customer->grace_days);
+            $this->assertSame('active', $subscription->status);
+            $this->assertNull($subscription->end_date);
+            $this->assertStringContainsString('temporary reconnection', $customer->notes);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_expired_party_payment_renews_the_remembered_package(): void

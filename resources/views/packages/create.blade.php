@@ -53,7 +53,7 @@
                         @if ($runningProfile->profile_found && $package->default_ip_pool && $runningProfile->remote_address === $package->default_ip_pool)
                             <span class="badge active">Selected default</span>
                         @endif
-                        <span class="muted" style="display:block">{{ $runningProfile->source_label }} · {{ $runningProfile->checked_at?->format('Y-m-d H:i:s') ?? 'No snapshot' }}</span>
+                        <span class="muted" style="display:block">{{ $runningProfile->source_label }} · {{ $runningProfile->checked_at?->format('d/m/Y H:i:s') ?? 'No snapshot' }}</span>
                     </span>
                 </div>
             @empty

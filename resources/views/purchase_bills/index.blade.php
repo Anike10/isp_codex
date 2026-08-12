@@ -38,7 +38,7 @@
                     No vendor selected
                 @endif
             </td>
-            <td>{{ $purchaseBill->purchase_date->format('Y-m-d') }}</td>
+            <td>{{ $purchaseBill->purchase_date->format('d/m/Y') }}</td>
             <td>{{ number_format($purchaseBill->subtotal, 2) }}</td>
             <td>@if($purchaseBill->document_path)<a class="btn light" target="_blank" rel="noopener" href="{{ route('purchase-bills.document', $purchaseBill) }}">View</a>@else N/A @endif</td>
             <td>{{ $purchaseBill->note ?? 'N/A' }}</td>

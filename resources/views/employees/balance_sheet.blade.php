@@ -47,7 +47,7 @@
         <p><strong>Opening Salary Balance:</strong> {{ $openingSalaryBalance >= 0 ? 'Due ' : 'Advance ' }}{{ number_format(abs($openingSalaryBalance), 2) }}</p>
         <p><strong>Closing Salary Balance:</strong> {{ $closingSalaryBalance >= 0 ? 'Due ' : 'Advance ' }}{{ number_format(abs($closingSalaryBalance), 2) }}</p>
         <p><strong>Current Salary:</strong> {{ number_format($employee->current_salary, 2) }}</p>
-        <p><strong>Salary Effective From:</strong> {{ $employee->salary_effective_from?->format('Y-m-d') ?? 'N/A' }}</p>
+        <p><strong>Salary Effective From:</strong> {{ $employee->salary_effective_from?->format('d/m/Y') ?? 'N/A' }}</p>
     </div>
 </div>
 
@@ -100,7 +100,7 @@
         <tbody>
             @forelse ($bonusPayments as $payment)
                 <tr data-href="{{ route('expenses.show', $payment) }}">
-                    <td>{{ $payment->expense_date->format('Y-m-d') }}</td>
+                    <td>{{ $payment->expense_date->format('d/m/Y') }}</td>
                     <td>{{ $payment->reference ?? 'Bonus #'.$payment->id }}</td>
                     <td>{{ number_format($payment->amount, 2) }}</td>
                     <td>{{ ucfirst($payment->payment_method) }}</td>

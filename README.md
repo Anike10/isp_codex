@@ -251,6 +251,13 @@ Windows/XAMPP-এ নিয়মিত artisan command চালানোর জ�
 cd /d D:\xampp\htdocs\isp_codex && php artisan mikrotik:sync-router-users
 ```
 
+Customer MikroTik assignment is many-to-many. On a customer details page,
+`MikroTik targets` can save and immediately sync the same PPPoE user to one or
+more selected active routers. Customer service status can be temporarily moved
+inactive or active in either direction without changing saved validity/grace
+data; the customer and latest subscription change together and MikroTik sync
+applies the matching inactive or package profile.
+
 Setup:
 
 1. Start menu থেকে `Task Scheduler` খুলুন।

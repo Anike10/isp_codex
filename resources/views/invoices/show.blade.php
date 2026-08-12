@@ -13,6 +13,8 @@
             'label' => $account->account_name.' - '.$account->account_number,
         ])->values())
         ->toArray();
+    $selectedPaymentMethod = old('payment_method', $paymentDefault['payment_method'] ?? 'cash');
+    $selectedPaymentAccountId = old('payment_account_id', $paymentDefault['payment_account_id'] ?? null);
 @endphp
 
 <div class="topbar">
@@ -72,9 +74,9 @@
         <p class="invoice-total-row invoice-paid-row"><strong>Paid:</strong> <span>{{ number_format($invoice->paid_amount, 2) }}</span></p>
         <p class="invoice-total-row invoice-due-row"><strong>Due:</strong> <span>{{ number_format($invoice->due_amount, 2) }}</span></p>
         <p class="invoice-total-row"><strong>Status:</strong> <span class="badge {{ $invoice->status }}">{{ $invoice->status }}</span></p>
-        <p class="invoice-total-row"><strong>Finalized:</strong> <span>{{ $invoice->finalized_at?->format('Y-m-d H:i') ?? 'Not finalized' }}</span></p>
+        <p class="invoice-total-row"><strong>Finalized:</strong> <span>{{ $invoice->finalized_at?->format('d/m/Y H:i') ?? 'Not finalized' }}</span></p>
         <p class="invoice-total-row"><strong>Created By:</strong> <span>{{ $invoice->entered_by_label }}</span></p>
-        <p class="invoice-total-row"><strong>Created At:</strong> <span>{{ $invoice->created_at?->format('d M Y, h:i:s A') ?? 'N/A' }}</span></p>
+        <p class="invoice-total-row"><strong>Created At:</strong> <span>{{ $invoice->created_at?->format('d/m/Y, h:i:s A') ?? 'N/A' }}</span></p>
     </section>
     <section class="card invoice-summary-card invoice-party-card">
         <h2>Party</h2>
@@ -120,12 +122,15 @@
             <span class="muted">Due is {{ number_format($invoice->due_amount, 2) }}. Extra amount will stay in party advance balance.</span>
         </div>
         <div>
-            <label>Method</label>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <label>Method</label>
+                @include('partials.payment_default_checkbox')
+            </div>
             <select name="payment_method" id="invoicePaymentMethod" required>
-                <option value="cash" @selected(old('payment_method', 'cash') === 'cash')>Cash</option>
-                <option value="bkash" @selected(old('payment_method') === 'bkash')>bKash</option>
-                <option value="nagad" @selected(old('payment_method') === 'nagad')>Nagad</option>
-                <option value="bank" @selected(old('payment_method') === 'bank')>Bank</option>
+                <option value="cash" @selected($selectedPaymentMethod === 'cash')>Cash</option>
+                <option value="bkash" @selected($selectedPaymentMethod === 'bkash')>bKash</option>
+                <option value="nagad" @selected($selectedPaymentMethod === 'nagad')>Nagad</option>
+                <option value="bank" @selected($selectedPaymentMethod === 'bank')>Bank</option>
             </select>
         </div>
         <div id="invoiceAccountSelectWrap">
@@ -209,7 +214,7 @@
         <tbody>
         @foreach ($saleReturnItems as $returnItem)
             <tr>
-                <td>{{ $returnItem->saleReturn->return_date->format('Y-m-d') }}</td>
+                <td>{{ $returnItem->saleReturn->return_date->format('d/m/Y') }}</td>
                 <td>
                     @if (Route::has('sale-returns.show'))
                         <a href="{{ route('sale-returns.show', $returnItem->saleReturn) }}">{{ $returnItem->saleReturn->return_no }}</a>
@@ -242,7 +247,7 @@
                 $paymentTotal = (float) ($allocation->payment?->amount ?? 0);
             @endphp
             <tr>
-                <td>{{ $allocation->allocated_at->format('Y-m-d') }}</td>
+                <td>{{ $allocation->allocated_at->format('d/m/Y') }}</td>
                 <td>{{ number_format($allocation->amount, 2) }}</td>
                 <td>
                     @if ($allocation->source_type === 'advance')
@@ -278,7 +283,7 @@
 @if ($canRecordPayment)
 <script>
 const invoiceAccountsByMethod = @json($accountsByMethod);
-const invoiceOldAccountId = @json(old('payment_account_id'));
+const invoiceOldAccountId = @json($selectedPaymentAccountId);
 const invoiceMethodSelect = document.getElementById('invoicePaymentMethod');
 const invoiceAccountWrap = document.getElementById('invoiceAccountSelectWrap');
 const invoiceCashAccountWrap = document.getElementById('invoiceCashAccountWrap');
@@ -345,7 +350,7 @@ refreshInvoiceAccounts();
         <thead><tr><th>Printed</th><th>Document</th><th>Organization</th><th>Printed By</th><th>IP</th></tr></thead>
         <tbody>
         @forelse($invoice->printLogs as $printLog)
-            <tr><td>{{ $printLog->printed_at->format('Y-m-d H:i:s') }}</td><td>{{ ucwords(str_replace('_', ' ', $printLog->document_type)) }}</td><td>{{ $printLog->organization->name }}</td><td>{{ $printLog->user?->name ?: $printLog->user_name ?: 'Unknown' }}</td><td>{{ $printLog->ip_address ?: 'N/A' }}</td></tr>
+            <tr><td>{{ $printLog->printed_at->format('d/m/Y H:i:s') }}</td><td>{{ ucwords(str_replace('_', ' ', $printLog->document_type)) }}</td><td>{{ $printLog->organization->name }}</td><td>{{ $printLog->user?->name ?: $printLog->user_name ?: 'Unknown' }}</td><td>{{ $printLog->ip_address ?: 'N/A' }}</td></tr>
         @empty
             <tr><td colspan="5">This invoice has not been printed yet.</td></tr>
         @endforelse

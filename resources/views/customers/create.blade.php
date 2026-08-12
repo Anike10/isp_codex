@@ -22,16 +22,14 @@
         <span class="muted">Used only when a Connection ID is provided.</span>
     </div>
     <div>
-        <label>MikroTik Target</label>
-        <select name="mikrotik_router_id">
-            <option value="">All active MikroTik routers</option>
-            @foreach ($routers as $router)
-                <option value="{{ $router->id }}" @selected((int) old('mikrotik_router_id') === $router->id)>
-                    {{ $router->name }} - {{ $router->ip_address }}:{{ $router->api_port }}
-                </option>
-            @endforeach
-        </select>
-        <span class="muted">Used only for ISP parties with a Connection ID.</span>
+        <label>MikroTik Targets</label>
+        @foreach ($routers as $router)
+            <label style="font-weight:400; display:flex; gap:8px; align-items:center; margin-top:6px">
+                <input type="checkbox" name="mikrotik_router_ids[]" value="{{ $router->id }}" @checked(in_array($router->id, array_map('intval', old('mikrotik_router_ids', [])), true)) style="width:auto">
+                {{ $router->name }} - {{ $router->ip_address }}:{{ $router->api_port }}
+            </label>
+        @endforeach
+        <span class="muted">Select one or more routers. With no selection, legacy all-active-router behavior is used.</span>
     </div>
     <div>
         <label>IP Assignment</label>

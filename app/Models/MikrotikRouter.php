@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MikrotikRouter extends Model
@@ -71,5 +72,10 @@ class MikrotikRouter extends Model
     public function importedSecrets(): HasMany
     {
         return $this->hasMany(MikrotikImportedSecret::class);
+    }
+
+    public function customers(): BelongsToMany
+    {
+        return $this->belongsToMany(Customer::class)->withTimestamps();
     }
 }

@@ -329,10 +329,7 @@ class MikrotikRouterDataController extends Controller
 
         $customer = Customer::query()
             ->whereKey($data['app_id'])
-            ->where(function ($query) use ($mikrotikRouter): void {
-                $query->where('mikrotik_router_id', $mikrotikRouter->id)
-                    ->orWhereNull('mikrotik_router_id');
-            })
+            ->assignedToMikrotikRouter($mikrotikRouter->id)
             ->firstOrFail();
         $connectionId = $customer->connection_id;
         $customer->update([
@@ -341,6 +338,7 @@ class MikrotikRouterDataController extends Controller
             'mikrotik_password' => null,
             'mikrotik_router_id' => null,
         ]);
+        $customer->mikrotikRouters()->detach();
 
         return back()->with('success', "PPPoE mapping {$connectionId} removed from the App comparison. The party, billing records, and MikroTik user were not deleted.");
     }
@@ -370,10 +368,7 @@ class MikrotikRouterDataController extends Controller
         $customers = Customer::query()
             ->whereNotNull('connection_id')
             ->where('connection_id', '!=', '')
-            ->where(function ($query) use ($mikrotikRouter): void {
-                $query->where('mikrotik_router_id', $mikrotikRouter->id)
-                    ->orWhereNull('mikrotik_router_id');
-            })
+            ->assignedToMikrotikRouter($mikrotikRouter->id)
             ->orderBy('connection_id')
             ->get();
         $localPools = AppIpPool::query()->where('mikrotik_router_id', $mikrotikRouter->id)->orderBy('name')->get();
@@ -415,8 +410,11 @@ class MikrotikRouterDataController extends Controller
 
     public function exportCustomer(MikrotikRouter $mikrotikRouter, Customer $customer, MikrotikCustomerSyncService $service)
     {
-        abort_unless(in_array($customer->mikrotik_router_id, [null, $mikrotikRouter->id], true), 404);
-        if ($customer->mikrotik_router_id === null) {
+        abort_unless(Customer::query()->whereKey($customer->id)->assignedToMikrotikRouter($mikrotikRouter->id)->exists(), 404);
+        if (! $customer->mikrotikRouters()->whereKey($mikrotikRouter->id)->exists()) {
+            $customer->mikrotikRouters()->syncWithoutDetaching([$mikrotikRouter->id]);
+        }
+        if (! $customer->mikrotik_router_id) {
             $customer->update(['mikrotik_router_id' => $mikrotikRouter->id]);
         }
         $service->sync($customer);

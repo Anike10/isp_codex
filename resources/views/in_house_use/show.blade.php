@@ -28,7 +28,7 @@
 <section class="card" style="margin-bottom:16px">
     <h2>Handover Details</h2>
     <div class="form-grid">
-        <div><span class="muted">Issue Date</span><strong>{{ $assignment->assigned_at->format('Y-m-d') }}</strong></div>
+        <div><span class="muted">Issue Date</span><strong>{{ $assignment->assigned_at->format('d/m/Y') }}</strong></div>
         <div><span class="muted">Warehouse</span><strong>{{ $assignment->warehouse->name }}</strong></div>
         <div><span class="muted">Serials</span><strong>{{ $assignment->serial_numbers ?: 'N/A' }}</strong></div>
         <div><span class="muted">Serial-less Qty</span><strong>{{ $assignment->serialless_quantity }}</strong></div>
@@ -79,7 +79,7 @@
         <thead><tr><th>Date</th><th>Warehouse</th><th>Quantity</th><th>Return Value</th><th>Serials</th><th>Serial-less</th><th>Note</th><th>Received By</th></tr></thead>
         <tbody>
         @forelse ($assignment->returns->sortByDesc('returned_at') as $return)
-            <tr><td>{{ $return->returned_at->format('Y-m-d') }}</td><td>{{ $return->warehouse->name }}</td><td>{{ $return->quantity }}</td><td>{{ number_format($return->quantity * (float)$assignment->unit_price, 2) }}</td><td>{{ $return->serial_numbers ?: 'N/A' }}</td><td>{{ $return->serialless_quantity }}</td><td>{{ $return->note ?? 'N/A' }}</td><td>{{ $return->receivedBy?->name ?? 'N/A' }}</td></tr>
+            <tr><td>{{ $return->returned_at->format('d/m/Y') }}</td><td>{{ $return->warehouse->name }}</td><td>{{ $return->quantity }}</td><td>{{ number_format($return->quantity * (float)$assignment->unit_price, 2) }}</td><td>{{ $return->serial_numbers ?: 'N/A' }}</td><td>{{ $return->serialless_quantity }}</td><td>{{ $return->note ?? 'N/A' }}</td><td>{{ $return->receivedBy?->name ?? 'N/A' }}</td></tr>
         @empty
             <tr><td colspan="8">No return recorded yet.</td></tr>
         @endforelse

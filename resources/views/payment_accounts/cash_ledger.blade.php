@@ -102,7 +102,7 @@
     </thead>
     <tbody>
         <tr>
-            <td>{{ request('from') ?: 'N/A' }}</td>
+            <td>{{ request('from') ? \Illuminate\Support\Carbon::parse(request('from'))->format('d/m/Y') : 'N/A' }}</td>
             <td>{{ request()->filled('from') ? 'Before Filter' : ($hasPriorPage ? 'Before Page' : 'Opening') }}</td>
             <td>N/A</td>
             <td>{{ request()->filled('from') ? 'Prior cash collection minus prior cash expense' : ($hasPriorPage ? 'Balance before this page' : 'Opening balance') }}</td>
@@ -115,7 +115,7 @@
                 $runningBalance += (float) $row['signed_amount'];
             @endphp
             <tr>
-                <td>{{ $row['date']?->format('Y-m-d') }}</td>
+                <td>{{ $row['date']?->format('d/m/Y') }}</td>
                 <td>
                     @if ($row['type'] === 'payment')
                         @if ($row['invoice_id'] && $canOpenInvoices)

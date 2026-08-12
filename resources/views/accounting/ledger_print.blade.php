@@ -156,8 +156,8 @@
             <h2>{{ $selectedCustomer ? 'Party Ledger' : 'Accounting Ledger' }}</h2>
             <p>
                 @if ($selectedCustomer)Party: <strong>{{ $selectedCustomer->name }}</strong><br>@endif
-                Period: <strong>{{ $from?->format('Y-m-d') ?: 'Beginning' }} to {{ $to?->format('Y-m-d') ?: 'Present' }}</strong><br>
-                Generated: {{ now()->format('Y-m-d h:i:s A') }}
+                Period: <strong>{{ $from?->format('d/m/Y') ?: 'Beginning' }} to {{ $to?->format('d/m/Y') ?: 'Present' }}</strong><br>
+                Generated: {{ now()->format('d/m/Y h:i:s A') }}
             </p>
         </div>
     </header>
@@ -186,7 +186,7 @@
             @forelse ($entries as $entry)
                 <tr>
                     <td class="sl">{{ $entry['serial'] }}</td>
-                    <td>{{ $entry['date']?->format('Y-m-d') }}</td>
+                    <td>{{ $entry['date']?->format('d/m/Y') }}</td>
                     <td>{{ $entry['type'] }}</td>
                     @unless ($selectedCustomer)<td>{{ $entry['customer'] }}</td>@endunless
                     <td>{{ $entry['note'] }}</td>

@@ -298,7 +298,7 @@ class QuotationController extends Controller
                 'track_inventory' => (bool) $product->track_inventory, 'track_serials' => (bool) $product->track_serial_numbers,
                 'serials' => $product->serials->map(fn (ProductSerial $serial): array => [
                     'serial_number' => $serial->serial_number,
-                    'warranty_until' => $serial->warranty_until?->format('Y-m-d'),
+                    'warranty_until' => $serial->warranty_until?->format('d/m/Y'),
                     'status' => $serial->status,
                 ])->values(),
             ])->values();

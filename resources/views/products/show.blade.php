@@ -86,7 +86,7 @@
                 <td>{{ $serial->status === 'in_stock' ? 'In house' : str_replace('_', ' ', ucfirst($serial->status)) }}</td>
                 <td>{{ $serial->warehouse?->name ?? 'N/A' }}</td>
                 <td>{{ $serial->customer?->name ?? 'N/A' }}</td>
-                <td>{{ $serial->warranty_until?->format('Y-m-d') ?? 'No warranty' }}</td>
+                <td>{{ $serial->warranty_until?->format('d/m/Y') ?? 'No warranty' }}</td>
                 <td>
                     @if ($serial->purchaseBill)
                         <a href="{{ route('purchase-bills.show', $serial->purchaseBill) }}">{{ $serial->purchaseBill->bill_no }}</a>
@@ -116,7 +116,7 @@
     <tbody>
     @forelse ($stockMovements as $movement)
         <tr>
-            <td>{{ $movement->created_at->format('Y-m-d H:i') }}</td>
+            <td>{{ $movement->created_at->format('d/m/Y H:i') }}</td>
             <td>{{ $movement->warehouse?->name ?? 'Legacy / N/A' }}</td>
             <td>{{ $movement->type === 'use' ? 'Own Use' : str_replace('_', ' ', ucfirst($movement->type)) }}</td>
             <td>{{ $movement->quantity }}</td>

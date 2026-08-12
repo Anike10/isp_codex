@@ -204,8 +204,8 @@
                 <h3>Quotation Details</h3>
                 <div class="box-body">
                     <div class="kv"><span class="muted">Quotation No</span><span>{{ $quotationNumber }}</span></div>
-                    <div class="kv"><span class="muted">Date</span><span>{{ $quotationDate?->format('d M Y') }}</span></div>
-                    <div class="kv"><span class="muted">Valid Until</span><span>{{ $validUntil?->format('d M Y') ?? 'Open' }}</span></div>
+                    <div class="kv"><span class="muted">Date</span><span>{{ $quotationDate?->format('d/m/Y') }}</span></div>
+                    <div class="kv"><span class="muted">Valid Until</span><span>{{ $validUntil?->format('d/m/Y') ?? 'Open' }}</span></div>
                     <div class="kv"><span class="muted">Reference Month</span><span>{{ $invoice->formatted_billing_month }}</span></div>
                 </div>
             </div>

@@ -626,8 +626,8 @@
                     <div class="kv"><span class="muted">Invoice No</span><span>{{ $invoice->invoice_no }}</span></div>
                     <div class="kv"><span class="muted">Bill Month</span><span>{{ $invoice->formatted_billing_month }}</span></div>
                     <div class="kv"><span class="muted">Invoice Type</span><span>{{ ucfirst($invoice->invoice_type ?? 'service') }}</span></div>
-                    <div class="kv"><span class="muted">Issue Date</span><span>{{ $invoice->created_at?->format('d M Y') }}</span></div>
-                    <div class="kv"><span class="muted">Due Date</span><span>{{ $invoice->due_date?->format('d M Y') ?? 'N/A' }}</span></div>
+                    <div class="kv"><span class="muted">Issue Date</span><span>{{ $invoice->created_at?->format('d/m/Y') }}</span></div>
+                    <div class="kv"><span class="muted">Due Date</span><span>{{ $invoice->due_date?->format('d/m/Y') ?? 'N/A' }}</span></div>
                 </div>
             </div>
         </section>

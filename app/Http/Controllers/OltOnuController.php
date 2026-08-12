@@ -410,7 +410,7 @@ class OltOnuController extends Controller
 
             $oltOnu->update([
                 'port_vlans' => $portVlans,
-                'raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nOLT VLAN mode changed to transparent from OLT ONU list at ".now()->format('Y-m-d H:i:s')."\n".$writeOutput),
+                'raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nOLT VLAN mode changed to transparent from OLT ONU list at ".now()->format('d/m/Y H:i:s')."\n".$writeOutput),
             ]);
 
             $message = "OLT VLAN mode changed to transparent for {$oltOnu->pon_port}/{$oltOnu->onu_id} and saved permanently.";
@@ -432,7 +432,7 @@ class OltOnuController extends Controller
                 ->implode(', ');
 
             $oltOnu->update([
-                'raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nOLT HGU VEIP native VLAN updated to {$vlan} at ".now()->format('Y-m-d H:i:s')."\n".$writeOutput),
+                'raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nOLT HGU VEIP native VLAN updated to {$vlan} at ".now()->format('d/m/Y H:i:s')."\n".$writeOutput),
             ]);
 
             $message = "OLT accepted and saved HGU VEIP native VLAN {$vlan} for {$oltOnu->pon_port}/{$oltOnu->onu_id}.";
@@ -471,7 +471,7 @@ class OltOnuController extends Controller
         $oltOnu->update([
             'port_vlans' => $portVlans,
             'learned_macs' => $learnedMacs,
-            'raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nOLT VLAN updated to {$vlan} from OLT ONU list at ".now()->format('Y-m-d H:i:s')."\n".$writeOutput),
+            'raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nOLT VLAN updated to {$vlan} from OLT ONU list at ".now()->format('d/m/Y H:i:s')."\n".$writeOutput),
         ]);
 
         $message = "OLT VLAN changed to {$vlan} for {$oltOnu->pon_port}/{$oltOnu->onu_id} and saved permanently.";
@@ -532,7 +532,7 @@ class OltOnuController extends Controller
         $states[(string) $port] = $state === 'enable' ? 'enabled' : 'disabled';
         $oltOnu->update([
             'port_admin_states' => $states,
-            'raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nEthernet port {$port} {$state}d at ".now()->format('Y-m-d H:i:s')."\n".$output),
+            'raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nEthernet port {$port} {$state}d at ".now()->format('d/m/Y H:i:s')."\n".$output),
         ]);
 
         if ($request->expectsJson()) {
@@ -653,7 +653,7 @@ class OltOnuController extends Controller
             }
 
             $note = implode("\n---\n", array_filter($aggregateOutput));
-            $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nAttempted name writes at ".now()->format('Y-m-d H:i:s')."\n".$note)]);
+            $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nAttempted name writes at ".now()->format('d/m/Y H:i:s')."\n".$note)]);
 
             $lengthMessage = $lastReadbackName
                 ? " Requested ".mb_strlen($desired)." characters, but OLT/readback returned '{$lastReadbackName}' (".mb_strlen($lastReadbackName).' characters).'
@@ -666,7 +666,7 @@ class OltOnuController extends Controller
         }
 
         $oltDevice->update(['last_error' => null]);
-        $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nName written to OLT at ".now()->format('Y-m-d H:i:s')."\n".implode("\n", array_filter($aggregateOutput)))]);
+        $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nName written to OLT at ".now()->format('d/m/Y H:i:s')."\n".implode("\n", array_filter($aggregateOutput)))]);
 
         if ($truncatedReadback !== null) {
             return back()->with('warning', "OLT/readback did not support or return the full ONU name. Requested '{$desired}' (".mb_strlen($desired)." characters); saved/read back '{$truncatedReadback}' (".mb_strlen($truncatedReadback).' characters). The App now shows the actual OLT value.');
@@ -773,14 +773,14 @@ class OltOnuController extends Controller
             $note = implode("\n---\n", array_filter($aggregateOutput));
 
             // persist a small note to raw_interface_config for debugging
-            $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nAttempted description writes at ".now()->format('Y-m-d H:i:s')."\n".$note)]);
+            $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nAttempted description writes at ".now()->format('d/m/Y H:i:s')."\n".$note)]);
 
             return back()->with('error', 'OLT description save failed; application now shows the value read from the OLT.');
         }
 
         // Success: log outputs and return success
         $oltDevice->update(['last_error' => null]);
-        $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nDescription written to OLT at ".now()->format('Y-m-d H:i:s')."\n".implode("\n", array_filter($aggregateOutput)))]);
+        $oltOnu->update(['raw_interface_config' => trim(($oltOnu->raw_interface_config ?: '')."\nDescription written to OLT at ".now()->format('d/m/Y H:i:s')."\n".implode("\n", array_filter($aggregateOutput)))]);
 
         return back()->with('success', "ONU description updated for {$oltOnu->pon_port}/{$oltOnu->onu_id} and written to OLT.");
     }
@@ -947,7 +947,7 @@ class OltOnuController extends Controller
                     'vlan' => (int) $data['vlan'],
                     'priority' => 0,
                 ]],
-                'raw_interface_config' => trim("Added from ".($data['source_type'] ?? 'auto discovery').' at '.now()->format('Y-m-d H:i:s')."\n".$output),
+                'raw_interface_config' => trim("Added from ".($data['source_type'] ?? 'auto discovery').' at '.now()->format('d/m/Y H:i:s')."\n".$output),
                 'last_live_polled_at' => now(),
             ]
         );
@@ -1275,8 +1275,8 @@ class OltOnuController extends Controller
             'status' => $oltRefreshRun->status,
             'progress' => $oltRefreshRun->progress,
             'message' => $oltRefreshRun->message,
-            'started_at' => $oltRefreshRun->started_at?->format('Y-m-d H:i:s'),
-            'completed_at' => $oltRefreshRun->completed_at?->format('Y-m-d H:i:s'),
+            'started_at' => $oltRefreshRun->started_at?->format('d/m/Y H:i:s'),
+            'completed_at' => $oltRefreshRun->completed_at?->format('d/m/Y H:i:s'),
         ]);
     }
 
@@ -1494,7 +1494,7 @@ class OltOnuController extends Controller
         $laser = $rxPowerDbm === null
             ? 'N/A (no live power)'
             : number_format((float) $rxPowerDbm, 2).' dBm';
-        $line = $timestamp->format('Y-m-d H:i:s').' | Laser: '.$laser;
+        $line = $timestamp->format('d/m/Y H:i:s').' | Laser: '.$laser;
 
         return trim((string) $note) === '' ? $line : rtrim((string) $note)."\n".$line;
     }
@@ -1572,7 +1572,7 @@ class OltOnuController extends Controller
             'power_badge_class' => $oltOnu->rx_power_dbm !== null ? ((float) $oltOnu->rx_power_dbm <= -25 ? 'failed' : 'active') : '',
             'vlans_html' => $this->vlanBadgesHtml($oltOnu->port_vlans ?: []),
             'learned_macs_html' => $this->learnedMacsHtml($oltOnu->learned_macs ?: [], $oltOnu->port_vlans ?: []),
-            'last_live_polled_at' => $oltOnu->last_live_polled_at?->format('Y-m-d H:i:s') ?? 'Never',
+            'last_live_polled_at' => $oltOnu->last_live_polled_at?->format('d/m/Y H:i:s') ?? 'Never',
             'note' => $oltOnu->note ?? '',
         ];
     }

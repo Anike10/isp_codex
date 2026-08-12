@@ -42,7 +42,7 @@
 </form>
 
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<div class="muted" style="margin:0 0 8px">নাম, স্পিড, MikroTik Profile, মাসিক মূল্য বা Status-এ double-click করে সরাসরি edit করুন। Enter/বাইরে click করলে save, Esc চাপলে বাতিল।</div>
+<div class="muted" style="margin:0 0 8px">নাম, স্পিড, MikroTik Profile, মাসিক মূল্য বা Status-এ double-click করে সরাসরি edit করুন। IP Pool dropdown-এর selection বদলালে সাথে সাথে save হবে।</div>
 <table>
     <thead><tr><th><input id="package-select-all" type="checkbox" style="width:auto" aria-label="Select all packages on this page"></th><th>SL</th><th>Name</th><th>Speed</th><th>MikroTik Profile</th><th>IP Pool</th><th>Monthly Price</th><th>Status</th><th>Action</th></tr></thead>
     <tbody>
@@ -54,11 +54,12 @@
             <td data-inline-field="speed" data-inline-url="{{ route('packages.inline-update', $package) }}"><span data-inline-value>{{ $package->speed }}</span></td>
             <td data-inline-field="mikrotik_profile" data-inline-url="{{ route('packages.inline-update', $package) }}"><span data-inline-value>{{ $package->mikrotik_profile }}</span></td>
             <td>
-                @if ($package->default_ip_pool)
-                    <span class="badge active">{{ $package->default_ip_pool }}</span>
-                @else
-                    <span class="muted">RouterOS default / none</span>
-                @endif
+                <select class="package-ip-pool-select" data-inline-url="{{ route('packages.inline-update', $package) }}" aria-label="IP Pool for {{ $package->name }}">
+                    <option value="" @selected(blank($package->default_ip_pool))>RouterOS default / none</option>
+                    @foreach($ipPoolNames as $ipPoolName)
+                        <option value="{{ $ipPoolName }}" @selected($package->default_ip_pool === $ipPoolName)>{{ $ipPoolName }}</option>
+                    @endforeach
+                </select>
             </td>
             <td data-inline-field="monthly_price" data-inline-url="{{ route('packages.inline-update', $package) }}" data-input-type="number"><span data-inline-value>{{ number_format($package->monthly_price, 2) }}</span></td>
             <td data-inline-field="status" data-inline-url="{{ route('packages.inline-update', $package) }}" data-input-type="status"><span class="badge {{ $package->status }}" data-inline-value>{{ $package->status }}</span></td>
@@ -97,6 +98,29 @@ packageForceDelete?.addEventListener('change', () => {
     packageReplacementWrap.style.display = packageForceDelete.checked ? 'block' : 'none';
     packageReplacement.disabled = ! packageForceDelete.checked;
     packageReplacement.required = packageForceDelete.checked;
+});
+
+document.querySelectorAll('.package-ip-pool-select').forEach(select => {
+    select.dataset.savedValue = select.value;
+    select.addEventListener('change', async () => {
+        const previousValue = select.dataset.savedValue;
+        select.disabled = true;
+        try {
+            const response = await fetch(select.dataset.inlineUrl, {
+                method: 'PATCH',
+                headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': packageCsrfToken},
+                body: JSON.stringify({field: 'default_ip_pool', value: select.value}),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Could not save IP pool');
+            select.dataset.savedValue = data.value || '';
+        } catch (error) {
+            select.value = previousValue;
+            alert(error.message);
+        } finally {
+            select.disabled = false;
+        }
+    });
 });
 
 function editPackageCell(cell) {

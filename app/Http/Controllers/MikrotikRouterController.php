@@ -216,10 +216,10 @@ class MikrotikRouterController extends Controller
             'ping_latency_ms' => $router->last_ping_latency_ms,
             'api_duration' => $this->durationSince($router->api_status_since),
             'ping_duration' => $this->durationSince($router->ping_status_since),
-            'checked_at' => $router->last_checked_at?->format('Y-m-d H:i:s'),
-            'last_online_at' => $router->last_online_at?->format('Y-m-d H:i:s'),
-            'last_offline_at' => $router->last_offline_at?->format('Y-m-d H:i:s'),
-            'last_ping_at' => $router->last_ping_at?->format('Y-m-d H:i:s'),
+            'checked_at' => $router->last_checked_at?->format('d/m/Y H:i:s'),
+            'last_online_at' => $router->last_online_at?->format('d/m/Y H:i:s'),
+            'last_offline_at' => $router->last_offline_at?->format('d/m/Y H:i:s'),
+            'last_ping_at' => $router->last_ping_at?->format('d/m/Y H:i:s'),
         ];
     }
 

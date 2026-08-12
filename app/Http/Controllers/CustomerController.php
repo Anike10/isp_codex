@@ -25,7 +25,7 @@ class CustomerController extends Controller
     {
         try {
             $hasImportedSecretTable = Schema::hasTable('mikrotik_imported_secrets');
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // In deployments where the migration is not present (or DB privileges differ),
             // keep the page functional without importing-related features.
             $hasImportedSecretTable = false;
@@ -100,6 +100,8 @@ class CustomerController extends Controller
             'reseller_commission_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'never_suspend' => ['nullable', 'boolean'],
             'mikrotik_router_id' => ['nullable', 'exists:mikrotik_routers,id'],
+            'mikrotik_router_ids' => ['nullable', 'array'],
+            'mikrotik_router_ids.*' => ['integer', 'distinct', 'exists:mikrotik_routers,id'],
             'use_fixed_ip' => ['nullable', 'boolean'],
             'fixed_ip_address' => ['nullable', 'required_if:use_fixed_ip,1', 'ip', 'max:45', 'unique:customers,fixed_ip_address'],
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
@@ -114,7 +116,8 @@ class CustomerController extends Controller
         $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
         $this->normalizeIpMode($data);
 
-        $customer = Customer::create($data);
+        $customer = Customer::create(Arr::except($data, ['mikrotik_router_ids']));
+        $customer->mikrotikRouters()->sync($data['mikrotik_router_ids']);
 
         if ($customer->is_reseller) {
             ResellerCommissionHistory::create([
@@ -146,7 +149,7 @@ class CustomerController extends Controller
 
     public function edit(Customer $customer)
     {
-        $customer->load('activeSubscription');
+        $customer->load(['activeSubscription', 'mikrotikRouters']);
 
         return view('customers.edit', [
             'customer' => $customer,
@@ -174,6 +177,8 @@ class CustomerController extends Controller
             'reseller_commission_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'never_suspend' => ['nullable', 'boolean'],
             'mikrotik_router_id' => ['nullable', 'exists:mikrotik_routers,id'],
+            'mikrotik_router_ids' => ['nullable', 'array'],
+            'mikrotik_router_ids.*' => ['integer', 'distinct', 'exists:mikrotik_routers,id'],
             'use_fixed_ip' => ['nullable', 'boolean'],
             'fixed_ip_address' => ['nullable', 'required_if:use_fixed_ip,1', 'ip', 'max:45', Rule::unique('customers', 'fixed_ip_address')->ignore($customer->id)],
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
@@ -190,6 +195,7 @@ class CustomerController extends Controller
 
         DB::transaction(function () use (&$customer, $data, $recordVersionService): void {
             $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+            $customer->load('mikrotikRouters');
             $oldCommissionPercent = (float) $customer->reseller_commission_percent;
             $activeSubscription = $customer->activeSubscription()->with('package')->lockForUpdate()->first();
             $customer->setRelation('activeSubscription', $activeSubscription);
@@ -197,10 +203,15 @@ class CustomerController extends Controller
 
             $newPackageId = ! empty($data['internet_package_id']) ? (int) $data['internet_package_id'] : null;
             $oldPackageId = $activeSubscription?->internet_package_id ? (int) $activeSubscription->internet_package_id : null;
+            $oldRouterIds = $customer->mikrotikRouters->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+            if ($oldRouterIds === [] && $customer->mikrotik_router_id) {
+                $oldRouterIds = [(int) $customer->mikrotik_router_id];
+            }
+            $newRouterIds = collect($data['mikrotik_router_ids'])->map(fn ($id) => (int) $id)->sort()->values()->all();
             $connectionChanged = $customer->connection_id !== ($data['connection_id'] ?? null)
-                || (int) ($customer->mikrotik_router_id ?? 0) !== (int) ($data['mikrotik_router_id'] ?? 0);
+                || $oldRouterIds !== $newRouterIds;
             $switchedFromFixedToDynamic = $customer->use_fixed_ip && ! $data['use_fixed_ip'];
-            $customerData = Arr::except($data, ['internet_package_id', 'start_date']);
+            $customerData = Arr::except($data, ['internet_package_id', 'start_date', 'mikrotik_router_ids']);
 
             if ($oldPackageId !== $newPackageId || $connectionChanged || $switchedFromFixedToDynamic) {
                 $customerData['learned_ip_address'] = null;
@@ -208,6 +219,7 @@ class CustomerController extends Controller
             }
 
             RecordVersionObserver::withoutRecording(fn () => $customer->update($customerData));
+            $customer->mikrotikRouters()->sync($data['mikrotik_router_ids']);
 
             if (! empty($data['internet_package_id'])) {
                 if ($activeSubscription) {
@@ -264,6 +276,7 @@ class CustomerController extends Controller
             'activeSubscription.package',
             'subscriptions.package',
             'mikrotikRouter',
+            'mikrotikRouters',
             'reseller',
             'resellerCustomers',
             'loginUsers.roles',
@@ -277,7 +290,9 @@ class CustomerController extends Controller
         ]);
         $versions = $customer->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
-        return view('customers.show', compact('customer', 'versions'));
+        $routers = MikrotikRouter::query()->orderBy('name')->get();
+
+        return view('customers.show', compact('customer', 'versions', 'routers'));
     }
 
     public function grantGracePeriod(Request $request, Customer $customer)
@@ -333,8 +348,8 @@ class CustomerController extends Controller
         $nextDate = $data['active_until'] ?? now()->addMonthNoOverflow()->toDateString();
         $detail = sprintf(
             '[%s] Activated package to %s via quick-activate action.',
-            now()->format('Y-m-d H:i'),
-            $nextDate
+            now()->format('d/m/Y H:i'),
+            Carbon::parse($nextDate)->format('d/m/Y')
         );
 
         DB::transaction(function () use ($customer, $subscription, $nextDate, $detail): void {
@@ -361,7 +376,7 @@ class CustomerController extends Controller
         $syncResult = $this->syncMikrotikCustomer($customer->refresh());
 
         return back()
-            ->with('success', "Package has been activated until {$nextDate}. MikroTik user {$syncResult['status']}.")
+            ->with('success', 'Package has been activated until '.Carbon::parse($nextDate)->format('d/m/Y').". MikroTik user {$syncResult['status']}.")
             ->with('warning', $syncResult['warning']);
     }
 
@@ -372,13 +387,13 @@ class CustomerController extends Controller
             'validity_note' => ['required', 'string', 'min:3', 'max:2000'],
         ]);
 
-        $previous = $customer->service_valid_until?->format('Y-m-d') ?? 'not set';
+        $previous = $customer->service_valid_until?->format('d/m/Y') ?? 'not set';
         $newUntil = $data['service_valid_until'];
         $detail = sprintf(
             '[%s] Manual validity override: %s → %s. Reason: %s',
-            now()->format('Y-m-d H:i'),
+            now()->format('d/m/Y H:i'),
             $previous,
-            $newUntil,
+            Carbon::parse($newUntil)->format('d/m/Y'),
             trim($data['validity_note'])
         );
 
@@ -404,6 +419,105 @@ class CustomerController extends Controller
 
         return back()
             ->with('success', "Validity date updated. Party was {$state}; MikroTik user {$syncResult['status']}.")
+            ->with('warning', $syncResult['warning']);
+    }
+
+    public function updateMikrotikTargets(Request $request, Customer $customer)
+    {
+        if (! $customer->mikrotik_username && ! $customer->connection_id) {
+            return back()->withErrors(['mikrotik_router_ids' => 'A Connection ID is required before assigning MikroTik targets.']);
+        }
+
+        $data = $request->validate([
+            'mikrotik_router_ids' => ['required', 'array', 'min:1'],
+            'mikrotik_router_ids.*' => ['integer', 'distinct', 'exists:mikrotik_routers,id'],
+        ]);
+        $routerIds = collect($data['mikrotik_router_ids'])->map(fn ($id) => (int) $id)->unique()->values()->all();
+
+        DB::transaction(function () use ($customer, $routerIds): void {
+            $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+            $customer->mikrotikRouters()->sync($routerIds);
+            $customer->update(['mikrotik_router_id' => $routerIds[0]]);
+        });
+
+        $syncResult = $this->syncMikrotikCustomer($customer->refresh());
+
+        return back()
+            ->with('success', 'MikroTik targets saved. PPPoE user '.$syncResult['status'].'.')
+            ->with('warning', $syncResult['warning']);
+    }
+
+    public function forceInactive(Request $request, Customer $customer)
+    {
+        $data = $request->validate([
+            'inactive_note' => ['required', 'string', 'min:3', 'max:2000'],
+        ]);
+        $detail = sprintf(
+            '[%s] Service temporarily force-inactivated while validity remained %s. Reason: %s',
+            now()->format('d/m/Y H:i'),
+            $customer->service_valid_until?->format('d/m/Y') ?? 'not set',
+            trim($data['inactive_note'])
+        );
+
+        DB::transaction(function () use ($customer, $detail): void {
+            $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+            $subscription = $customer->activeSubscription()->lockForUpdate()->first();
+
+            $customer->update([
+                'status' => 'inactive',
+                'service_validity_note' => trim(implode("\n", array_filter([$customer->service_validity_note, $detail]))),
+                'notes' => trim(implode("\n", array_filter([$customer->notes, $detail]))),
+            ]);
+
+            $subscription?->update([
+                'status' => 'inactive',
+                'end_date' => now()->toDateString(),
+            ]);
+        });
+
+        $syncResult = $this->syncMikrotikCustomer($customer->refresh());
+
+        return back()
+            ->with('success', 'Service temporarily force-inactivated; validity and grace data were kept. MikroTik user '.$syncResult['status'].'.')
+            ->with('warning', $syncResult['warning']);
+    }
+
+    public function forceActive(Request $request, Customer $customer)
+    {
+        $data = $request->validate([
+            'active_note' => ['required', 'string', 'min:3', 'max:2000'],
+        ]);
+        $subscriptionId = $customer->subscriptions()->latest('id')->value('id');
+        if (! $subscriptionId) {
+            return back()->withErrors(['active_note' => 'A package subscription is required before temporarily activating this service.']);
+        }
+
+        $detail = sprintf(
+            '[%s] Service temporarily force-activated while validity remained %s. Reason: %s',
+            now()->format('d/m/Y H:i'),
+            $customer->service_valid_until?->format('d/m/Y') ?? 'not set',
+            trim($data['active_note'])
+        );
+
+        DB::transaction(function () use ($customer, $subscriptionId, $detail): void {
+            $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+            $subscription = Subscription::query()->whereKey($subscriptionId)->lockForUpdate()->firstOrFail();
+
+            $customer->update([
+                'status' => 'active',
+                'service_validity_note' => trim(implode("\n", array_filter([$customer->service_validity_note, $detail]))),
+                'notes' => trim(implode("\n", array_filter([$customer->notes, $detail]))),
+            ]);
+            $subscription->update([
+                'status' => 'active',
+                'end_date' => null,
+            ]);
+        });
+
+        $syncResult = $this->syncMikrotikCustomer($customer->refresh());
+
+        return back()
+            ->with('success', 'Service temporarily force-activated; validity and grace data were kept. MikroTik user '.$syncResult['status'].'.')
             ->with('warning', $syncResult['warning']);
     }
 
@@ -434,12 +548,20 @@ class CustomerController extends Controller
     private function normalizeCustomerConnectionData(array &$data, ?Customer $customer = null): void
     {
         $connectionId = trim((string) ($data['connection_id'] ?? '')) ?: null;
+        $routerIds = collect($data['mikrotik_router_ids'] ?? (isset($data['mikrotik_router_id']) ? [$data['mikrotik_router_id']] : []))
+            ->filter(fn ($id) => filled($id))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
 
         $data['connection_id'] = $connectionId;
         $data['mikrotik_username'] = $connectionId;
         $data['mikrotik_password'] = $connectionId
             ? ($customer?->mikrotik_password ?: MikrotikCustomerSyncService::DEFAULT_PASSWORD)
             : null;
+        $data['mikrotik_router_ids'] = $connectionId ? $routerIds : [];
+        $data['mikrotik_router_id'] = $connectionId ? ($routerIds[0] ?? null) : null;
 
         if (! $connectionId) {
             $data['mikrotik_router_id'] = null;

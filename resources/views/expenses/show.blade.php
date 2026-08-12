@@ -86,7 +86,7 @@
 <div class="topbar">
     <div>
         <h1>{{ $typeLabel }} Details</h1>
-        <div class="muted">{{ $expense->expense_date->format('Y-m-d') }} | {{ $categoryLabel }}</div>
+        <div class="muted">{{ $expense->expense_date->format('d/m/Y') }} | {{ $categoryLabel }}</div>
     </div>
     <div class="actions">
         @if ($expense->employee)
@@ -113,7 +113,7 @@
     </div>
     <div class="highlight-card">
         <span class="highlight-label">Date</span>
-        <span class="highlight-value">{{ $expense->expense_date->format('Y-m-d') }}</span>
+        <span class="highlight-value">{{ $expense->expense_date->format('d/m/Y') }}</span>
     </div>
 </div>
 
@@ -124,7 +124,7 @@
             <div class="detail-row"><span>Category</span><span>{{ $categoryLabel }}</span></div>
             <div class="detail-row"><span>Reference</span><span>{{ $expense->reference ?? 'N/A' }}</span></div>
             <div class="detail-row"><span>Entry By</span><span>{{ $expense->entry_by ?? 'N/A' }}</span></div>
-            <div class="detail-row"><span>Created</span><span>{{ $expense->created_at?->format('Y-m-d H:i') ?? 'N/A' }}</span></div>
+            <div class="detail-row"><span>Created</span><span>{{ $expense->created_at?->format('d/m/Y H:i') ?? 'N/A' }}</span></div>
         </div>
     </div>
 

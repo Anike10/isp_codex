@@ -163,14 +163,14 @@ class PaymentServiceTest extends TestCase
         $this->get(route('payments.index'))
             ->assertOk()
             ->assertSee('Payment Operator')
-            ->assertSee('2026-07-18 10:45:30 AM');
+            ->assertSee('18/07/2026 10:45:30 AM');
 
         $this->get(route('payments.show', $payment))
             ->assertOk()
             ->assertSee('Entered By:')
             ->assertSee('Payment Operator')
             ->assertSee('Entered At:')
-            ->assertSee('2026-07-18 10:45:30 AM');
+            ->assertSee('18/07/2026 10:45:30 AM');
     }
 
     public function test_direct_advance_collections_are_visible_on_the_payment_index(): void
@@ -194,7 +194,7 @@ class PaymentServiceTest extends TestCase
             ->assertSee('Rahim Ahmed')
             ->assertSee('500.00')
             ->assertSee('Advance Operator')
-            ->assertSee('2026-07-18 11:15:00 AM')
+            ->assertSee('18/07/2026 11:15:00 AM')
             ->assertSee('Advance collected at office.');
     }
 

@@ -12,7 +12,7 @@
         <p><strong>Customer:</strong> {{ $selectedSerial->customer?->name ?? 'N/A' }}</p>
         <p><strong>Product:</strong> {{ $selectedSerial->product?->name ?? 'N/A' }}</p>
         <p><strong>Serial:</strong> {{ $selectedSerial->serial_number }}</p>
-        <p><strong>Warranty Until:</strong> {{ $selectedSerial->warranty_until?->format('Y-m-d') ?? 'No warranty' }}</p>
+        <p><strong>Warranty Until:</strong> {{ $selectedSerial->warranty_until?->format('d/m/Y') ?? 'No warranty' }}</p>
     </section>
 @endif
 

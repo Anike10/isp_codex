@@ -50,11 +50,11 @@ class AccountingLedgerTest extends TestCase
             ], false);
 
         $this->assertMatchesRegularExpression(
-            '/<td>1<\/td>\s*<td>2026-07-20<\/td>/',
+            '/<td>1<\/td>\s*<td>20\/07\/2026<\/td>/',
             $response->getContent(),
         );
         $this->assertMatchesRegularExpression(
-            '/<td>2<\/td>\s*<td>2026-07-20<\/td>/',
+            '/<td>2<\/td>\s*<td>20\/07\/2026<\/td>/',
             $response->getContent(),
         );
     }
@@ -105,7 +105,7 @@ class AccountingLedgerTest extends TestCase
             ->assertSee('Showing rows 26 to 30 | Total rows: 30')
             ->assertSee('data-href="'.route('invoices.show', $invoices[26]).'"', false);
         $this->assertMatchesRegularExpression(
-            '/<td>26<\/td>\s*<td>2026-07-20<\/td>/',
+            '/<td>26<\/td>\s*<td>20\/07\/2026<\/td>/',
             $secondPage->getContent(),
         );
 
@@ -131,7 +131,7 @@ class AccountingLedgerTest extends TestCase
             ->assertSee('Print Road, Dhaka')
             ->assertSee('name="organization_id"', false)
             ->assertSee('value="2026-07-20"', false)
-            ->assertSee('Period: <strong>2026-07-20 to 2026-07-20</strong>', false)
+            ->assertSee('Period: <strong>20/07/2026 to 20/07/2026</strong>', false)
             ->assertSee('<td class="sl">1</td>', false)
             ->assertSee('<td class="sl">30</td>', false)
             ->assertSee('Print Report')

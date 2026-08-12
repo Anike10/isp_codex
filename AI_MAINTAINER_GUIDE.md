@@ -1372,6 +1372,19 @@ PPPoE sync:
 
 - Command: `php artisan mikrotik:sync-router-users`
 - Force now: `php artisan mikrotik:sync-router-users --force`
+- Explicit customer targets are stored in `customer_mikrotik_router`; one PPPoE
+  user can be assigned to multiple routers. `customers.mikrotik_router_id`
+  remains as a compatibility/primary-target field. If a customer has no pivot
+  targets, the legacy single-target or all-active-router behavior still applies.
+- The customer details `Save & sync targets` action replaces the explicit target
+  set and immediately creates or updates the PPPoE secret on every selected
+  active router.
+- Customer service status has reversible temporary overrides. `Temporary
+  inactive` preserves validity/grace data, marks the active subscription
+  inactive, records the reason, and syncs the secret to the inactive PPPoE
+  profile. `Temporary active` restores the latest subscription with a null end
+  date, records the reason, and syncs the package profile; the action can be
+  reversed again from the same customer page.
 - Run this from Windows Task Scheduler every minute; the command respects each router's own interval.
 - Active customers use package `mikrotik_profile`.
 - Inactive/due/no-package customers are not disabled.
@@ -1389,9 +1402,11 @@ PPPoE sync:
   `remote-address` during customer sync and package export; sending an empty
   value can be parsed by RouterOS as an ambiguous pool prefix. A selected pool
   must match an exact live `/ip/pool` name before export.
-- `/packages` shows a pagination-aware serial number and the App-selected
-  `default_ip_pool`; a blank value is labelled `RouterOS default / none` and
-  package search includes the pool name.
+- `/packages` shows a pagination-aware serial number and an always-visible IP
+  Pool dropdown populated from distinct `app_ip_pools.name` values. Changing
+  the dropdown saves `default_ip_pool` through the package inline-update route;
+  a blank value means `RouterOS default / none`, and package search includes
+  the pool name.
 - Package list bulk delete is conservative by default: unassigned selections
   are deleted, while assigned package names are reported and retained. Force
   Delete requires a non-selected replacement package, moves every affected

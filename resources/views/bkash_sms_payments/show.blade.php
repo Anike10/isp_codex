@@ -8,7 +8,7 @@
 <div class="topbar">
     <div>
         <h1>bKash SMS Details</h1>
-        <div class="muted">{{ $bkashSmsPayment->trx_id ?? 'No TrxID' }} - {{ $bkashSmsPayment->created_at->format('Y-m-d H:i') }}</div>
+        <div class="muted">{{ $bkashSmsPayment->trx_id ?? 'No TrxID' }} - {{ $bkashSmsPayment->created_at->format('d/m/Y H:i') }}</div>
     </div>
     <div class="actions">
         <a class="btn secondary" href="{{ route('bkash-sms-payments.create') }}">Manual Entry</a>
@@ -47,7 +47,7 @@
         <p><strong>From Number:</strong> {{ $bkashSmsPayment->customer_number ?? 'N/A' }}</p>
         <p><strong>Reference:</strong> {{ $bkashSmsPayment->reference ?? 'N/A' }}</p>
         <p><strong>TrxID:</strong> {{ $bkashSmsPayment->trx_id ?? 'N/A' }}</p>
-        <p><strong>Payment Date:</strong> {{ $bkashSmsPayment->payment_date?->format('Y-m-d') ?? 'N/A' }}</p>
+        <p><strong>Payment Date:</strong> {{ $bkashSmsPayment->payment_date?->format('d/m/Y') ?? 'N/A' }}</p>
         <p><strong>SMS Sender:</strong> {{ $bkashSmsPayment->sms_sender ?? 'N/A' }}</p>
     </section>
 

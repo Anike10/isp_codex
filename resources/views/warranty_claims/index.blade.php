@@ -48,7 +48,7 @@
                     <div class="muted">Estimate only</div>
                 @endif
             </td>
-            <td>{{ $claim->claim_date?->format('Y-m-d') }}</td>
+            <td>{{ $claim->claim_date?->format('d/m/Y') }}</td>
         </tr>
     @empty
         <tr><td colspan="8">No warranty claims found.</td></tr>

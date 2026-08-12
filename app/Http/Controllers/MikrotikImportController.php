@@ -165,7 +165,7 @@ class MikrotikImportController extends Controller
 
     private function sourceNote(MikrotikRouter $router, MikrotikImportedSecret $secret): string
     {
-        return 'Imported from MikroTik: '.$router->name.' ('.$router->ip_address.':'.$router->api_port.') at '.now()->format('Y-m-d H:i:s')."\nConnection ID: {$secret->name}\nProfile: ".($secret->profile ?: 'none')."\nService: ".($secret->service ?: 'none')."\nRouter comment: ".($secret->router_comment ?: 'none');
+        return 'Imported from MikroTik: '.$router->name.' ('.$router->ip_address.':'.$router->api_port.') at '.now()->format('d/m/Y H:i:s')."\nConnection ID: {$secret->name}\nProfile: ".($secret->profile ?: 'none')."\nService: ".($secret->service ?: 'none')."\nRouter comment: ".($secret->router_comment ?: 'none');
     }
 
     private function appendNote(?string $old, string $new): string

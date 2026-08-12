@@ -25,7 +25,7 @@
         </div>
     </div>
     <div class="fleet-metrics">
-        <div class="fleet-metric"><span>Work Date</span><strong>{{ $maintenanceLog->service_date->format('Y-m-d') }}</strong></div>
+        <div class="fleet-metric"><span>Work Date</span><strong>{{ $maintenanceLog->service_date->format('d/m/Y') }}</strong></div>
         <div class="fleet-metric"><span>Action</span><strong>{{ \App\Models\VehicleMaintenanceLog::ACTIONS[$maintenanceLog->action] ?? ucfirst($maintenanceLog->action) }}</strong></div>
         <div class="fleet-metric"><span>Cost</span><strong>{{ number_format((float)$maintenanceLog->cost,2) }}</strong></div>
         <div class="fleet-metric"><span>Mileage</span><strong>{{ $maintenanceLog->mileage !== null ? number_format($maintenanceLog->mileage).' km' : 'N/A' }}</strong></div>
@@ -33,7 +33,7 @@
 </section>
 
 @if($maintenanceLog->isFinalized())
-    <div class="final-callout"><strong>Finalized and locked.</strong> Finalized by {{ $maintenanceLog->finalizer?->name ?? 'N/A' }} on {{ $maintenanceLog->finalized_at->format('Y-m-d h:i A') }}.</div>
+    <div class="final-callout"><strong>Finalized and locked.</strong> Finalized by {{ $maintenanceLog->finalizer?->name ?? 'N/A' }} on {{ $maintenanceLog->finalized_at->format('d/m/Y h:i A') }}.</div>
 @else
     <div class="draft-callout"><strong>This record is still a draft.</strong> You can edit it and every previous version will remain in Edit History. Finalize only after checking all information.</div>
 @endif
@@ -45,8 +45,8 @@
         <div class="fleet-detail-row"><span>Work / Repair Name</span><strong>{{ $maintenanceLog->work_name ?? 'N/A' }}</strong></div>
         <div class="fleet-detail-row"><span>Workshop / Vendor</span><strong>{{ $maintenanceLog->vendor ?? 'N/A' }}</strong></div>
         <div class="fleet-detail-row"><span>Entered By</span><strong>{{ $maintenanceLog->creator?->name ?? 'N/A' }}</strong></div>
-        <div class="fleet-detail-row"><span>Entry Time</span><strong>{{ $maintenanceLog->created_at?->format('Y-m-d h:i A') ?? 'N/A' }}</strong></div>
-        <div class="fleet-detail-row"><span>Last Updated</span><strong>{{ $maintenanceLog->updated_at?->format('Y-m-d h:i A') ?? 'N/A' }}</strong></div>
+        <div class="fleet-detail-row"><span>Entry Time</span><strong>{{ $maintenanceLog->created_at?->format('d/m/Y h:i A') ?? 'N/A' }}</strong></div>
+        <div class="fleet-detail-row"><span>Last Updated</span><strong>{{ $maintenanceLog->updated_at?->format('d/m/Y h:i A') ?? 'N/A' }}</strong></div>
     </div>
     <div style="margin-top:18px"><label>What Was Done</label><div class="fleet-note">{{ $maintenanceLog->details ?? 'N/A' }}</div></div>
 </section>

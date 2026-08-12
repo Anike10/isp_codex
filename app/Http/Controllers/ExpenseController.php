@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\PaymentAccount;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use App\Services\PaymentAccountPreferenceService;
 use App\Services\PrintContextService;
 
 class ExpenseController extends Controller
@@ -60,17 +61,18 @@ class ExpenseController extends Controller
         ]);
     }
 
-    public function create()
+    public function create(Request $request, PaymentAccountPreferenceService $preferenceService)
     {
         return view('expenses.create', [
             'types' => Expense::TYPES,
             'categories' => Expense::CATEGORIES,
             'employees' => Employee::where('status', 'active')->orderBy('name')->get(),
             'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
+            'paymentDefault' => $preferenceService->forUser($request->user()),
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, PaymentAccountPreferenceService $preferenceService)
     {
         $data = $request->validate([
             'expense_type' => ['required', Rule::in(array_keys(Expense::TYPES))],
@@ -85,7 +87,10 @@ class ExpenseController extends Controller
             'expense_date' => ['required', 'date'],
             'reference' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string'],
+            'set_as_default' => ['nullable', 'boolean'],
         ]);
+        $rememberAsDefault = $request->boolean('set_as_default');
+        unset($data['set_as_default']);
 
         if ($data['payment_method'] === 'cash') {
             $data['payment_account_id'] = null;
@@ -127,6 +132,8 @@ class ExpenseController extends Controller
         $data['entry_by_type'] = 'user';
 
         Expense::create($data);
+
+        $preferenceService->remember($request->user(), $rememberAsDefault, $data['payment_method'], $data['payment_account_id']);
 
         return redirect()->route('expenses.index')->with('success', 'Expense recorded successfully.');
     }

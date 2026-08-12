@@ -15,6 +15,7 @@ use App\Models\Subscription;
 use App\Observers\RecordVersionObserver;
 use App\Services\BillingService;
 use App\Services\InventoryService;
+use App\Services\PaymentAccountPreferenceService;
 use App\Services\PaymentService;
 use App\Services\PrintContextService;
 use App\Services\RecordVersionService;
@@ -33,7 +34,7 @@ class InvoiceController extends Controller
 
     private const DEFAULT_PAYMENT_NOTE = 'Please pay the due amount by the due date. Keep this bill for your records.';
 
-    public function index(Request $request)
+    public function index(Request $request, PaymentAccountPreferenceService $preferenceService)
     {
         $generationPreviewMonth = $request->filled('billing_month')
             ? $request->input('billing_month')
@@ -100,7 +101,9 @@ class InvoiceController extends Controller
             ->orderBy('account_name')
             ->get();
 
-        return view('invoices.index', compact('invoices', 'invoiceSummary', 'generatePreviewCount', 'generationPreviewMonth', 'paymentAccounts'));
+        $paymentDefault = $preferenceService->forUser($request->user());
+
+        return view('invoices.index', compact('invoices', 'invoiceSummary', 'generatePreviewCount', 'generationPreviewMonth', 'paymentAccounts', 'paymentDefault'));
     }
 
     public function create()
@@ -367,7 +370,7 @@ class InvoiceController extends Controller
         return back()->with('success', $finalizedCount.' selected invoice(s) finalized. Editing is now locked.');
     }
 
-    public function paySelected(Request $request, PaymentService $paymentService)
+    public function paySelected(Request $request, PaymentService $paymentService, PaymentAccountPreferenceService $preferenceService)
     {
         $data = $request->validate([
             'invoice_ids' => ['required', 'array', 'min:1'],
@@ -377,7 +380,10 @@ class InvoiceController extends Controller
             'payment_account_id' => ['nullable', 'exists:payment_accounts,id'],
             'payment_date' => ['required', 'date'],
             'note' => ['nullable', 'string'],
+            'set_as_default' => ['nullable', 'boolean'],
         ]);
+        $rememberAsDefault = $request->boolean('set_as_default');
+        unset($data['set_as_default']);
 
         $invoiceIds = array_values(array_unique(array_map('intval', $data['invoice_ids'])));
         $invoices = Invoice::with('customer')->whereIn('id', $invoiceIds)->get();
@@ -420,6 +426,8 @@ class InvoiceController extends Controller
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
         }
+
+        $preferenceService->remember($request->user(), $rememberAsDefault, $data['payment_method'], $data['payment_account_id']);
 
         return back()->with('success', $invoices->count().' selected invoice(s) paid with one payment.');
     }
@@ -752,7 +760,7 @@ class InvoiceController extends Controller
                     'track_serials' => (bool) $product->track_serial_numbers,
                     'serials' => $product->serials->map(fn (ProductSerial $serial): array => [
                         'serial_number' => $serial->serial_number,
-                        'warranty_until' => $serial->warranty_until?->format('Y-m-d'),
+                        'warranty_until' => $serial->warranty_until?->format('d/m/Y'),
                         'status' => $serial->status,
                     ])->values(),
                 ];
@@ -852,7 +860,7 @@ class InvoiceController extends Controller
         }
     }
 
-    public function show(Invoice $invoice)
+    public function show(Request $request, Invoice $invoice, PaymentAccountPreferenceService $preferenceService)
     {
         $relations = ['customer', 'reseller', 'entryByUser', 'payments.account', 'allocations.payment.account', 'allocations.payment.allocations.invoice', 'items', 'printLogs.organization', 'printLogs.user'];
 
@@ -872,7 +880,9 @@ class InvoiceController extends Controller
                 ->get();
         }
 
-        return view('invoices.show', compact('invoice', 'paymentAccounts', 'versions'));
+        $paymentDefault = $preferenceService->forUser($request->user());
+
+        return view('invoices.show', compact('invoice', 'paymentAccounts', 'versions', 'paymentDefault'));
     }
 
     public function challan(Request $request, Invoice $invoice, PrintContextService $printContext)

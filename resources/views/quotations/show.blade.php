@@ -34,8 +34,8 @@
 <div class="grid two">
     <section class="card">
         <h2>Quotation</h2>
-        <p><strong>Date:</strong> {{ $quotation->quotation_date?->format('Y-m-d') }}</p>
-        <p><strong>Valid Until:</strong> {{ $quotation->valid_until?->format('Y-m-d') ?? 'Open' }}</p>
+        <p><strong>Date:</strong> {{ $quotation->quotation_date?->format('d/m/Y') }}</p>
+        <p><strong>Valid Until:</strong> {{ $quotation->valid_until?->format('d/m/Y') ?? 'Open' }}</p>
         <p><strong>Reference Month:</strong> {{ $quotation->formatted_billing_month }}</p>
         <p><strong>Subtotal:</strong> {{ number_format($quotation->subtotal, 2) }}</p>
         @if ((float) $quotation->discount > 0)<p><strong>Discount:</strong> {{ number_format($quotation->discount, 2) }}</p>@endif

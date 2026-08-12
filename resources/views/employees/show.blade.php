@@ -70,7 +70,7 @@
         <p><strong>Remaining Due:</strong> {{ number_format($monthlySalaryDue, 2) }}</p>
         <p><strong>Advance Balance:</strong> {{ number_format($monthlySalaryAdvance, 2) }}</p>
         <p><strong>Closing Balance:</strong> {{ $monthlyClosingBalance >= 0 ? 'Due ' : 'Advance ' }}{{ number_format(abs($monthlyClosingBalance), 2) }}</p>
-        <p><strong>Effective From:</strong> {{ $employee->salary_effective_from?->format('Y-m-d') ?? 'N/A' }}</p>
+        <p><strong>Effective From:</strong> {{ $employee->salary_effective_from?->format('d/m/Y') ?? 'N/A' }}</p>
     </div>
 
     <div class="card">
@@ -98,7 +98,7 @@
     <div class="card">
         <h2>Employee Details</h2>
         <p><strong>Phone:</strong> {{ $employee->phone ?? 'N/A' }}</p>
-        <p><strong>Join Date:</strong> {{ $employee->join_date?->format('Y-m-d') ?? 'N/A' }}</p>
+        <p><strong>Join Date:</strong> {{ $employee->join_date?->format('d/m/Y') ?? 'N/A' }}</p>
         <p><strong>Fleet Role:</strong> {{ $employee->fleet_role ? ucfirst($employee->fleet_role) : 'Not fleet staff' }}</p>
         <p><strong>Bonus Estimate:</strong> {{ number_format($yearlyBonusEntitlement, 2) }} / year</p>
         <p><strong>Note:</strong> {{ $employee->note ?: 'No note added.' }}</p>
@@ -112,7 +112,7 @@
         <tbody>
             @forelse ($employee->salaryRevisions as $revision)
                 <tr>
-                    <td>{{ $revision->effective_from->format('Y-m-d') }}</td>
+                    <td>{{ $revision->effective_from->format('d/m/Y') }}</td>
                     <td>{{ number_format($revision->old_salary, 2) }}</td>
                     <td>{{ number_format($revision->new_salary, 2) }}</td>
                     <td>{{ number_format((float) $revision->new_salary - (float) $revision->old_salary, 2) }}</td>
@@ -132,7 +132,7 @@
         <tbody>
             @forelse ($employee->expenses as $expense)
                 <tr data-href="{{ route('expenses.show', $expense) }}">
-                    <td>{{ $expense->expense_date->format('Y-m-d') }}</td>
+                    <td>{{ $expense->expense_date->format('d/m/Y') }}</td>
                     <td>{{ $expense->category === 'bonus' ? 'Bonus' : 'Salary' }}</td>
                     <td>{{ $expense->salary_month ?? 'N/A' }}</td>
                     <td>{{ number_format($expense->amount, 2) }}</td>

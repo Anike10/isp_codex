@@ -9,7 +9,7 @@
         'bonus_amount' => round((float) $employee->current_salary * (float) $employee->bonus_percent / 100, 2),
         'yearly_bonus_count' => $employee->yearly_bonus_count,
         'bonus_percent' => $employee->bonus_percent,
-        'salary_effective_from' => $employee->salary_effective_from?->format('Y-m-d'),
+        'salary_effective_from' => $employee->salary_effective_from?->format('d/m/Y'),
     ]]);
 
     $accountsByMethod = $paymentAccounts
@@ -19,6 +19,8 @@
             'label' => $account->account_name.' - '.$account->account_number,
         ])->values())
         ->toArray();
+    $selectedPaymentMethod = old('payment_method', $paymentDefault['payment_method'] ?? 'cash');
+    $selectedPaymentAccountId = old('payment_account_id', $paymentDefault['payment_account_id'] ?? null);
 @endphp
 
 <div class="topbar">
@@ -76,12 +78,15 @@
         <input type="number" step="0.01" min="0.01" name="amount" id="amountInput" value="{{ old('amount') }}" required>
     </div>
     <div>
-        <label>Payment Method</label>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <label>Payment Method</label>
+            @include('partials.payment_default_checkbox')
+        </div>
         <select name="payment_method" id="paymentMethod" required>
-            <option value="cash" @selected(old('payment_method', 'cash') === 'cash')>Cash</option>
-            <option value="bkash" @selected(old('payment_method') === 'bkash')>bKash</option>
-            <option value="nagad" @selected(old('payment_method') === 'nagad')>Nagad</option>
-            <option value="bank" @selected(old('payment_method') === 'bank')>Bank</option>
+            <option value="cash" @selected($selectedPaymentMethod === 'cash')>Cash</option>
+            <option value="bkash" @selected($selectedPaymentMethod === 'bkash')>bKash</option>
+            <option value="nagad" @selected($selectedPaymentMethod === 'nagad')>Nagad</option>
+            <option value="bank" @selected($selectedPaymentMethod === 'bank')>Bank</option>
         </select>
     </div>
     <div id="accountSelectWrap">
@@ -110,7 +115,7 @@
 <script>
 const accountsByMethod = @json($accountsByMethod);
 const employeesById = @json($employeesForJs);
-const oldAccountId = @json(old('payment_account_id'));
+const oldAccountId = @json($selectedPaymentAccountId);
 const expenseType = document.getElementById('expenseType');
 const categorySelect = document.getElementById('categorySelect');
 const employeeSelect = document.getElementById('employeeSelect');

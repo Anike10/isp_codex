@@ -13,6 +13,8 @@
             'label' => $account->account_name.' - '.$account->account_number,
         ])->values())
         ->toArray();
+    $selectedPaymentMethod = old('payment_method', $paymentDefault['payment_method'] ?? 'cash');
+    $selectedPaymentAccountId = old('payment_account_id', $paymentDefault['payment_account_id'] ?? null);
 @endphp
 
 <style>
@@ -309,12 +311,15 @@
                     <input type="number" step="0.01" name="amount" id="bulkPaymentAmount" form="bulkPaymentForm" readonly required>
                 </div>
                 <div>
-                    <label>Method</label>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                        <label>Method</label>
+                        @include('partials.payment_default_checkbox', ['paymentDefaultForm' => 'bulkPaymentForm'])
+                    </div>
                     <select name="payment_method" id="bulkPaymentMethod" form="bulkPaymentForm" required>
-                        <option value="cash">Cash</option>
-                        <option value="bkash">bKash</option>
-                        <option value="nagad">Nagad</option>
-                        <option value="bank">Bank</option>
+                        <option value="cash" @selected($selectedPaymentMethod === 'cash')>Cash</option>
+                        <option value="bkash" @selected($selectedPaymentMethod === 'bkash')>bKash</option>
+                        <option value="nagad" @selected($selectedPaymentMethod === 'nagad')>Nagad</option>
+                        <option value="bank" @selected($selectedPaymentMethod === 'bank')>Bank</option>
                     </select>
                 </div>
                 <div id="bulkPaymentAccountWrap">
@@ -460,6 +465,7 @@
         const bulkPaymentAccount = document.getElementById('bulkPaymentAccount');
         const bulkPaymentAccountWrap = document.getElementById('bulkPaymentAccountWrap');
         const accountsByMethod = @json($accountsByMethod);
+        const defaultPaymentAccountId = @json($selectedPaymentAccountId);
 
         function refreshFinalizeSelectedButton() {
             const selectedFinalizable = invoiceSelects.filter((input) => input.checked && input.dataset.finalizable === '1');
@@ -506,6 +512,7 @@
                 const option = document.createElement('option');
                 option.value = account.id;
                 option.textContent = account.label;
+                option.selected = String(defaultPaymentAccountId) === String(account.id);
                 bulkPaymentAccount.appendChild(option);
             });
         }

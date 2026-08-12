@@ -4,7 +4,7 @@
 <div class="topbar">
     <div>
         <h1>{{ $ticket->subject }}</h1>
-        <div class="muted">{{ $ticket->customer->name }} - {{ $ticket->created_at->format('Y-m-d') }}</div>
+        <div class="muted">{{ $ticket->customer->name }} - {{ $ticket->created_at->format('d/m/Y') }}</div>
     </div>
     <a class="btn light" href="{{ route('tickets.index') }}">Back</a>
 </div>

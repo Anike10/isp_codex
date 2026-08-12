@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\PaymentAccount;
 use App\Services\BillingService;
 use App\Services\MikrotikCustomerSyncService;
+use App\Services\PaymentAccountPreferenceService;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -16,7 +17,7 @@ use Throwable;
 
 class CustomerPaymentController extends Controller
 {
-    public function create(Customer $customer)
+    public function create(Request $request, Customer $customer, PaymentAccountPreferenceService $preferenceService)
     {
         return view('customers.payment', [
             'customer' => $customer->load('activeSubscription.package'),
@@ -27,10 +28,11 @@ class CustomerPaymentController extends Controller
                 ->get(),
             'balanceTransactions' => $customer->balanceTransactions()->latest()->limit(20)->get(),
             'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
+            'paymentDefault' => $preferenceService->forUser($request->user()),
         ]);
     }
 
-    public function store(Request $request, Customer $customer, BillingService $billingService, PaymentService $paymentService)
+    public function store(Request $request, Customer $customer, BillingService $billingService, PaymentService $paymentService, PaymentAccountPreferenceService $preferenceService)
     {
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:1'],
@@ -41,7 +43,10 @@ class CustomerPaymentController extends Controller
             'keep_as_advance' => ['nullable', 'in:1'],
             'invoice_allocations' => ['nullable', 'array'],
             'invoice_allocations.*' => ['nullable', 'numeric', 'min:0'],
+            'set_as_default' => ['nullable', 'boolean'],
         ]);
+        $rememberAsDefault = $request->boolean('set_as_default');
+        unset($data['set_as_default']);
 
         $this->logSubmittedAmount($request, $customer, $data, 'customer_payment');
         $keepAsAdvance = (string) ($data['keep_as_advance'] ?? '') === '1';
@@ -81,6 +86,8 @@ class CustomerPaymentController extends Controller
                 return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
             }
 
+            $preferenceService->remember($request->user(), $rememberAsDefault, $data['payment_method'], $data['payment_account_id']);
+
             return redirect()->route('customers.show', $customer)->with('success', 'Payment was saved as advance.');
         }
 
@@ -91,6 +98,8 @@ class CustomerPaymentController extends Controller
             } catch (InvalidArgumentException $exception) {
                 return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
             }
+
+            $preferenceService->remember($request->user(), $rememberAsDefault, $data['payment_method'], $data['payment_account_id']);
 
             return redirect()->route('customers.show', $customer)->with('success', $renewedMonths > 0
                 ? "Payment saved and {$renewedMonths} future month(s) was renewed on MikroTik."
@@ -104,6 +113,8 @@ class CustomerPaymentController extends Controller
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
         }
 
+        $preferenceService->remember($request->user(), $rememberAsDefault, $data['payment_method'], $data['payment_account_id']);
+
         return redirect()->route('customers.show', $customer)->with('success', $renewedMonths > 0
             ? "Party payment recorded successfully and {$renewedMonths} future month(s) was renewed on MikroTik."
             : 'Party payment recorded successfully.');
@@ -114,7 +125,7 @@ class CustomerPaymentController extends Controller
         return redirect()->route('customers.payments.create', $customer);
     }
 
-    public function storeAdvance(Request $request, Customer $customer, PaymentService $paymentService, BillingService $billingService)
+    public function storeAdvance(Request $request, Customer $customer, PaymentService $paymentService, BillingService $billingService, PaymentAccountPreferenceService $preferenceService)
     {
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:1'],
@@ -125,7 +136,10 @@ class CustomerPaymentController extends Controller
             'note' => ['nullable', 'string'],
             'invoice_allocations' => ['nullable', 'array'],
             'invoice_allocations.*' => ['nullable', 'numeric', 'min:0'],
+            'set_as_default' => ['nullable', 'boolean'],
         ]);
+        $rememberAsDefault = $request->boolean('set_as_default');
+        unset($data['set_as_default']);
 
         $this->logSubmittedAmount($request, $customer, $data, 'customer_advance');
 
@@ -168,6 +182,8 @@ class CustomerPaymentController extends Controller
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
         }
+
+        $preferenceService->remember($request->user(), $rememberAsDefault, $data['payment_method'], $data['payment_account_id']);
 
         return redirect()->route('customers.payments.create', $customer)->with('success', $renewedMonths > 0
             ? "Advance payment saved and {$renewedMonths} future month(s) was renewed on MikroTik."

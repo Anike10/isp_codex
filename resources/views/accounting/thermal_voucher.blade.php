@@ -76,14 +76,14 @@
         <header class="brand">
             @if($selectedOrganization->logo_url)<img src="{{ $selectedOrganization->logo_url }}" alt="{{ $selectedOrganization->name }} logo" style="max-width:28mm;max-height:14mm;margin-bottom:2mm">@endif
             <h1>{{ $selectedOrganization->name }}</h1>
-            <p>{!! nl2br(e($selectedOrganization->address ?: '')) !!}@if($selectedOrganization->mobile)<br>Mobile - {{ $selectedOrganization->mobile }}@endif @if($selectedOrganization->phone)<br>Phone - {{ $selectedOrganization->phone }}@endif @if($selectedOrganization->email)<br>{{ $selectedOrganization->email }}@endif @if($selectedOrganization->tax_id)<br>Tax/BIN - {{ $selectedOrganization->tax_id }}@endif<br>{{ now()->format('Y-m-d H:i') }}</p>
+            <p>{!! nl2br(e($selectedOrganization->address ?: '')) !!}@if($selectedOrganization->mobile)<br>Mobile - {{ $selectedOrganization->mobile }}@endif @if($selectedOrganization->phone)<br>Phone - {{ $selectedOrganization->phone }}@endif @if($selectedOrganization->email)<br>{{ $selectedOrganization->email }}@endif @if($selectedOrganization->tax_id)<br>Tax/BIN - {{ $selectedOrganization->tax_id }}@endif<br>{{ now()->format('d/m/Y H:i') }}</p>
         </header>
 
         <div class="title">{{ $voucher['title'] }}</div>
 
         <div class="section">
             <div class="row"><span class="label">Voucher</span><span class="value">{{ $voucher['voucher_no'] }}</span></div>
-            <div class="row"><span class="label">Date</span><span class="value">{{ $voucher['date']?->format('Y-m-d') }}</span></div>
+            <div class="row"><span class="label">Date</span><span class="value">{{ $voucher['date']?->format('d/m/Y') }}</span></div>
         </div>
 
         <div class="amount">

@@ -6,6 +6,7 @@ use App\Models\Invoice;
 use App\Models\CustomerBalanceTransaction;
 use App\Models\Payment;
 use App\Models\PaymentAccount;
+use App\Services\PaymentAccountPreferenceService;
 use App\Services\PaymentService;
 use App\Services\PrintContextService;
 use Illuminate\Http\Request;
@@ -72,11 +73,12 @@ class PaymentController extends Controller
         ]);
     }
 
-    public function create()
+    public function create(Request $request, PaymentAccountPreferenceService $preferenceService)
     {
         return view('payments.create', [
             'invoices' => Invoice::with('customer')->where('due_amount', '>', 0)->latest()->get(),
             'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
+            'paymentDefault' => $preferenceService->forUser($request->user()),
         ]);
     }
 
@@ -104,7 +106,7 @@ class PaymentController extends Controller
         ], $printContext->for($request)));
     }
 
-    public function store(Request $request, PaymentService $paymentService)
+    public function store(Request $request, PaymentService $paymentService, PaymentAccountPreferenceService $preferenceService)
     {
         $data = $request->validate([
             'invoice_id' => ['required', 'exists:invoices,id'],
@@ -115,7 +117,10 @@ class PaymentController extends Controller
             'new_account_number' => ['nullable', 'string', 'max:100'],
             'payment_date' => ['required', 'date'],
             'note' => ['nullable', 'string'],
+            'set_as_default' => ['nullable', 'boolean'],
         ]);
+        $rememberAsDefault = $request->boolean('set_as_default');
+        unset($data['set_as_default']);
 
         if ($data['payment_method'] === 'cash') {
             $data['payment_account_id'] = null;
@@ -160,6 +165,13 @@ class PaymentController extends Controller
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
         }
+
+        $preferenceService->remember(
+            $request->user(),
+            $rememberAsDefault,
+            $data['payment_method'],
+            $data['payment_account_id']
+        );
 
         if ($request->input('redirect_to') === 'invoice') {
             return redirect()->route('invoices.show', $invoice)->with('success', 'Payment recorded successfully.');

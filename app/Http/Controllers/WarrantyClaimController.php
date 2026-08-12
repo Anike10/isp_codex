@@ -97,7 +97,7 @@ class WarrantyClaimController extends Controller
                 'id' => $serial->id,
                 'serial_number' => $serial->serial_number,
                 'status' => $serial->status,
-                'warranty_until' => $serial->warranty_until?->format('Y-m-d'),
+                'warranty_until' => $serial->warranty_until?->format('d/m/Y'),
                 'invoice_no' => $serial->invoice?->invoice_no,
                 'product' => $serial->product ? [
                     'id' => $serial->product->id,
@@ -452,7 +452,7 @@ class WarrantyClaimController extends Controller
             'actor' => $claim->entry_by ?: 'System',
             'note' => $claim->problem_description,
             'details' => [
-                'Claim Date' => $claim->claim_date?->format('Y-m-d'),
+                'Claim Date' => $claim->claim_date?->format('d/m/Y'),
                 'Party' => $claim->customer->name.' - '.$claim->customer->phone,
                 'Product' => $claim->product?->name ?? 'Manual claim',
                 'Serial' => $claim->productSerial?->serial_number ?? 'N/A',
@@ -472,7 +472,7 @@ class WarrantyClaimController extends Controller
                 'actor' => 'System',
                 'note' => 'Device/product was marked as received for warranty processing.',
                 'details' => [
-                    'Received At' => $claim->received_at->format('Y-m-d H:i'),
+                    'Received At' => $claim->received_at->format('d/m/Y H:i'),
                     'Serial' => $claim->productSerial?->serial_number ?? 'N/A',
                 ],
             ]);
@@ -508,7 +508,7 @@ class WarrantyClaimController extends Controller
                     'Old Serial' => $claim->productSerial?->serial_number ?? 'N/A',
                     'New Serial' => $claim->replacementProductSerial->serial_number,
                     'Replacement Product' => $claim->replacementProduct?->name ?? $claim->product?->name ?? 'N/A',
-                    'Closed At' => $claim->closed_at?->format('Y-m-d H:i') ?? 'N/A',
+                    'Closed At' => $claim->closed_at?->format('d/m/Y H:i') ?? 'N/A',
                 ],
             ]);
         }
@@ -535,7 +535,7 @@ class WarrantyClaimController extends Controller
                 'actor' => $claim->entry_by ?: 'System',
                 'note' => $claim->resolution_note ?: $claim->delivery_note ?: 'Claim completed.',
                 'details' => [
-                    'Closed At' => $claim->closed_at->format('Y-m-d H:i'),
+                    'Closed At' => $claim->closed_at->format('d/m/Y H:i'),
                     'Final Status' => $this->label($claim->status),
                     'Delivery Note' => $claim->delivery_note ?: 'N/A',
                 ],

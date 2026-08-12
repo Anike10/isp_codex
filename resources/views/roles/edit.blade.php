@@ -57,8 +57,8 @@
         </div>
         <div class="role-meta">
             <div><span>Current Permissions</span><strong>{{ count($selectedPermissions) }}</strong></div>
-            <div><span>Created</span><strong>{{ $role->created_at?->format('Y-m-d') ?? 'N/A' }}</strong></div>
-            <div><span>Updated</span><strong>{{ $role->updated_at?->format('Y-m-d') ?? 'N/A' }}</strong></div>
+            <div><span>Created</span><strong>{{ $role->created_at?->format('d/m/Y') ?? 'N/A' }}</strong></div>
+            <div><span>Updated</span><strong>{{ $role->updated_at?->format('d/m/Y') ?? 'N/A' }}</strong></div>
         </div>
     </div>
 

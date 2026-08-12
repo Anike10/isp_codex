@@ -155,6 +155,33 @@ class MikrotikAddressSyncTest extends TestCase
         $this->assertSame('updated', $status);
     }
 
+    public function test_existing_secret_without_remote_address_does_not_resend_an_empty_value(): void
+    {
+        $router = $this->router();
+        $package = $this->package('Home 30', 'home-30', '30 Mbps');
+        $customer = $this->customer($router, 'party-no-remote');
+        $this->subscribe($customer, $package);
+        $customer->load('activeSubscription.package');
+
+        $client = Mockery::mock(RouterOsClient::class);
+        $client->shouldReceive('command')->once()->with('/ppp/secret/print', [
+            '?name' => 'party-no-remote', '.proplist' => '.id,profile,disabled,remote-address',
+        ])->andReturn([['.id' => '*SNR', 'profile' => 'home-30', 'disabled' => 'false']]);
+        $client->shouldReceive('command')->once()->with('/ppp/profile/print', [
+            '?name' => 'home-30', '.proplist' => '.id,remote-address,rate-limit',
+        ])->andReturn([['.id' => '*PNR', 'rate-limit' => '30M/30M']]);
+        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) =>
+            $payload['.id'] === '*SNR'
+            && $payload['profile'] === 'home-30'
+            && ! array_key_exists('remote-address', $payload)
+        ))->andReturn([]);
+
+        $method = new \ReflectionMethod(MikrotikCustomerSyncService::class, 'syncPppSecret');
+        $status = $method->invoke(app(MikrotikCustomerSyncService::class), $client, $customer, $router);
+
+        $this->assertSame('updated', $status);
+    }
+
     private function router(): MikrotikRouter
     {
         return MikrotikRouter::create([

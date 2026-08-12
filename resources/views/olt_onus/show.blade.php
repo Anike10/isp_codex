@@ -49,7 +49,7 @@
             </div>
             <div class="summary-item">
                 <span class="muted">Last Live Poll</span>
-                <strong data-field="last_live_polled_at">{{ $oltOnu->last_live_polled_at?->format('Y-m-d H:i:s') ?? 'Never' }}</strong>
+                <strong data-field="last_live_polled_at">{{ $oltOnu->last_live_polled_at?->format('d/m/Y H:i:s') ?? 'Never' }}</strong>
             </div>
             <div class="summary-item">
                 <span class="muted">Power</span>
@@ -87,13 +87,13 @@
             </div>
             <div class="summary-item">
                 <span class="muted">Last Registered</span>
-                <strong>{{ $oltOnu->last_registered_at?->format('Y-m-d H:i:s') ?? 'Never' }}</strong>
+                <strong>{{ $oltOnu->last_registered_at?->format('d/m/Y H:i:s') ?? 'Never' }}</strong>
             </div>
             <div class="summary-item">
                 <span class="muted">Last Deregistered</span>
                 <div>
                     @if ($oltOnu->last_deregistered_at)
-                        <strong>{{ $oltOnu->last_deregistered_at->format('Y-m-d H:i:s') }}</strong>
+                        <strong>{{ $oltOnu->last_deregistered_at->format('d/m/Y H:i:s') }}</strong>
                         @if ($oltOnu->last_deregister_reason)
                             <div class="muted" style="margin-top:6px;">{{ $oltOnu->last_deregister_reason }}</div>
                         @endif

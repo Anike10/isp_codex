@@ -3,7 +3,7 @@
     <tbody>
     @forelse($movements as $movement)
         <tr>
-            <td>{{ $movement->created_at?->format('Y-m-d H:i') }}</td>
+            <td>{{ $movement->created_at?->format('d/m/Y H:i') }}</td>
             <td>
                 @if ($movement->product)
                     <a href="{{ route('products.show', $movement->product) }}">{{ $movement->product->name }}</a>

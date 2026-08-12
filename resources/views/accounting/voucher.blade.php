@@ -70,7 +70,7 @@
         <div class="company">
             @if($selectedOrganization->logo_url)<img src="{{ $selectedOrganization->logo_url }}" alt="{{ $selectedOrganization->name }} logo" style="max-width:80px;max-height:46px;margin-bottom:6px">@endif
             <h1>{{ $selectedOrganization->name }}</h1>
-            <p>{!! nl2br(e($selectedOrganization->address ?: '')) !!}@if($selectedOrganization->mobile)<br>Mobile - {{ $selectedOrganization->mobile }}@endif @if($selectedOrganization->phone)<br>Phone - {{ $selectedOrganization->phone }}@endif @if($selectedOrganization->email)<br>{{ $selectedOrganization->email }}@endif @if($selectedOrganization->website)<br>{{ $selectedOrganization->website }}@endif @if($selectedOrganization->tax_id)<br>Tax/BIN - {{ $selectedOrganization->tax_id }}@endif<br>Generated: {{ now()->format('Y-m-d H:i') }}</p>
+            <p>{!! nl2br(e($selectedOrganization->address ?: '')) !!}@if($selectedOrganization->mobile)<br>Mobile - {{ $selectedOrganization->mobile }}@endif @if($selectedOrganization->phone)<br>Phone - {{ $selectedOrganization->phone }}@endif @if($selectedOrganization->email)<br>{{ $selectedOrganization->email }}@endif @if($selectedOrganization->website)<br>{{ $selectedOrganization->website }}@endif @if($selectedOrganization->tax_id)<br>Tax/BIN - {{ $selectedOrganization->tax_id }}@endif<br>Generated: {{ now()->format('d/m/Y H:i') }}</p>
         </div>
         <div class="voucher-title">
             <h2>{{ $voucher['title'] }}</h2>
@@ -87,7 +87,7 @@
         <section class="box">
             <h3>Voucher Details</h3>
             <div class="box-body">
-                <div class="kv"><span class="muted">Date</span><span class="strong">{{ $voucher['date']?->format('Y-m-d') }}</span></div>
+                <div class="kv"><span class="muted">Date</span><span class="strong">{{ $voucher['date']?->format('d/m/Y') }}</span></div>
                 <div class="kv"><span class="muted">Type</span><span class="strong">{{ $voucher['type'] }}</span></div>
                 <div class="kv"><span class="muted">Reference</span><span class="strong">{{ $voucher['reference'] }}</span></div>
             </div>
@@ -117,7 +117,7 @@
             <h3>Prepared By</h3>
             <div class="box-body">
                 <div class="kv"><span class="muted">System</span><span class="strong">{{ $selectedOrganization->name }}</span></div>
-                <div class="kv"><span class="muted">Printed</span><span class="strong">{{ now()->format('Y-m-d H:i') }}</span></div>
+                <div class="kv"><span class="muted">Printed</span><span class="strong">{{ now()->format('d/m/Y H:i') }}</span></div>
             </div>
         </section>
     </div>

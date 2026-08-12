@@ -14,7 +14,7 @@
 <div class="topbar">
     <div>
         <h1>Payment #{{ $payment->id }}</h1>
-        <div class="muted">{{ $payment->customer->name }} - {{ $payment->payment_date?->format('Y-m-d') }}</div>
+        <div class="muted">{{ $payment->customer->name }} - {{ $payment->payment_date?->format('d/m/Y') }}</div>
     </div>
     <div class="actions">
         <a class="btn" href="{{ route('payments.voucher', $payment) }}">Voucher</a>
@@ -27,9 +27,9 @@
     <section class="card">
         <h2>Payment Details</h2>
         <p><strong>Amount:</strong> {{ number_format($payment->amount, 2) }}</p>
-        <p><strong>Date:</strong> {{ $payment->payment_date?->format('Y-m-d') }}</p>
+        <p><strong>Date:</strong> {{ $payment->payment_date?->format('d/m/Y') }}</p>
         <p><strong>Entered By:</strong> {{ $payment->entered_by_label }}</p>
-        <p><strong>Entered At:</strong> {{ $payment->created_at?->format('Y-m-d h:i:s A') }}</p>
+        <p><strong>Entered At:</strong> {{ $payment->created_at?->format('d/m/Y h:i:s A') }}</p>
         <p><strong>Method:</strong> {{ ucfirst($payment->payment_method) }}</p>
         <p><strong>Account:</strong> {{ $payment->account ? $payment->account->account_name.' - '.$payment->account->account_number : 'Cash Ledger' }}</p>
         <p><strong>Reference:</strong> Payment #{{ $payment->id }}</p>
@@ -71,7 +71,7 @@
                     @endif
                 </td>
                 <td>{{ $allocation->invoice->formatted_billing_month }}</td>
-                <td>{{ $allocation->allocated_at?->format('Y-m-d') }}</td>
+                <td>{{ $allocation->allocated_at?->format('d/m/Y') }}</td>
                 <td>{{ number_format($allocation->amount, 2) }}</td>
                 <td>{{ $allocation->note }}</td>
             </tr>

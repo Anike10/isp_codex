@@ -147,6 +147,12 @@ php artisan migrate --force
 php artisan optimize:clear
 ```
 
+The multi-router customer assignment feature requires migration
+`2026_08_12_000001_create_customer_mikrotik_router_table.php`. It creates the
+many-to-many target table and backfills every existing non-null
+`customers.mikrotik_router_id`. After deployment, run `php artisan migrate
+--force` before opening customer details or running MikroTik sync.
+
 If Composer dependencies changed:
 
 ```bash

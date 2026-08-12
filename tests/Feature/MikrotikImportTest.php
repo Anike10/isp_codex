@@ -169,7 +169,7 @@ class MikrotikImportTest extends TestCase
             ->get(route('mikrotik-routers.edit', $router))
             ->assertOk()
             ->assertSee('name="router_api_username"', false)
-            ->assertSee('data-saved-username="admin"', false)
+            ->assertSee('name="router_api_username" value="admin"', false)
             ->assertSee('name="router_api_password"', false);
 
         $this->actingAs($user)->put(route('mikrotik-routers.update', $router), [

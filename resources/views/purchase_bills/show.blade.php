@@ -4,7 +4,7 @@
 <div class="topbar">
     <div>
         <h1>{{ $purchaseBill->bill_no }}</h1>
-        <div class="muted">{{ $purchaseBill->purchase_date->format('Y-m-d') }} - {{ $purchaseBill->party?->name ?? 'No vendor selected' }}</div>
+        <div class="muted">{{ $purchaseBill->purchase_date->format('d/m/Y') }} - {{ $purchaseBill->party?->name ?? 'No vendor selected' }}</div>
         <div style="margin-top:8px">
             @if ($purchaseBill->isFinalized())
                 <span class="badge active">Final</span>
@@ -32,8 +32,8 @@
     <div class="card stat"><span class="muted">Vendor Party</span><strong style="font-size:18px">{{ $purchaseBill->party?->name ?? 'N/A' }}</strong></div>
     <div class="card stat"><span class="muted">Items</span><strong>{{ $purchaseBill->items->count() }}</strong></div>
     <div class="card stat"><span class="muted">Total</span><strong>{{ number_format($purchaseBill->subtotal, 2) }}</strong></div>
-    <div class="card stat"><span class="muted">Date</span><strong style="font-size:18px">{{ $purchaseBill->purchase_date->format('Y-m-d') }}</strong></div>
-    <div class="card stat"><span class="muted">Finalized</span><strong style="font-size:18px">{{ $purchaseBill->finalized_at?->format('Y-m-d H:i') ?? 'Not finalized' }}</strong></div>
+    <div class="card stat"><span class="muted">Date</span><strong style="font-size:18px">{{ $purchaseBill->purchase_date->format('d/m/Y') }}</strong></div>
+    <div class="card stat"><span class="muted">Finalized</span><strong style="font-size:18px">{{ $purchaseBill->finalized_at?->format('d/m/Y H:i') ?? 'Not finalized' }}</strong></div>
     <div class="card stat"><span class="muted">Bill / Invoice Copy</span><strong style="font-size:16px">{{ $purchaseBill->document_name ?? 'Not attached' }}</strong></div>
 </div>
 
@@ -70,7 +70,7 @@
                 </td>
                 <td>
                     @forelse ($item->serials as $serial)
-                        <div><span class="badge">{{ $serial->serial_number }}</span> <span class="muted">{{ $serial->warranty_until ? 'Warranty until '.$serial->warranty_until->format('Y-m-d') : 'No warranty date' }}</span></div>
+                        <div><span class="badge">{{ $serial->serial_number }}</span> <span class="muted">{{ $serial->warranty_until ? 'Warranty until '.$serial->warranty_until->format('d/m/Y') : 'No warranty date' }}</span></div>
                     @empty
                         <span class="muted">No serial tracked</span>
                     @endforelse
