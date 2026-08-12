@@ -1025,6 +1025,8 @@
             </details>
         </section>
     @endif
+
+    @include('customers.partials.map_location', ['editable' => false])
 </div>
 
 <script>

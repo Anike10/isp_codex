@@ -1,0 +1,198 @@
+.party-location-card {
+    overflow: hidden;
+    margin-top: 16px;
+    padding: 0;
+    border: 1px solid #b8d8d2;
+    border-radius: 16px;
+    background: linear-gradient(145deg, #f4fbf9 0%, #ffffff 58%, #eef7f5 100%);
+    box-shadow: 0 16px 40px rgba(15, 118, 110, .1);
+}
+
+.form-grid > .party-location-card {
+    margin-top: 0;
+}
+
+.party-location-card--view {
+    width: 100%;
+}
+
+.party-location-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 20px;
+}
+
+.party-location-head h2 {
+    margin: 3px 0 5px;
+    color: #123c38;
+    font-size: 22px;
+}
+
+.party-location-head p {
+    margin: 0;
+    color: #52716d;
+}
+
+.party-location-kicker {
+    color: #0f766e;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.party-location-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+#partyLocationPicker {
+    width: 100%;
+    min-height: 380px;
+    border-block: 1px solid #b8d8d2;
+    background: #dcebea;
+}
+
+.party-map-style-panel {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 20px;
+    border-top: 1px solid #d4e7e3;
+    background: rgba(255, 255, 255, .76);
+}
+
+.party-map-style-panel > strong {
+    flex: 0 0 auto;
+    color: #123c38;
+    font-size: 13px;
+}
+
+.party-map-style-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.party-map-style-options button {
+    min-height: 34px;
+    padding: 6px 11px;
+    border: 1px solid #b8d8d2;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #355d58;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.party-map-style-options button.active {
+    border-color: #0f766e;
+    background: #0f766e;
+    color: #ffffff;
+    box-shadow: 0 5px 14px rgba(15, 118, 110, .2);
+}
+
+.party-coordinate-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+    align-items: end;
+    gap: 14px;
+    padding: 18px 20px 20px;
+}
+
+.party-coordinate-grid label {
+    margin: 0;
+}
+
+.party-location-state {
+    align-self: center;
+    min-width: 190px;
+    padding: 10px 12px;
+    border: 1px dashed #9abcb7;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .72);
+    color: #667085;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.party-location-state.selected {
+    border-style: solid;
+    border-color: #6fc5b9;
+    background: #e7f8f4;
+    color: #0f766e;
+}
+
+.party-location-share {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: end;
+    gap: 10px;
+    padding: 0 20px 20px;
+}
+
+.party-location-share label {
+    margin: 0;
+}
+
+.party-location-share input,
+.party-location-share textarea {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.party-location-share textarea {
+    min-height: 136px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+.party-whatsapp {
+    border-color: #128c7e;
+    background: #128c7e;
+    color: #ffffff;
+}
+
+.party-whatsapp:hover {
+    background: #0d756a;
+    color: #ffffff;
+}
+
+.party-whatsapp.disabled {
+    pointer-events: none;
+    opacity: .5;
+}
+
+#partyLocationPicker .maplibregl-canvas {
+    cursor: crosshair;
+}
+
+@media (max-width: 760px) {
+    .party-location-head,
+    .party-coordinate-grid,
+    .party-location-share {
+        grid-template-columns: 1fr;
+    }
+
+    .party-location-head {
+        display: grid;
+    }
+
+    .party-location-actions {
+        justify-content: flex-start;
+    }
+
+    .party-map-style-panel {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    #partyLocationPicker {
+        min-height: 320px;
+    }
+}

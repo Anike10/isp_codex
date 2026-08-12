@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Customer;
 use App\Models\NetworkMapFeature;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,10 +18,11 @@ class NetworkMapController extends Controller
 
     private const LINK_TYPES = ['fiber_cable'];
 
-    public function show(): View
+    public function show(Request $request): View
     {
         return view('network_map.index', [
             'title' => 'FTTX Network Map',
+            'initialCustomerId' => $request->integer('customer_id') ?: null,
         ]);
     }
 
@@ -30,6 +32,50 @@ class NetworkMapController extends Controller
             ->latest('updated_at')
             ->get()
             ->map(fn (NetworkMapFeature $feature) => $feature->toGeoJsonFeature())
+            ->values();
+
+        return response()->json([
+            'type' => 'FeatureCollection',
+            'features' => $features,
+        ]);
+    }
+
+    public function customers(): JsonResponse
+    {
+        $features = Customer::query()
+            ->whereNotNull('map_latitude')
+            ->whereNotNull('map_longitude')
+            ->orderBy('id')
+            ->get([
+                'id',
+                'name',
+                'phone',
+                'connection_id',
+                'mikrotik_username',
+                'address',
+                'status',
+                'map_latitude',
+                'map_longitude',
+            ])
+            ->map(fn (Customer $customer) => [
+                'type' => 'Feature',
+                'id' => 'customer-'.$customer->id,
+                'geometry' => [
+                    'type' => 'Point',
+                    'coordinates' => [(float) $customer->map_longitude, (float) $customer->map_latitude],
+                ],
+                'properties' => [
+                    'customer_id' => $customer->id,
+                    'name' => $customer->name,
+                    'phone' => $customer->phone,
+                    'connection_id' => $customer->connection_id,
+                    'mikrotik_username' => $customer->mikrotik_username,
+                    'address' => $customer->address,
+                    'status' => $customer->status,
+                    'show_url' => route('customers.show', $customer),
+                    'edit_url' => route('customers.edit', $customer),
+                ],
+            ])
             ->values();
 
         return response()->json([

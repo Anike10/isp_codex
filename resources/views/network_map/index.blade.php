@@ -41,6 +41,15 @@
             </div>
 
             <div class="tool-section">
+                <h2>Party Location</h2>
+                <form class="location-search" id="customerSearch">
+                    <input type="search" id="customerIdQuery" inputmode="numeric" placeholder="Enter party ID, e.g. 346" value="{{ $initialCustomerId }}">
+                    <button type="submit" class="btn secondary">Show Party</button>
+                </form>
+                <div class="search-results" id="customerSearchResult" hidden></div>
+            </div>
+
+            <div class="tool-section">
                 <h2>Location Search</h2>
                 <form class="location-search" id="locationSearch">
                     <input type="search" id="locationQuery" placeholder="Search location, road, village">
@@ -115,11 +124,13 @@
     <script>
         window.NETWORK_MAP_CONFIG = {
             indexUrl: @json(route('network-map.features.index')),
+            customersUrl: @json(route('network-map.customers.index')),
             storeUrl: @json(route('network-map.features.store')),
             photoUploadUrl: @json(route('network-map.photos.store')),
+            initialCustomerId: @json($initialCustomerId),
             csrfToken: @json(csrf_token()),
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map.js') }}?v=20260620-11"></script>
+    <script src="{{ asset('js/network-map.js') }}?v=20260813-2"></script>
 @endsection

@@ -182,6 +182,7 @@ Route::middleware('auth')->group(function () {
         Route::patch('ip-pools/{appIpPool}', [MikrotikRouterDataController::class, 'updateGlobalPool'])->name('ip-pools.update');
         Route::delete('ip-pools/{appIpPool}', [MikrotikRouterDataController::class, 'deleteGlobalPool'])->name('ip-pools.destroy');
         Route::get('network-map', [NetworkMapController::class, 'show'])->name('network-map.index');
+        Route::get('network-map/customers', [NetworkMapController::class, 'customers'])->name('network-map.customers.index');
         Route::get('network-map/features', [NetworkMapController::class, 'index'])->name('network-map.features.index');
         Route::post('network-map/features', [NetworkMapController::class, 'store'])->name('network-map.features.store');
         Route::post('network-map/photos', [NetworkMapController::class, 'uploadPhotos'])->name('network-map.photos.store');

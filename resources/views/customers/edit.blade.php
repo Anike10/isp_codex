@@ -56,6 +56,7 @@
         <span class="muted">Required only when Fixed IP is selected.</span>
     </div>
     <div class="full"><label>Address</label><textarea name="address" required>{{ old('address', $customer->address) }}</textarea></div>
+    @include('customers.partials.map_location', ['editable' => true])
     <div class="full"><label>Note</label><textarea name="notes">{{ old('notes', $customer->notes) }}</textarea></div>
     <div>
         <label>Status</label>

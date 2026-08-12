@@ -154,6 +154,8 @@ class CustomerController extends Controller
             'email' => ['nullable', 'email', 'max:255'],
             'connection_id' => ['required_with:internet_package_id', 'required_if:use_fixed_ip,1', 'nullable', 'string', 'max:100', Rule::unique('customers', 'connection_id')->ignore($customer->id)],
             'address' => ['required', 'string'],
+            'map_latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:map_longitude'],
+            'map_longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:map_latitude'],
             'notes' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
             'is_customer' => ['nullable', 'boolean'],

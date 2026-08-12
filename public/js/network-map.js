@@ -1,10 +1,10 @@
 (function () {
     const config = window.NETWORK_MAP_CONFIG;
     const emptyCollection = () => ({ type: 'FeatureCollection', features: [] });
-    const defaultViewStorageKey = 'network-map-default-view';
+    const defaultViewStorageKey = 'network-map-default-view-kushtia-v2';
     const fallbackDefaultView = {
-        center: [89.122, 23.9013],
-        zoom: 17,
+        center: [89.1219, 23.9013],
+        zoom: 14,
     };
     const visibilityStorageKey = 'network-map-visible-types';
     const hiddenFeaturesStorageKey = 'network-map-hidden-features';
@@ -31,6 +31,8 @@
         visibleTypes: new Set(['router', 'switch', 'olt', 'splitter', 'tj_box', 'onu', 'fiber_cable']),
         hiddenFeatureIds: new Set(),
         features: new Map(),
+        customerFeatures: new Map(),
+        customerPopup: null,
         editingFeatureId: null,
         dirty: false,
     };
@@ -283,6 +285,7 @@
     function onMapLoad() {
         addNetworkLayers();
         loadTopology();
+        loadCustomerLocations();
 
         state.map.on('click', handleMapClick);
         state.map.on('dblclick', function (event) {
@@ -299,6 +302,8 @@
         });
         state.map.on('mouseenter', 'network-nodes-circle', showHoverDetails);
         state.map.on('mouseleave', 'network-nodes-circle', hideHoverDetails);
+        state.map.on('mouseenter', 'customer-locations-circle', () => { state.map.getCanvas().style.cursor = 'pointer'; });
+        state.map.on('mouseleave', 'customer-locations-circle', () => { state.map.getCanvas().style.cursor = ''; });
         state.map.on('mouseenter', 'network-links-line-hit', showHoverDetails);
         state.map.on('mouseleave', 'network-links-line-hit', hideHoverDetails);
         state.map.on('mousedown', 'network-nodes-circle', startNodeDrag);
@@ -315,6 +320,7 @@
 
     function addNetworkLayers() {
         state.map.addSource('network-nodes', { type: 'geojson', data: emptyCollection() });
+        state.map.addSource('customer-locations', { type: 'geojson', data: emptyCollection() });
         state.map.addSource('network-links', { type: 'geojson', data: emptyCollection() });
         state.map.addSource('endpoint-core-links', { type: 'geojson', data: emptyCollection() });
         state.map.addSource('draft-line', { type: 'geojson', data: emptyCollection() });
@@ -459,6 +465,49 @@
                 'text-halo-width': 1.5,
             },
         });
+
+        state.map.addLayer({
+            id: 'customer-locations-halo',
+            type: 'circle',
+            source: 'customer-locations',
+            paint: {
+                'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 9, 16, 16],
+                'circle-color': 'rgba(15, 118, 110, .2)',
+                'circle-stroke-color': 'rgba(15, 118, 110, .36)',
+                'circle-stroke-width': 2,
+            },
+        });
+
+        state.map.addLayer({
+            id: 'customer-locations-circle',
+            type: 'circle',
+            source: 'customer-locations',
+            paint: {
+                'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 16, 9],
+                'circle-color': ['case', ['==', ['get', 'status'], 'active'], '#0f766e', '#667085'],
+                'circle-stroke-color': '#ffffff',
+                'circle-stroke-width': 2,
+            },
+        });
+
+        state.map.addLayer({
+            id: 'customer-locations-label',
+            type: 'symbol',
+            source: 'customer-locations',
+            minzoom: 13,
+            layout: {
+                'text-field': ['concat', '#', ['to-string', ['get', 'customer_id']], ' ', ['get', 'name']],
+                'text-size': 12,
+                'text-offset': [0, 1.25],
+                'text-anchor': 'top',
+                'text-allow-overlap': false,
+            },
+            paint: {
+                'text-color': '#134e4a',
+                'text-halo-color': '#ffffff',
+                'text-halo-width': 1.5,
+            },
+        });
     }
 
     function bindUi() {
@@ -487,6 +536,7 @@
         document.getElementById('cancelDraft').addEventListener('click', cancelDrawing);
         document.getElementById('saveTopology').addEventListener('click', persistTopology);
         document.getElementById('exportGeojson').addEventListener('click', toggleGeoJsonPreview);
+        document.getElementById('customerSearch').addEventListener('submit', searchCustomer);
         document.getElementById('locationSearch').addEventListener('submit', searchLocation);
         document.getElementById('defaultViewForm').addEventListener('submit', applyDefaultViewForm);
         document.getElementById('useCurrentView').addEventListener('click', saveCurrentDefaultView);
@@ -953,6 +1003,82 @@
         setStatus(`Location selected: ${result.display_name}`);
     }
 
+    async function loadCustomerLocations() {
+        try {
+            const response = await fetch(config.customersUrl, { headers: { Accept: 'application/json' } });
+            if (!response.ok) throw new Error(await responseErrorMessage(response, 'Unable to load party locations.'));
+
+            const collection = await response.json();
+            state.customerFeatures = new Map((collection.features || []).map((feature) => [String(feature.properties.customer_id), feature]));
+            setSourceData('customer-locations', collection);
+
+            if (config.initialCustomerId) {
+                focusCustomer(String(config.initialCustomerId));
+            }
+        } catch (error) {
+            setCustomerSearchResult(error.message, true);
+        }
+    }
+
+    function searchCustomer(event) {
+        event.preventDefault();
+        const input = document.getElementById('customerIdQuery');
+        const customerId = input.value.trim();
+
+        if (!/^\d+$/.test(customerId)) {
+            setCustomerSearchResult('Enter a valid numeric party ID.', true);
+            return;
+        }
+
+        focusCustomer(customerId);
+    }
+
+    function focusCustomer(customerId) {
+        const feature = state.customerFeatures.get(String(customerId));
+        if (!feature) {
+            setCustomerSearchResult(`Party #${customerId} has no saved map location.`, true);
+            setStatus(`No map location saved for party #${customerId}.`);
+            return false;
+        }
+
+        state.map.flyTo({
+            center: feature.geometry.coordinates,
+            zoom: Math.max(state.map.getZoom(), 17),
+            duration: 850,
+        });
+        showCustomerPopup(feature);
+        setCustomerSearchResult(`Showing #${customerId} - ${feature.properties.name}.`);
+        setStatus(`Party #${customerId} selected on the map.`);
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('customer_id', customerId);
+        window.history.replaceState({}, '', url);
+        return true;
+    }
+
+    function showCustomerPopup(feature) {
+        const properties = feature.properties || {};
+        state.customerPopup?.remove();
+        state.customerPopup = new maplibregl.Popup({ offset: 16 })
+            .setLngLat(feature.geometry.coordinates)
+            .setHTML(`
+                <p class="popup-title">#${escapeHtml(properties.customer_id)} ${escapeHtml(properties.name)}</p>
+                <p class="popup-meta">${escapeHtml(properties.status || 'unknown')} - ${escapeHtml(properties.mikrotik_username || properties.connection_id || 'No user ID')}</p>
+                <dl class="popup-details">
+                    <div><dt>Phone</dt><dd>${escapeHtml(properties.phone || 'Not provided')}</dd></div>
+                    <div><dt>Address</dt><dd>${escapeHtml(properties.address || 'Not provided')}</dd></div>
+                    <div><dt>Actions</dt><dd><a href="${escapeHtml(properties.show_url)}">View</a> | <a href="${escapeHtml(properties.edit_url)}">Edit location</a></dd></div>
+                </dl>
+            `)
+            .addTo(state.map);
+    }
+
+    function setCustomerSearchResult(message, isError = false) {
+        const panel = document.getElementById('customerSearchResult');
+        panel.hidden = false;
+        panel.innerHTML = `<div class="search-empty${isError ? ' error' : ''}">${escapeHtml(message)}</div>`;
+    }
+
     async function loadTopology() {
         try {
             const response = await fetch(config.indexUrl, { headers: { Accept: 'application/json' } });
@@ -1017,10 +1143,19 @@
         }
 
         const clicked = state.map.queryRenderedFeatures(event.point, {
-            layers: ['network-nodes-circle', 'network-links-line-hit'],
+            layers: ['customer-locations-circle', 'network-nodes-circle', 'network-links-line-hit'],
         });
 
         if (clicked.length) {
+            if (clicked[0].layer.id === 'customer-locations-circle') {
+                const customer = state.customerFeatures.get(String(clicked[0].properties.customer_id));
+                if (customer) {
+                    document.getElementById('customerIdQuery').value = customer.properties.customer_id;
+                    focusCustomer(String(customer.properties.customer_id));
+                }
+                return;
+            }
+
             const featureId = clicked[0].properties.id;
             const feature = state.features.get(featureId);
             if (state.pendingEndpointLink && feature?.properties.component_type === 'tj_box') {
