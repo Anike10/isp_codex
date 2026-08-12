@@ -16,7 +16,7 @@
 @endphp
 
 <link rel="stylesheet" href="{{ asset('css/maplibre-gl.css') }}?v=4.7.1">
-<link rel="stylesheet" href="{{ asset('css/customer-location-picker.css') }}?v=20260813-2">
+<link rel="stylesheet" href="{{ asset('css/customer-location-picker.css') }}?v=20260813-3">
 
 <section
     class="party-location-card {{ $editable ? 'full' : 'party-location-card--view' }}"
@@ -78,4 +78,4 @@
 </section>
 
 <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-<script src="{{ asset('js/customer-location-map.js') }}?v=20260813-4"></script>
+<script src="{{ asset('js/customer-location-map.js') }}?v=20260813-5"></script>
