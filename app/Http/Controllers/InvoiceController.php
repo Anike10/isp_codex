@@ -1005,9 +1005,7 @@ class InvoiceController extends Controller
 
     public function editPaymentNoteDefault()
     {
-        return view('invoices.payment_note_default', [
-            'paymentNote' => $this->defaultPaymentNote(),
-        ]);
+        return redirect()->route('organizations.edit', 1);
     }
 
     public function updatePaymentNoteDefault(Request $request)
@@ -1019,7 +1017,7 @@ class InvoiceController extends Controller
         AppSetting::setValue(self::PAYMENT_NOTE_SETTING_KEY, $data['payment_note']);
 
         return redirect()
-            ->route('invoices.payment-note-default.edit')
+            ->route('organizations.edit', 1)
             ->with('success', 'Default payment note updated successfully.');
     }
 

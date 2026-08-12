@@ -735,7 +735,7 @@ function enforceManualLimits(totalAmount) {
         const dueAfter = Math.max(0, totalDue - allocatedTotal);
         const advanceAfter = currentAdvance + amount - allocatedTotal;
         const netAfter = advanceAfter - dueAfter;
-        const shouldTreatAsAdvance = keepAsAdvance.checked || allocatedTotal > 0;
+        const shouldTreatAsAdvance = keepAsAdvance.checked;
 
         summaryAfter.textContent = money(netAfter);
         previewDue.textContent = money(dueAfter);

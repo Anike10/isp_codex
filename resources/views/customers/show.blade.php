@@ -644,9 +644,12 @@
                     <form method="post" action="{{ route('customers.advance-renewal.store', $customer) }}">
                         @csrf
                         <div class="action-row">
-                            <button class="btn" type="submit" @disabled($daysRemaining !== null && $daysRemaining >= 0)>
+                            <button class="btn" type="submit">
                                 Renew 1 month from advance
                             </button>
+                            @if ($daysRemaining !== null && $daysRemaining >= 0)
+                                <small class="muted">Current validity is {{ $daysRemaining }} day(s) remaining; renewal will extend from current date.</small>
+                            @endif
                         </div>
                     </form>
                 </div>

@@ -35,7 +35,14 @@ class CustomerPaymentController extends Controller
         ]);
     }
 
-    public function store(Request $request, Customer $customer, BillingService $billingService, PaymentService $paymentService, AdvanceRenewalService $advanceRenewalService, PaymentAccountPreferenceService $preferenceService)
+    public function store(
+        Request $request,
+        Customer $customer,
+        BillingService $billingService,
+        PaymentService $paymentService,
+        AdvanceRenewalService $advanceRenewalService,
+        PaymentAccountPreferenceService $preferenceService,
+    )
     {
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:1'],
@@ -95,33 +102,47 @@ class CustomerPaymentController extends Controller
         }
 
         if (! $invoice) {
+            $paymentAmount = (float) $data['amount'];
+            $renewedMonths = 0;
             try {
                 $paymentService->addAdvanceCredit($customer, $data);
-                $renewedMonths = $advanceRenewalService->renew(
-                    $customer,
-                    $data['payment_date'],
-                    24,
-                    'Automatic renewal from advance balance for remembered package.',
-                );
+                if ($paymentAmount > 0) {
+                    $renewedMonths = $advanceRenewalService->renewFromAmount(
+                        $customer,
+                        $data['payment_date'],
+                        $paymentAmount,
+                        24,
+                        'Automatic renewal from the newly paid amount.',
+                    );
+                }
             } catch (InvalidArgumentException $exception) {
                 return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
             }
 
             $preferenceService->remember($request->user(), $rememberAsDefault, $data['payment_method'], $data['payment_account_id']);
 
-            return redirect()->route('customers.show', $customer)->with('success', $renewedMonths > 0
-                ? "Payment saved and {$renewedMonths} future month(s) was renewed on MikroTik."
-                : 'No due invoice found. Payment was added to party advance balance.');
+            if ($renewedMonths > 0) {
+                return redirect()->route('customers.show', $customer)->with('success', "Payment saved and {$renewedMonths} future month(s) was renewed from this payment.");
+            }
+
+            return redirect()->route('customers.show', $customer)->with('success', 'No due invoice found. Payment was added to party advance balance.');
         }
 
         try {
-            $paymentService->recordPayment($invoice, $data);
-            $renewedMonths = $advanceRenewalService->renew(
-                $customer,
-                $data['payment_date'],
-                24,
-                'Automatic renewal from advance balance for remembered package.',
-            );
+            $payment = $paymentService->recordPayment($invoice, $data);
+            $renewAmount = round((float) $payment->balanceTransactions()
+                ->where('direction', 'credit')
+                ->sum('amount'), 2);
+            $renewedMonths = 0;
+            if ($renewAmount > 0) {
+                $renewedMonths = $advanceRenewalService->renewFromAmount(
+                    $customer,
+                    $data['payment_date'],
+                    $renewAmount,
+                    24,
+                    'Automatic renewal from the newly paid amount.',
+                );
+            }
         } catch (InvalidArgumentException $exception) {
             return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
         }
@@ -129,7 +150,7 @@ class CustomerPaymentController extends Controller
         $preferenceService->remember($request->user(), $rememberAsDefault, $data['payment_method'], $data['payment_account_id']);
 
         return redirect()->route('customers.show', $customer)->with('success', $renewedMonths > 0
-            ? "Party payment recorded successfully and {$renewedMonths} future month(s) was renewed on MikroTik."
+            ? "Party payment recorded successfully and {$renewedMonths} future month(s) was renewed from this payment."
             : 'Party payment recorded successfully.');
     }
 

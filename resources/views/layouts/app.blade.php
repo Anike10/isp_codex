@@ -291,7 +291,7 @@
                             <a href="{{ route('quotations.create') }}">Create Quotation</a>
                         @endif
                         @if ($canMenu('payment_note_default'))
-                            <a href="{{ route('invoices.payment-note-default.edit') }}">Payment Note Default</a>
+                            <a href="{{ route('organizations.edit', 1) }}">Payment Note Default</a>
                         @endif
                         @if ($canMenu('organizations'))
                             <a href="{{ route('organizations.index') }}">Organizations</a>

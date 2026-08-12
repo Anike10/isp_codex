@@ -103,4 +103,99 @@ class AdvanceRenewalService
 
         return $renewedMonths;
     }
+
+    /**
+     * Renew from a specific amount without using existing advance balance first.
+     * Useful for applying only the newly paid amount while keeping old advance
+     * untouched for manual processing.
+     */
+    public function renewFromAmount(
+        Customer $customer,
+        string $paymentDate,
+        float $availableAmount,
+        int $maxRenewals = 24,
+        ?string $note = null,
+    ): int {
+        $availableAmount = max(0, round((float) $availableAmount, 2));
+        $maxRenewals = max(1, min(24, $maxRenewals));
+        $note = trim((string) ($note ?: 'Renewal from available amount.'));
+
+        $renewedMonths = DB::transaction(function () use ($customer, $paymentDate, $availableAmount, $maxRenewals, $note): int {
+            $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+            $renewedMonths = 0;
+            $pool = $availableAmount;
+
+            for ($step = 0; $step < $maxRenewals; $step++) {
+                $customer->refresh();
+
+                if ((float) Invoice::query()
+                    ->where('customer_id', $customer->id)
+                    ->where('due_amount', '>', 0)
+                    ->sum('due_amount') > 0) {
+                    break;
+                }
+
+                if ($pool <= 0) {
+                    break;
+                }
+
+                $renewalInvoice = $this->billingService->generateNextRenewalServiceBillForCustomer(
+                    $customer,
+                    $paymentDate,
+                    $pool,
+                );
+
+                if (! $renewalInvoice || (float) $renewalInvoice->due_amount <= 0) {
+                    break;
+                }
+
+                if (round((float) $pool, 2) < round((float) $renewalInvoice->due_amount, 2)) {
+                    break;
+                }
+
+                $this->paymentService->applyAdvanceToInvoice($customer->refresh(), $renewalInvoice, [
+                    'amount' => $renewalInvoice->due_amount,
+                    'payment_date' => $paymentDate,
+                    'note' => $note,
+                ], true);
+
+                $pool = round($pool - (float) $renewalInvoice->due_amount, 2);
+                $renewedMonths++;
+            }
+
+            if ($renewedMonths <= 0) {
+                return 0;
+            }
+
+            $customer = $customer->refresh();
+            $this->paymentService->extendPaidServiceValidityFromCurrent(
+                $customer,
+                $paymentDate,
+                $renewedMonths,
+                $note,
+            );
+
+            $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
+            $subscription?->update([
+                'status' => 'active',
+                'end_date' => null,
+            ]);
+
+            return $renewedMonths;
+        });
+
+        if ($renewedMonths > 0) {
+            try {
+                $this->mikrotikSyncService->sync($customer->refresh());
+            } catch (Throwable $exception) {
+                Log::warning('MikroTik sync failed after advance amount renewal.', [
+                    'customer_id' => $customer->id,
+                    'renewed_months' => $renewedMonths,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        return $renewedMonths;
+    }
 }
