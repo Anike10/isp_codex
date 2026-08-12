@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Product;
 use App\Models\ProductSerial;
+use App\Models\Warehouse;
 use App\Models\Quotation;
 use App\Observers\RecordVersionObserver;
 use App\Services\InventoryService;
@@ -41,13 +42,17 @@ class QuotationController extends Controller
         return view('quotations.index', compact('quotations'));
     }
 
-    public function create()
+    public function create(InventoryService $inventoryService)
     {
+        $selectedCustomerSummary = $this->customerSummaryForForm((int) old('customer_id'));
         return view('invoices.create', [
             'documentMode' => 'quotation',
             'customers' => Customer::where('status', 'active')->orderBy('name')->get(),
             'productSuggestionData' => $this->productSuggestionData(),
             'defaultPaymentNote' => 'This quotation is valid until the stated date. Delivery, installation, and payment terms are subject to final confirmation.',
+            'warehouses' => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'defaultWarehouseId' => $inventoryService->defaultWarehouse()->id,
+            'selectedCustomerSummary' => $selectedCustomerSummary,
         ]);
     }
 
@@ -91,6 +96,7 @@ class QuotationController extends Controller
         }
 
         $quotation->load(['customer', 'items']);
+        $selectedCustomerSummary = $this->customerSummaryForForm((int) $quotation->customer_id);
 
         return view('invoices.create', [
             'documentMode' => 'quotation',
@@ -98,6 +104,9 @@ class QuotationController extends Controller
             'customers' => Customer::where('status', 'active')->orderBy('name')->get(),
             'productSuggestionData' => $this->productSuggestionData($quotation),
             'defaultPaymentNote' => 'This quotation is valid until the stated date. Delivery, installation, and payment terms are subject to final confirmation.',
+            'warehouses' => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'defaultWarehouseId' => app(InventoryService::class)->defaultWarehouse()->id,
+            'selectedCustomerSummary' => $selectedCustomerSummary,
         ]);
     }
 
@@ -158,6 +167,10 @@ class QuotationController extends Controller
 
     private function validateData(Request $request): array
     {
+        if ($request->filled('quotation_date') && ! $request->filled('billing_month')) {
+            $request->merge(['billing_month' => substr((string) $request->input('quotation_date'), 0, 7)]);
+        }
+
         return $request->validate([
             'customer_id' => ['nullable', 'exists:customers,id'],
             'customer_name' => ['required_without:customer_id', 'nullable', 'string', 'max:255'],
@@ -169,6 +182,7 @@ class QuotationController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['nullable', 'exists:products,id'],
             'items.*.product_name' => ['required', 'string', 'max:255'],
+            'items.*.line_discount' => ['nullable', 'numeric', 'min:0'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.serial_numbers' => ['nullable', 'string'],
@@ -206,6 +220,8 @@ class QuotationController extends Controller
             $serials = app(SerialNumberParser::class)->parse($item['serial_numbers'] ?? '');
             $serialless = (int) ($item['serialless_quantity'] ?? 0);
             $quantity = max((int) $item['quantity'], count($serials) + $serialless);
+            $lineDiscount = max(0, (float) ($item['line_discount'] ?? 0));
+            $lineDiscount = min($lineDiscount, (float) ($item['unit_price'] * $quantity));
 
             if ($serials !== [] && ! $product?->track_serial_numbers) {
                 throw new InvalidArgumentException('Serial numbers can only be used for serial-tracked quotation products.');
@@ -217,7 +233,8 @@ class QuotationController extends Controller
                 throw new InvalidArgumentException('For serial-tracked quotation items, serial count plus serial-less quantity must match quantity.');
             }
 
-            $lineTotal = round($quantity * (float) $item['unit_price'], 2);
+            $grossTotal = $quantity * (float) $item['unit_price'];
+            $lineTotal = round(max(0, $grossTotal - $lineDiscount), 2);
             $subtotal += $lineTotal;
             $items[] = [
                 'product_id' => $item['product_id'] ?? null,
@@ -239,6 +256,20 @@ class QuotationController extends Controller
         $data['vat_amount'] = $vat;
 
         return [$customerId, $items, $subtotal, max(0, $subtotal - $discount + $vat), $data];
+    }
+
+    private function customerSummaryForForm(?int $customerId): ?Customer
+    {
+        if (! $customerId) {
+            return null;
+        }
+
+        return Customer::query()
+            ->select('id', 'name', 'account_balance', 'reseller_commission_percent')
+            ->withSum(['invoices as running_due' => function ($query) {
+                $query->where('due_amount', '>', 0);
+            }], 'due_amount')
+            ->find($customerId);
     }
 
     private function quotationAttributes(int $customerId, float $subtotal, float $total, array $data): array

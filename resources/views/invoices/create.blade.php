@@ -6,1701 +6,1403 @@
     $document = $isQuotation ? ($quotation ?? null) : ($invoice ?? null);
     $isEdit = $document !== null;
     $selectedInvoiceType = old('invoice_type', $isEdit ? ($document->invoice_type ?? 'product') : request('type', 'product'));
-    $defaultProductName = $selectedInvoiceType === 'service' ? 'Service charge' : '';
     $discountType = old('discount_type', $isEdit ? ($document->discount_type ?? 'amount') : 'amount');
-    $discountValue = old('discount', $isEdit ? ($document->discount_value ?? $document->discount) : '0.00');
+    $discountValue = old('discount', $isEdit ? ($document->discount_value ?? ($document->discount ?? '0.00')) : '0.00');
     $vatType = old('vat_type', $isEdit ? ($document->vat_type ?? 'amount') : 'amount');
-    $vatValue = old('vat', $isEdit ? ($document->vat_value ?? $document->vat ?? '0.00') : '0.00');
-    $invoiceItems = old('items', $isEdit
-        ? $document->items->map(fn ($item) => [
-            'product_id' => $item->product_id,
-            'product_name' => $item->product_name,
-            'quantity' => $item->quantity,
-            'unit_price' => $item->unit_price,
-            'serial_numbers' => $item->serial_numbers,
-            'serialless_quantity' => $item->serialless_quantity,
-            'track_serial_numbers' => $item->product?->track_serial_numbers ?? (! empty($item->serial_numbers) || (int) $item->serialless_quantity > 0),
-        ])->toArray()
-        : [
-        [
-            'product_id' => '',
-            'product_name' => $defaultProductName,
-            'quantity' => 1,
-            'unit_price' => '',
-            'serial_numbers' => '',
-            'serialless_quantity' => '',
-            'track_serial_numbers' => '1',
-        ],
-    ]);
-    $invoiceItems = collect($invoiceItems)->map(function (array $item): array {
-        $item['serial_numbers'] = app(\App\Support\SerialNumberParser::class)
-            ->formatCompact($item['serial_numbers'] ?? '');
-
-        return $item;
-    })->all();
+    $vatValue = old('vat', $isEdit ? ($document->vat_value ?? ($document->vat ?? '0.00')) : '0.00');
+    $invoiceDate = old('billing_month', $isEdit ? ($document->billing_month ?? now()->format('Y-m')) : now()->format('Y-m'));
+    $quotationDate = old('quotation_date', $isEdit ? optional($document->quotation_date)?->format('Y-m-d') : now()->format('Y-m-d'));
+    $validUntil = old('valid_until', $isEdit ? optional($document->valid_until)?->format('Y-m-d') : '');
+    $dueDate = old('due_date', $isEdit ? optional($document->due_date)?->format('Y-m-d') : null);
+    $defaultProductName = $selectedInvoiceType === 'service' ? 'Service charge' : '';
     $selectedCustomer = old('customer_id')
         ? $customers->firstWhere('id', (int) old('customer_id'))
         : ($isEdit ? $document->customer : null);
     $selectedCustomerId = old('customer_id', $selectedCustomer?->id);
+    $selectedCustomerPhone = old('customer_phone', $selectedCustomer?->phone);
+    $selectedCustomerName = old('customer_name', $selectedCustomer?->name);
+    $invoiceItems = old('items', $isEdit
+        ? $document->items->map(fn ($item) => [
+            'product_id' => $item->product_id,
+            'product_name' => $item->product_name,
+            'quantity' => (string) $item->quantity,
+            'unit_price' => (string) $item->unit_price,
+            'line_discount' => 0,
+            'serial_numbers' => $item->serial_numbers ?? '',
+            'serialless_quantity' => (string) ($item->serialless_quantity ?? ''),
+            'track_serial_numbers' => $item->product?->track_serial_numbers ? '1' : '0',
+        ])->toArray()
+        : [[
+            'product_id' => '',
+            'product_name' => $defaultProductName,
+            'quantity' => '1',
+            'unit_price' => '',
+            'line_discount' => '0',
+            'serial_numbers' => '',
+            'serialless_quantity' => '',
+            'track_serial_numbers' => '1',
+        ]]);
+
+    $invoiceItems = collect($invoiceItems)->map(function (array $item): array {
+        return [
+            'product_id' => $item['product_id'] ?? '',
+            'product_name' => $item['product_name'] ?? '',
+            'quantity' => (string) ($item['quantity'] ?? 1),
+            'unit_price' => (string) ($item['unit_price'] ?? ''),
+            'line_discount' => (string) ($item['line_discount'] ?? 0),
+            'serial_numbers' => app(\App\Support\SerialNumberParser::class)->formatCompact($item['serial_numbers'] ?? ''),
+            'serialless_quantity' => (string) ($item['serialless_quantity'] ?? ''),
+            'track_serial_numbers' => (string) ($item['track_serial_numbers'] ?? '0'),
+        ];
+    })->all();
+
     $documentLabel = $isQuotation ? 'Quotation' : 'Invoice';
+    $pageTitle = $isEdit ? 'Edit '.$documentLabel : 'Create '.$documentLabel;
+    $indexRoute = $isQuotation ? route('quotations.index') : route('invoices.index');
+
     $formAction = $isQuotation
         ? ($isEdit ? route('quotations.update', $document) : route('quotations.store'))
         : ($isEdit ? route('invoices.update', $document) : route('invoices.store'));
-    $indexRoute = $isQuotation ? route('quotations.index') : route('invoices.index');
     $cancelRoute = $isEdit
         ? ($isQuotation ? route('quotations.show', $document) : route('invoices.show', $document))
         : $indexRoute;
-    $initialSubtotal = $isEdit ? (float) ($document->subtotal ?? 0) : 0;
-    $initialDiscountAmount = $isEdit ? (float) ($document->discount ?? 0) : 0;
-    $initialVatAmount = $isEdit ? (float) ($document->vat ?? 0) : 0;
-    $initialGrandTotal = $isEdit ? (float) ($document->total ?? 0) : 0;
+
+    $initialSubtotal = (float) ($document?->subtotal ?? 0);
+    $initialDiscountAmount = (float) ($document?->discount ?? 0);
+    $initialVatAmount = (float) ($document?->vat ?? 0);
+    $initialResellerCommission = (float) ($document?->reseller_commission_amount ?? 0);
+    $initialResellerPercent = (float) ($document?->reseller_commission_percent ?? ($selectedCustomerSummary?->reseller_commission_percent ?? 0));
+    $initialGrandTotal = (float) ($document?->total ?? 0);
+    $runningDue = (float) ($selectedCustomerSummary?->running_due ?? 0);
+    $advanceBalance = (float) ($selectedCustomerSummary?->account_balance ?? 0);
+    $resellerPercent = (float) ($selectedCustomerSummary?->reseller_commission_percent ?? 0);
+    $canFinalize = auth()->user()?->can('finalize_invoices');
+    $warehouses = $warehouses ?? collect();
+    $defaultWarehouseId = old('warehouse_id', $defaultWarehouseId ?? null);
 @endphp
 
 <style>
-    .invoice-page {
+    .invoice-create-shell {
         display: grid;
-        gap: 18px;
+        gap: 14px;
     }
 
-    .invoice-hero {
+    .toolbar-wrap {
+        position: sticky;
+        top: 8px;
+        z-index: 30;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 18px;
-        align-items: end;
-        padding: 22px;
-        border: 1px solid #d8dee9;
-        border-radius: 8px;
-        background:
-            radial-gradient(circle at 100% 0%, rgba(255,255,255,.18), transparent 32%),
-            linear-gradient(125deg, #102a43, #116149 62%, #1d76c9);
-        color: #fff;
+        gap: 12px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid #d9e2f1;
+        border-radius: 14px;
+        padding: 12px;
+        backdrop-filter: blur(4px);
+        box-shadow: 0 12px 30px rgba(16, 42, 67, 0.08);
     }
 
-    .invoice-hero h1 {
-        font-size: 30px;
-        letter-spacing: 0;
-        color: #fff;
+    .toolbar-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
     }
 
-    .invoice-hero .muted {
-        max-width: 650px;
-        margin-top: 8px;
-        line-height: 1.5;
-        color: #d7e8ef;
+    .toolbar-title h1 {
+        margin: 0;
+        font-size: 1.5rem;
     }
 
-    .invoice-hero .btn.light { border-color: rgba(255,255,255,.28); background: rgba(255,255,255,.14); color: #fff; }
+    .toolbar-title p {
+        margin: 4px 0 0;
+        color: #5f6b80;
+    }
 
-    .invoice-shell {
+    .toolbar-compact {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 320px;
-        gap: 18px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .help-tip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        background: #eef4ff;
+        color: #3f4f96;
+        font-size: 11px;
+        margin-left: 6px;
+        font-weight: 700;
+        border: 1px solid #ccd9f5;
+        cursor: help;
+    }
+
+    .compact-field {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+    }
+
+    .compact-field label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: 700;
+        color: #22314a;
+        font-size: 13px;
+    }
+
+    .compact-field .required {
+        color: #b42318;
+    }
+
+    .compact-field input,
+    .compact-field select {
+        width: 100%;
+        min-height: 39px;
+        border: 1px solid #c7d4e6;
+        border-radius: 10px;
+        padding: 8px 10px;
+        background: #fff;
+    }
+
+    .toolbar-search {
+        position: relative;
+    }
+
+    .suggestion-list {
+        display: none;
+        position: absolute;
+        z-index: 60;
+        left: 0;
+        right: 0;
+        top: calc(100% + 4px);
+        max-height: 240px;
+        overflow: auto;
+        background: #fff;
+        border: 1px solid #ccd7e8;
+        border-radius: 10px;
+        box-shadow: 0 16px 30px rgba(11, 16, 34, 0.15);
+    }
+
+    .suggestion-list button {
+        display: block;
+        width: 100%;
+        border: 0;
+        border-bottom: 1px solid #edf1f6;
+        background: #fff;
+        text-align: left;
+        padding: 10px;
+        font: inherit;
+        cursor: pointer;
+        color: #1f2937;
+    }
+
+    .suggestion-list button:hover,
+    .suggestion-list button.is-active {
+        background: #f0f6ff;
+    }
+
+    .suggestion-list button strong {
+        display: block;
+    }
+
+    .suggestion-list button span {
+        display: block;
+        color: #667085;
+        font-size: 12px;
+        margin-top: 2px;
+    }
+
+    .create-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: 14px;
         align-items: start;
     }
 
-    .invoice-panel,
-    .invoice-summary {
+    .section-card {
         background: #ffffff;
-        border: 1px solid #cbdde8;
-        border-radius: 8px;
-        box-shadow: 0 8px 20px rgba(16,42,67,.065);
-    }
-
-    .invoice-panel {
-        overflow: hidden;
+        border: 1px solid #d2dcef;
+        border-radius: 14px;
+        box-shadow: 0 10px 25px rgba(31, 48, 67, 0.06);
     }
 
     .section-head {
-        display: flex;
-        justify-content: space-between;
-        gap: 14px;
-        align-items: center;
-        padding: 18px 20px;
-        border-bottom: 1px solid #e6ebf2;
-        background: linear-gradient(110deg, #eef8f4, #f2f7fc);
+        border-bottom: 1px solid #e6edf5;
+        padding: 13px 16px;
+        background: linear-gradient(130deg, #f3f7fb, #f9fbff);
     }
 
     .section-head h2 {
         margin: 0;
-        font-size: 18px;
+        font-size: 1.1rem;
     }
 
     .section-head p {
-        margin: 5px 0 0;
-        color: #667085;
-        line-height: 1.4;
+        margin: 6px 0 0;
+        color: #607089;
+        font-size: 0.92rem;
     }
 
     .section-body {
-        padding: 20px;
+        padding: 14px 16px;
     }
 
-    .invoice-form-grid {
+    .input-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 16px;
+        gap: 12px;
     }
 
-    .field-note {
-        display: block;
-        margin-top: 6px;
-        color: #667085;
-        font-size: 12px;
-        line-height: 1.35;
-    }
-
-    .amount-mode {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 120px;
-        gap: 8px;
-    }
-
-    .invoice-note-field {
+    .input-grid .field-full {
         grid-column: 1 / -1;
     }
 
-    .invoice-note-header {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        align-items: center;
-        margin-bottom: 8px;
-    }
-
-    .invoice-note-header label {
-        margin: 0;
-    }
-
-    .checkbox-line {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        color: #475467;
-        font-size: 13px;
-        font-weight: 700;
-        white-space: nowrap;
-    }
-
-    .checkbox-line input {
-        width: 16px;
-        height: 16px;
-        margin: 0;
-    }
-
-    .items-list {
+    .field,
+    .line-field {
         display: grid;
-        gap: 8px;
+        gap: 6px;
     }
 
-    .items-header {
-        display: grid;
-        grid-template-columns: 52px minmax(180px, 1fr) 96px 130px 130px 44px;
-        gap: 12px;
-        padding: 0 14px;
-        color: #667085;
+    .field label,
+    .line-field label {
         font-size: 12px;
+        font-weight: 700;
+        color: #233252;
+    }
+
+    .line-field label {
+        font-size: 11px;
+    }
+
+    .line-field small,
+    .field small {
+        color: #667085;
+        font-size: 11px;
+        margin-top: -2px;
+    }
+
+    .amount-pair {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 110px;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .line-table-head {
+        display: grid;
+        grid-template-columns: minmax(220px, 2.2fr) minmax(150px, 1.2fr) 90px 110px 110px 100px 70px;
+        gap: 10px;
+        padding: 0 10px 8px;
+        color: #667085;
+        font-size: 11px;
         font-weight: 700;
         text-transform: uppercase;
+        border-bottom: 1px dashed #d2dded;
     }
 
-    .item-row {
+    .line-item-row {
         display: grid;
-        grid-template-columns: 52px minmax(180px, 1fr) 96px 130px 130px 44px;
-        gap: 12px;
+        grid-template-columns: minmax(220px, 2.2fr) minmax(150px, 1.2fr) 90px 110px 110px 100px 70px;
+        gap: 10px;
         align-items: start;
-        padding: 14px;
-        border: 1px solid #e1e7ef;
-        border-radius: 8px;
-        background: linear-gradient(135deg, #ffffff, #f7fbfc);
-        box-shadow: 0 3px 9px rgba(16,42,67,.035);
+        padding: 10px;
+        border: 1px solid #e2e9f2;
+        border-radius: 12px;
+        background: #fff;
+        margin-bottom: 10px;
     }
 
-    .item-row:nth-child(odd) { border-left: 3px solid #8ccdb7; }
-    .item-row:nth-child(even) { border-left: 3px solid #8eb9dc; }
-
-    .item-row.is-dragging {
-        opacity: .55;
-        border-color: #116149;
-        box-shadow: 0 10px 24px rgba(17, 97, 73, .14);
+    .line-item-row:hover {
+        border-color: #bccae0;
+        box-shadow: 0 8px 20px rgba(24, 39, 63, 0.06);
     }
 
-    .item-row label {
-        display: none;
+    .line-field input,
+    .line-field textarea,
+    .line-field select,
+    .compact-field input,
+    .compact-field select,
+    .field input,
+    .field textarea {
+        width: 100%;
+        border: 1px solid #cbd7e8;
+        border-radius: 9px;
+        padding: 8px 10px;
+        min-height: 36px;
+        font: inherit;
+        background: #fff;
     }
 
-    .item-order {
-        width: 44px;
-        min-height: 40px;
+    .line-field textarea {
+        min-height: 72px;
+        resize: vertical;
+    }
+
+    .line-field input[readonly],
+    .line-field textarea[readonly] {
+        background: #f8fafc;
+        color: #334155;
+    }
+
+    .serial-option-area {
+        display: grid;
+        gap: 6px;
+    }
+
+    .serial-option-area label {
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        border: 1px solid #c8d2df;
-        border-radius: 8px;
-        background: #f8fafc;
-        color: #172033;
-        cursor: grab;
-        font: inherit;
-        font-weight: 800;
-        user-select: none;
-    }
-
-    .item-order:active {
-        cursor: grabbing;
-    }
-
-    .product-picker {
-        position: relative;
-    }
-
-    .item-serials {
-        grid-column: 2 / -2;
-    }
-
-    .item-serials label {
-        display: block;
-    }
-
-    .serial-inline-controls {
-        display: grid;
-        gap: 8px;
-    }
-
-    .serial-controls-head {
-        display: grid;
-        grid-template-columns: minmax(120px, 1fr) 150px auto;
-        gap: 10px;
-        align-items: center;
-    }
-
-    .serial-controls-head label {
-        margin: 0;
-    }
-
-    .serialless-stock-badge {
-        align-self: center;
-        white-space: nowrap;
-    }
-
-    .serial-options {
-        display: flex;
-        flex-wrap: wrap;
         gap: 6px;
-        margin-top: 8px;
+        font-size: 11px;
+        color: #2e3f57;
+        font-weight: 600;
     }
 
-    .serial-option {
-        border: 1px solid #c8d2df;
-        border-radius: 6px;
-        background: #ffffff;
-        color: #172033;
-        padding: 5px 8px;
-        cursor: pointer;
-        font: inherit;
-        font-size: 12px;
-    }
-
-    .serial-option.is-selected {
-        border-color: #116149;
-        background: #edf8f4;
-        color: #0f513e;
-    }
-
-    .serial-option:focus {
-        outline: 2px solid #116149;
-        outline-offset: 2px;
-    }
-
-    .item-serials.is-hidden {
-        display: none;
-    }
-
-    .item-row:hover {
-        border-color: #b7c7d9;
-        box-shadow: 0 8px 18px rgba(23, 32, 51, .06);
-    }
-
-    .remove-item {
-        width: 44px;
-        justify-content: center;
-        padding: 10px;
-        background: #fff0f0;
-        color: #b42318;
-    }
-
-    .add-item-bar {
-        display: flex;
-        justify-content: space-between;
-        gap: 14px;
-        align-items: center;
-        margin-top: 14px;
-        padding-top: 16px;
-        border-top: 1px dashed #c8d2df;
-    }
-
-    .add-item-actions {
+    .line-item-actions {
         display: flex;
         align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
         justify-content: flex-end;
     }
 
-    .add-item-count {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        color: #475467;
-        font-size: 13px;
-        font-weight: 700;
+    .line-item-actions .btn {
+        min-height: 36px;
+        width: 100%;
     }
 
-    .add-item-count input {
-        width: 78px;
-        min-height: 40px;
-    }
-
-    .invoice-templates {
+    .line-actions {
+        margin-top: 8px;
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-bottom: 14px;
-    }
-
-    .invoice-templates .btn {
-        min-height: 34px;
-        padding: 8px 10px;
-        font-size: 13px;
-    }
-
-    .invoice-summary {
-        position: sticky;
-        top: 18px;
-        padding: 18px;
-        background: linear-gradient(145deg, #ffffff, #f0f8f5 68%, #f0f6fb);
-    }
-
-    .summary-title {
-        display: flex;
-        justify-content: space-between;
+        justify-content: flex-end;
         gap: 10px;
         align-items: center;
-        margin-bottom: 16px;
+        border-top: 1px dashed #d3deea;
+        padding-top: 12px;
     }
 
-    .summary-title h2 {
-        margin: 0;
-        font-size: 18px;
+    .line-actions .btn {
+        min-height: 38px;
+    }
+
+    .summary {
+        position: sticky;
+        top: 20px;
+        padding: 16px;
+    }
+
+    .summary-grid {
+        display: grid;
+        gap: 8px;
     }
 
     .summary-row {
         display: flex;
         justify-content: space-between;
-        gap: 12px;
-        padding: 11px 0;
-        border-bottom: 1px solid #edf1f5;
-        color: #475467;
+        gap: 10px;
+        color: #4b5563;
+        padding: 7px 0;
+        border-bottom: 1px dashed #e3eaf4;
     }
 
     .summary-row strong {
-        color: #172033;
+        color: #111827;
+        font-weight: 700;
     }
 
-    .summary-total {
-        margin-top: 14px;
-        padding: 16px;
-        border-radius: 8px;
-        border: 1px solid #b9d8cc;
-        background: linear-gradient(135deg, #e5f7ef, #eff8fd);
+    .summary-net {
+        margin-top: 8px;
+        border: 1px solid #bde4ce;
+        border-radius: 11px;
+        background: linear-gradient(135deg, #eefaf1, #ecf7ff);
+        padding: 12px;
         color: #0f513e;
+        display: grid;
+        gap: 3px;
     }
 
-    .summary-total span {
-        display: block;
-        margin-top: 4px;
-        font-size: 30px;
-        font-weight: 800;
-        color: #116149;
+    .summary-net strong {
+        color: #065f46;
+        font-size: 1.45rem;
     }
 
     .summary-actions {
+        margin-top: 14px;
         display: grid;
-        gap: 10px;
-        margin-top: 16px;
+        gap: 8px;
     }
 
     .summary-actions .btn {
+        min-height: 42px;
+        width: 100%;
         justify-content: center;
-        width: 100%;
+        font-weight: 700;
     }
 
-    .required-mark {
-        color: #b42318;
-    }
-
-    .customer-picker {
-        position: relative;
-    }
-
-    .customer-suggestions {
-        display: none;
-        position: absolute;
-        z-index: 20;
-        left: 0;
-        right: 0;
-        top: calc(100% + 6px);
-        max-height: 240px;
-        overflow-y: auto;
-        background: #ffffff;
-        border: 1px solid #c8d2df;
-        border-radius: 8px;
-        box-shadow: 0 14px 30px rgba(23, 32, 51, .14);
-    }
-
-    .customer-suggestion {
-        width: 100%;
-        border: 0;
-        border-bottom: 1px solid #edf1f5;
-        background: #ffffff;
-        padding: 10px 12px;
-        text-align: left;
-        cursor: pointer;
-        font: inherit;
-    }
-
-    .customer-suggestion:last-child {
-        border-bottom: 0;
-    }
-
-    .customer-suggestion:hover {
-        background: #edf8f4;
-    }
-
-    .customer-suggestion.is-active {
-        background: #dff2ea;
-        outline: 2px solid #116149;
-        outline-offset: -2px;
-    }
-
-    .customer-suggestion strong {
-        display: block;
-        color: #172033;
-    }
-
-    .customer-suggestion span {
-        display: block;
-        margin-top: 3px;
+    .summary-note {
+        margin: 10px 0 0;
         color: #667085;
         font-size: 12px;
     }
 
-    @media (max-width: 1160px) {
-        .invoice-shell {
+    .action-row {
+        margin-top: 12px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .action-row .btn {
+        min-height: 40px;
+    }
+
+    details.doc-notes {
+        margin-top: 12px;
+    }
+
+    details.doc-notes summary {
+        cursor: pointer;
+        color: #1e40af;
+        font-weight: 700;
+        list-style: none;
+    }
+
+    details.doc-notes summary::-webkit-details-marker {
+        display: none;
+    }
+
+    @media (max-width: 1220px) {
+        .create-layout {
             grid-template-columns: 1fr;
         }
 
-        .invoice-summary {
+        .summary {
             position: static;
         }
     }
 
-    @media (max-width: 780px) {
-        .invoice-hero,
-        .invoice-form-grid,
-        .item-row {
+    @media (max-width: 840px) {
+        .toolbar-compact,
+        .line-table-head,
+        .line-item-row {
             grid-template-columns: 1fr;
         }
 
-        .items-header {
+        .line-item-row {
+            padding: 10px;
+            gap: 8px;
+        }
+
+        .line-table-head {
             display: none;
         }
 
-        .item-row label {
-            display: block;
+        .line-item-row .line-field {
+            order: initial;
         }
 
-        .invoice-hero {
-            align-items: start;
+        .line-item-actions {
+            justify-content: flex-start;
         }
 
-        .add-item-bar {
-            align-items: stretch;
-            flex-direction: column;
-        }
-
-        .add-item-actions {
-            align-items: stretch;
-            justify-content: stretch;
-        }
-
-        .add-item-count,
-        .add-item-count input {
-            width: 100%;
-        }
-
-        .remove-item {
-            width: 100%;
-        }
-
-        .summary-total span {
-            font-size: 24px;
-        }
-
-        .invoice-page {
-            gap: 12px;
-        }
-
-        .invoice-hero {
-            padding: 14px;
-            gap: 10px;
-        }
-
-        .invoice-hero h1 {
-            font-size: 22px;
-        }
-
-        .section-head {
-            padding: 13px 14px;
-        }
-
-        .section-head h2 {
-            font-size: 16px;
-        }
-
-        .section-body {
-            padding: 14px;
-        }
-
-        .invoice-form-grid,
-        .items-list {
-            gap: 11px;
-        }
-
-        .item-row {
-            padding: 12px;
-            gap: 10px;
-        }
-
-        .item-serials {
-            grid-column: 1 / -1;
-        }
-
-        .serial-inline-controls {
-            grid-template-columns: 1fr;
-        }
-
-        .serial-controls-head {
-            grid-template-columns: 1fr;
-        }
-
-        .add-item-bar {
-            gap: 10px;
-        }
-
-        .invoice-summary {
-            padding: 14px;
-        }
-
-        .summary-row {
-            padding: 9px 0;
-        }
-
-        .summary-total {
-            padding: 12px;
+        .line-item-actions .btn {
+            width: auto;
         }
     }
 </style>
 
-<div class="invoice-page">
-    <div class="invoice-hero">
-        <div>
-            <h1>{{ $isEdit ? 'Edit '.$documentLabel : 'Create '.$documentLabel }}</h1>
-            <div class="muted">{{ $isQuotation ? 'Prepare a customer quotation without affecting accounts, dues, payments, or stock.' : ($isEdit ? 'Update this draft invoice before finalizing it.' : 'Create a clean product or one-time charge invoice, add multiple line items, apply discount and VAT, and review the payable amount before saving.') }}</div>
+<div class="invoice-create-shell">
+    <div class="toolbar-wrap">
+        <div class="toolbar-head">
+            <div class="toolbar-title">
+                <h1>{{ $pageTitle }}</h1>
+                <p>{{ $isQuotation ? 'Prepare and send quotation fast with minimal clicks.' : 'Create or edit invoice records in a compact, transaction-focused layout.' }}</p>
+            </div>
+            <a class="btn btn-light" href="{{ $cancelRoute }}">Back</a>
         </div>
-        <a class="btn light" href="{{ $indexRoute }}">Back to {{ $isQuotation ? 'Quotations' : 'Invoices' }}</a>
+        <div class="toolbar-compact">
+            <div class="compact-field">
+                <label for="documentMode">Document Type <span class="help-tip" title="Change here to jump between Invoice / Quotation screens.">i</span></label>
+                <select id="documentMode" {{ $isEdit ? 'disabled' : '' }}>
+                    <option value="invoice" @selected(!$isQuotation)>Invoice</option>
+                    <option value="quotation" @selected($isQuotation)>Quotation</option>
+                </select>
+            </div>
+            <div class="compact-field">
+                <label for="customer_name">Party / Customer <span class="required">*</span> <span class="help-tip" title="Search by name, phone, or connection ID">i</span></label>
+                <div class="toolbar-search">
+                <input id="customer_name" name="customer_name" form="invoiceCreateForm" placeholder="Type customer name / phone..." value="{{ $selectedCustomerName }}" autocomplete="off">
+                    <div id="customerSuggestions" class="suggestion-list"></div>
+                </div>
+                <input type="hidden" id="customer_id" name="customer_id" form="invoiceCreateForm" value="{{ $selectedCustomerId }}">
+            </div>
+            <div class="compact-field">
+                <label for="{{ $isQuotation ? 'quotation_date' : 'billing_month' }}">{{ $isQuotation ? 'Quotation Date' : 'Billing Month' }} <span class="required">*</span> <span class="help-tip" title="Use the period this document belongs to.">i</span></label>
+                <input id="documentDate" type="{{ $isQuotation ? 'date' : 'month' }}" name="{{ $isQuotation ? 'quotation_date' : 'billing_month' }}" value="{{ $isQuotation ? $quotationDate : $invoiceDate }}" required form="invoiceCreateForm">
+                @if ($isQuotation)
+                    <input type="hidden" id="billing_month" name="billing_month" form="invoiceCreateForm" value="{{ $invoiceDate }}">
+                @endif
+            </div>
+            <div class="compact-field">
+                <label for="warehouse_id">Warehouse <span class="help-tip" title="Select default for quick stock lookup while typing products.">i</span></label>
+                <select id="warehouse_id" name="warehouse_id" form="invoiceCreateForm">
+                    @forelse ($warehouses as $warehouse)
+                        <option value="{{ $warehouse->id }}" @selected((string) old('warehouse_id', $defaultWarehouseId) === (string) $warehouse->id)>{{ $warehouse->name }}</option>
+                    @empty
+                        <option value="">Default Warehouse</option>
+                    @endforelse
+                </select>
+            </div>
+        </div>
     </div>
 
-    <form method="post" action="{{ $formAction }}" id="invoiceForm"
-        data-edit="{{ $isEdit ? '1' : '0' }}"
-        data-initial-subtotal="{{ number_format($initialSubtotal, 2, '.', '') }}"
-        data-initial-discount="{{ number_format($initialDiscountAmount, 2, '.', '') }}"
-        data-initial-vat="{{ number_format($initialVatAmount, 2, '.', '') }}"
-        data-initial-total="{{ number_format($initialGrandTotal, 2, '.', '') }}">
+    @if ($errors->any())
+        <div class="alert alert-danger" style="margin: 0">
+            <ul style="margin: 0; padding-left: 16px;">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
+    <form method="post" action="{{ $formAction }}" id="invoiceCreateForm" autocomplete="off">
         @csrf
         @if ($isEdit)
             @method('PUT')
         @endif
-        <div class="invoice-shell">
-            <div class="grid">
-                <section class="invoice-panel">
+
+        <input type="hidden" id="initialSubtotal" value="{{ number_format($initialSubtotal, 2, '.', '') }}">
+        <input type="hidden" id="initialDiscount" value="{{ number_format($initialDiscountAmount, 2, '.', '') }}">
+        <input type="hidden" id="initialVat" value="{{ number_format($initialVatAmount, 2, '.', '') }}">
+        <input type="hidden" id="initialResellerCommission" value="{{ number_format($initialResellerCommission, 2, '.', '') }}">
+        <input type="hidden" id="initialResellerPercent" value="{{ number_format($initialResellerPercent, 2, '.', '') }}">
+
+        <div class="create-layout">
+            <div class="left-column">
+                <section class="section-card">
                     <div class="section-head">
-                        <div>
-                            <h2>{{ $documentLabel }} Details</h2>
-                            <p>Select the party this {{ strtolower($documentLabel) }} is for and define its dates.</p>
-                        </div>
+                        <h2>Customer & Document Details</h2>
+                        <p>Keep required data compact. Optional notes are in one fold.</p>
                     </div>
                     <div class="section-body">
-                        <div class="invoice-form-grid">
-                            <div class="customer-picker">
-                                <label for="customer_name">Party Name <span class="required-mark">*</span></label>
-                                <input type="hidden" id="customer_id" name="customer_id" value="{{ $selectedCustomerId }}">
-                                <input id="customer_name" name="customer_name" value="{{ old('customer_name', $selectedCustomer?->name) }}" autocomplete="off" placeholder="Type party name or mobile number" required>
-                                <div id="customerSuggestions" class="customer-suggestions"></div>
-                                <span class="field-note">Start typing a name or mobile number. Select an existing party, or continue with a new party.</span>
+                        <div class="input-grid">
+                            <div class="field">
+                                <label for="customer_phone">Mobile Number <span class="required">*</span></label>
+                                <input id="customer_phone" name="customer_phone" value="{{ $selectedCustomerPhone }}" placeholder="01xxxxxxxxx" required>
                             </div>
-
-                            <div class="customer-picker">
-                                <label for="customer_phone">Mobile Number <span class="required-mark">*</span></label>
-                                <input id="customer_phone" name="customer_phone" value="{{ old('customer_phone', $selectedCustomer?->phone) }}" autocomplete="off" placeholder="Party mobile number" required>
-                                <div id="customerPhoneSuggestions" class="customer-suggestions"></div>
-                                <span class="field-note">Existing party suggestions also show mobile numbers.</span>
-                            </div>
-
-                            <div>
-                                <label for="billing_month">{{ $isQuotation ? 'Reference Month' : 'Billing Month' }} <span class="required-mark">*</span></label>
-                                <input id="billing_month" type="month" name="billing_month" value="{{ old('billing_month', $isEdit ? $document->billing_month : now()->format('Y-m')) }}" required>
-                            </div>
-
-                            <div>
-                                <label for="invoice_type">{{ $documentLabel }} Type <span class="required-mark">*</span></label>
-                                <select id="invoice_type" name="invoice_type" required>
-                                    <option value="product" @selected($selectedInvoiceType === 'product')>Product or one-time bill</option>
-                                    <option value="service" @selected($selectedInvoiceType === 'service')>Service charge</option>
+                            <div class="field">
+                                <label for="invoice_type">Document Type Name <span class="required">*</span></label>
+                                <select id="invoice_type" name="invoice_type">
+                                    <option value="product" @selected($selectedInvoiceType === 'product')>Product / One-time</option>
+                                    <option value="service" @selected($selectedInvoiceType === 'service')>Service Charge</option>
                                 </select>
-                                <span class="field-note">Use product for devices and stock items. Use service for labor, support, and monthly service adjustments.</span>
                             </div>
+                            @if ($isQuotation)
+                                <div class="field">
+                                    <label for="valid_until">Valid Until</label>
+                                    <input type="date" id="valid_until" name="valid_until" value="{{ $validUntil }}">
+                                </div>
+                                <div class="field">
+                                    <label for="invoice_type_note">Type Hint</label>
+                                    <input id="invoice_type_note" value="Quotation is non-accounting draft." readonly>
+                                </div>
+                            @else
+                                <div class="field">
+                                    <label for="due_date">Due Date</label>
+                                    <input type="date" id="due_date" name="due_date" value="{{ $dueDate }}">
+                                </div>
+                                <div class="field">
+                                    <label for="due_date">Reference</label>
+                                    <input id="reference_code" name="reference_code" placeholder="Optional reference">
+                                </div>
+                            @endif
+                        </div>
 
-                            <div>
-                                <label for="discount">Discount <span class="required-mark">*</span></label>
-                                <div class="amount-mode">
-                                    <input id="discount" type="number" name="discount" step="0.01" min="0" value="{{ $discountValue }}" required>
-                                    <select id="discountType" name="discount_type" required>
+                        <div class="input-grid" style="margin-top: 12px;">
+                            <div class="field">
+                                <label for="discount">Discount <span class="help-tip" title="Use fixed BDT value or percentage.">i</span></label>
+                                <div class="amount-pair">
+                                    <input id="discount" type="number" name="discount" step="0.01" min="0" value="{{ $discountValue }}">
+                                    <select id="discountType" name="discount_type">
                                         <option value="amount" @selected($discountType === 'amount')>BDT</option>
                                         <option value="percent" @selected($discountType === 'percent')>%</option>
                                     </select>
                                 </div>
-                                <span class="field-note">Use fixed taka amount or percentage of subtotal.</span>
                             </div>
-
-                            <div>
-                                <label for="vat">VAT <span class="required-mark">*</span></label>
-                                <div class="amount-mode">
-                                    <input id="vat" type="number" name="vat" step="0.01" min="0" value="{{ $vatValue }}" required>
-                                    <select id="vatType" name="vat_type" required>
+                            <div class="field">
+                                <label for="vat">VAT <span class="help-tip" title="Use VAT after discount.">i</span></label>
+                                <div class="amount-pair">
+                                    <input id="vat" type="number" name="vat" step="0.01" min="0" value="{{ $vatValue }}">
+                                    <select id="vatType" name="vat_type">
                                         <option value="amount" @selected($vatType === 'amount')>BDT</option>
                                         <option value="percent" @selected($vatType === 'percent')>%</option>
                                     </select>
                                 </div>
-                                <span class="field-note">Use fixed taka amount or percentage after discount.</span>
-                            </div>
-
-                            @if($isQuotation)
-                                <div>
-                                    <label for="quotation_date">Quotation Date <span class="required-mark">*</span></label>
-                                    <input id="quotation_date" type="date" name="quotation_date" value="{{ old('quotation_date', $isEdit ? $document->quotation_date?->format('Y-m-d') : now()->format('Y-m-d')) }}" required>
-                                </div>
-                                <div>
-                                    <label for="valid_until">Valid Until</label>
-                                    <input id="valid_until" type="date" name="valid_until" value="{{ old('valid_until', $isEdit ? $document->valid_until?->format('Y-m-d') : now()->addDays(15)->format('Y-m-d')) }}">
-                                </div>
-                            @else
-                                <div>
-                                    <label for="due_date">Due Date</label>
-                                    <input id="due_date" type="date" name="due_date" value="{{ old('due_date', $isEdit ? $document->due_date?->format('Y-m-d') : null) }}">
-                                </div>
-                            @endif
-
-                            <div class="invoice-note-field">
-                                <label for="payment_note">{{ $isQuotation ? 'Terms & Conditions' : 'Payment Note Override' }}</label>
-                                <textarea id="payment_note" name="payment_note" rows="3" placeholder="{{ $defaultPaymentNote ?? 'Default payment note' }}">{{ old('payment_note', $isEdit ? $document->payment_note : null) }}</textarea>
-                                <span class="field-note">{{ $isQuotation ? 'These terms appear on the printed quotation.' : 'Leave blank to use the default payment note: '.($defaultPaymentNote ?? 'Please pay the due amount by the due date. Keep this bill for your records.') }}</span>
-                            </div>
-
-                            <div class="invoice-note-field">
-                                <div class="invoice-note-header">
-                                    <label for="public_note">{{ $documentLabel }} Note</label>
-                                    <label class="checkbox-line" for="show_public_note">
-                                        <input id="show_public_note" type="checkbox" name="show_public_note" value="1" @checked(old('show_public_note', $isEdit ? $document->show_public_note : false))>
-                                        Show on {{ strtolower($documentLabel) }}
-                                    </label>
-                                </div>
-                                <textarea id="public_note" name="public_note" rows="3" placeholder="Write a customer-facing note">{{ old('public_note', $isEdit ? $document->public_note : null) }}</textarea>
-                                <span class="field-note">This note appears on the printed {{ strtolower($documentLabel) }} only when selected.</span>
-                            </div>
-
-                            <div class="invoice-note-field">
-                                <label for="private_note">Private Note</label>
-                                <textarea id="private_note" name="private_note" rows="3" placeholder="Internal note for office use only">{{ old('private_note', $isEdit ? $document->private_note : null) }}</textarea>
-                                <span class="field-note">This note is never shown on printed customer documents.</span>
                             </div>
                         </div>
+
+                        <details class="doc-notes">
+                            <summary>Notes & Payment Text (Optional)</summary>
+                            <div class="input-grid" style="margin-top: 10px;">
+                                <div class="field field-full">
+                                    <label for="payment_note">Payment Note</label>
+                                    <textarea id="payment_note" name="payment_note" rows="3">{{ old('payment_note', $isEdit ? ($document->payment_note ?? $defaultPaymentNote) : $defaultPaymentNote) }}</textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="public_note">Public Note</label>
+                                    <textarea id="public_note" name="public_note" rows="3">{{ old('public_note', $isEdit ? $document->public_note : '') }}</textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="private_note">Private Note</label>
+                                    <textarea id="private_note" name="private_note" rows="3">{{ old('private_note', $isEdit ? $document->private_note : '') }}</textarea>
+                                </div>
+                                <div class="field">
+                                    <label class="checkbox-line" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700;">
+                                        <input type="checkbox" id="show_public_note" name="show_public_note" value="1" @checked((bool) old('show_public_note', $isEdit ? (bool) ($document->show_public_note ?? false) : false))>
+                                        <span>Show Public Note on Print</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </details>
                     </div>
                 </section>
 
-                <section class="invoice-panel">
+                <section class="section-card" style="margin-top: 14px;">
                     <div class="section-head">
-                        <div>
-                            <h2>Line Items</h2>
-                            <p>Add products, service charges, installation fees, or other one-time items.</p>
-                        </div>
+                        <h2>Line Items</h2>
+                        <p>Add products/services and keep row values focused for fast data entry.</p>
                     </div>
                     <div class="section-body">
-                        <div class="invoice-templates">
-                            <button type="button" class="btn light" data-template-name="Router" data-template-price="">Router</button>
-                            <button type="button" class="btn light" data-template-name="Installation charge" data-template-price="">Installation</button>
-                            <button type="button" class="btn light" data-template-name="Service charge" data-template-price="">Service Charge</button>
-                            <button type="button" class="btn light" data-template-name="Cable" data-template-price="">Cable</button>
+                        <div class="line-table-head">
+                            <div>Product</div>
+                            <div>Serial</div>
+                            <div>Qty</div>
+                            <div>Rate</div>
+                            <div>Line Disc.</div>
+                            <div>Total</div>
+                            <div>Action</div>
                         </div>
-                        <div id="itemsContainer" class="items-list">
-                            <div class="items-header" aria-hidden="true">
-                                <span>SL</span>
-                                <span>Product Name <span class="required-mark">*</span></span>
-                                <span>Qty <span class="required-mark">*</span></span>
-                                <span>Unit Price <span class="required-mark">*</span></span>
-                                <span>Total</span>
-                                <span></span>
-                            </div>
-                            @foreach ($invoiceItems as $index => $item)
-                                <div class="item-row">
-                                    <div>
-                                        <button type="button" class="item-order" draggable="true" aria-label="Drag item {{ $index + 1 }} to reorder">{{ $index + 1 }}</button>
-                                    </div>
-                                    <div>
-                                        <label for="items_{{ $index }}_product_name">Product Name <span class="required-mark">*</span></label>
-                                        <div class="product-picker">
-                                            <input type="hidden" name="items[{{ $index }}][product_id]" value="{{ $item['product_id'] ?? '' }}" data-product-id>
-                                            <input id="items_{{ $index }}_product_name" type="text" name="items[{{ $index }}][product_name]" value="{{ $item['product_name'] ?? '' }}" placeholder="Router, cable, setup fee" autocomplete="off" data-product-search required>
-                                            <div class="customer-suggestions product-suggestions"></div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label for="items_{{ $index }}_quantity">Qty <span class="required-mark">*</span></label>
-                                        <input id="items_{{ $index }}_quantity" type="number" name="items[{{ $index }}][quantity]" min="1" value="{{ $item['quantity'] ?? 1 }}" class="quantity" required>
-                                    </div>
-                                    <div>
-                                        <label for="items_{{ $index }}_unit_price">Unit Price <span class="required-mark">*</span></label>
-                                        <input id="items_{{ $index }}_unit_price" type="number" name="items[{{ $index }}][unit_price]" step="0.01" min="0" value="{{ $item['unit_price'] ?? '' }}" class="unit-price" required>
-                                    </div>
-                                    <div>
-                                        <label for="items_{{ $index }}_total">Total</label>
-                                        <input id="items_{{ $index }}_total" type="number" name="items[{{ $index }}][total]" step="0.01" min="0" class="total" readonly tabindex="-1">
-                                    </div>
-                                    <div>
-                                        <button type="button" class="btn light remove-item" @if (count($invoiceItems) === 1) style="display:none;" @endif aria-label="Remove item">X</button>
-                                    </div>
-                                    <div class="item-serials">
-                                        <input type="hidden" name="items[{{ $index }}][track_serial_numbers]" value="0" data-serial-track-hidden>
-                                        <label class="checkbox-line" style="display:inline-flex;margin-bottom:8px">
-                                            <input type="checkbox" name="items[{{ $index }}][track_serial_numbers]" value="1" data-serial-track-checkbox @checked(old("items.$index.track_serial_numbers", $item['track_serial_numbers'] ?? empty($item['product_id'] ?? '')))>
-                                            Serial item
-                                        </label>
-                                        <div class="serial-inline-controls">
-                                            <div class="serial-controls-head">
-                                                <label for="items_{{ $index }}_serial_numbers">Serial Numbers</label>
-                                                <input id="items_{{ $index }}_serialless_quantity" type="number" name="items[{{ $index }}][serialless_quantity]" min="0" value="{{ $item['serialless_quantity'] ?? '' }}" placeholder="Serial-less Qty">
-                                                <span class="badge serialless-stock-badge" hidden>Serial-less Stock: 0</span>
-                                            </div>
-                                            <textarea id="items_{{ $index }}_serial_numbers" name="items[{{ $index }}][serial_numbers]" rows="1" placeholder="Click serials below, or type comma-separated serials">{{ $item['serial_numbers'] ?? '' }}</textarea>
-                                        </div>
-                                        <div class="serial-options"></div>
-                                        <span class="field-note">For serial-tracked products, serial count plus serial-less quantity must match total quantity.</span>
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-
-                        <div class="add-item-bar">
-                            <div class="muted">Each item total is calculated automatically from quantity and unit price.</div>
-                            <div class="add-item-actions">
-                                <label class="add-item-count" for="addItemCount">
-                                    Rows
-                                    <input id="addItemCount" type="number" min="1" max="50" value="1" inputmode="numeric">
-                                </label>
-                                <button type="button" class="btn secondary" id="addItem">Add Item</button>
-                            </div>
+                        <div id="lineItemsContainer"></div>
+                        <div class="line-actions">
+                            <button type="button" id="addLineItemBtn" class="btn btn-success">+ Add Line Item</button>
+                            <span class="summary-note">Tip: Use Enter inside product field for quick selection.</span>
                         </div>
                     </div>
                 </section>
             </div>
 
-            <aside class="invoice-summary">
-                <div class="summary-title">
-                    <h2>{{ $documentLabel }} Summary</h2>
-                    <span class="badge">{{ $isEdit ? 'Editing Draft' : 'Draft' }}</span>
+            <aside class="section-card summary">
+                <div class="section-head">
+                    <h2>Billing Summary</h2>
+                    <p>Live preview updates while typing.</p>
                 </div>
+                <div class="section-body">
+                    <div class="summary-grid">
+                        <div class="summary-row">
+                            <span>Running Due</span>
+                            <strong id="summaryRunningDue">{{ number_format($runningDue, 2, '.', ',') }}</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>Advance Balance</span>
+                            <strong id="summaryAdvanceBalance">{{ number_format($advanceBalance, 2, '.', ',') }}</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>Net Balance</span>
+                            <strong id="summaryNetBalance">{{ number_format(max(0, $runningDue - $advanceBalance), 2, '.', ',') }}</strong>
+                        </div>
+                    </div>
 
-                <div class="summary-row">
-                    <span>Items</span>
-                    <strong id="itemCount">1</strong>
-                </div>
-                <div class="summary-row">
-                    <span>Subtotal</span>
-                    <strong>BDT <span id="subtotalAmount">{{ number_format($initialSubtotal, 2) }}</span></strong>
-                </div>
-                <div class="summary-row">
-                    <span>Discount</span>
-                    <strong><span id="discountLabel">BDT</span> <span id="discountAmount">{{ number_format($initialDiscountAmount, 2) }}</span></strong>
-                </div>
-                <div class="summary-row">
-                    <span>VAT</span>
-                    <strong><span id="vatLabel">BDT</span> <span id="vatAmount">{{ number_format($initialVatAmount, 2) }}</span></strong>
-                </div>
+                    <div class="summary-grid" style="margin-top: 12px;">
+                        <div class="summary-row">
+                            <span>Subtotal</span>
+                            <strong id="summarySubtotal">0.00</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>Discount</span>
+                            <strong id="summaryDiscount">0.00</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>VAT</span>
+                            <strong id="summaryVat">0.00</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>Reseller Commission</span>
+                            <strong id="summaryReseller">0.00</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>Total Amount</span>
+                            <strong id="summaryTotalAmount">0.00</strong>
+                        </div>
+                    </div>
+                    <div class="summary-net">
+                        <span>Net Due</span>
+                        <strong id="summaryNetDue">0.00</strong>
+                    </div>
 
-                <div class="summary-total">
-                    {{ $isQuotation ? 'Quoted Amount' : 'Payable Amount' }}
-                    <span>BDT <span id="grandTotal">{{ number_format($initialGrandTotal, 2) }}</span></span>
-                </div>
-
-                <div class="summary-actions">
-                    <button class="btn" type="submit">{{ $isEdit ? 'Update '.$documentLabel : 'Create '.$documentLabel }}</button>
-                    <a class="btn light" href="{{ $cancelRoute }}">Cancel</a>
+                    <div class="summary-actions">
+                        <button type="submit" class="btn btn-outline-secondary" name="document_action" value="draft">{{ $isEdit ? 'Update Draft' : 'Save Draft' }}</button>
+                        @if ($isQuotation)
+                            <button type="submit" class="btn btn-success" name="document_action" value="finalize">Save Quotation</button>
+                        @else
+                            <button type="submit" class="btn btn-success" name="document_action" value="finalize" id="finalizeButton">Save / Finalize {{ $documentLabel }}</button>
+                        @endif
+                    </div>
+                    <p class="summary-note">
+                        @if (! $isQuotation)
+                            Draft save stores as editable. Finalize requires permission.
+                        @else
+                            Quotation save does not touch accounting balances.
+                        @endif
+                    </p>
                 </div>
             </aside>
         </div>
     </form>
 </div>
 
+<template id="line-item-template">
+    <div class="line-item-row">
+        <div class="line-field">
+            <label>Product <span class="required">*</span></label>
+            <input type="hidden" class="line-product-id">
+            <div class="toolbar-search">
+                <input type="text" class="line-product-search" placeholder="Router, Cable, Service..." autocomplete="off">
+                <div class="line-suggestions suggestion-list"></div>
+            </div>
+            <small>Type to search</small>
+        </div>
+        <div class="line-field">
+            <label>Serial Numbers</label>
+                <div class="serial-option-area">
+                    <textarea class="line-serials" rows="1" placeholder="SN1, SN2..."></textarea>
+                    <label>
+                        <input type="checkbox" class="line-track-toggle" checked> Track serial / stock adjustment
+                    </label>
+                    <input type="hidden" class="line-track-hidden">
+                    <input type="number" class="line-serialless" min="0" placeholder="Serial-less qty">
+                    <small class="stock-count">Serial-less stock: <span class="line-serialless-stock">0</span></small>
+                </div>
+            </div>
+        <div class="line-field">
+            <label>Qty</label>
+            <input type="number" class="line-qty" min="1" value="1">
+        </div>
+        <div class="line-field">
+            <label>Unit Price</label>
+            <input type="number" class="line-unit-price" step="0.01" min="0">
+        </div>
+        <div class="line-field">
+            <label>Line Discount</label>
+            <input type="number" class="line-line-discount" step="0.01" min="0" value="0">
+        </div>
+        <div class="line-field">
+            <label>Total</label>
+            <input type="number" class="line-total" readonly>
+        </div>
+        <div class="line-item-actions">
+            <button type="button" class="btn btn-light remove-line-item">Remove</button>
+        </div>
+    </div>
+</template>
+
+<input type="hidden" id="initialCustomerResellerPercent" value="{{ number_format($resellerPercent, 2, '.', '') }}">
 <script>
-const customerSearchUrl = @json(route('invoice-customers.search'));
-const customerIdInput = document.getElementById('customer_id');
-const customerNameInput = document.getElementById('customer_name');
-const customerPhoneInput = document.getElementById('customer_phone');
-const customerNameSuggestions = document.getElementById('customerSuggestions');
-const customerPhoneSuggestions = document.getElementById('customerPhoneSuggestions');
-const products = @json($productSuggestionData ?? []);
-let customerSearchTimer;
-let activeCustomerSuggestions = customerNameSuggestions;
-let currentCustomerSuggestions = [];
-let highlightedCustomerIndex = -1;
-let activeProductRow = null;
-let currentProductSuggestions = [];
-let highlightedProductIndex = -1;
+(() => {
+    const products = @json($productSuggestionData, JSON_UNESCAPED_UNICODE);
+    const initialItems = @json($invoiceItems, JSON_UNESCAPED_UNICODE);
+    const isQuotation = @json($isQuotation);
+    const routeMap = {
+        invoice: '{{ route('invoices.create') }}',
+        quotation: '{{ route('quotations.create') }}',
+    };
 
-function clearSelectedCustomer() {
-    customerIdInput.value = '';
-}
+    const summaryState = {
+        runningDue: {{ json_encode((float) $runningDue) }},
+        advanceBalance: {{ json_encode((float) $advanceBalance) }},
+        resellerPercent: {{ json_encode((float) ($initialResellerPercent > 0 ? $initialResellerPercent : $resellerPercent)) }},
+    };
+    const canFinalize = {{ json_encode($canFinalize) }};
+    const isEdit = @json($isEdit);
 
-function hideCustomerSuggestions() {
-    [customerNameSuggestions, customerPhoneSuggestions].forEach(suggestions => {
-        suggestions.style.display = 'none';
-        suggestions.innerHTML = '';
-    });
-    currentCustomerSuggestions = [];
-    highlightedCustomerIndex = -1;
-}
+    const documentMode = document.getElementById('documentMode');
+    const customerNameInput = document.getElementById('customer_name');
+    const customerPhoneInput = document.getElementById('customer_phone');
+    const customerIdInput = document.getElementById('customer_id');
+    const customerSuggestions = document.getElementById('customerSuggestions');
+    const docDate = document.getElementById('documentDate');
+    const warehouseSelect = document.getElementById('warehouse_id');
+    const container = document.getElementById('lineItemsContainer');
+    const lineTemplate = document.getElementById('line-item-template');
+    const addLineItemButton = document.getElementById('addLineItemBtn');
+    const form = document.getElementById('invoiceCreateForm');
+    const discountInput = document.getElementById('discount');
+    const discountType = document.getElementById('discountType');
+    const vatInput = document.getElementById('vat');
+    const vatType = document.getElementById('vatType');
+    const summaryRows = {
+        subtotal: document.getElementById('summarySubtotal'),
+        discount: document.getElementById('summaryDiscount'),
+        vat: document.getElementById('summaryVat'),
+        reseller: document.getElementById('summaryReseller'),
+        total: document.getElementById('summaryTotalAmount'),
+        netDue: document.getElementById('summaryNetDue'),
+        runningDue: document.getElementById('summaryRunningDue'),
+        advance: document.getElementById('summaryAdvanceBalance'),
+        netBalance: document.getElementById('summaryNetBalance'),
+    };
 
-function selectCustomerSuggestion(customer) {
-    customerIdInput.value = customer.id;
-    customerNameInput.value = customer.name;
-    customerPhoneInput.value = customer.phone || '';
-    hideCustomerSuggestions();
-}
+    let activeProductRow = null;
+    let currentProductMatches = [];
+    let activeProductIndex = -1;
+    let activeCustomerRow = -1;
+    let customerSuggestionsData = [];
+    let customerTimer = null;
 
-function refreshHighlightedCustomer() {
-    activeCustomerSuggestions.querySelectorAll('.customer-suggestion').forEach((button, index) => {
-        const active = index === highlightedCustomerIndex;
-        button.classList.toggle('is-active', active);
-        if (active) {
-            button.scrollIntoView({ block: 'nearest' });
-        }
-    });
-}
-
-function renderCustomerSuggestions(customers) {
-    const suggestions = activeCustomerSuggestions;
-    suggestions.innerHTML = '';
-    currentCustomerSuggestions = customers;
-    highlightedCustomerIndex = customers.length > 0 ? 0 : -1;
-
-    if (customers.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'customer-suggestion';
-        empty.innerHTML = '<strong>No existing party found</strong><span>This will be added as a new party when the invoice is saved.</span>';
-        suggestions.appendChild(empty);
-        suggestions.style.display = 'block';
-        return;
+    function toNumber(value) {
+        const num = parseFloat(value);
+        return Number.isFinite(num) ? num : 0;
     }
 
-    customers.forEach((customer, index) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'customer-suggestion';
-        button.innerHTML = `
-            <strong>${customer.name}</strong>
-            <span>${customer.phone || 'No mobile'} - ${customer.connection_id || 'No connection'} - ${customer.party_type}</span>
-        `;
-        button.addEventListener('mouseenter', () => {
-            highlightedCustomerIndex = index;
-            refreshHighlightedCustomer();
+    function money(value) {
+        return toNumber(value).toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
         });
-        button.addEventListener('click', () => selectCustomerSuggestion(customer));
-        suggestions.appendChild(button);
-    });
-
-    suggestions.style.display = 'block';
-    refreshHighlightedCustomer();
-}
-
-function searchCustomers(sourceInput) {
-    activeCustomerSuggestions = sourceInput === customerPhoneInput ? customerPhoneSuggestions : customerNameSuggestions;
-    (activeCustomerSuggestions === customerNameSuggestions ? customerPhoneSuggestions : customerNameSuggestions).style.display = 'none';
-
-    const query = `${customerNameInput.value} ${customerPhoneInput.value}`.trim();
-
-    clearTimeout(customerSearchTimer);
-
-    if (query.length < 2) {
-        hideCustomerSuggestions();
-        return;
     }
 
-    customerSearchTimer = setTimeout(() => {
-        fetch(`${customerSearchUrl}?q=${encodeURIComponent(query)}`, {
-            headers: { 'Accept': 'application/json' },
-        })
-            .then(response => response.json())
-            .then(renderCustomerSuggestions)
-            .catch(hideCustomerSuggestions);
-    }, 220);
-}
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
 
-customerNameInput.addEventListener('input', () => {
-    clearSelectedCustomer();
-    searchCustomers(customerNameInput);
-});
+    function productSearchText(product) {
+        return `${product.name || ''} ${product.sku || ''} ${product.barcode || ''} ${product.brand || ''}`.toLowerCase();
+    }
 
-customerPhoneInput.addEventListener('input', () => {
-    clearSelectedCustomer();
-    searchCustomers(customerPhoneInput);
-});
+    function lineTotals() {
+        return Array.from(container.querySelectorAll('.line-item-row'));
+    }
 
-[customerNameInput, customerPhoneInput].forEach(input => {
-    input.addEventListener('focus', () => {
-        activeCustomerSuggestions = input === customerPhoneInput ? customerPhoneSuggestions : customerNameSuggestions;
-    });
+    function syncTrackFields(row) {
+        const toggle = row.querySelector('.line-track-toggle');
+        const serialNumbers = row.querySelector('.line-serials');
+        const serialLess = row.querySelector('.line-serialless');
+        const hidden = row.querySelector('.line-track-hidden');
+        const trackSelected = toggle.checked;
 
-    input.addEventListener('keydown', event => {
-        const suggestionsVisible = activeCustomerSuggestions.style.display === 'block';
+        serialNumbers.disabled = !trackSelected;
+        serialLess.disabled = !trackSelected;
+        hidden.value = trackSelected ? '1' : '0';
+    }
 
-        if (!suggestionsVisible || currentCustomerSuggestions.length === 0) {
+    function applyProductToRow(row, product) {
+        row.querySelector('.line-product-id').value = product.id || '';
+        const rowProduct = row.querySelector('.line-product-search');
+        rowProduct.value = product.name || '';
+        const unitInput = row.querySelector('.line-unit-price');
+        if (!unitInput.value || Number(unitInput.value) === 0) {
+            unitInput.value = product.sale_price || '';
+        }
+
+        const trackToggle = row.querySelector('.line-track-toggle');
+        const stockSpan = row.querySelector('.line-serialless-stock');
+        const serialLess = row.querySelector('.line-serialless');
+        const serialNumbers = row.querySelector('.line-serials');
+
+        if (product.track_serials) {
+            trackToggle.checked = true;
+            serialNumbers.value = serialNumbers.value || '';
+            stockSpan.textContent = String(product.serialless_stock ?? 0);
+        } else {
+            trackToggle.checked = false;
+            serialNumbers.value = '';
+            serialLess.value = '';
+            stockSpan.textContent = '0';
+        }
+
+        syncTrackFields(row);
+        syncLineTotal(row);
+        syncRowNames();
+        updateSummary();
+    }
+
+    function hideProductSuggestions(row) {
+        if (!row) {
+            return;
+        }
+        const box = row.querySelector('.line-suggestions');
+        box.style.display = 'none';
+        box.innerHTML = '';
+        if (activeProductRow === row) {
+            activeProductRow = null;
+        }
+        currentProductMatches = [];
+        activeProductIndex = -1;
+    }
+
+    function renderProductSuggestions(row) {
+        const query = row.querySelector('.line-product-search').value.trim().toLowerCase();
+        const suggestionPanel = row.querySelector('.line-suggestions');
+
+        if (!query) {
+            hideProductSuggestions(row);
             return;
         }
 
+        suggestionPanel.innerHTML = '';
+        currentProductMatches = products
+            .filter((product) => productSearchText(product).includes(query))
+            .slice(0, 8);
+        activeProductIndex = currentProductMatches.length > 0 ? 0 : -1;
+
+        if (currentProductMatches.length === 0) {
+            const empty = document.createElement('div');
+            empty.style.padding = '10px';
+            empty.style.color = '#667085';
+            empty.textContent = 'No product found.';
+            suggestionPanel.appendChild(empty);
+            suggestionPanel.style.display = 'block';
+            return;
+        }
+
+        currentProductMatches.forEach((product, index) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.innerHTML = `<strong>${escapeHtml(product.name)}</strong><span>${escapeHtml(product.sku || 'SKU N/A')} • BDT ${money(product.sale_price || 0)}</span>`;
+            button.className = index === 0 ? 'is-active' : '';
+            button.addEventListener('click', () => {
+                applyProductToRow(row, product);
+                hideProductSuggestions(row);
+                row.querySelector('.line-qty').focus();
+            });
+            button.addEventListener('mouseenter', () => {
+                activeProductIndex = index;
+                refreshSuggestionHighlight(suggestionPanel, row);
+            });
+            suggestionPanel.appendChild(button);
+        });
+
+        suggestionPanel.style.display = 'block';
+        refreshSuggestionHighlight(suggestionPanel, row);
+    }
+
+    function refreshSuggestionHighlight(panel, row) {
+        panel.querySelectorAll('button').forEach((button, index) => {
+            button.classList.toggle('is-active', index === activeProductIndex);
+            if (index === activeProductIndex) {
+                button.scrollIntoView({ block: 'nearest' });
+            }
+        });
+    }
+
+    function syncLineTotal(row) {
+        const qty = toNumber(row.querySelector('.line-qty').value);
+        const rate = toNumber(row.querySelector('.line-unit-price').value);
+        const lineDiscount = toNumber(row.querySelector('.line-line-discount').value);
+        const total = Math.max(0, qty * rate - lineDiscount);
+        row.querySelector('.line-total').value = total.toFixed(2);
+    }
+
+    function syncRowNames() {
+        const rows = lineTotals();
+        rows.forEach((row, index) => {
+            row.querySelector('.line-product-id').name = `items[${index}][product_id]`;
+            row.querySelector('.line-product-search').name = `items[${index}][product_name]`;
+            row.querySelector('.line-qty').name = `items[${index}][quantity]`;
+            row.querySelector('.line-unit-price').name = `items[${index}][unit_price]`;
+            row.querySelector('.line-line-discount').name = `items[${index}][line_discount]`;
+            row.querySelector('.line-total').name = `items[${index}][total]`;
+            row.querySelector('.line-serials').name = `items[${index}][serial_numbers]`;
+            row.querySelector('.line-serialless').name = `items[${index}][serialless_quantity]`;
+            row.querySelector('.line-track-hidden').name = `items[${index}][track_serial_numbers]`;
+        });
+    }
+
+    function updateSummary() {
+        const rows = lineTotals();
+        let subtotal = 0;
+
+        rows.forEach((row) => {
+            syncLineTotal(row);
+            subtotal += toNumber(row.querySelector('.line-total').value);
+        });
+
+        const docDiscount = discountType.value === 'percent'
+            ? subtotal * toNumber(discountInput.value) / 100
+            : toNumber(discountInput.value);
+        const afterDiscount = Math.max(0, subtotal - docDiscount);
+        const vat = vatType.value === 'percent'
+            ? afterDiscount * toNumber(vatInput.value) / 100
+            : toNumber(vatInput.value);
+        const total = Math.max(0, afterDiscount + vat);
+        const resellerRate = isQuotation ? 0 : summaryState.resellerPercent;
+        const resellerAmount = total * (resellerRate / 100);
+        const netDue = Math.max(0, total - resellerAmount);
+
+        summaryRows.subtotal.textContent = money(subtotal);
+        summaryRows.discount.textContent = money(docDiscount);
+        summaryRows.vat.textContent = money(vat);
+        summaryRows.reseller.textContent = money(resellerAmount);
+        summaryRows.total.textContent = money(total);
+        summaryRows.netDue.textContent = money(netDue);
+        summaryRows.runningDue.textContent = money(summaryState.runningDue);
+        summaryRows.advance.textContent = money(summaryState.advanceBalance);
+        summaryRows.netBalance.textContent = money(Math.max(0, summaryState.runningDue - summaryState.advanceBalance));
+
+        if (!isEdit) {
+            const suggestedDue = netDue;
+            summaryRows.netDue.textContent = money(suggestedDue);
+        }
+    }
+
+    function updateCustomerSummary(payload = null) {
+        if (!payload) {
+            payload = {
+                running_due: summaryState.runningDue,
+                account_balance: summaryState.advanceBalance,
+                reseller_commission_percent: summaryState.resellerPercent,
+            };
+        }
+
+        summaryState.runningDue = toNumber(payload.running_due || payload.runningDue);
+        summaryState.advanceBalance = toNumber(payload.account_balance || payload.advance_balance || payload.advanceBalance);
+        summaryState.resellerPercent = toNumber(payload.reseller_commission_percent || 0);
+        updateSummary();
+    }
+
+    function appendLineRow(item = {}) {
+        const node = lineTemplate.content.firstElementChild.cloneNode(true);
+        node.querySelector('.line-product-id').value = item.product_id ?? '';
+        node.querySelector('.line-product-search').value = item.product_name ?? '';
+        node.querySelector('.line-qty').value = item.quantity ?? 1;
+        node.querySelector('.line-unit-price').value = item.unit_price ?? '';
+        node.querySelector('.line-line-discount').value = item.line_discount ?? 0;
+        node.querySelector('.line-serials').value = item.serial_numbers ?? '';
+        node.querySelector('.line-serialless').value = item.serialless_quantity ?? '';
+        node.querySelector('.line-track-toggle').checked = String(item.track_serial_numbers ?? '0') === '1';
+        node.querySelector('.line-track-hidden').value = node.querySelector('.line-track-toggle').checked ? '1' : '0';
+        node.querySelector('.line-serialless-stock').textContent = '0';
+        syncTrackFields(node);
+
+        const product = products.find((productItem) => String(productItem.id) === String(item.product_id));
+        if (product && String(product.track_serials) === '1') {
+            node.querySelector('.line-serialless-stock').textContent = String(product.serialless_stock ?? 0);
+        }
+
+        container.appendChild(node);
+        syncTrackFields(node);
+        syncLineTotal(node);
+        syncLineRows();
+    }
+
+    function syncLineRows() {
+        syncRowNames();
+        const rows = lineTotals();
+        if (rows.length === 0) {
+            appendLineRow();
+            return;
+        }
+
+        if (rows.length === 1) {
+            rows[0].querySelector('.remove-line-item').style.visibility = 'hidden';
+        } else {
+            rows.forEach((row) => {
+                row.querySelector('.remove-line-item').style.visibility = 'visible';
+            });
+        }
+
+        updateSummary();
+    }
+
+    function addLineRow() {
+        appendLineRow({
+            product_id: '',
+            product_name: '',
+            quantity: 1,
+            unit_price: '',
+            line_discount: 0,
+            serial_numbers: '',
+            serialless_quantity: '',
+            track_serial_numbers: '0',
+        });
+    }
+
+    function renderCustomerSuggestions(matches) {
+        customerSuggestions.innerHTML = '';
+        customerSuggestionsData = matches;
+        activeCustomerRow = matches.length > 0 ? 0 : -1;
+
+        if (matches.length === 0) {
+            const empty = document.createElement('div');
+            empty.style.padding = '10px';
+            empty.style.color = '#667085';
+            empty.textContent = 'No customer found.';
+            customerSuggestions.appendChild(empty);
+            customerSuggestions.style.display = 'block';
+            return;
+        }
+
+        matches.forEach((customer, index) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.innerHTML = `<strong>${escapeHtml(customer.name || '')}</strong><span>${escapeHtml(customer.phone || '')} - Due ${money(customer.running_due || 0)}</span>`;
+            button.className = index === 0 ? 'is-active' : '';
+            button.addEventListener('click', () => {
+                applyCustomerSelection(customer);
+            });
+            button.addEventListener('mouseenter', () => {
+                activeCustomerRow = index;
+                refreshCustomerHighlight();
+            });
+            customerSuggestions.appendChild(button);
+        });
+
+        customerSuggestions.style.display = 'block';
+        refreshCustomerHighlight();
+    }
+
+    function refreshCustomerHighlight() {
+        customerSuggestions.querySelectorAll('button').forEach((button, index) => {
+            button.classList.toggle('is-active', index === activeCustomerRow);
+            if (index === activeCustomerRow) {
+                button.scrollIntoView({ block: 'nearest' });
+            }
+        });
+    }
+
+    function applyCustomerSelection(customer) {
+        customerSuggestions.style.display = 'none';
+        customerSuggestions.innerHTML = '';
+        customerNameInput.value = customer.name || '';
+        customerPhoneInput.value = customer.phone || '';
+        customerIdInput.value = customer.id;
+        updateCustomerSummary(customer);
+    }
+
+    function loadCustomers(query) {
+        if (!query || query.length < 2) {
+            customerSuggestions.style.display = 'none';
+            customerSuggestions.innerHTML = '';
+            return;
+        }
+
+        fetch(`{{ route('invoice-customers.search') }}?q=${encodeURIComponent(query)}`, {
+            headers: {
+                Accept: 'application/json',
+            },
+        }).then((response) => response.json())
+            .then((rows) => {
+                renderCustomerSuggestions(rows);
+            })
+            .catch(() => {
+                customerSuggestions.innerHTML = '';
+                customerSuggestions.style.display = 'none';
+            });
+    }
+
+    documentMode.addEventListener('change', () => {
+        if (isEdit) {
+            return;
+        }
+        const target = documentMode.value === 'quotation'
+            ? routeMap.quotation
+            : routeMap.invoice;
+        window.location.href = target;
+    });
+
+    document.addEventListener('click', function(event) {
+        if (!event.target.closest('.toolbar-search')) {
+            customerSuggestions.style.display = 'none';
+            hideProductSuggestions(activeProductRow || null);
+        }
+    });
+
+    customerNameInput.addEventListener('input', () => {
+        customerIdInput.value = '';
+        window.clearTimeout(customerTimer);
+        const query = customerNameInput.value.trim();
+        customerTimer = window.setTimeout(() => {
+            loadCustomers(query);
+        }, 220);
+    });
+
+    customerNameInput.addEventListener('keydown', function(event) {
+        if (!customerSuggestions.style.display || customerSuggestions.style.display === 'none' || customerSuggestionsData.length === 0) {
+            return;
+        }
         if (event.key === 'ArrowDown') {
             event.preventDefault();
-            highlightedCustomerIndex = (highlightedCustomerIndex + 1) % currentCustomerSuggestions.length;
-            refreshHighlightedCustomer();
-        } else if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            highlightedCustomerIndex = (highlightedCustomerIndex - 1 + currentCustomerSuggestions.length) % currentCustomerSuggestions.length;
-            refreshHighlightedCustomer();
-        } else if (event.key === 'Enter') {
-            event.preventDefault();
-            selectCustomerSuggestion(currentCustomerSuggestions[highlightedCustomerIndex]);
-        } else if (event.key === 'Escape') {
-            hideCustomerSuggestions();
+            activeCustomerRow = (activeCustomerRow + 1) % customerSuggestionsData.length;
+            refreshCustomerHighlight();
         }
-    });
-});
-
-document.addEventListener('click', function(e) {
-    if (!e.target.closest('.customer-picker')) {
-        hideCustomerSuggestions();
-    }
-
-    if (!e.target.closest('.product-picker')) {
-        hideProductSuggestions();
-    }
-});
-
-function escapeHtml(value) {
-    return String(value || '').replace(/[&<>"']/g, char => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;',
-    }[char]));
-}
-
-function productSearchText(product) {
-    return [
-        product.name,
-        product.sku,
-        product.barcode,
-        product.brand,
-    ].filter(Boolean).join(' ').toLowerCase();
-}
-
-function productLabel(product) {
-    const stockLabel = product.track_inventory ? `Stock ${product.stock_quantity}` : 'No stock tracking';
-
-    return [
-        product.sku,
-        product.barcode,
-        product.brand,
-        stockLabel,
-        product.track_serials ? `${product.serials.length} serials` : null,
-    ].filter(Boolean).join(' - ');
-}
-
-const bengaliDigits = {
-    '\u09E6': '0',
-    '\u09E7': '1',
-    '\u09E8': '2',
-    '\u09E9': '3',
-    '\u09EA': '4',
-    '\u09EB': '5',
-    '\u09EC': '6',
-    '\u09ED': '7',
-    '\u09EE': '8',
-    '\u09EF': '9',
-};
-const asciiDigits = Object.fromEntries(Object.entries(bengaliDigits).map(([key, value]) => [value, key]));
-
-function normalizeSerialDigits(value) {
-    return String(value).replace(/[\u09E6-\u09EF]/g, digit => bengaliDigits[digit] || digit);
-}
-
-function toBengaliSerialDigits(value) {
-    return String(value).replace(/[0-9]/g, digit => asciiDigits[digit] || digit);
-}
-
-function expandSerialPart(part) {
-    const match = String(part).trim().match(/^([\p{L}_-]*)([0-9\u09E6-\u09EF]+)\s*(?:-|to|থেকে)\s*([\p{L}_-]*)([0-9\u09E6-\u09EF]+)$/iu);
-
-    if (!match) {
-        return [part];
-    }
-
-    const startPrefix = match[1];
-    const endPrefix = match[3] || startPrefix;
-
-    if (startPrefix !== endPrefix) {
-        return [part];
-    }
-
-    const startText = normalizeSerialDigits(match[2]);
-    const endText = normalizeSerialDigits(match[4]);
-    const start = Number(startText);
-    const end = Number(endText);
-
-    if (!Number.isInteger(start) || !Number.isInteger(end) || end < start || end - start >= 1000) {
-        return [part];
-    }
-
-    const width = Math.max(startText.length, endText.length);
-    const useBengaliDigits = /[\u09E6-\u09EF]/u.test(match[2]);
-    const serials = [];
-
-    for (let number = start; number <= end; number++) {
-        const serial = String(number).padStart(width, '0');
-        serials.push(startPrefix + (useBengaliDigits ? toBengaliSerialDigits(serial) : serial));
-    }
-
-    return serials;
-}
-
-function selectedSerials(row) {
-    const textarea = row.querySelector('[name$="[serial_numbers]"]');
-
-    return (textarea?.value || '')
-        .split(/[\r\n,]+/)
-        .map(value => value.trim())
-        .filter(Boolean);
-}
-
-function expandedSelectedSerials(row) {
-    return [...new Set(selectedSerials(row).flatMap(expandSerialPart))];
-}
-
-function setSelectedSerials(row, serials) {
-    row.querySelector('[name$="[serial_numbers]"]').value = [...new Set(serials)].join(', ');
-    syncQuantityToSerials(row);
-}
-
-function syncQuantityToSerials(row) {
-    const serialCount = expandedSelectedSerials(row).length;
-    const seriallessCount = parseInt(row.querySelector('[name$="[serialless_quantity]"]')?.value || '0', 10) || 0;
-    const quantity = row.querySelector('.quantity');
-    const trackedCount = serialCount + seriallessCount;
-
-    if (trackedCount > 0 && quantity) {
-        quantity.value = trackedCount;
-    }
-
-    updateRowTotal(row);
-    updateTotals();
-}
-
-function selectedProduct(row) {
-    const productId = row.querySelector('[data-product-id]')?.value;
-
-    return products.find(product => String(product.id) === String(productId));
-}
-
-function updateSeriallessStockBadge(row, product = selectedProduct(row)) {
-    const badge = row.querySelector('.serialless-stock-badge');
-
-    if (!badge) return;
-
-    if (!product?.track_serials) {
-        badge.hidden = true;
-        badge.textContent = 'Serial-less Stock: 0';
-        return;
-    }
-
-    badge.hidden = false;
-    badge.textContent = `Serial-less Stock: ${product.serialless_stock || 0}`;
-}
-
-function refreshSerialOptions(row, focusSerialNumber = null) {
-    const product = selectedProduct(row);
-    const serialTextarea = row.querySelector('[name$="[serial_numbers]"]');
-    const seriallessInput = row.querySelector('[name$="[serialless_quantity]"]');
-    const serialTrackCheckbox = row.querySelector('[data-serial-track-checkbox]');
-    const serialOptions = row.querySelector('.serial-options');
-    const serialBlock = row.querySelector('.item-serials');
-    let focusButton = null;
-
-    if (!serialTextarea || !serialOptions) return;
-
-    serialOptions.innerHTML = '';
-    updateSeriallessStockBadge(row, product);
-
-    if (!product) {
-        const isSerialLine = serialTrackCheckbox?.checked ?? true;
-        serialBlock?.classList.toggle('is-hidden', !isSerialLine);
-        if (serialTrackCheckbox) {
-            serialTrackCheckbox.disabled = false;
-            serialTrackCheckbox.checked = isSerialLine;
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            activeCustomerRow = (activeCustomerRow - 1 + customerSuggestionsData.length) % customerSuggestionsData.length;
+            refreshCustomerHighlight();
         }
-        serialTextarea.disabled = !isSerialLine;
-        serialTextarea.placeholder = isSerialLine ? 'Type comma-separated serials for this new item' : 'Serial not tracked for this line';
-        if (seriallessInput) {
-            seriallessInput.disabled = !isSerialLine;
-            if (!isSerialLine) {
-                seriallessInput.value = '';
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            if (activeCustomerRow >= 0) {
+                applyCustomerSelection(customerSuggestionsData[activeCustomerRow]);
             }
         }
-        return;
-    }
-
-    if (!product.track_serials) {
-        serialBlock?.classList.add('is-hidden');
-        if (serialTrackCheckbox) {
-            serialTrackCheckbox.checked = false;
-            serialTrackCheckbox.disabled = true;
-        }
-        serialTextarea.disabled = true;
-        serialTextarea.value = '';
-        if (seriallessInput) {
-            seriallessInput.disabled = true;
-            seriallessInput.value = '';
-        }
-        return;
-    }
-
-    serialBlock?.classList.remove('is-hidden');
-    if (serialTrackCheckbox) {
-        serialTrackCheckbox.checked = true;
-        serialTrackCheckbox.disabled = true;
-    }
-    serialTextarea.disabled = false;
-    if (seriallessInput) {
-        seriallessInput.disabled = false;
-    }
-    serialTextarea.placeholder = 'Click serials below, or type comma-separated serials';
-    const chosen = expandedSelectedSerials(row);
-
-    product.serials.forEach(serial => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'serial-option';
-        button.setAttribute('aria-pressed', chosen.includes(serial.serial_number) ? 'true' : 'false');
-        button.textContent = serial.warranty_until ? `${serial.serial_number} (${serial.warranty_until})` : serial.serial_number;
-        button.classList.toggle('is-selected', chosen.includes(serial.serial_number));
-        button.addEventListener('click', () => {
-            const serials = expandedSelectedSerials(row);
-            const nextSerials = serials.includes(serial.serial_number)
-                ? serials.filter(value => value !== serial.serial_number)
-                : [...serials, serial.serial_number];
-
-            setSelectedSerials(row, nextSerials);
-            refreshSerialOptions(row, serial.serial_number);
-        });
-        serialOptions.appendChild(button);
-
-        if (focusSerialNumber === serial.serial_number) {
-            focusButton = button;
+        if (event.key === 'Escape') {
+            customerSuggestions.style.display = 'none';
         }
     });
 
-    focusButton?.focus();
-}
+    addLineItemButton.addEventListener('click', addLineRow);
 
-function hideProductSuggestions() {
-    document.querySelectorAll('.product-suggestions').forEach(suggestions => {
-        suggestions.style.display = 'none';
-        suggestions.innerHTML = '';
-    });
-    activeProductRow = null;
-    currentProductSuggestions = [];
-    highlightedProductIndex = -1;
-}
-
-function selectProductSuggestion(row, product) {
-    const previousProductId = row.querySelector('[data-product-id]').value;
-    row.querySelector('[data-product-id]').value = product.id;
-    row.querySelector('[data-product-search]').value = product.name;
-
-    if (previousProductId && String(previousProductId) !== String(product.id)) {
-        row.querySelector('[name$="[serial_numbers]"]').value = '';
-        row.querySelector('[name$="[serialless_quantity]"]').value = '';
-    }
-
-    const unitPrice = row.querySelector('.unit-price');
-    if (unitPrice && (!unitPrice.value || Number(unitPrice.value) === 0)) {
-        unitPrice.value = product.sale_price || '';
-    }
-
-    hideProductSuggestions();
-    refreshSerialOptions(row);
-    updateRowTotal(row);
-    updateTotals();
-}
-
-function clearSelectedProduct(row) {
-    row.querySelector('[data-product-id]').value = '';
-    row.querySelector('[name$="[serial_numbers]"]').value = '';
-    row.querySelector('[name$="[serialless_quantity]"]').value = '';
-    refreshSerialOptions(row);
-}
-
-function refreshHighlightedProduct() {
-    if (!activeProductRow) return;
-
-    activeProductRow.querySelectorAll('.product-suggestions .customer-suggestion').forEach((button, index) => {
-        const active = index === highlightedProductIndex;
-        button.classList.toggle('is-active', active);
-        if (active) {
-            button.scrollIntoView({ block: 'nearest' });
-        }
-    });
-}
-
-function renderProductSuggestions(row) {
-    const input = row.querySelector('[data-product-search]');
-    const suggestions = row.querySelector('.product-suggestions');
-    const query = input.value.trim().toLowerCase();
-
-    suggestions.innerHTML = '';
-    activeProductRow = row;
-
-    if (query.length < 1) {
-        hideProductSuggestions();
-        return;
-    }
-
-    currentProductSuggestions = products
-        .filter(product => productSearchText(product).includes(query))
-        .slice(0, 10);
-    highlightedProductIndex = currentProductSuggestions.length > 0 ? 0 : -1;
-
-    if (currentProductSuggestions.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'customer-suggestion';
-        empty.innerHTML = '<strong>No inventory product found</strong><span>This line will be saved as text only.</span>';
-        suggestions.appendChild(empty);
-        suggestions.style.display = 'block';
-        return;
-    }
-
-    currentProductSuggestions.forEach((product, index) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'customer-suggestion';
-        button.innerHTML = `<strong>${escapeHtml(product.name)}</strong><span>${escapeHtml(productLabel(product))}</span>`;
-        button.addEventListener('mouseenter', () => {
-            highlightedProductIndex = index;
-            refreshHighlightedProduct();
-        });
-        button.addEventListener('click', () => selectProductSuggestion(row, product));
-        suggestions.appendChild(button);
-    });
-
-    suggestions.style.display = 'block';
-    refreshHighlightedProduct();
-}
-
-let itemIndex = {{ count($invoiceItems) }};
-
-function addItemRow() {
-    const container = document.getElementById('itemsContainer');
-    const newRow = document.createElement('div');
-    newRow.className = 'item-row';
-    newRow.innerHTML = `
-        <div>
-            <button type="button" class="item-order" draggable="true" aria-label="Drag item to reorder"></button>
-        </div>
-        <div>
-            <label for="items_${itemIndex}_product_name">Product Name <span class="required-mark">*</span></label>
-            <div class="product-picker">
-                <input type="hidden" name="items[${itemIndex}][product_id]" data-product-id>
-                <input id="items_${itemIndex}_product_name" type="text" name="items[${itemIndex}][product_name]" placeholder="Router, cable, setup fee" autocomplete="off" data-product-search required>
-                <div class="customer-suggestions product-suggestions"></div>
-            </div>
-        </div>
-        <div>
-            <label for="items_${itemIndex}_quantity">Qty <span class="required-mark">*</span></label>
-            <input id="items_${itemIndex}_quantity" type="number" name="items[${itemIndex}][quantity]" min="1" value="1" class="quantity" required>
-        </div>
-        <div>
-            <label for="items_${itemIndex}_unit_price">Unit Price <span class="required-mark">*</span></label>
-            <input id="items_${itemIndex}_unit_price" type="number" name="items[${itemIndex}][unit_price]" step="0.01" min="0" class="unit-price" required>
-        </div>
-        <div>
-            <label for="items_${itemIndex}_total">Total</label>
-            <input id="items_${itemIndex}_total" type="number" name="items[${itemIndex}][total]" step="0.01" min="0" class="total" readonly tabindex="-1">
-        </div>
-        <div>
-            <button type="button" class="btn light remove-item" aria-label="Remove item">X</button>
-        </div>
-        <div class="item-serials">
-            <input type="hidden" name="items[${itemIndex}][track_serial_numbers]" value="0" data-serial-track-hidden>
-            <label class="checkbox-line" style="display:inline-flex;margin-bottom:8px">
-                <input type="checkbox" name="items[${itemIndex}][track_serial_numbers]" value="1" data-serial-track-checkbox checked>
-                Serial item
-            </label>
-            <div class="serial-inline-controls">
-                <div class="serial-controls-head">
-                    <label for="items_${itemIndex}_serial_numbers">Serial Numbers</label>
-                    <input id="items_${itemIndex}_serialless_quantity" type="number" name="items[${itemIndex}][serialless_quantity]" min="0" placeholder="Serial-less Qty">
-                    <span class="badge serialless-stock-badge" hidden>Serial-less Stock: 0</span>
-                </div>
-                <textarea id="items_${itemIndex}_serial_numbers" name="items[${itemIndex}][serial_numbers]" rows="1" placeholder="Click serials below, or type comma-separated serials"></textarea>
-            </div>
-            <div class="serial-options"></div>
-            <span class="field-note">For serial-tracked products, serial count plus serial-less quantity must match total quantity.</span>
-        </div>
-    `;
-    container.appendChild(newRow);
-    refreshSerialOptions(newRow);
-    itemIndex++;
-    refreshItemRows();
-    return newRow;
-}
-
-document.getElementById('addItem').addEventListener('click', function() {
-    const countInput = document.getElementById('addItemCount');
-    const rowsToAdd = Math.min(Math.max(parseInt(countInput?.value || '1', 10) || 1, 1), 50);
-
-    for (let i = 0; i < rowsToAdd; i++) {
-        addItemRow();
-    }
-
-    if (countInput) {
-        countInput.value = rowsToAdd;
-    }
-});
-
-document.querySelectorAll('[data-template-name]').forEach(button => {
-    button.addEventListener('click', () => {
-        const rows = Array.from(document.querySelectorAll('.item-row'));
-        let row = rows.find(itemRow => !itemRow.querySelector('[data-product-search]').value.trim());
-
-        if (!row) {
-            row = addItemRow();
-        }
-
+    container.addEventListener('input', function(event) {
+        const row = event.target.closest('.line-item-row');
         if (!row) {
             return;
         }
 
-        row.querySelector('[data-product-id]').value = '';
-        row.querySelector('[data-product-search]').value = button.dataset.templateName || '';
-        const quantity = row.querySelector('.quantity');
-        const unitPrice = row.querySelector('.unit-price');
-
-        if (quantity && (!quantity.value || Number(quantity.value) < 1)) {
-            quantity.value = 1;
+        if (event.target.classList.contains('line-product-search')) {
+            activeProductRow = row;
+            renderProductSuggestions(row);
         }
 
-        if (unitPrice && button.dataset.templatePrice) {
-            unitPrice.value = button.dataset.templatePrice;
+        if (event.target.classList.contains('line-track-toggle')) {
+            syncTrackFields(row);
         }
 
-        refreshSerialOptions(row);
-        updateRowTotal(row);
-        updateTotals();
-        row.querySelector('[data-product-search]')?.focus();
+        if (event.target.classList.contains('line-qty')
+            || event.target.classList.contains('line-unit-price')
+            || event.target.classList.contains('line-line-discount')) {
+            syncLineTotal(row);
+            updateSummary();
+        }
     });
-});
 
-document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('remove-item')) {
-        e.target.closest('.item-row').remove();
-        refreshItemRows();
-    }
-});
-
-const itemsContainer = document.getElementById('itemsContainer');
-
-itemsContainer.addEventListener('dragstart', function(e) {
-    const handle = e.target.closest('.item-order');
-    const row = handle?.closest('.item-row');
-
-    if (!row) {
-        return;
-    }
-
-    row.classList.add('is-dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', '');
-});
-
-itemsContainer.addEventListener('dragover', function(e) {
-    const draggingRow = itemsContainer.querySelector('.item-row.is-dragging');
-
-    if (!draggingRow) {
-        return;
-    }
-
-    e.preventDefault();
-    const afterElement = getDragAfterElement(itemsContainer, e.clientY);
-
-    if (afterElement) {
-        itemsContainer.insertBefore(draggingRow, afterElement);
-    } else {
-        itemsContainer.appendChild(draggingRow);
-    }
-});
-
-itemsContainer.addEventListener('dragend', function(e) {
-    const row = e.target.closest('.item-row');
-    row?.classList.remove('is-dragging');
-    refreshItemRows();
-});
-
-function getDragAfterElement(container, y) {
-    const draggableRows = [...container.querySelectorAll('.item-row:not(.is-dragging)')];
-
-    return draggableRows.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-
-        if (offset < 0 && offset > closest.offset) {
-            return { offset, element: child };
+    container.addEventListener('focusin', function(event) {
+        const row = event.target.closest('.line-item-row');
+        if (!row || !event.target.classList.contains('line-product-search')) {
+            return;
         }
-
-        return closest;
-    }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
-}
-
-document.addEventListener('input', function(e) {
-    if (e.target.matches('[data-product-search]')) {
-        const row = e.target.closest('.item-row');
-        clearSelectedProduct(row);
+        activeProductRow = row;
         renderProductSuggestions(row);
-        return;
-    }
-
-    if (e.target.matches('[name$="[serial_numbers]"]')) {
-        const row = e.target.closest('.item-row');
-        syncQuantityToSerials(row);
-        refreshSerialOptions(row);
-        return;
-    }
-
-    if (e.target.matches('[name$="[serialless_quantity]"]')) {
-        syncQuantityToSerials(e.target.closest('.item-row'));
-        return;
-    }
-
-    if (e.target.matches('[data-serial-track-checkbox]')) {
-        const row = e.target.closest('.item-row');
-        if (!e.target.checked) {
-            row.querySelector('[name$="[serial_numbers]"]').value = '';
-            row.querySelector('[name$="[serialless_quantity]"]').value = '';
-        }
-        refreshSerialOptions(row);
-        syncQuantityToSerials(row);
-        return;
-    }
-
-    if (e.target.classList.contains('quantity') || e.target.classList.contains('unit-price') || ['discount', 'vat', 'discountType', 'vatType'].includes(e.target.id)) {
-        const row = e.target.closest('.item-row');
-        if (row) {
-            updateRowTotal(row);
-        }
-        updateTotals();
-    }
-});
-
-document.addEventListener('focusin', function(e) {
-    if (e.target.matches('[data-product-search]') && e.target.value.trim()) {
-        renderProductSuggestions(e.target.closest('.item-row'));
-    }
-});
-
-document.addEventListener('keydown', function(e) {
-    if (!e.target.matches('[data-product-search]') || !activeProductRow) return;
-
-    const suggestionsVisible = activeProductRow.querySelector('.product-suggestions').style.display === 'block';
-    if (!suggestionsVisible || currentProductSuggestions.length === 0) return;
-
-    if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        highlightedProductIndex = (highlightedProductIndex + 1) % currentProductSuggestions.length;
-        refreshHighlightedProduct();
-    } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        highlightedProductIndex = (highlightedProductIndex - 1 + currentProductSuggestions.length) % currentProductSuggestions.length;
-        refreshHighlightedProduct();
-    } else if (e.key === 'Enter') {
-        e.preventDefault();
-        selectProductSuggestion(activeProductRow, currentProductSuggestions[highlightedProductIndex]);
-    } else if (e.key === 'Escape') {
-        hideProductSuggestions();
-    }
-});
-
-document.addEventListener('change', function(e) {
-    if (['discountType', 'vatType'].includes(e.target.id)) {
-        updateTotals();
-    }
-});
-
-function updateRowTotal(row) {
-    const quantity = parseFloat(row.querySelector('.quantity').value) || 0;
-    const unitPrice = parseFloat(row.querySelector('.unit-price').value) || 0;
-    const total = quantity * unitPrice;
-    row.querySelector('.total').value = total.toFixed(2);
-}
-
-function updateTotals() {
-    document.querySelectorAll('.item-row').forEach(updateRowTotal);
-
-    const totals = document.querySelectorAll('.total');
-    const invoiceForm = document.getElementById('invoiceForm');
-    if (totals.length === 0 && invoiceForm?.dataset.edit === '1') {
-        document.getElementById('itemCount').textContent = '0';
-        document.getElementById('subtotalAmount').textContent = Number(invoiceForm.dataset.initialSubtotal || 0).toFixed(2);
-        document.getElementById('discountAmount').textContent = Number(invoiceForm.dataset.initialDiscount || 0).toFixed(2);
-        document.getElementById('vatAmount').textContent = Number(invoiceForm.dataset.initialVat || 0).toFixed(2);
-        document.getElementById('grandTotal').textContent = Number(invoiceForm.dataset.initialTotal || 0).toFixed(2);
-        return;
-    }
-    let subtotal = 0;
-    totals.forEach(total => {
-        subtotal += parseFloat(total.value) || 0;
     });
 
-    const discountInput = parseFloat(document.getElementById('discount').value) || 0;
-    const vatInput = parseFloat(document.getElementById('vat').value) || 0;
-    const discountType = document.getElementById('discountType').value;
-    const vatType = document.getElementById('vatType').value;
-    const discount = discountType === 'percent' ? subtotal * discountInput / 100 : discountInput;
-    const afterDiscount = Math.max(0, subtotal - discount);
-    const vat = vatType === 'percent' ? afterDiscount * vatInput / 100 : vatInput;
-    const grandTotal = Math.max(0, afterDiscount + vat);
-
-    document.getElementById('itemCount').textContent = totals.length;
-    document.getElementById('subtotalAmount').textContent = subtotal.toFixed(2);
-    document.getElementById('discountAmount').textContent = discount.toFixed(2);
-    document.getElementById('vatAmount').textContent = vat.toFixed(2);
-    document.getElementById('discountLabel').textContent = discountType === 'percent' ? `${discountInput.toFixed(2)}% = BDT` : 'BDT';
-    document.getElementById('vatLabel').textContent = vatType === 'percent' ? `${vatInput.toFixed(2)}% = BDT` : 'BDT';
-    document.getElementById('grandTotal').textContent = grandTotal.toFixed(2);
-}
-
-function refreshRemoveButtons() {
-    const rows = document.querySelectorAll('.item-row');
-    rows.forEach(row => {
-        const button = row.querySelector('.remove-item');
-        button.style.display = rows.length === 1 ? 'none' : 'inline-flex';
-    });
-}
-
-function reindexItemRows() {
-    const rows = document.querySelectorAll('.item-row');
-
-    rows.forEach((row, index) => {
-        const productId = row.querySelector('[data-product-id]');
-        const productName = row.querySelector('[data-product-search]');
-        const quantity = row.querySelector('.quantity');
-        const unitPrice = row.querySelector('.unit-price');
-        const total = row.querySelector('.total');
-        const serialNumbers = row.querySelector('[name$="[serial_numbers]"]');
-        const seriallessQuantity = row.querySelector('[name$="[serialless_quantity]"]');
-        const serialTrackHidden = row.querySelector('[data-serial-track-hidden]');
-        const serialTrackCheckbox = row.querySelector('[data-serial-track-checkbox]');
-        const orderButton = row.querySelector('.item-order');
-
-        if (orderButton) {
-            orderButton.textContent = index + 1;
-            orderButton.setAttribute('aria-label', `Drag item ${index + 1} to reorder`);
+    container.addEventListener('click', function(event) {
+        if (event.target.classList.contains('remove-line-item')) {
+            event.preventDefault();
+            const row = event.target.closest('.line-item-row');
+            if (!row) {
+                return;
+            }
+            row.remove();
+            syncLineRows();
+            return;
         }
 
-        if (productId) {
-            productId.name = `items[${index}][product_id]`;
-        }
-
-        if (productName) {
-            productName.id = `items_${index}_product_name`;
-            productName.name = `items[${index}][product_name]`;
-            row.querySelector('label[for$="_product_name"]')?.setAttribute('for', productName.id);
-        }
-
-        if (quantity) {
-            quantity.id = `items_${index}_quantity`;
-            quantity.name = `items[${index}][quantity]`;
-            row.querySelector('label[for$="_quantity"]')?.setAttribute('for', quantity.id);
-        }
-
-        if (unitPrice) {
-            unitPrice.id = `items_${index}_unit_price`;
-            unitPrice.name = `items[${index}][unit_price]`;
-            row.querySelector('label[for$="_unit_price"]')?.setAttribute('for', unitPrice.id);
-        }
-
-        if (total) {
-            total.id = `items_${index}_total`;
-            total.name = `items[${index}][total]`;
-            row.querySelector('label[for$="_total"]')?.setAttribute('for', total.id);
-        }
-
-        if (serialNumbers) {
-            serialNumbers.id = `items_${index}_serial_numbers`;
-            serialNumbers.name = `items[${index}][serial_numbers]`;
-            row.querySelector('label[for$="_serial_numbers"]')?.setAttribute('for', serialNumbers.id);
-        }
-
-        if (seriallessQuantity) {
-            seriallessQuantity.id = `items_${index}_serialless_quantity`;
-            seriallessQuantity.name = `items[${index}][serialless_quantity]`;
-            row.querySelector('label[for$="_serialless_quantity"]')?.setAttribute('for', seriallessQuantity.id);
-        }
-
-        if (serialTrackHidden) {
-            serialTrackHidden.name = `items[${index}][track_serial_numbers]`;
-        }
-
-        if (serialTrackCheckbox) {
-            serialTrackCheckbox.name = `items[${index}][track_serial_numbers]`;
+        if (event.target.closest('.line-suggestions') && !event.target.classList.contains('line-suggestions')) {
+            return;
         }
     });
 
-    itemIndex = rows.length;
-}
+    container.addEventListener('keydown', function(event) {
+        const row = event.target.closest('.line-item-row');
+        if (!row || !event.target.classList.contains('line-product-search')) {
+            return;
+        }
 
-function refreshItemRows() {
-    reindexItemRows();
-    refreshRemoveButtons();
-    updateTotals();
-}
+        if (!activeProductRow || activeProductRow !== row) {
+            activeProductRow = row;
+        }
 
-refreshItemRows();
-document.querySelectorAll('.item-row').forEach(refreshSerialOptions);
-updateTotals();
+        const suggestions = row.querySelector('.line-suggestions');
+        const suggestionsVisible = suggestions.style.display === 'block';
+        if (!suggestionsVisible) {
+            return;
+        }
+
+        const total = Math.max(0, suggestions.querySelectorAll('button').length);
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            activeProductIndex = (activeProductIndex + 1) % total;
+            refreshSuggestionHighlight(suggestions, row);
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            activeProductIndex = (activeProductIndex - 1 + total) % total;
+            refreshSuggestionHighlight(suggestions, row);
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            const product = currentProductMatches[activeProductIndex];
+            if (product) {
+                applyProductToRow(row, product);
+                hideProductSuggestions(row);
+            }
+        } else if (event.key === 'Escape') {
+            hideProductSuggestions(row);
+        }
+    });
+
+    if (discountInput && discountType) {
+        discountInput.addEventListener('input', updateSummary);
+        discountType.addEventListener('change', updateSummary);
+    }
+    if (vatInput && vatType) {
+        vatInput.addEventListener('input', updateSummary);
+        vatType.addEventListener('change', updateSummary);
+    }
+
+    form.addEventListener('submit', function() {
+        const rows = lineTotals();
+        if (rows.length === 0) {
+            addLineRow();
+        }
+
+        syncRowNames();
+        syncLineRows();
+    });
+
+    initialItems.forEach((item) => {
+        appendLineRow(item);
+    });
+
+    if (container.children.length === 0) {
+        addLineRow();
+    }
+
+    syncRowNames();
+    updateCustomerSummary({
+        running_due: summaryState.runningDue,
+        account_balance: summaryState.advanceBalance,
+        reseller_commission_percent: summaryState.resellerPercent,
+    });
+    updateSummary();
+    const billingMonthField = document.getElementById('billing_month');
+    const documentDateField = document.getElementById('documentDate');
+    const syncBillingMonth = () => {
+        if (!billingMonthField || !documentDateField) {
+            return;
+        }
+        if (!documentDateField.value) {
+            billingMonthField.value = '';
+            return;
+        }
+        billingMonthField.value = documentDateField.value.substring(0, 7);
+    };
+    syncBillingMonth();
+    documentDateField.addEventListener('change', syncBillingMonth);
+    if (!canFinalize) {
+        const finalizeBtn = document.getElementById('finalizeButton');
+        if (finalizeBtn) {
+            finalizeBtn.style.display = 'none';
+        }
+    }
+})();
 </script>
 @endsection

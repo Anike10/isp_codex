@@ -14,7 +14,9 @@ class InventoryService
 {
     public function defaultWarehouse(): Warehouse
     {
-        return Warehouse::query()->where('is_default', true)->firstOrFail();
+        $warehouse = Warehouse::query()->where('is_default', true)->first();
+
+        return $warehouse ?: $this->repairDefaultWarehouse();
     }
 
     public function moveStock(
@@ -222,6 +224,52 @@ class InventoryService
             }
 
             return $movements;
+        });
+    }
+
+    private function repairDefaultWarehouse(): Warehouse
+    {
+        return DB::transaction(function (): Warehouse {
+            $existingDefault = Warehouse::query()->where('is_default', true)->first();
+
+            if ($existingDefault) {
+                return $existingDefault;
+            }
+
+            $candidate = Warehouse::query()
+                ->orderByDesc('is_active')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->first();
+
+            if ($candidate) {
+                if (! $candidate->is_default || ! $candidate->is_active) {
+                    $candidate->update([
+                        'is_default' => true,
+                        'is_active' => true,
+                    ]);
+                    $candidate->refresh();
+                }
+
+                return $candidate;
+            }
+
+            $baseCode = 'MAIN';
+            $suffix = 1;
+            $code = $baseCode;
+
+            while (Warehouse::query()->where('code', $code)->exists()) {
+                $code = $baseCode.'-'.$suffix++;
+            }
+
+            return Warehouse::query()->create([
+                'entry_by' => 'system',
+                'entry_by_type' => 'system',
+                'name' => 'Main Warehouse',
+                'code' => $code,
+                'is_default' => true,
+                'is_active' => true,
+            ]);
         });
     }
 

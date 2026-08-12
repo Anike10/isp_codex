@@ -12,6 +12,7 @@ use App\Models\ProductSerial;
 use App\Models\Quotation;
 use App\Models\SaleReturn;
 use App\Models\Subscription;
+use App\Models\Warehouse;
 use App\Observers\RecordVersionObserver;
 use App\Services\BillingService;
 use App\Services\InventoryService;
@@ -93,7 +94,7 @@ class InvoiceController extends Controller
         ];
 
         $invoices = $invoiceQuery
-            ->latest()
+            ->orderByDesc('id')
             ->paginate($this->perPage($request))
             ->appends($request->query());
         $paymentAccounts = PaymentAccount::where('status', 'active')
@@ -106,14 +107,16 @@ class InvoiceController extends Controller
         return view('invoices.index', compact('invoices', 'invoiceSummary', 'generatePreviewCount', 'generationPreviewMonth', 'paymentAccounts', 'paymentDefault'));
     }
 
-    public function create()
+    public function create(InventoryService $inventoryService)
     {
-        $customers = Customer::where('status', 'active')->orderBy('name')->get();
-
+        $selectedCustomerSummary = $this->customerSummaryForForm((int) old('customer_id'));
         return view('invoices.create', [
-            'customers' => $customers,
+            'customers' => Customer::where('status', 'active')->orderBy('name')->get(),
             'productSuggestionData' => $this->productSuggestionData(),
             'defaultPaymentNote' => $this->defaultPaymentNote(),
+            'warehouses' => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'defaultWarehouseId' => $inventoryService->defaultWarehouse()->id,
+            'selectedCustomerSummary' => $selectedCustomerSummary,
         ]);
     }
 
@@ -123,6 +126,9 @@ class InvoiceController extends Controller
 
         return Customer::query()
             ->where('status', 'active')
+            ->withSum(['invoices as running_due' => function ($query) {
+                $query->where('due_amount', '>', 0);
+            }], 'due_amount')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query->where('name', 'like', "%{$search}%")
@@ -132,12 +138,24 @@ class InvoiceController extends Controller
             })
             ->orderBy('name')
             ->limit(10)
-            ->get(['id', 'name', 'phone', 'connection_id', 'is_customer', 'is_vendor'])
+            ->get([
+                'id',
+                'name',
+                'phone',
+                'connection_id',
+                'is_customer',
+                'is_vendor',
+                'account_balance',
+                'reseller_commission_percent',
+            ])
             ->map(fn (Customer $customer): array => [
                 'id' => $customer->id,
                 'name' => $customer->name,
                 'phone' => $customer->phone,
                 'connection_id' => $customer->connection_id,
+                'running_due' => round((float) $customer->running_due, 2),
+                'advance_balance' => round((float) $customer->account_balance, 2),
+                'reseller_commission_percent' => round((float) $customer->reseller_commission_percent, 2),
                 'party_type' => collect([
                     $customer->is_customer ? 'Customer' : null,
                     $customer->is_vendor ? 'Vendor' : null,
@@ -148,11 +166,19 @@ class InvoiceController extends Controller
     public function store(Request $request, InventoryService $inventoryService)
     {
         $data = $this->validateInvoiceData($request);
+        $documentAction = $request->string('document_action', 'draft')->toString();
+        $finalizeNow = $documentAction === 'finalize';
+
+        if ($finalizeNow && ! $request->user()?->hasPermission('finalize_invoices')) {
+            return back()->withErrors([
+                'document_action' => 'You do not have permission to finalize invoices.',
+            ]);
+        }
 
         try {
             [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data);
 
-            $invoice = DB::transaction(function () use ($data, $customerId, $itemsData, $subtotal, $total, $inventoryService): Invoice {
+            $invoice = DB::transaction(function () use ($data, $customerId, $itemsData, $subtotal, $total, $inventoryService, $finalizeNow): Invoice {
                 $invoice = Invoice::create([
                     'customer_id' => $customerId,
                     'reseller_id' => $data['reseller_id'],
@@ -166,6 +192,7 @@ class InvoiceController extends Controller
                     'discount' => $data['discount_amount'],
                     'discount_type' => $data['discount_type'],
                     'discount_value' => $data['discount'],
+                    'finalized_at' => $finalizeNow ? now() : null,
                     'vat' => $data['vat_amount'],
                     'vat_type' => $data['vat_type'],
                     'vat_value' => $data['vat'],
@@ -191,10 +218,12 @@ class InvoiceController extends Controller
             return back()->withInput()->withErrors(['items' => $exception->getMessage()]);
         }
 
-        return redirect()->route('invoices.show', $invoice)->with('success', 'Invoice created as draft. You can edit it until finalizing.');
+        return redirect()->route('invoices.show', $invoice)->with('success', $finalizeNow
+            ? 'Invoice created and finalized successfully.'
+            : 'Invoice created as draft. You can edit it until finalizing.');
     }
 
-    public function edit(Invoice $invoice)
+    public function edit(Invoice $invoice, InventoryService $inventoryService)
     {
         if ($invoice->isFinalized()) {
             return redirect()->route('invoices.show', $invoice)->withErrors([
@@ -210,12 +239,16 @@ class InvoiceController extends Controller
 
         $invoice->load(['customer', 'items']);
         $customers = Customer::where('status', 'active')->orderBy('name')->get();
+        $selectedCustomerSummary = $this->customerSummaryForForm((int) $invoice->customer_id);
 
         return view('invoices.create', [
             'customers' => $customers,
             'invoice' => $invoice,
             'productSuggestionData' => $this->productSuggestionData($invoice),
             'defaultPaymentNote' => $this->defaultPaymentNote(),
+            'warehouses' => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'defaultWarehouseId' => $inventoryService->defaultWarehouse()->id,
+            'selectedCustomerSummary' => $selectedCustomerSummary,
         ]);
     }
 
@@ -228,13 +261,21 @@ class InvoiceController extends Controller
         }
 
         $data = $this->validateInvoiceData($request);
+        $documentAction = $request->string('document_action', 'draft')->toString();
+        $finalizeNow = $documentAction === 'finalize';
+
+        if ($finalizeNow && ! $request->user()?->hasPermission('finalize_invoices')) {
+            return back()->withErrors([
+                'document_action' => 'You do not have permission to finalize invoices.',
+            ]);
+        }
         $becameFinalized = false;
         $becameReturnLocked = false;
 
         try {
             [$customerId, $itemsData, $subtotal, $total, $data] = $this->prepareInvoiceData($data, $invoice);
 
-            DB::transaction(function () use (&$invoice, $data, $customerId, $itemsData, $subtotal, $total, $inventoryService, $recordVersionService, &$becameFinalized, &$becameReturnLocked): void {
+            DB::transaction(function () use (&$invoice, $data, $customerId, $itemsData, $subtotal, $total, $inventoryService, $recordVersionService, &$becameFinalized, &$becameReturnLocked, $finalizeNow): void {
                 $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
                 if ($invoice->isFinalized()) {
@@ -280,6 +321,10 @@ class InvoiceController extends Controller
                     'private_note' => $data['private_note'] ?? null,
                 ]));
 
+                if ($finalizeNow) {
+                    $invoice->update(['finalized_at' => now()]);
+                }
+
                 $invoice->items()->delete();
                 foreach ($itemsData as $itemData) {
                     $invoiceItem = $invoice->items()->create($itemData);
@@ -308,7 +353,9 @@ class InvoiceController extends Controller
             ]);
         }
 
-        return redirect()->route('invoices.show', $invoice)->with('success', 'Draft invoice updated successfully.');
+        return redirect()->route('invoices.show', $invoice)->with('success', $finalizeNow
+            ? 'Invoice finalized successfully.'
+            : 'Draft invoice updated successfully.');
     }
 
     public function finalize(Invoice $invoice, RecordVersionService $recordVersionService)
@@ -582,6 +629,7 @@ class InvoiceController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['nullable', 'exists:products,id'],
             'items.*.product_name' => ['required', 'string', 'max:255'],
+            'items.*.line_discount' => ['nullable', 'numeric', 'min:0'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.serial_numbers' => ['nullable', 'string'],
@@ -628,6 +676,7 @@ class InvoiceController extends Controller
             $serialNumbers = app(SerialNumberParser::class)->parse($item['serial_numbers'] ?? '');
             $seriallessQuantity = (int) ($item['serialless_quantity'] ?? 0);
             $quantity = (int) $item['quantity'];
+            $lineDiscount = min(max((float) ($item['line_discount'] ?? 0), 0), (float) ($item['unit_price'] * $quantity));
             $product = ! empty($item['product_id']) ? Product::find($item['product_id']) : null;
             $productType = $product?->product_type ?? null;
             $serviceGuaranteeDays = $product?->service_guarantee_days;
@@ -644,7 +693,8 @@ class InvoiceController extends Controller
                 throw new InvalidArgumentException(($item['product_name'] ?? 'This item').' is serial-tracked. Select serials or enter Serial-less Qty for all '.$quantity.' unit(s). Current count: '.count($serialNumbers).' serial(s) + '.$seriallessQuantity.' serial-less.');
             }
 
-            $total = $quantity * $item['unit_price'];
+            $grossTotal = $quantity * $item['unit_price'];
+            $total = max(0, round((float) $grossTotal - $lineDiscount, 2));
             $subtotal += $total;
             $itemsData[] = [
                 'product_id' => $item['product_id'] ?? null,
@@ -693,6 +743,20 @@ class InvoiceController extends Controller
         $data['gross_total'] = $commission['gross_total'];
 
         return [$customerId, $itemsData, $subtotal, $total, $data];
+    }
+
+    private function customerSummaryForForm(?int $customerId): ?Customer
+    {
+        if (! $customerId) {
+            return null;
+        }
+
+        return Customer::query()
+            ->select('id', 'name', 'account_balance', 'reseller_commission_percent')
+            ->withSum(['invoices as running_due' => function ($query) {
+                $query->where('due_amount', '>', 0);
+            }], 'due_amount')
+            ->find($customerId);
     }
 
     private function resolveAdjustmentAmount(float $baseAmount, float|int|string $value, string $type): float

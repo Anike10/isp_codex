@@ -19,7 +19,7 @@ use InvalidArgumentException;
 
 class ProductController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, InventoryService $inventoryService)
     {
         $serialSearch = trim((string) $request->query('serial_search', ''));
 
@@ -58,7 +58,7 @@ class ProductController extends Controller
                 ->appends($request->query()),
             ...$this->productTaxonomyOptions(),
             'warehouses' => Warehouse::query()->where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get(),
-            'defaultWarehouse' => Warehouse::query()->where('is_default', true)->firstOrFail(),
+            'defaultWarehouse' => $inventoryService->defaultWarehouse(),
             'serialSearch' => $serialSearch,
             'serialTraceSerials' => $serialTraceSerials,
             'serialTraceMovements' => $serialTraceMovements,
