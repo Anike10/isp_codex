@@ -19,11 +19,19 @@
 @if (in_array($bkashSmsPayment->status, ['pending', 'failed'], true))
     <form method="post" action="{{ route('bkash-sms-payments.approve', $bkashSmsPayment) }}" class="card form-grid" style="margin-bottom:16px">
         @csrf
+        @php
+            $approvalCandidates = $manualCandidates->isNotEmpty() ? $manualCandidates : $customers;
+        @endphp
         <div class="full">
             <label>Manual Match Party</label>
+            @if ($manualCandidates->isNotEmpty())
+                <p class="muted" style="margin:0 0 8px 2px;">{{ $matchMessageHint ?? 'Multiple parties match this sender number. Please choose one.' }}</p>
+            @else
+                <p class="muted" style="margin:0 0 8px 2px;">{{ $matchMessageHint ?? 'Select the correct party to map this SMS.' }}</p>
+            @endif
             <select name="customer_id" required>
-                <option value="">Select party</option>
-                @foreach ($customers as $customer)
+                <option value="">{{ $manualCandidates->isNotEmpty() ? 'Choose party from matched numbers' : 'Select party' }}</option>
+                @foreach ($approvalCandidates as $customer)
                     <option value="{{ $customer->id }}">
                         {{ $customer->name }} - {{ $customer->phone }} - {{ $customer->mikrotik_username ?? $customer->connection_id }}
                         @if ($customer->is_customer || $customer->is_vendor)

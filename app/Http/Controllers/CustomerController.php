@@ -73,7 +73,7 @@ class CustomerController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:30'],
+            'phone' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
             'connection_id' => ['required_with:internet_package_id', 'required_if:use_fixed_ip,1', 'nullable', 'string', 'max:100', 'unique:customers,connection_id'],
             'address' => ['required', 'string'],
@@ -150,7 +150,7 @@ class CustomerController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:30'],
+            'phone' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
             'connection_id' => ['required_with:internet_package_id', 'required_if:use_fixed_ip,1', 'nullable', 'string', 'max:100', Rule::unique('customers', 'connection_id')->ignore($customer->id)],
             'address' => ['required', 'string'],
@@ -291,7 +291,7 @@ class CustomerController extends Controller
 
         $validationRules = [
             'name' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:30'],
+            'phone' => ['required', 'string', 'max:255'],
             'package' => ['nullable', 'integer', 'exists:internet_packages,id'],
         ];
 

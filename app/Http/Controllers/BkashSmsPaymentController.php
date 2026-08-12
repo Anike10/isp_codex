@@ -74,13 +74,28 @@ class BkashSmsPaymentController extends Controller
             ->with('success', 'bKash SMS entry saved with '.$smsPayment->status.' status.');
     }
 
-    public function show(BkashSmsPayment $bkashSmsPayment)
+    public function show(BkashSmsPayment $bkashSmsPayment, BkashSmsPaymentService $smsPaymentService)
     {
         $bkashSmsPayment->load(['customer', 'invoice', 'payment']);
+
+        $match = $smsPaymentService->identifyCustomer(
+            $bkashSmsPayment->reference,
+            $bkashSmsPayment->customer_number,
+        );
+
+        $manualCandidates = collect();
+        if (! empty($match['candidate_customer_ids'])) {
+            $manualCandidates = Customer::query()
+                ->whereIn('id', $match['candidate_customer_ids'])
+                ->orderBy('name')
+                ->get(['id', 'name', 'phone', 'connection_id', 'mikrotik_username', 'is_customer', 'is_vendor']);
+        }
 
         return view('bkash_sms_payments.show', [
             'bkashSmsPayment' => $bkashSmsPayment,
             'customers' => Customer::orderBy('name')->get(['id', 'name', 'phone', 'connection_id', 'mikrotik_username', 'is_customer', 'is_vendor']),
+            'manualCandidates' => $manualCandidates,
+            'matchMessageHint' => $match['message'],
         ]);
     }
 

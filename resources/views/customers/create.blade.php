@@ -9,7 +9,11 @@
 <form method="post" action="{{ route('customers.store') }}" class="card form-grid">
     @csrf
     <div><label>Name</label><input name="name" value="{{ old('name') }}" required></div>
-    <div><label>Phone</label><input name="phone" value="{{ old('phone') }}" required></div>
+    <div>
+        <label>Phone</label>
+        <input name="phone" value="{{ old('phone') }}" required>
+        <span class="muted">Multiple phone numbers allowed: use comma or space, for example 01710000000, 01820000000</span>
+    </div>
     <div><label>Email</label><input type="email" name="email" value="{{ old('email') }}"></div>
     <div>
         <label>Connection ID</label>

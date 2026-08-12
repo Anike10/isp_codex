@@ -100,7 +100,9 @@ class BkashSmsPaymentService
             // even when the customer still needs to be matched manually.
             $paymentAccount = $this->resolveSmsDeviceAccount($rawSms, $smsSender, $deviceName);
 
-            [$customer, $matchMessage] = $this->findCustomer($parsed['reference'], $parsed['customer_number']);
+            $match = $this->identifyCustomer($parsed['reference'], $parsed['customer_number']);
+            $customer = $match['customer'];
+            $matchMessage = $match['message'];
 
             if (! $customer) {
                 $smsPayment->update([
@@ -200,6 +202,12 @@ class BkashSmsPaymentService
         });
     }
 
+    public function identifyCustomer(?string $reference, ?string $phone): array
+    {
+        $reference = trim((string) $reference);
+        return $this->findCustomer($reference === '' ? null : $reference, $phone);
+    }
+
     public function parse(string $rawSms): array
     {
         $normalized = preg_replace('/\s+/', ' ', trim($rawSms));
@@ -252,28 +260,93 @@ class BkashSmsPaymentService
                 ->first();
 
             if ($referenceCustomer) {
-                return [$referenceCustomer, 'Customer matched by reference user ID.'];
+                return [
+                    'customer' => $referenceCustomer,
+                    'message' => 'Customer matched by reference user ID.',
+                    'candidate_customer_ids' => [],
+                ];
             }
         }
 
         if (! $phone) {
-            return [null, $reference ? 'Reference user ID did not match and no sender number was parsed.' : 'No reference or sender number found.'];
+            return [
+                'customer' => null,
+                'message' => $reference ? 'Reference user ID did not match and no sender number was parsed.' : 'No reference or sender number found.',
+                'candidate_customer_ids' => [],
+            ];
         }
 
-        $matches = Customer::query()
-            ->get()
-            ->filter(fn (Customer $customer) => $this->normalizePhone($customer->phone) === $phone)
+        $matches = $this->findCustomersBySenderNumber($phone)
             ->values();
 
         if ($matches->count() === 1) {
-            return [$matches->first(), $reference ? 'Reference user ID did not match. Customer matched by sender number.' : 'Customer matched by sender number.'];
+            return [
+                'customer' => $matches->first(),
+                'message' => $reference ? 'Reference user ID did not match. Customer matched by sender number.' : 'Customer matched by sender number.',
+                'candidate_customer_ids' => [],
+            ];
         }
 
         if ($matches->count() > 1) {
-            return [null, 'Multiple customers matched this bKash sender number. Manual review required.'];
+            $candidateIds = $matches->pluck('id')->all();
+            return [
+                'customer' => null,
+                'message' => $reference
+                    ? 'Reference user ID did not match. Multiple customers matched this sender number. Please choose the correct party.'
+                    : 'Multiple customers matched this sender number. Manual review required.',
+                'candidate_customer_ids' => $candidateIds,
+            ];
         }
 
-        return [null, $reference ? 'Reference user ID did not match and no customer matched this bKash sender number.' : 'No customer matched this bKash sender number.'];
+        return [
+            'customer' => null,
+            'message' => $reference ? 'Reference user ID did not match and no customer matched this bKash sender number.' : 'No customer matched this bKash sender number.',
+            'candidate_customer_ids' => [],
+        ];
+    }
+
+    private function findCustomersBySenderNumber(?string $phone)
+    {
+        $normalizedPhone = $this->normalizePhone($phone);
+
+        if (! $normalizedPhone) {
+            return collect();
+        }
+
+        return Customer::query()
+            ->get()
+            ->filter(fn (Customer $customer) => $this->customerHasPhone($customer->phone, $normalizedPhone))
+            ->values();
+    }
+
+    private function customerHasPhone(?string $storedPhones, string $normalizedPhone): bool
+    {
+        foreach ($this->extractCustomerPhones($storedPhones) as $phone) {
+            if ($this->normalizePhone($phone) === $normalizedPhone) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function extractCustomerPhones(?string $storedPhones): array
+    {
+        if (! $storedPhones) {
+            return [];
+        }
+
+        $splitPhones = preg_split('/[\s,;|\/]+/u', trim($storedPhones));
+        $phones = [];
+
+        foreach ($splitPhones as $number) {
+            $phone = $this->normalizePhone($number);
+            if ($phone !== null) {
+                $phones[] = $phone;
+            }
+        }
+
+        return array_values(array_unique($phones));
     }
 
     private function normalizePhone(?string $phone): ?string

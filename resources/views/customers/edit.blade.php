@@ -11,7 +11,11 @@
     @method('PUT')
 
     <div><label>Name</label><input name="name" value="{{ old('name', $customer->name) }}" required></div>
-    <div><label>Phone</label><input name="phone" value="{{ old('phone', $customer->phone) }}" required></div>
+    <div>
+        <label>Phone</label>
+        <input name="phone" value="{{ old('phone', $customer->phone) }}" required>
+        <span class="muted">Multiple phone numbers allowed: use comma or space, for example 01710000000, 01820000000</span>
+    </div>
     <div><label>Email</label><input type="email" name="email" value="{{ old('email', $customer->email) }}"></div>
     <div>
         <label>Connection ID</label>
