@@ -288,11 +288,18 @@ class CustomerController extends Controller
             'productSerials' => fn ($query) => $query->with(['product', 'invoice', 'warrantyClaims'])->latest('sold_at')->limit(50),
             'warrantyClaims' => fn ($query) => $query->with(['product', 'productSerial'])->latest()->limit(10),
         ]);
-        $versions = $customer->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
         $routers = MikrotikRouter::query()->orderBy('name')->get();
 
-        return view('customers.show', compact('customer', 'versions', 'routers'));
+        return view('customers.show', compact('customer', 'routers'));
+    }
+
+    public function history(Customer $customer)
+    {
+        $customer->load(['activeSubscription.package']);
+        $versions = $customer->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
+
+        return view('customers.history', compact('customer', 'versions'));
     }
 
     public function grantGracePeriod(Request $request, Customer $customer)

@@ -71,6 +71,7 @@ Route::middleware('auth')->group(function () {
         Route::post('customers/{customer}/mikrotik-targets', [CustomerController::class, 'updateMikrotikTargets'])->name('customers.mikrotik-targets.update');
         Route::post('customers/{customer}/force-inactive', [CustomerController::class, 'forceInactive'])->name('customers.force-inactive');
         Route::post('customers/{customer}/force-active', [CustomerController::class, 'forceActive'])->name('customers.force-active');
+        Route::get('customers/{customer}/history', [CustomerController::class, 'history'])->name('customers.history');
         Route::resource('customers', CustomerController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
     });
 

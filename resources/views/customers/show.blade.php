@@ -501,6 +501,7 @@
                 <button class="btn btn--ghost" type="button" id="mikrotik-quick-sync" {{ ! $routerTargetsExists ? 'disabled' : '' }}>
                     MikroTik Sync
                 </button>
+                <a class="btn secondary" href="{{ route('customers.history', $customer) }}">Edit History</a>
                 <a class="btn light" href="{{ route('customers.index') }}">All Parties</a>
             </div>
         </div>
@@ -999,8 +1000,6 @@
             </div>
         </details>
     </section>
-
-    @include('partials.record_versions', ['versions' => $versions])
 
     @if ($customer->commissionHistories->isNotEmpty())
         <section class="details-stack">
