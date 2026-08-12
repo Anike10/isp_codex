@@ -1,6 +1,9 @@
 @extends('layouts.app')
 
 @section('content')
+@php
+    $isDeletedCustomer = method_exists($customer, 'trashed') && $customer->trashed();
+@endphp
 <div class="customer-shell">
     <section class="topbar">
         <div>
@@ -15,7 +18,11 @@
             @endif
         </div>
         <div class="actions">
-            <a class="btn" href="{{ route('customers.show', $customer) }}">Back to Profile</a>
+            @if ($isDeletedCustomer)
+                <a class="btn light" href="{{ route('customers.deleted') }}">Back to Deleted Parties</a>
+            @else
+                <a class="btn" href="{{ route('customers.show', $customer) }}">Back to Profile</a>
+            @endif
         </div>
     </section>
 

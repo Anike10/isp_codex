@@ -2,24 +2,65 @@
 
 @section('content')
 <meta name="csrf-token" content="{{ csrf_token() }}">
+@php $showDeletedCustomers = $showDeletedCustomers ?? false; @endphp
+<style>
+    .customer-filter-form {
+        display: grid;
+        grid-template-columns: minmax(190px, 1.5fr) repeat(6, minmax(110px, 1fr)) auto;
+        gap: 8px;
+        align-items: end;
+    }
+    .customer-filter-form input,
+    .customer-filter-form select {
+        padding: 7px 9px;
+        min-height: 34px;
+        font-size: 13px;
+    }
+    .customer-filter-form label {
+        font-size: 12px;
+        margin-bottom: 4px;
+    }
+    .customer-filter-form .filter-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: nowrap;
+        white-space: nowrap;
+    }
+    .customer-filter-form .filter-actions .btn { padding: 8px 12px; }
+    @media (max-width: 1500px) {
+        .customer-filter-form {
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        }
+    }
+</style>
+
 <div class="topbar">
-    <div><h1>Parties</h1><div class="muted">Customers, vendors, resellers, and product-only buyers</div></div>
-    <a class="btn" href="{{ route('customers.create') }}">Add Party</a>
+    <div><h1>{{ $showDeletedCustomers ? 'Deleted Parties' : 'Parties' }}</h1><div class="muted">{{ $showDeletedCustomers ? 'Soft-deleted parties kept with all history' : 'Customers, vendors, resellers, and product-only buyers' }}</div></div>
+    <div class="actions" style="gap:8px">
+        @if (! $showDeletedCustomers)
+            <a class="btn" href="{{ route('customers.create') }}">Add Party</a>
+        @else
+            <a class="btn" href="{{ route('customers.index') }}">Active Parties</a>
+        @endif
+    </div>
 </div>
 
-<form method="get" class="card filter-form" style="margin-bottom:16px">
-    <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Search by name, phone, connection ID, MikroTik username"></div>
+<form method="get" class="card customer-filter-form" style="margin-bottom:16px">
+    <div><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Search by name, phone, connection ID, MikroTik username"></div>
     <div><label>Role</label><select name="role"><option value="">All roles</option><option value="customer" @selected(request('role') === 'customer')>Customer</option><option value="vendor" @selected(request('role') === 'vendor')>Vendor</option><option value="reseller" @selected(request('role') === 'reseller')>Reseller</option></select></div>
     <div><label>Status</label><select name="status"><option value="">All statuses</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>
     <div><label>Package</label><select name="package_id"><option value="">All packages</option>@foreach($packages as $package)<option value="{{ $package->id }}" @selected((int) request('package_id') === $package->id)>{{ $package->name }}</option>@endforeach</select></div>
     <div><label>Balance</label><select name="due_state"><option value="">All balances</option><option value="due" @selected(request('due_state') === 'due')>Has due</option><option value="advance" @selected(request('due_state') === 'advance')>Has advance</option></select></div>
-    <div class="full actions"><button class="btn secondary" type="submit">Search</button><a class="btn light" href="{{ route('customers.index') }}">Reset</a></div>
+    <div><label>Expiring in next (days)</label><input type="number" name="expiring_in_days" min="0" placeholder="e.g. 7" value="{{ request('expiring_in_days') }}"></div>
+    <div><label>Expired days ago</label><input type="number" name="expired_more_than_days" min="1" placeholder="e.g. 30" value="{{ request('expired_more_than_days') }}"></div>
+    <div class="filter-actions"><button class="btn secondary" type="submit">Search</button><a class="btn light" href="{{ route($showDeletedCustomers ? 'customers.deleted' : 'customers.index') }}">Reset</a></div>
 </form>
 
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Role</th><th>User ID</th><th>Package</th><th>Balance</th><th>Status</th><th>Active Until</th><th></th></tr></thead>
+    <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Role</th><th>User ID</th><th>Package</th><th>Balance</th><th>Status</th><th>Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
         @php
@@ -29,12 +70,12 @@
             $nextActiveDate = now()->addMonthNoOverflow()->toDateString();
             $canQuickActivate = ($hasImportedSecretTable ?? false) && ($customer->imported_secret_exists ?? false) && ! ($customer->invoices_exists ?? false);
         @endphp
-        <tr class="{{ $customer->never_suspend ? 'customer-row-special' : '' }}" data-href="{{ route('customers.show', $customer) }}">
+        <tr class="{{ $customer->never_suspend ? 'customer-row-special' : '' }}" @if(! $showDeletedCustomers) data-href="{{ route('customers.show', $customer) }}" @endif>
             <td>{{ $customers->firstItem() + $loop->index }}</td>
-            <td data-inline-field="name" data-inline-url="{{ route('customers.inline-update', $customer) }}">
+            <td @if(! $showDeletedCustomers) data-inline-field="name" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif>
                 <span data-inline-value>{{ $customer->name }}</span>
             </td>
-            <td data-inline-field="phone" data-inline-url="{{ route('customers.inline-update', $customer) }}">
+            <td @if(! $showDeletedCustomers) data-inline-field="phone" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif>
                 <span data-inline-value>{{ $customer->phone }}</span>
             </td>
             <td>
@@ -46,7 +87,7 @@
                 @endif
             </td>
             <td>{{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}</td>
-            <td data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" data-package-id="{{ $customer->activeSubscription?->internet_package_id }}">
+            <td @if(! $showDeletedCustomers) data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif data-package-id="{{ $customer->activeSubscription?->internet_package_id }}">
                 @php $currentPackageName = $customer->activeSubscription?->package?->name ?: 'No package'; @endphp
                 <span data-inline-value>{{ $currentPackageName }}</span>
             </td>
@@ -54,12 +95,19 @@
                 <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span>
             </td>
             <td>
-                <span class="badge {{ $customer->status }}">{{ $customer->status }}</span>
-                @if ($customer->hasActiveGracePeriod())
-                    <span class="badge pending">Grace</span>
+                @if ($showDeletedCustomers)
+                    <span class="muted">Deleted</span>
+                @else
+                    <span class="badge {{ $customer->status }}">{{ $customer->status }}</span>
+                    @if ($customer->hasActiveGracePeriod())
+                        <span class="badge pending">Grace</span>
+                    @endif
                 @endif
             </td>
             <td>
+                @if ($showDeletedCustomers)
+                    <span class="muted">Deleted</span>
+                @else
                 @if ($customer->status === 'active' && $activeUntil)
                     <strong>{{ $activeUntil->format('d/m/Y') }}</strong>
                     @if ($daysRemaining > 0)
@@ -114,22 +162,40 @@
                 @else
                     <span class="muted">Grace used {{ $customer->grace_until?->format('d/m/Y') }}</span>
                 @endif
+                @endif
             </td>
+            @if ($showDeletedCustomers)
+                <td>{{ optional($customer->deleted_at)->format('d/m/Y H:i') }}</td>
+            @endif
             <td class="actions">
-                <a class="btn secondary" href="{{ route('customers.payments.create', $customer) }}">Pay</a>
-                <a class="btn light" href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}">Ledger</a>
-                <a class="btn light" href="{{ route('customers.show', $customer) }}">View</a>
-                <a class="btn light" href="{{ route('customers.edit', $customer) }}">Edit</a>
+            @if ($showDeletedCustomers)
+                    <form method="post" action="{{ route('customers.restore', $customer->id) }}" onsubmit="return confirm('Restore this party to active list?');" style="display:inline">
+                        @csrf
+                        <button class="btn secondary" type="submit">Restore</button>
+                    </form>
+                    <a class="btn light" href="{{ route('customers.deleted.history', $customer->id) }}">History</a>
+                @else
+                    <a class="btn secondary" href="{{ route('customers.payments.create', $customer) }}">Pay</a>
+                    <a class="btn light" href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}">Ledger</a>
+                    <a class="btn light" href="{{ route('customers.show', $customer) }}">View</a>
+                    <a class="btn light" href="{{ route('customers.edit', $customer) }}">Edit</a>
+                    <form method="post" action="{{ route('customers.destroy', $customer) }}" onsubmit="return confirm('Delete this party and keep all history?');" style="display:inline">
+                        @csrf
+                        @method('delete')
+                        <button class="btn light" type="submit">Delete</button>
+                    </form>
+                @endif
             </td>
         </tr>
     @empty
-        <tr><td colspan="10">No parties found.</td></tr>
+        <tr><td colspan="{{ $showDeletedCustomers ? 11 : 10 }}">No parties found.</td></tr>
     @endforelse
     </tbody>
 </table>
 
 <div style="margin-top:16px">{{ $customers->links() }}</div>
 
+@if (! $showDeletedCustomers)
 <script>
 const customerCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
 const customerPackages = @json($packages->mapWithKeys(fn ($package) => [$package->id => $package->name])->toArray());
@@ -253,15 +319,28 @@ function editCustomerInlineCell(cell, event) {
 }
 
 document.querySelectorAll('[data-inline-field="name"], [data-inline-field="phone"]').forEach((cell) => {
-    cell.addEventListener('dblclick', function () {
+    cell.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    });
+    cell.addEventListener('dblclick', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
         editCustomerInlineCell(this);
     });
 });
 
 document.querySelectorAll('td[data-inline-field="package"]').forEach((cell) => {
-    cell.addEventListener('dblclick', function () {
+    cell.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    });
+    cell.addEventListener('dblclick', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
         editCustomerInlineCell(this);
     });
 });
 </script>
+@endif
 @endsection

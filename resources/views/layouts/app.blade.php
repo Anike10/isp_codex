@@ -271,6 +271,7 @@
                     <div class="nav-menu">
                         @if ($canMenu('parties'))
                             <a href="{{ route('customers.index') }}">Parties</a>
+                            <a href="{{ route('customers.deleted') }}">Deleted Parties</a>
                         @endif
                         @if ($canMenu('resellers'))
                             <a href="{{ route('resellers.index') }}">Resellers</a>
@@ -491,7 +492,7 @@ if (navToggle && appNav) {
 }
 
 document.addEventListener('click', function (event) {
-    if (event.target.closest('a, button, input, select, textarea, label, form, details, summary, .actions, .action-menu')) {
+    if (event.target.closest('a, button, input, select, textarea, label, form, details, summary, .actions, .action-menu, [data-inline-field]')) {
         return;
     }
 

@@ -73,6 +73,10 @@ Route::middleware('auth')->group(function () {
         Route::post('customers/{customer}/force-inactive', [CustomerController::class, 'forceInactive'])->name('customers.force-inactive');
         Route::post('customers/{customer}/force-active', [CustomerController::class, 'forceActive'])->name('customers.force-active');
         Route::get('customers/{customer}/history', [CustomerController::class, 'history'])->name('customers.history');
+        Route::get('customers/deleted', [CustomerController::class, 'deleted'])->name('customers.deleted');
+        Route::get('customers/deleted/{customer}/history', [CustomerController::class, 'deletedHistory'])->name('customers.deleted.history');
+        Route::delete('customers/{customer}', [CustomerController::class, 'destroy'])->name('customers.destroy');
+        Route::post('customers/{customer}/restore', [CustomerController::class, 'restore'])->name('customers.restore');
         Route::resource('customers', CustomerController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
     });
 

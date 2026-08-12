@@ -11,6 +11,7 @@ use App\Observers\RecordVersionObserver;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\RecordVersionService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -23,53 +24,39 @@ class CustomerController extends Controller
 {
     public function index(Request $request)
     {
-        try {
-            $hasImportedSecretTable = Schema::hasTable('mikrotik_imported_secrets');
-        } catch (Throwable) {
-            // In deployments where the migration is not present (or DB privileges differ),
-            // keep the page functional without importing-related features.
-            $hasImportedSecretTable = false;
-        }
-
-        $customers = Customer::query()
-            ->with('activeSubscription.package')
-            ->withExists('subscriptions')
-            ->withExists('invoices')
-            ->withSum('invoices as total_due_amount', 'due_amount')
-            ->withMax(['invoices as latest_paid_billing_month' => function ($query) {
-                $query->where('invoice_type', 'service')
-                    ->where('due_amount', '<=', 0);
-            }], 'billing_month')
-            ->withMin(['invoices as earliest_unpaid_billing_month' => function ($query) {
-                $query->where('invoice_type', 'service')
-                    ->where('due_amount', '>', 0);
-            }], 'billing_month')
-            ->when($request->search, function ($query, string $search) {
-                $query->where(function ($query) use ($search) {
-                    $query->where('name', 'like', "%{$search}%")
-                        ->orWhere('phone', 'like', "%{$search}%")
-                        ->orWhere('connection_id', 'like', "%{$search}%")
-                        ->orWhere('mikrotik_username', 'like', "%{$search}%");
-                });
-            })
-            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))
-            ->when($request->query('role') === 'customer', fn ($query) => $query->where('is_customer', true))
-            ->when($request->query('role') === 'vendor', fn ($query) => $query->where('is_vendor', true))
-            ->when($request->query('role') === 'reseller', fn ($query) => $query->where('is_reseller', true))
-            ->when($request->filled('package_id'), fn ($query) => $query->whereHas('activeSubscription', fn ($query) => $query->where('internet_package_id', $request->integer('package_id'))))
-            ->when($request->query('due_state') === 'due', fn ($query) => $query->whereHas('invoices', fn ($query) => $query->where('due_amount', '>', 0)))
-            ->when($request->query('due_state') === 'advance', fn ($query) => $query->where('account_balance', '>', 0))
-            ->when($hasImportedSecretTable, function ($query) {
-                return $query->withExists('importedSecret');
-            })
+        $hasImportedSecretTable = $this->hasImportedSecretTable();
+        $perPage = $this->perPage($request, 200);
+        $customers = $this->customerQueryForIndex($request, $hasImportedSecretTable, false)
             ->latest()
-            ->paginate($this->perPage($request))
+            ->paginate($perPage)
             ->appends($request->query());
 
         return view('customers.index', [
             'customers' => $customers,
             'hasImportedSecretTable' => $hasImportedSecretTable,
             'packages' => InternetPackage::where('status', 'active')->orderBy('name')->get(),
+            'showDeletedCustomers' => false,
+            'perPage' => $perPage,
+            'perPageDefault' => 200,
+        ]);
+    }
+
+    public function deleted(Request $request)
+    {
+        $hasImportedSecretTable = $this->hasImportedSecretTable();
+        $perPage = $this->perPage($request, 200);
+        $customers = $this->customerQueryForIndex($request, $hasImportedSecretTable, true)
+            ->latest('deleted_at')
+            ->paginate($perPage)
+            ->appends($request->query());
+
+        return view('customers.index', [
+            'customers' => $customers,
+            'hasImportedSecretTable' => $hasImportedSecretTable,
+            'packages' => InternetPackage::where('status', 'active')->orderBy('name')->get(),
+            'showDeletedCustomers' => true,
+            'perPage' => $perPage,
+            'perPageDefault' => 200,
         ]);
     }
 
@@ -371,10 +358,48 @@ class CustomerController extends Controller
 
     public function history(Customer $customer)
     {
+        $customer = Customer::withTrashed()->findOrFail($customer->getKey());
         $customer->load(['activeSubscription.package']);
         $versions = $customer->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
         return view('customers.history', compact('customer', 'versions'));
+    }
+
+    public function destroy(Customer $customer)
+    {
+        $customerName = $customer->name;
+
+        $customer->delete();
+
+        return redirect()
+            ->route('customers.deleted')
+            ->with('success', "\"{$customerName}\" moved to deleted parties. You can still view its history from Deleted Parties.");
+    }
+
+    public function deletedHistory(int $customerId)
+    {
+        $customer = Customer::withTrashed()->findOrFail($customerId);
+        $customer->load(['activeSubscription.package']);
+        $versions = $customer->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
+
+        return view('customers.history', compact('customer', 'versions'));
+    }
+
+    public function restore(int $customerId)
+    {
+        $customer = Customer::withTrashed()->findOrFail($customerId);
+
+        if (! $customer->trashed()) {
+            return redirect()
+                ->route('customers.index')
+                ->with('warning', 'Party is already active.');
+        }
+
+        $customer->restore();
+
+        return redirect()
+            ->route('customers.index')
+            ->with('success', "\"{$customer->name}\" restored successfully.");
     }
 
     public function grantGracePeriod(Request $request, Customer $customer)
@@ -694,5 +719,64 @@ class CustomerController extends Controller
             $data['reseller_commission_percent'] = $customer?->reseller_commission_percent ?? 0;
             $data['reseller_id'] = filled($data['reseller_id'] ?? null) ? (int) $data['reseller_id'] : null;
         }
+    }
+
+    private function hasImportedSecretTable(): bool
+    {
+        try {
+            return Schema::hasTable('mikrotik_imported_secrets');
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function customerQueryForIndex(Request $request, bool $hasImportedSecretTable, bool $onlyDeleted): Builder
+    {
+        $query = $onlyDeleted ? Customer::onlyTrashed() : Customer::query();
+        $expiringInDays = $request->integer('expiring_in_days');
+        $expiredMoreThanDays = $request->integer('expired_more_than_days');
+
+        $query
+            ->with('activeSubscription.package')
+            ->withExists('subscriptions')
+            ->withExists('invoices')
+            ->withSum('invoices as total_due_amount', 'due_amount')
+            ->withMax(['invoices as latest_paid_billing_month' => function ($query) {
+                $query->where('invoice_type', 'service')
+                    ->where('due_amount', '<=', 0);
+            }], 'billing_month')
+            ->withMin(['invoices as earliest_unpaid_billing_month' => function ($query) {
+                $query->where('invoice_type', 'service')
+                    ->where('due_amount', '>', 0);
+            }], 'billing_month')
+            ->when($request->search, function ($query, string $search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('connection_id', 'like', "%{$search}%")
+                        ->orWhere('mikrotik_username', 'like', "%{$search}%");
+                });
+            })
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))
+            ->when($request->query('role') === 'customer', fn ($query) => $query->where('is_customer', true))
+            ->when($request->query('role') === 'vendor', fn ($query) => $query->where('is_vendor', true))
+            ->when($request->query('role') === 'reseller', fn ($query) => $query->where('is_reseller', true))
+            ->when($request->filled('package_id'), fn ($query) => $query->whereHas('activeSubscription', fn ($query) => $query->where('internet_package_id', $request->integer('package_id'))))
+            ->when($request->query('due_state') === 'due', fn ($query) => $query->whereHas('invoices', fn ($query) => $query->where('due_amount', '>', 0)))
+            ->when($request->query('due_state') === 'advance', fn ($query) => $query->where('account_balance', '>', 0))
+            ->when($hasImportedSecretTable, function ($query) {
+                return $query->withExists('importedSecret');
+            })
+            ->when($expiringInDays > 0, function ($query) use ($expiringInDays) {
+                $query->whereNotNull('service_valid_until')
+                    ->whereDate('service_valid_until', '>=', now()->toDateString())
+                    ->whereDate('service_valid_until', '<=', now()->addDays($expiringInDays)->toDateString());
+            })
+            ->when($expiredMoreThanDays > 0 && ! $request->filled('expiring_in_days'), function ($query) use ($expiredMoreThanDays) {
+                $query->whereNotNull('service_valid_until')
+                    ->whereDate('service_valid_until', '<', now()->subDays($expiredMoreThanDays)->toDateString());
+            });
+
+        return $query;
     }
 }
