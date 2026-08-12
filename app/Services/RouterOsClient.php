@@ -52,7 +52,7 @@ class RouterOsClient
             $data = $this->parseAttributes($sentence);
 
             if ($reply === '!trap') {
-                throw new RuntimeException($data['message'] ?? 'MikroTik returned an error.');
+                throw new RuntimeException($this->formatTrapExceptionMessage($data));
             }
 
             if ($reply === '!done') {
@@ -115,7 +115,8 @@ class RouterOsClient
             $data = $this->parseAttributes($sentence);
 
             if ($reply === '!trap') {
-                throw new RuntimeException('Authentication failed: '.($data['message'] ?? 'RouterOS rejected the saved username or password.'));
+                $message = $this->formatTrapExceptionMessage($data);
+                throw new RuntimeException('Authentication failed: '.$message);
             }
 
             if (isset($data['ret'])) {
@@ -146,7 +147,8 @@ class RouterOsClient
             $data = $this->parseAttributes($sentence);
 
             if ($reply === '!trap') {
-                throw new RuntimeException('Authentication failed: '.($data['message'] ?? 'RouterOS rejected the saved username or password.'));
+                $message = $this->formatTrapExceptionMessage($data);
+                throw new RuntimeException('Authentication failed: '.$message);
             }
 
             if ($reply === '!done') {
@@ -271,5 +273,44 @@ class RouterOsClient
         }
 
         return $data;
+    }
+
+    private function formatTrapExceptionMessage(array $data): string
+    {
+        $message = trim((string) ($data['message'] ?? 'MikroTik returned an error.'));
+        $extras = [];
+
+        foreach (['reply', 'detail', 'category', 'code', 'type'] as $field) {
+            if (! empty($data[$field]) && (string) $data[$field] !== $message) {
+                $extras[$field] = (string) $data[$field];
+            }
+        }
+
+        foreach ($data as $field => $value) {
+            if (in_array($field, ['message', 'reply', 'detail', 'category', 'code', 'type'], true)) {
+                continue;
+            }
+
+            if (! is_scalar($value) || $value === '') {
+                continue;
+            }
+
+            $extras[$field] = (string) $value;
+        }
+
+        if ($extras === []) {
+            return $message;
+        }
+
+        $extraText = [];
+        foreach ($extras as $field => $value) {
+            if ($field === 'message') {
+                continue;
+            }
+
+            $extraText[] = "{$field}: {$value}";
+        }
+
+        return "{$message} (".implode(', ', $extraText).')';
     }
 }
