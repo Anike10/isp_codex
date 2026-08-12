@@ -398,15 +398,6 @@
         margin-top: 10px;
     }
 
-    body.customer-show-clean-nav .app-header .nav,
-    body.customer-show-clean-nav .app-header .nav-toggle {
-        display: none;
-    }
-    body.customer-show-clean-nav .app-header .header-inner {
-        grid-template-columns: auto auto;
-        justify-content: space-between;
-    }
-
     @media (max-width: 1120px) {
         .customer-grid {
             grid-template-columns: 1fr 1fr;
@@ -1050,8 +1041,6 @@ document.addEventListener('DOMContentLoaded', function () {
             activateTab(this.dataset.tab);
         });
     });
-
-    document.body.classList.add('customer-show-clean-nav');
 
     const quickSyncButton = document.getElementById('mikrotik-quick-sync');
     const targetForm = document.getElementById('mikrotik-target-form');
