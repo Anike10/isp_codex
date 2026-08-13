@@ -121,8 +121,8 @@
     <div><label>Status</label><select name="status"><option value="">All statuses</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>
     <div><label>Package</label><select name="package_id"><option value="">All packages</option>@foreach($packages as $package)<option value="{{ $package->id }}" @selected((int) request('package_id') === $package->id)>{{ $package->name }}</option>@endforeach</select></div>
     <div><label>Balance</label><select name="due_state"><option value="">All balances</option><option value="due" @selected(request('due_state') === 'due')>Has due</option><option value="advance" @selected(request('due_state') === 'advance')>Has advance</option></select></div>
-    <div><label>Expiring Date</label><input type="date" name="expiring_date" value="{{ request()->has('expiring_date') ? request('expiring_date') : now()->addDay()->toDateString() }}"></div>
-    <div><label>Expired Date</label><input type="date" name="expired_date" value="{{ request()->has('expired_date') ? request('expired_date') : now()->subDay()->toDateString() }}"></div>
+    <div><label>Expiring Date</label><input type="date" name="expiring_date" value="{{ request('expiring_date') }}"></div>
+    <div><label>Expired Date</label><input type="date" name="expired_date" value="{{ request('expired_date') }}"></div>
     <div class="filter-actions"><button class="btn secondary" type="submit">Search</button><a class="btn light" href="{{ route($showDeletedCustomers ? 'customers.deleted' : 'customers.index') }}">Reset</a></div>
 </form>
 
