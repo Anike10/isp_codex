@@ -37,10 +37,12 @@ class CustomerController extends Controller
                 ->whereDate('service_valid_until', $today)
                 ->count(),
             'tomorrow' => (clone $expiryCountQuery)
-                ->whereDate('service_valid_until', now()->addDay()->toDateString())
+                ->whereDate('service_valid_until', '>=', $today)
+                ->whereDate('service_valid_until', '<=', now()->addDay()->toDateString())
                 ->count(),
             'in_7_days' => (clone $expiryCountQuery)
-                ->whereDate('service_valid_until', now()->addDays(7)->toDateString())
+                ->whereDate('service_valid_until', '>=', $today)
+                ->whereDate('service_valid_until', '<=', now()->addDays(7)->toDateString())
                 ->count(),
         ];
         $customers = $this->customerQueryForIndex($request, $hasImportedSecretTable, false)
@@ -810,10 +812,12 @@ class CustomerController extends Controller
                 $query->whereDate('service_valid_until', now()->toDateString());
             })
             ->when($expiryWindow === 'tomorrow', function ($query) {
-                $query->whereDate('service_valid_until', now()->addDay()->toDateString());
+                $query->whereDate('service_valid_until', '>=', now()->toDateString())
+                    ->whereDate('service_valid_until', '<=', now()->addDay()->toDateString());
             })
             ->when($expiryWindow === 'in_7_days', function ($query) {
-                $query->whereDate('service_valid_until', now()->addDays(7)->toDateString());
+                $query->whereDate('service_valid_until', '>=', now()->toDateString())
+                    ->whereDate('service_valid_until', '<=', now()->addDays(7)->toDateString());
             })
             ->when(! $expiryWindow && ($expiringDate || $expiredDate), function ($query) use ($expiringDate, $expiredDate) {
                 $today = now()->toDateString();
