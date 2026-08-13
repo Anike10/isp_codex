@@ -500,7 +500,7 @@
             source: 'customer-locations',
             minzoom: 13,
             layout: {
-                'text-field': ['concat', '#', ['to-string', ['get', 'customer_id']], ' ', ['get', 'name']],
+                'text-field': ['concat', '#', ['to-string', ['get', 'customer_id']]],
                 'text-size': 12,
                 'text-offset': [0, 1.25],
                 'text-anchor': 'top',
@@ -1095,15 +1095,12 @@
 
             if (matches.length === 1) {
                 const match = matches[0];
-                const customerId = String(match?.properties?.customer_id || '');
-                const featureName = match?.properties?.name ? ` - ${match.properties.name}` : '';
+                renderPartySearchResults([match]);
                 if (customerHasLocation(match)) {
-                    focusCustomer(customerId);
-                    return;
+                    setStatus(`1 party found for "${query}".`);
+                } else {
+                    setStatus(`${formatPartyLabel(match) || query} has no saved map location.`);
                 }
-
-                renderPartyNoLocationPrompt(match);
-                setStatus(`Party #${customerId}${featureName} has no saved map location.`);
                 return;
             }
 
@@ -1148,15 +1145,23 @@
             .map((feature) => {
                 const properties = feature.properties || {};
                 const id = properties.customer_id;
+                const label = formatPartyLabel(feature);
+                const comment = formatPartyComment(feature);
+                const userName = formatPartyUserName(properties);
+                const statusText = formatPartyStatus(properties.status);
                 const details = compactJoin([
                     properties.phone || '',
                     properties.connection_id || properties.mikrotik_username || '',
                     properties.address || '',
+                    statusText !== 'Not provided' ? `Status: ${statusText}` : '',
+                    `User: ${userName}`,
                 ]);
                 const hasLocation = Boolean(properties.has_map_location);
 
                 return `<div class="search-result" data-customer-id="${escapeHtml(id)}">
-                    <strong>${escapeHtml(`Party #${id} - ${properties.name || 'Unknown party'}`)}</strong>
+                    <strong>${escapeHtml(label)}</strong>
+                    ${comment ? `<span>${escapeHtml(`Comment: ${comment}`)}</span>` : ''}
+                    ${statusText ? `<span><span class="badge ${formatPartyStatusClass(properties.status)}">${escapeHtml(statusText)}</span></span>` : ''}
                     <span>${escapeHtml(details || 'No mobile / user ID / address')}</span>
                     <div class="search-result-actions">
                         <button type="button" class="search-result-action search-result-action--focus" data-focus-customer="${escapeHtml(id)}">View on map</button>
@@ -1178,6 +1183,7 @@
                 event.preventDefault();
                 event.stopPropagation();
                 const customerId = button.dataset.focusCustomer;
+                setPartySearchInput(customerId);
                 resultsPanel.hidden = true;
                 focusCustomer(customerId);
             });
@@ -1204,7 +1210,8 @@
 
     function renderPartyNoLocationPrompt(feature) {
         const customerId = String(feature?.properties?.customer_id || '');
-        const name = feature?.properties?.name ? ` - ${feature.properties.name}` : '';
+        const label = formatPartyLabel(feature);
+        const comment = formatPartyComment(feature);
         const details = compactJoin([
             feature?.properties?.phone || '',
             feature?.properties?.connection_id || feature?.properties?.mikrotik_username || '',
@@ -1218,7 +1225,8 @@
 
         resultsPanel.innerHTML = `
             <div class="search-result" data-customer-id="${escapeHtml(customerId)}">
-                <strong>${escapeHtml(`Party #${customerId}${name} has no saved map location.`)}</strong>
+                <strong>${escapeHtml(`${label} has no saved map location.`)}</strong>
+                ${comment ? `<span>${escapeHtml(`Comment: ${comment}`)}</span>` : ''}
                 <span>${escapeHtml(details || 'No mobile / user ID / address')}</span>
                 <div class="search-result-actions">
                     <button type="button" class="search-result-action search-result-action--primary" data-add-party-location="${escapeHtml(customerId)}">Add on map</button>
@@ -1237,26 +1245,30 @@
         }
     }
 
-    function focusCustomer(customerId) {
+    function focusCustomer(customerId, options = {}) {
         const feature = state.customerFeatures.get(String(customerId));
+        if (!options.preserveInput) {
+            setPartySearchInput(customerId);
+        }
         if (!feature || !customerHasLocation(feature)) {
-            const featureName = feature?.properties?.name ? ` - ${feature.properties.name}` : '';
+            const missingLocationLabel = formatPartyLabel(feature || { customer_id: customerId });
             if (feature) {
                 renderPartyNoLocationPrompt(feature);
             } else {
-                setCustomerSearchResult(`Party #${customerId}${featureName} has no saved map location.`, true);
+                setCustomerSearchResult(`${missingLocationLabel} has no saved map location.`, true);
             }
             return false;
         }
 
+        const label = formatPartyLabel(feature);
         state.map.flyTo({
             center: feature.geometry.coordinates,
             zoom: Math.max(state.map.getZoom(), 17),
             duration: 850,
         });
         showCustomerPopup(feature);
-        setCustomerSearchResult(`Showing #${customerId} - ${feature.properties.name}.`);
-        setStatus(`Party #${customerId} selected on the map.`);
+        setCustomerSearchResult(`Showing ${label}.`);
+        setStatus(`${label} selected on the map.`);
 
         const url = new URL(window.location.href);
         url.searchParams.set('customer_id', customerId);
@@ -1268,11 +1280,16 @@
         const properties = feature.properties || {};
         const siblingPorts = customerSiblingsAtLocation(feature.geometry?.coordinates || []);
         const canEdit = customerHasLocation(feature);
+        const displayName = formatPartyDisplayName(properties);
+        const userName = formatPartyUserName(properties);
+        const statusText = formatPartyStatus(properties.status);
         const siblingSummary = siblingPorts.length > 1
             ? siblingPorts.map((item, index) => {
-                return `<div>${escapeHtml(`Port ${String(index + 1).padStart(2, '0')}: #${item.properties.customer_id} ${item.properties.name || 'Unknown party'}`)}</div>`;
+                return `<div>${escapeHtml(`Port ${String(index + 1).padStart(2, '0')}: ${formatPartyLabel(item)}`)}</div>`;
             }).join('')
             : '';
+        const comment = formatPartyComment(properties);
+        const showCommentRow = Boolean(comment) && comment !== displayName;
         const removeButton = canEdit
             ? `<button type="button" class="search-result-action search-result-action--danger" data-remove-party-location="${escapeHtml(String(properties.customer_id))}">Remove location</button>`
             : '';
@@ -1281,9 +1298,18 @@
         state.customerPopup = new maplibregl.Popup({ offset: 16 })
             .setLngLat(feature.geometry.coordinates)
             .setHTML(`
-                <p class="popup-title">#${escapeHtml(properties.customer_id)} ${escapeHtml(properties.name)}</p>
-                <p class="popup-meta">${escapeHtml(properties.status || 'unknown')} - ${escapeHtml(properties.mikrotik_username || properties.connection_id || 'No user ID')}</p>
+                <p class="popup-title">${escapeHtml(formatPartyLabel(properties))}</p>
+                <p class="popup-meta">
+                    <span class="badge ${formatPartyStatusClass(properties.status)}">${escapeHtml(statusText)}</span>
+                    <span class="badge-sep">|</span>
+                    <span>${escapeHtml(userName)}</span>
+                </p>
                 <dl class="popup-details">
+                    <div><dt>Name</dt><dd>${escapeHtml(displayName || 'Not provided')}</dd></div>
+                    <div><dt>Party ID</dt><dd>${escapeHtml(formatPartyLabel(properties) || 'N/A')}</dd></div>
+                    <div><dt>User Name</dt><dd>${escapeHtml(userName)}</dd></div>
+                    <div><dt>Active Status</dt><dd><span class="badge ${formatPartyStatusClass(properties.status)}">${escapeHtml(statusText)}</span></dd></div>
+                    ${showCommentRow ? `<div><dt>Comment</dt><dd>${escapeHtml(comment || 'Not provided')}</dd></div>` : ''}
                     <div><dt>Phone</dt><dd>${escapeHtml(properties.phone || 'Not provided')}</dd></div>
                     <div><dt>Address</dt><dd>${escapeHtml(properties.address || 'Not provided')}</dd></div>
                     ${siblingSummary ? `<div><dt>Multi-port at location</dt><dd>${siblingSummary}</dd></div>` : ''}
@@ -1382,8 +1408,11 @@
         title.textContent = `Place Party #${customerId} on map`;
 
         const properties = feature.properties || {};
+        const displayName = formatPartyDisplayName(properties);
         const details = [
-            ['Name', properties.name || 'Not provided'],
+            ['Name', displayName || 'Not provided'],
+            ['Party ID', `#${String(customerId)}`],
+            ['Comment', properties.comment || 'Not provided'],
             ['Mobile', properties.phone || 'Not provided'],
             ['User ID', properties.connection_id || properties.mikrotik_username || 'Not provided'],
             ['Address', properties.address || 'Not provided'],
@@ -1419,7 +1448,7 @@
             state.map.getCanvas().style.cursor = 'crosshair';
         }
 
-        document.getElementById('customerIdQuery').value = String(customerId);
+        setPartySearchInput(customerId);
         renderPartyPlacementPanel(feature);
         setStatus(`Add mode: click map to set location for party #${customerId}.`);
     }
@@ -1493,8 +1522,8 @@
         }
 
         const feature = state.customerFeatures.get(String(customerId));
-        const name = feature?.properties?.name || 'this party';
-        if (!confirm(`Remove saved map location for Party #${customerId} (${name})?`)) {
+        const label = formatPartyLabel(feature || { customer_id: customerId });
+        if (!confirm(`Remove saved map location for ${label}?`)) {
             return;
         }
 
@@ -1629,7 +1658,7 @@
             if (clicked[0].layer.id === 'customer-locations-circle') {
                 const customer = state.customerFeatures.get(String(clicked[0].properties.customer_id));
                 if (customer) {
-                    document.getElementById('customerIdQuery').value = customer.properties.customer_id;
+                    setPartySearchInput(customer.properties.customer_id);
                     focusCustomer(String(customer.properties.customer_id));
                 }
                 return;
@@ -3913,6 +3942,71 @@
 
     function compactJoin(values) {
         return values.filter((value) => value !== undefined && value !== null && String(value).trim() !== '').join(' / ');
+    }
+
+    function setPartySearchInput(value) {
+        const input = document.getElementById('customerIdQuery');
+        if (!input) {
+            return;
+        }
+
+        const normalized = String(value || '').trim();
+        input.value = normalized;
+    }
+
+    function formatPartyDisplayName(customerOrFeature) {
+        const properties = customerOrFeature?.properties ?? customerOrFeature ?? {};
+        const rawName = String(properties.name || '').trim();
+        const id = String(properties.customer_id || '').trim();
+        const customerName = String(properties.customer_name || '').trim();
+
+        if (rawName && rawName !== id && !/^\d+$/.test(rawName)) {
+            return rawName;
+        }
+
+        if (customerName && customerName !== id && !/^\d+$/.test(customerName)) {
+            return customerName;
+        }
+
+        return '';
+    }
+
+    function formatPartyLabel(customerOrFeature) {
+        const properties = customerOrFeature?.properties ?? customerOrFeature ?? {};
+        const id = String(properties.customer_id || '').trim();
+        if (!id) {
+            return '';
+        }
+
+        return `Party #${id}`;
+    }
+
+    function formatPartyComment(customerOrFeature) {
+        const properties = customerOrFeature?.properties ?? customerOrFeature ?? {};
+        return String(properties.comment || '').trim();
+    }
+
+    function formatPartyUserName(customerOrFeature) {
+        const properties = customerOrFeature?.properties ?? customerOrFeature ?? {};
+        return String(properties.connection_id || properties.mikrotik_username || 'Not provided').trim();
+    }
+
+    function formatPartyStatus(rawStatus) {
+        const status = String(rawStatus || '').trim();
+        if (!status) {
+            return 'Not provided';
+        }
+
+        return status.toLowerCase() === 'inactive'
+            ? 'Inactive'
+            : status.toLowerCase() === 'deactivated'
+            ? 'Inactive'
+            : 'Active';
+    }
+
+    function formatPartyStatusClass(rawStatus) {
+        const normalized = String(rawStatus || '').trim().toLowerCase();
+        return normalized === 'active' ? 'active' : normalized === 'inactive' || normalized === 'deactivated' ? 'inactive' : 'inactive';
     }
 
     function formatFiberCoreMap(rows) {

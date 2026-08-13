@@ -26,6 +26,14 @@ class NetworkMapController extends Controller
         ]);
     }
 
+    public function partyLocations(Request $request): View
+    {
+        return view('network_map.party_locations', [
+            'title' => 'Party Location Manager',
+            'initialCustomerId' => $request->integer('customer_id') ?: null,
+        ]);
+    }
+
     public function index(): JsonResponse
     {
         $features = NetworkMapFeature::query()
@@ -45,12 +53,14 @@ class NetworkMapController extends Controller
         $search = trim((string) $request->query('q', ''));
 
         $features = Customer::query()
+            ->with('importedSecret')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query->where('name', 'like', "%{$search}%")
                         ->orWhere('phone', 'like', "%{$search}%")
                         ->orWhere('connection_id', 'like', "%{$search}%")
                         ->orWhere('mikrotik_username', 'like', "%{$search}%")
+                        ->orWhereHas('importedSecret', fn ($query) => $query->where('router_comment', 'like', "%{$search}%"))
                         ->orWhere('address', 'like', "%{$search}%");
 
                     if (ctype_digit($search)) {
@@ -319,6 +329,8 @@ class NetworkMapController extends Controller
 
     private function customerToFeature(Customer $customer): array
     {
+        $customer->loadMissing('importedSecret');
+        $comment = trim((string) ($customer->importedSecret?->router_comment ?: ''));
         $hasLocation = ! is_null($customer->map_latitude) && ! is_null($customer->map_longitude);
 
         return [
@@ -330,7 +342,9 @@ class NetworkMapController extends Controller
             ] : null,
             'properties' => [
                 'customer_id' => $customer->id,
-                'name' => $customer->name,
+                'customer_name' => $customer->name,
+                'name' => (string) $customer->id,
+                'comment' => $comment,
                 'phone' => $customer->phone,
                 'connection_id' => $customer->connection_id,
                 'mikrotik_username' => $customer->mikrotik_username,

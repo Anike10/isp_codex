@@ -1240,6 +1240,41 @@
     margin: 0;
     color: #667085;
     font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.popup-meta .badge,
+.party-list-meta .badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+}
+
+.badge.active,
+.badge-sep ~ .badge.active {
+    border-color: #34a853;
+    background-color: #e8f5ea;
+    color: #14532d;
+}
+
+.badge.inactive,
+.badge-sep ~ .badge.inactive {
+    border-color: #ef4444;
+    background-color: #fef2f2;
+    color: #7f1d1d;
+}
+
+.badge:not(.active):not(.inactive) {
+    border-color: #e5e7eb;
+    background-color: #f8fafc;
+    color: #475467;
+}
+
+.badge-sep {
+    color: #98a2b3;
 }
 
 .popup-details {
@@ -1264,6 +1299,65 @@
     margin: 0;
     color: #172033;
     white-space: pre-wrap;
+}
+
+.party-location-stats {
+    margin: 0;
+    color: #667085;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.party-list {
+    display: grid;
+    gap: 8px;
+    max-height: calc(100vh - 350px);
+    overflow: auto;
+    padding-right: 4px;
+}
+
+.party-list-item {
+    display: grid;
+    gap: 6px;
+    padding: 9px 10px;
+    border: 1px solid #d8dee9;
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+.party-list-item.has-location {
+    border-left: 3px solid #16a34a;
+}
+
+.party-list-item.is-active {
+    border-color: #116149;
+    background: #e7f7ef;
+}
+
+.party-list-title {
+    margin: 0;
+    color: #172033;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.party-list-meta {
+    display: grid;
+    gap: 2px;
+    color: #667085;
+    font-size: 12px;
+}
+
+.party-list-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.party-location-search-status.search-empty {
+    margin-top: 6px;
+    border: 1px dashed #d8dee9;
+    background: #f8fafc;
 }
 
 @media (max-width: 980px) {

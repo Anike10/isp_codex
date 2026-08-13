@@ -1,0 +1,875 @@
+(() => {
+    const config = window.NETWORK_PARTY_LOCATIONS_CONFIG || {};
+    const defaultViewStorageKey = 'network-party-locations-default-view-v1';
+    const fallbackDefaultView = {
+        center: [89.1219, 23.9013],
+        zoom: 14,
+    };
+
+    const basemaps = {
+        voyager: {
+            label: 'Voyager',
+            tiles: [
+                'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+                'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+                'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+            ],
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+        },
+        osm: {
+            label: 'OpenStreetMap',
+            tiles: [
+                'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            ],
+            attribution: '&copy; OpenStreetMap contributors',
+        },
+        light: {
+            label: 'Light',
+            tiles: [
+                'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
+                'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
+            ],
+            attribution: '&copy; Stadia Maps &copy; OpenStreetMap contributors',
+        },
+        dark: {
+            label: 'Dark',
+            tiles: [
+                'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
+                'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
+            ],
+            attribution: '&copy; Stadia Maps &copy; OpenStreetMap contributors',
+        },
+        satellite: {
+            label: 'Satellite',
+            tiles: [
+                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            ],
+            attribution: 'Tiles &copy; Esri',
+        },
+        google_road: {
+            label: 'Google Road',
+            tiles: [
+                'https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}',
+                'https://mt2.google.com/vt/lyrs=r&x={x}&y={y}&z={z}',
+                'https://mt3.google.com/vt/lyrs=r&x={x}&y={y}&z={z}',
+            ],
+            attribution: '&copy; Google',
+        },
+        google_satellite: {
+            label: 'Google Sat',
+            tiles: [
+                'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+                'https://mt2.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+                'https://mt3.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+            ],
+            attribution: '&copy; Google',
+        },
+    };
+
+    const state = {
+        map: null,
+        activeBasemap: 'voyager',
+        customers: new Map(),
+        pendingPartyLocationCustomerId: null,
+        selectedCustomerId: null,
+        searchToken: 0,
+        popup: null,
+    };
+
+    const dom = {
+        basemapTools: document.getElementById('partyBasemapTools'),
+        searchForm: document.getElementById('partyLocationSearchForm'),
+        searchInput: document.getElementById('partyLocationQuery'),
+        searchStatus: document.getElementById('partyLocationSearchStatus'),
+        partyList: document.getElementById('partyList'),
+        partyStats: document.getElementById('partyLocationStats'),
+        mapStatus: document.getElementById('mapStatus'),
+        placementPanel: document.getElementById('partyPlacementPanel'),
+        placementTitle: document.getElementById('partyPlacementTitle'),
+        placementInfo: document.getElementById('partyPlacementInfo'),
+        cancelPlacementBtn: document.getElementById('cancelPartyPlacementBtn'),
+    };
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    function init() {
+        if (typeof window.maplibregl === 'undefined') {
+            setStatus('Map library could not load. Refresh the page and try again.');
+            return;
+        }
+
+        const defaultView = loadDefaultView();
+
+        state.map = new maplibregl.Map({
+            container: 'networkMap',
+            style: {
+                version: 8,
+                sources: Object.fromEntries(Object.entries(basemaps).map(([key, basemap]) => [
+                    `basemap-${key}`,
+                    {
+                        type: 'raster',
+                        tiles: basemap.tiles,
+                        tileSize: 256,
+                        attribution: basemap.attribution,
+                    },
+                ])),
+                layers: Object.keys(basemaps).map((key) => ({
+                    id: `basemap-${key}`,
+                    type: 'raster',
+                    source: `basemap-${key}`,
+                    layout: {
+                        visibility: key === state.activeBasemap ? 'visible' : 'none',
+                    },
+                })),
+            },
+            center: defaultView.center,
+            zoom: defaultView.zoom,
+            maxZoom: 22,
+            doubleClickZoom: false,
+        });
+
+        state.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+        state.map.on('load', onMapLoad);
+        bindGlobalEvents();
+    }
+
+    function onMapLoad() {
+        addLayers();
+        state.map.on('click', onMapClick);
+        state.map.on('mouseenter', 'party-location-circle', function () {
+            state.map.getCanvas().style.cursor = 'pointer';
+        });
+        state.map.on('mouseleave', 'party-location-circle', function () {
+            state.map.getCanvas().style.cursor = '';
+        });
+
+        loadCustomers();
+    }
+
+    function bindGlobalEvents() {
+        bindBasemapTools();
+        if (dom.searchForm) {
+            dom.searchForm.addEventListener('submit', onPartySearchSubmit);
+        }
+        if (dom.partyList) {
+            dom.partyList.addEventListener('click', onPartyListClick);
+        }
+        if (dom.cancelPlacementBtn) {
+            dom.cancelPlacementBtn.addEventListener('click', cancelPartyLocationPlacement);
+        }
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                cancelPartyLocationPlacement();
+            }
+        });
+        if (dom.searchInput) {
+            dom.searchInput.addEventListener('input', function () {
+                clearSearchStatus();
+            });
+        }
+    }
+
+    function bindBasemapTools() {
+        if (!dom.basemapTools) {
+            return;
+        }
+
+        dom.basemapTools.querySelectorAll('.basemap-tool').forEach((button) => {
+            button.addEventListener('click', function () {
+                setBasemap(button.dataset.basemap);
+            });
+        });
+    }
+
+    function onPartySearchSubmit(event) {
+        event.preventDefault();
+        const query = (dom.searchInput?.value || '').trim();
+        loadCustomers(query);
+    }
+
+    function onPartyListClick(event) {
+        const button = event.target.closest('[data-party-action]');
+        if (!button) {
+            return;
+        }
+
+        event.preventDefault();
+        const action = button.dataset.partyAction;
+        const customerId = button.dataset.customerId;
+        if (!customerId) {
+            return;
+        }
+
+        if (action === 'focus') {
+            focusCustomer(customerId);
+            return;
+        }
+
+        if (action === 'add' || action === 'edit') {
+            requestPartyLocationPlacement(customerId);
+            return;
+        }
+
+        if (action === 'remove') {
+            removePartyLocation(customerId);
+        }
+    }
+
+    function onMapClick(event) {
+        if (state.pendingPartyLocationCustomerId) {
+            placePartyLocationFromMapClick(state.pendingPartyLocationCustomerId, event.lngLat.lng, event.lngLat.lat);
+            return;
+        }
+
+        const clicked = state.map.queryRenderedFeatures(event.point, {
+            layers: ['party-location-circle'],
+        });
+
+        if (!clicked.length) {
+            return;
+        }
+
+        const customerId = clicked[0].properties?.customer_id;
+        if (!customerId) {
+            return;
+        }
+
+        focusCustomer(customerId);
+    }
+
+    function setBasemap(basemapKey) {
+        if (!basemaps[basemapKey] || !state.map?.isStyleLoaded()) {
+            return;
+        }
+
+        state.activeBasemap = basemapKey;
+        state.map.setPaintProperty('party-location-halo', 'circle-color', '#0f766e');
+        Object.keys(basemaps).forEach((key) => {
+            state.map.setLayoutProperty(
+                `basemap-${key}`,
+                'visibility',
+                key === basemapKey ? 'visible' : 'none'
+            );
+        });
+
+        dom.basemapTools?.querySelectorAll('.basemap-tool').forEach((button) => {
+            button.classList.toggle('active', button.dataset.basemap === basemapKey);
+        });
+
+        setStatus(`${basemaps[basemapKey].label} map selected.`);
+        saveDefaultView({
+            center: state.map.getCenter().toArray(),
+            zoom: state.map.getZoom(),
+        });
+    }
+
+    function addLayers() {
+        state.map.addSource('party-locations', {
+            type: 'geojson',
+            data: emptyCollection(),
+        });
+
+        state.map.addLayer({
+            id: 'party-location-halo',
+            type: 'circle',
+            source: 'party-locations',
+            paint: {
+                'circle-color': '#f97316',
+                'circle-radius': 14,
+                'circle-opacity': 0.06,
+                'circle-stroke-width': 0,
+            },
+        });
+
+        state.map.addLayer({
+            id: 'party-location-circle',
+            type: 'circle',
+            source: 'party-locations',
+            paint: {
+                'circle-radius': 7,
+                'circle-color': '#16a34a',
+                'circle-stroke-color': '#ffffff',
+                'circle-stroke-width': 2,
+            },
+        });
+
+        state.map.addLayer({
+            id: 'party-location-label',
+            type: 'symbol',
+            source: 'party-locations',
+            layout: {
+                'text-field': ['concat', '#', ['get', 'customer_id']],
+                'text-size': 11,
+                'text-offset': [0, 1.35],
+                'text-anchor': 'top',
+                'text-allow-overlap': false,
+            },
+            paint: {
+                'text-color': '#134e4a',
+                'text-halo-color': '#ffffff',
+                'text-halo-width': 1.2,
+            },
+        });
+    }
+
+    async function loadCustomers(query = '') {
+        if (!dom.mapStatus) {
+            return;
+        }
+
+        state.searchToken += 1;
+        const requestToken = state.searchToken;
+        setStatus('Loading parties...');
+        clearSearchStatus();
+
+        const url = new URL(config.customersUrl);
+        const trimmed = (query || '').trim();
+
+        if (trimmed) {
+            url.searchParams.set('q', trimmed);
+        } else {
+            url.searchParams.delete('q');
+        }
+
+        try {
+            const response = await fetch(url, {
+                headers: { Accept: 'application/json' },
+            });
+
+            if (!response.ok) {
+                throw new Error(await responseErrorMessage(response, 'Unable to load parties.'));
+            }
+
+            const collection = await response.json();
+            const features = Array.isArray(collection.features) ? collection.features : [];
+
+            if (requestToken !== state.searchToken) {
+                return;
+            }
+
+            state.customers = new Map();
+            features.forEach((feature) => {
+                const customerId = feature?.properties?.customer_id;
+                if (!customerId) {
+                    return;
+                }
+
+                state.customers.set(String(customerId), feature);
+            });
+
+            renderPartyLocationSource();
+            renderPartyList();
+            updatePartyStats();
+
+            if (trimmed) {
+                setSearchStatus(`${features.length} parties found for "${trimmed}".`);
+            } else {
+                setSearchStatus('');
+            }
+
+            const initialCustomerId = String(config.initialCustomerId || '').trim();
+            if (initialCustomerId) {
+                focusCustomer(initialCustomerId);
+                config.initialCustomerId = null;
+            }
+        } catch (error) {
+            setStatus(error.message);
+            if (dom.partyList) {
+                dom.partyList.innerHTML = `<div class="search-empty error">${escapeHtml(error.message)}</div>`;
+            }
+        }
+    }
+
+    function renderPartyLocationSource() {
+        const locationFeatures = [...state.customers.values()].filter(customerHasLocation);
+        setSourceData('party-locations', {
+            type: 'FeatureCollection',
+            features: locationFeatures,
+        });
+    }
+
+    function renderPartyList() {
+        if (!dom.partyList) {
+            return;
+        }
+
+        if (!state.customers.size) {
+            dom.partyList.innerHTML = '<div class="search-empty">No parties found.</div>';
+            return;
+        }
+
+        const rows = [...state.customers.values()].sort((a, b) => {
+            const firstName = (formatPartyDisplayName(a) || '').toLowerCase();
+            const secondName = (formatPartyDisplayName(b) || '').toLowerCase();
+            if (firstName === secondName) {
+                return formatPartyLabel(a).localeCompare(formatPartyLabel(b));
+            }
+
+            return firstName.localeCompare(secondName);
+        });
+
+        dom.partyList.innerHTML = rows.map((feature) => {
+            const properties = feature.properties || {};
+            const customerId = String(properties.customer_id || '').trim();
+            const label = formatPartyLabel(feature);
+            const partyName = formatPartyDisplayName(feature) || 'Name not provided';
+            const userName = formatPartyUserName(feature);
+            const statusText = formatPartyStatus(properties.status);
+            const statusClass = formatPartyStatusClass(properties.status);
+            const comment = formatPartyComment(feature);
+            const hasLocation = customerHasLocation(feature);
+            const locationText = hasLocation ? 'Location saved' : 'No location';
+
+            const details = compactJoin([
+                properties.phone ? `Mobile: ${properties.phone}` : '',
+                properties.connection_id ? `User ID: ${properties.connection_id}` : '',
+                properties.mikrotik_username ? `Mikrotik: ${properties.mikrotik_username}` : '',
+                properties.address ? `Address: ${properties.address}` : '',
+            ]);
+
+            return `
+                <div class="party-list-item ${hasLocation ? 'has-location' : ''} ${String(state.selectedCustomerId) === customerId ? 'is-active' : ''}" data-customer-row="${escapeHtml(customerId)}">
+                    <div class="party-list-title">${escapeHtml(label)}</div>
+                    <div class="party-list-meta">
+                        <span>Name: ${escapeHtml(partyName)}</span>
+                        <span><span class="badge ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span></span>
+                        <span>User: ${escapeHtml(userName)}</span>
+                        <span>${escapeHtml(locationText)}</span>
+                        ${comment ? `<span>Comment: ${escapeHtml(comment)}</span>` : ''}
+                        ${details ? `<span>${escapeHtml(details)}</span>` : ''}
+                    </div>
+                    <div class="party-list-actions">
+                        <button type="button" class="search-result-action search-result-action--focus" data-party-action="focus" data-customer-id="${escapeHtml(customerId)}">View on map</button>
+                        <button type="button" class="${hasLocation ? 'search-result-action' : 'search-result-action search-result-action--primary'}" data-party-action="${hasLocation ? 'edit' : 'add'}" data-customer-id="${escapeHtml(customerId)}">${hasLocation ? 'Edit location' : 'Add location'}</button>
+                        ${hasLocation ? `<button type="button" class="search-result-action search-result-action--danger" data-party-action="remove" data-customer-id="${escapeHtml(customerId)}">Delete location</button>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function updatePartyStats() {
+        if (!dom.partyStats) {
+            return;
+        }
+
+        const total = state.customers.size;
+        const withLocation = [...state.customers.values()].filter(customerHasLocation).length;
+        dom.partyStats.textContent = `Total parties: ${total} | Locations set: ${withLocation}`;
+    }
+
+    function focusCustomer(customerId) {
+        const feature = state.customers.get(String(customerId));
+        if (!feature) {
+            setStatus(`Party ${escapeHtml(customerId)} not found.`);
+            return false;
+        }
+
+        if (!customerHasLocation(feature)) {
+            requestPartyLocationPlacement(customerId);
+            return false;
+        }
+
+        state.selectedCustomerId = String(customerId);
+        renderPartyList();
+
+        const coordinates = feature.geometry?.coordinates;
+        const rowId = String(customerId);
+        const row = document.querySelector(`[data-customer-row="${CSS.escape(rowId)}"]`);
+        if (row) {
+            row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+
+        state.map.flyTo({
+            center: coordinates,
+            zoom: Math.max(state.map.getZoom(), 17),
+            duration: 750,
+        });
+        openPartyPopup(feature);
+
+        const label = formatPartyLabel(feature);
+        setStatus(`${label} focused on the map.`);
+        return true;
+    }
+
+    function openPartyPopup(feature) {
+        if (!feature || !customerHasLocation(feature)) {
+            return;
+        }
+
+        const properties = feature.properties || {};
+        const customerId = String(properties.customer_id || '').trim();
+        const customerName = formatPartyDisplayName(feature);
+        const userName = formatPartyUserName(properties);
+        const statusText = formatPartyStatus(properties.status);
+        const statusClass = formatPartyStatusClass(properties.status);
+
+        if (state.popup) {
+            state.popup.remove();
+            state.popup = null;
+        }
+
+        state.popup = new maplibregl.Popup({ offset: 16 })
+            .setLngLat(feature.geometry.coordinates)
+            .setHTML(`
+                <p class="popup-title">${escapeHtml(`Party #${customerId}`)}</p>
+                <p class="popup-meta">
+                    <span class="badge ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span>
+                    <span class="badge-sep">|</span>
+                    <span>${escapeHtml(userName)}</span>
+                </p>
+                <dl class="popup-details">
+                    <div><dt>Name</dt><dd>${escapeHtml(customerName || 'Not provided')}</dd></div>
+                    <div><dt>User Name</dt><dd>${escapeHtml(userName)}</dd></div>
+                    <div><dt>Active Status</dt><dd><span class="badge ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span></dd></div>
+                    <div><dt>Comment</dt><dd>${escapeHtml(properties.comment || 'Not provided')}</dd></div>
+                    <div><dt>Phone</dt><dd>${escapeHtml(properties.phone || 'Not provided')}</dd></div>
+                    <div><dt>Address</dt><dd>${escapeHtml(properties.address || 'Not provided')}</dd></div>
+                    <div><dt>Actions</dt><dd><button type="button" class="search-result-action search-result-action--primary" data-popup-action="edit" data-popup-party="${escapeHtml(customerId)}">Edit location</button> <button type="button" class="search-result-action search-result-action--danger" data-popup-action="remove" data-popup-party="${escapeHtml(customerId)}">Delete location</button></dd></div>
+                </dl>
+            `)
+            .addTo(state.map);
+
+        const popupElement = state.popup.getElement();
+        const editButton = popupElement.querySelector('[data-popup-action="edit"]');
+        const removeButton = popupElement.querySelector('[data-popup-action="remove"]');
+
+        if (editButton) {
+            editButton.addEventListener('click', function () {
+                const selectedId = editButton.dataset.popupParty;
+                requestPartyLocationPlacement(selectedId);
+                if (state.popup) {
+                    state.popup.remove();
+                    state.popup = null;
+                }
+            });
+        }
+
+        if (removeButton) {
+            removeButton.addEventListener('click', function () {
+                const selectedId = removeButton.dataset.popupParty;
+                removePartyLocation(selectedId);
+                if (state.popup) {
+                    state.popup.remove();
+                    state.popup = null;
+                }
+            });
+        }
+    }
+
+    function requestPartyLocationPlacement(customerId) {
+        const feature = state.customers.get(String(customerId));
+        if (!feature) {
+            return;
+        }
+
+        state.pendingPartyLocationCustomerId = String(customerId);
+        state.map.getCanvas().style.cursor = 'crosshair';
+
+        const properties = feature.properties || {};
+        const customerName = formatPartyDisplayName(feature) || 'Name not provided';
+        const userName = formatPartyUserName(properties);
+        const activeStatusText = formatPartyStatus(properties.status);
+        const placementHeader = customerHasLocation(feature)
+            ? `Edit location for Party #${customerId}`
+            : `Set new location for Party #${customerId}`;
+
+        if (dom.placementPanel) {
+            dom.placementTitle.textContent = placementHeader;
+            dom.placementInfo.innerHTML = `
+                <span class="detail"><span class="label">Party Name:</span><strong>${escapeHtml(customerName)}</strong></span>
+                <span class="detail"><span class="label">Party ID:</span><strong>#${escapeHtml(customerId)}</strong></span>
+                <span class="detail"><span class="label">User:</span><strong>${escapeHtml(userName)}</strong></span>
+                <span class="detail"><span class="label">Active:</span><strong><span class="badge ${escapeHtml(formatPartyStatusClass(properties.status))}">${escapeHtml(activeStatusText)}</span></strong></span>
+                <span class="detail"><span class="label">Comment:</span><strong>${escapeHtml(properties.comment || 'Not provided')}</strong></span>
+            `;
+            dom.placementPanel.hidden = false;
+        }
+
+        setStatus(`Placement mode: click on the map to save location for Party #${customerId}.`);
+    }
+
+    function cancelPartyLocationPlacement() {
+        if (!state.pendingPartyLocationCustomerId) {
+            if (dom.placementPanel) {
+                dom.placementPanel.hidden = true;
+            }
+            return;
+        }
+
+        state.pendingPartyLocationCustomerId = null;
+        state.map.getCanvas().style.cursor = '';
+        if (dom.placementPanel) {
+            dom.placementPanel.hidden = true;
+            dom.placementInfo.innerHTML = '';
+            dom.placementTitle.textContent = 'Place party location';
+        }
+
+        setStatus('Party location placement cancelled.');
+    }
+
+    async function placePartyLocationFromMapClick(customerId, longitude, latitude) {
+        const feature = await savePartyLocation(customerId, {
+            map_latitude: latitude,
+            map_longitude: longitude,
+        });
+
+        if (!feature) {
+            return;
+        }
+
+        upsertPartyFeature(feature);
+        state.pendingPartyLocationCustomerId = null;
+        state.map.getCanvas().style.cursor = '';
+        if (dom.placementPanel) {
+            dom.placementPanel.hidden = true;
+            dom.placementInfo.innerHTML = '';
+            dom.placementTitle.textContent = 'Place party location';
+        }
+
+        setStatus(`Party #${customerId} location saved.`);
+        focusCustomer(customerId);
+    }
+
+    async function savePartyLocation(customerId, payload) {
+        const url = `${config.customersUrl}/${encodeURIComponent(customerId)}/location`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'PATCH',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': config.csrfToken,
+                },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                throw new Error(await responseErrorMessage(response, 'Unable to save party location.'));
+            }
+
+            return await response.json();
+        } catch (error) {
+            setStatus(error.message);
+            return null;
+        }
+    }
+
+    async function removePartyLocation(customerId) {
+        const feature = state.customers.get(String(customerId));
+        const label = formatPartyLabel(feature || { customer_id: customerId });
+        if (!confirm(`Delete map location for ${label}?`)) {
+            return;
+        }
+
+        const url = `${config.customersUrl}/${encodeURIComponent(customerId)}/location`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'DELETE',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': config.csrfToken,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(await responseErrorMessage(response, 'Unable to remove party location.'));
+            }
+
+            const updated = await response.json();
+            upsertPartyFeature(updated);
+            if (String(state.pendingPartyLocationCustomerId) === String(customerId)) {
+                cancelPartyLocationPlacement();
+            }
+
+            if (state.popup) {
+                state.popup.remove();
+                state.popup = null;
+            }
+
+            setStatus(`Party #${customerId} location removed.`);
+        } catch (error) {
+            setStatus(error.message);
+        }
+    }
+
+    function upsertPartyFeature(feature) {
+        const customerId = feature?.properties?.customer_id;
+        if (!customerId) {
+            return;
+        }
+
+        state.customers.set(String(customerId), feature);
+        renderPartyLocationSource();
+        renderPartyList();
+        updatePartyStats();
+    }
+
+    function customerHasLocation(feature) {
+        const longitude = Number(feature?.geometry?.coordinates?.[0]);
+        const latitude = Number(feature?.geometry?.coordinates?.[1]);
+        return Number.isFinite(longitude) && Number.isFinite(latitude);
+    }
+
+    function setSourceData(sourceId, data) {
+        const source = state.map?.getSource(sourceId);
+        if (!source || typeof source.setData !== 'function') {
+            return;
+        }
+
+        source.setData(data);
+    }
+
+    function emptyCollection() {
+        return { type: 'FeatureCollection', features: [] };
+    }
+
+    function setStatus(message) {
+        if (dom.mapStatus) {
+            dom.mapStatus.textContent = message;
+        }
+    }
+
+    function setSearchStatus(message) {
+        if (!dom.searchStatus) {
+            return;
+        }
+
+        if (message) {
+            dom.searchStatus.textContent = message;
+            dom.searchStatus.hidden = false;
+        } else {
+            dom.searchStatus.hidden = true;
+            dom.searchStatus.textContent = '';
+        }
+    }
+
+    function clearSearchStatus() {
+        if (dom.searchStatus) {
+            dom.searchStatus.hidden = true;
+            dom.searchStatus.textContent = '';
+        }
+    }
+
+    function loadDefaultView() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(defaultViewStorageKey) || 'null');
+            if (isValidDefaultView(saved)) {
+                return saved;
+            }
+        } catch (error) {
+            localStorage.removeItem(defaultViewStorageKey);
+        }
+
+        return { ...fallbackDefaultView };
+    }
+
+    function saveDefaultView(view) {
+        localStorage.setItem(defaultViewStorageKey, JSON.stringify(view));
+    }
+
+    function isValidDefaultView(view) {
+        return Array.isArray(view?.center)
+            && view.center.length === 2
+            && Number.isFinite(Number(view.center[0]))
+            && Number.isFinite(Number(view.center[1]))
+            && Number.isFinite(Number(view.zoom))
+            && Number(view.zoom) >= 1
+            && Number(view.zoom) <= 22;
+    }
+
+    async function responseErrorMessage(response, fallback) {
+        try {
+            const payload = await response.json();
+            if (payload?.message) {
+                return payload.message;
+            }
+
+            if (typeof payload?.error === 'string') {
+                return payload.error;
+            }
+        } catch (error) {
+            // Ignore.
+        }
+
+        return fallback;
+    }
+
+    function formatPartyDisplayName(customerOrFeature) {
+        const properties = customerOrFeature?.properties ?? customerOrFeature ?? {};
+        const rawName = String(properties.name || '').trim();
+        const id = String(properties.customer_id || '').trim();
+        const customerName = String(properties.customer_name || '').trim();
+
+        if (rawName && rawName !== id && !/^\d+$/.test(rawName)) {
+            return rawName;
+        }
+
+        if (customerName && customerName !== id && !/^\d+$/.test(customerName)) {
+            return customerName;
+        }
+
+        return '';
+    }
+
+    function formatPartyLabel(customerOrFeature) {
+        const properties = customerOrFeature?.properties ?? customerOrFeature ?? {};
+        const id = String(properties.customer_id || '').trim();
+        if (!id) {
+            return '';
+        }
+
+        return `Party #${id}`;
+    }
+
+    function formatPartyComment(customerOrFeature) {
+        const properties = customerOrFeature?.properties ?? customerOrFeature ?? {};
+        return String(properties.comment || '').trim();
+    }
+
+    function formatPartyUserName(customerOrFeature) {
+        const properties = customerOrFeature?.properties ?? customerOrFeature ?? {};
+        return String(properties.connection_id || properties.mikrotik_username || 'Not provided').trim();
+    }
+
+    function formatPartyStatus(rawStatus) {
+        const status = String(rawStatus || '').trim();
+        if (!status) {
+            return 'Not provided';
+        }
+
+        return status.toLowerCase() === 'inactive'
+            ? 'Inactive'
+            : status.toLowerCase() === 'deactivated'
+            ? 'Inactive'
+            : 'Active';
+    }
+
+    function formatPartyStatusClass(rawStatus) {
+        const normalized = String(rawStatus || '').trim().toLowerCase();
+        return normalized === 'active'
+            ? 'active'
+            : (normalized === 'inactive' || normalized === 'deactivated')
+                ? 'inactive'
+                : 'inactive';
+    }
+
+    function compactJoin(values) {
+        return values
+            .filter((value) => value !== undefined && value !== null && String(value).trim() !== '')
+            .join(' | ');
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll('\'', '&#039;');
+    }
+})();

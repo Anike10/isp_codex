@@ -248,6 +248,7 @@
                         @endif
                         @if ($canMenu('network_map'))
                             <a href="{{ route('network-map.index') }}">FTTX Network Map</a>
+                            <a href="{{ route('network-map.party-locations.index') }}">Party Location Manager</a>
                         @endif
                         @if ($canMenu('olt_onus'))
                             <a href="{{ route('olt-onus.index') }}">OLT ONUs</a>
