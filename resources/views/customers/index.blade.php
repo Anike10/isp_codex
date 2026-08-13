@@ -62,6 +62,9 @@
         background: #ffffff;
         box-shadow: 0 14px 32px rgba(15, 23, 42, .2);
     }
+    .customer-action-menu:not([open]) > .customer-action-menu-list {
+        display: none;
+    }
     .customer-action-menu-list a,
     .customer-action-menu-list button {
         display: block;
