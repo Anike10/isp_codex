@@ -28,6 +28,67 @@
         white-space: nowrap;
     }
     .customer-filter-form .filter-actions .btn { padding: 8px 12px; }
+    .customer-action-menu {
+        position: relative;
+        display: inline-block;
+    }
+    .customer-action-menu > summary {
+        min-width: 88px;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+    }
+    .customer-action-menu > summary::-webkit-details-marker { display: none; }
+    .customer-action-menu > summary::after {
+        margin-left: 7px;
+        content: '\25BE';
+        font-size: 11px;
+    }
+    .customer-action-menu[open] > summary {
+        border-color: #116149;
+        background: #e7f7ef;
+        color: #07543e;
+    }
+    .customer-action-menu-list {
+        position: absolute;
+        top: calc(100% + 5px);
+        right: 0;
+        z-index: 30;
+        display: grid;
+        min-width: 150px;
+        overflow: hidden;
+        border: 1px solid #d8dee9;
+        border-radius: 7px;
+        background: #ffffff;
+        box-shadow: 0 14px 32px rgba(15, 23, 42, .2);
+    }
+    .customer-action-menu-list a,
+    .customer-action-menu-list button {
+        display: block;
+        width: 100%;
+        min-height: 36px;
+        border: 0;
+        border-bottom: 1px solid #eef2f6;
+        border-radius: 0;
+        padding: 9px 12px;
+        background: #ffffff;
+        color: #172033;
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        text-align: left;
+        text-decoration: none;
+    }
+    .customer-action-menu-list > :last-child,
+    .customer-action-menu-list > :last-child button { border-bottom: 0; }
+    .customer-action-menu-list a:hover,
+    .customer-action-menu-list button:hover {
+        background: #eef8f4;
+        color: #07543e;
+    }
+    .customer-action-menu-list .customer-action-delete { color: #b42318; }
+    .customer-action-menu-list form { margin: 0; }
     @media (max-width: 1500px) {
         .customer-filter-form {
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -175,15 +236,20 @@
                     </form>
                     <a class="btn light" href="{{ route('customers.deleted.history', $customer->id) }}">History</a>
                 @else
-                    <a class="btn secondary" href="{{ route('customers.payments.create', $customer) }}">Pay</a>
-                    <a class="btn light" href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}">Ledger</a>
-                    <a class="btn light" href="{{ route('customers.show', $customer) }}">View</a>
-                    <a class="btn light" href="{{ route('customers.edit', $customer) }}">Edit</a>
-                    <form method="post" action="{{ route('customers.destroy', $customer) }}" onsubmit="return confirm('Delete this party and keep all history?');" style="display:inline">
-                        @csrf
-                        @method('delete')
-                        <button class="btn light" type="submit">Delete</button>
-                    </form>
+                    <details class="customer-action-menu">
+                        <summary class="btn light">Actions</summary>
+                        <div class="customer-action-menu-list">
+                            <a href="{{ route('customers.payments.create', $customer) }}">Pay</a>
+                            <a href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}">Ledger</a>
+                            <a href="{{ route('customers.show', $customer) }}">View</a>
+                            <a href="{{ route('customers.edit', $customer) }}">Edit</a>
+                            <form method="post" action="{{ route('customers.destroy', $customer) }}" onsubmit="return confirm('Delete this party and keep all history?');">
+                                @csrf
+                                @method('delete')
+                                <button class="customer-action-delete" type="submit">Delete</button>
+                            </form>
+                        </div>
+                    </details>
                 @endif
             </td>
         </tr>
@@ -339,6 +405,19 @@ document.querySelectorAll('td[data-inline-field="package"]').forEach((cell) => {
         event.preventDefault();
         event.stopPropagation();
         editCustomerInlineCell(this);
+    });
+});
+
+document.querySelectorAll('.customer-action-menu').forEach((menu) => {
+    menu.addEventListener('click', function (event) {
+        event.stopPropagation();
+    });
+
+    menu.addEventListener('toggle', function () {
+        if (! menu.open) return;
+        document.querySelectorAll('.customer-action-menu[open]').forEach((otherMenu) => {
+            if (otherMenu !== menu) otherMenu.removeAttribute('open');
+        });
     });
 });
 </script>
