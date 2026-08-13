@@ -218,6 +218,13 @@
             $netBalance = (float) $customer->account_balance - (float) ($customer->total_due_amount ?? 0);
             $activeUntil = $customer->activeUntil();
             $daysRemaining = $customer->activeDaysRemaining();
+            $assignedSubscription = $customer->activeSubscription ?: $customer->latestSubscription;
+            $inactiveSince = $activeUntil && $daysRemaining < 0
+                ? $activeUntil->copy()->startOfDay()
+                : $customer->updated_at?->copy()->startOfDay();
+            $inactiveDays = $inactiveSince
+                ? (int) $inactiveSince->diffInDays(now()->startOfDay())
+                : null;
             $nextActiveDate = now()->addMonthNoOverflow()->toDateString();
             $canQuickActivate = ($hasImportedSecretTable ?? false) && ($customer->imported_secret_exists ?? false) && ! ($customer->invoices_exists ?? false);
         @endphp
@@ -238,9 +245,12 @@
                 @endif
             </td>
             <td>{{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}</td>
-            <td @if(! $showDeletedCustomers) data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif data-package-id="{{ $customer->activeSubscription?->internet_package_id }}">
-                @php $currentPackageName = $customer->activeSubscription?->package?->name ?: 'No package'; @endphp
+            <td @if(! $showDeletedCustomers) data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif data-package-id="{{ $assignedSubscription?->internet_package_id }}">
+                @php $currentPackageName = $assignedSubscription?->package?->name ?: 'No package'; @endphp
                 <span data-inline-value>{{ $currentPackageName }}</span>
+                @if ($activeUntil && $daysRemaining < 0)
+                    <div class="muted">Expired: {{ $activeUntil->format('d/m/Y') }}</div>
+                @endif
             </td>
             <td>
                 <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span>
@@ -250,6 +260,12 @@
                     <span class="muted">Deleted</span>
                 @else
                     <span class="badge {{ $customer->status }}">{{ $customer->status }}</span>
+                    @if ($customer->status === 'inactive' && $inactiveSince)
+                        <div class="muted">
+                            {{ $inactiveDays === 0 ? 'Inactive today' : 'Inactive for '.$inactiveDays.' days' }}
+                        </div>
+                        <div class="muted" style="font-size:11px;">Since {{ $inactiveSince->format('d/m/Y') }}</div>
+                    @endif
                     @if ($customer->hasActiveGracePeriod())
                         <span class="badge pending">Grace</span>
                     @endif

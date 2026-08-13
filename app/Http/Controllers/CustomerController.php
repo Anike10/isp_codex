@@ -773,7 +773,7 @@ class CustomerController extends Controller
         ], true) ? $request->query('expiry_window') : null;
 
         $query
-            ->with('activeSubscription.package')
+            ->with(['activeSubscription.package', 'latestSubscription.package'])
             ->withExists('subscriptions')
             ->withExists('invoices')
             ->withSum('invoices as total_due_amount', 'due_amount')

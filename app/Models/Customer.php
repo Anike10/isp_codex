@@ -139,6 +139,11 @@ class Customer extends Model
         return $this->hasOne(Subscription::class)->where('status', 'active')->latestOfMany();
     }
 
+    public function latestSubscription(): HasOne
+    {
+        return $this->hasOne(Subscription::class)->latestOfMany();
+    }
+
     public function mikrotikRouter(): BelongsTo
     {
         return $this->belongsTo(MikrotikRouter::class);
