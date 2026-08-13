@@ -99,6 +99,10 @@
             setStatus('Map library could not load. Refresh the page and try again.');
             return;
         }
+        if (!config.customersUrl) {
+            setStatus('Customers API URL is missing. Please refresh the page after deployment.');
+            return;
+        }
 
         const mapContainer = document.getElementById('networkMap');
         if (!mapContainer) {
@@ -140,6 +144,9 @@
 
             state.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
             state.map.on('load', onMapLoad);
+            requestAnimationFrame(() => {
+                state.map.resize();
+            });
             state.map.resize();
             bindGlobalEvents();
         } catch (error) {
@@ -353,6 +360,16 @@
 
             if (!response.ok) {
                 throw new Error(await responseErrorMessage(response, 'Unable to load parties.'));
+            }
+
+            const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+            if (!contentType.includes('application/json')) {
+                const body = await response.text().catch(() => '');
+                if (body.toLowerCase().includes('<html') && body.toLowerCase().includes('login')) {
+                    throw new Error('Session expired. Please sign in again to load parties.');
+                }
+
+                throw new Error('Invalid response from customers API.');
             }
 
             const collection = await response.json();
