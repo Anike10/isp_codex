@@ -100,39 +100,52 @@
             return;
         }
 
+        const mapContainer = document.getElementById('networkMap');
+        if (!mapContainer) {
+            setStatus('Map container missing. Refresh the page and try again.');
+            return;
+        }
+
         const defaultView = loadDefaultView();
-
-        state.map = new maplibregl.Map({
-            container: 'networkMap',
-            style: {
-                version: 8,
-                sources: Object.fromEntries(Object.entries(basemaps).map(([key, basemap]) => [
-                    `basemap-${key}`,
-                    {
-                        type: 'raster',
-                        tiles: basemap.tiles,
-                        tileSize: 256,
-                        attribution: basemap.attribution,
-                    },
-                ])),
-                layers: Object.keys(basemaps).map((key) => ({
-                    id: `basemap-${key}`,
-                    type: 'raster',
-                    source: `basemap-${key}`,
-                    layout: {
-                        visibility: key === state.activeBasemap ? 'visible' : 'none',
-                    },
-                })),
+        const basemapEntries = Object.entries(basemaps).map(([key, basemap]) => [
+            `basemap-${key}`,
+            {
+                type: 'raster',
+                tiles: basemap.tiles,
+                tileSize: 256,
+                attribution: basemap.attribution,
             },
-            center: defaultView.center,
-            zoom: defaultView.zoom,
-            maxZoom: 22,
-            doubleClickZoom: false,
-        });
+        ]);
 
-        state.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
-        state.map.on('load', onMapLoad);
-        bindGlobalEvents();
+        try {
+            state.map = new maplibregl.Map({
+                container: mapContainer,
+                style: {
+                    version: 8,
+                    sources: Object.fromEntries(basemapEntries),
+                    layers: Object.keys(basemaps).map((key) => ({
+                        id: `basemap-${key}`,
+                        type: 'raster',
+                        source: `basemap-${key}`,
+                        layout: {
+                            visibility: key === state.activeBasemap ? 'visible' : 'none',
+                        },
+                    })),
+                },
+                center: defaultView.center,
+                zoom: defaultView.zoom,
+                maxZoom: 22,
+                doubleClickZoom: false,
+            });
+
+            state.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+            state.map.on('load', onMapLoad);
+            state.map.resize();
+            bindGlobalEvents();
+        } catch (error) {
+            console.error('Party location map initialization failed.', error);
+            setStatus(`Map could not start: ${error.message}`);
+        }
     }
 
     function onMapLoad() {
