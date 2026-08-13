@@ -71,17 +71,17 @@
                 Payment Date
                 <input type="date" name="payment_date" value="{{ old('payment_date', now()->toDateString()) }}" required>
             </label>
-            <div class="full" style="display:flex;align-items:flex-end;gap:16px">
-                <label style="flex:1;margin:0">
-                    Payment Method
-                    <select name="payment_method" id="bulkPaymentMethod">
-                        <option value="cash" @selected($selectedPaymentMethod === 'cash')>Cash</option>
-                        <option value="bkash" @selected($selectedPaymentMethod === 'bkash')>bKash</option>
-                        <option value="nagad" @selected($selectedPaymentMethod === 'nagad')>Nagad</option>
-                        <option value="bank" @selected($selectedPaymentMethod === 'bank')>Bank</option>
-                    </select>
-                </label>
-                <div style="padding-bottom:9px;white-space:nowrap">@include('partials.payment_default_checkbox')</div>
+            <div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-weight:600">
+                    <label for="bulkPaymentMethod" style="margin:0">Payment Method</label>
+                    @include('partials.payment_default_checkbox')
+                </div>
+                <select name="payment_method" id="bulkPaymentMethod">
+                    <option value="cash" @selected($selectedPaymentMethod === 'cash')>Cash</option>
+                    <option value="bkash" @selected($selectedPaymentMethod === 'bkash')>bKash</option>
+                    <option value="nagad" @selected($selectedPaymentMethod === 'nagad')>Nagad</option>
+                    <option value="bank" @selected($selectedPaymentMethod === 'bank')>Bank</option>
+                </select>
             </div>
             <label>
                 Payment Account
