@@ -778,17 +778,13 @@ class CustomerController extends Controller
                 return $query->withExists('importedSecret');
             })
             ->when($expiringDate || $expiredDate, function ($query) use ($expiringDate, $expiredDate) {
-                $query->whereNotNull('service_valid_until')
-                    ->where(function ($dateQuery) use ($expiringDate, $expiredDate) {
-                        if ($expiredDate) {
-                            $dateQuery->whereDate('service_valid_until', $expiredDate);
-                        }
+                $today = now()->toDateString();
+                $rangeStart = $expiredDate ?: $today;
+                $rangeEnd = $expiringDate ?: $today;
 
-                        if ($expiringDate) {
-                            $method = $expiredDate ? 'orWhereDate' : 'whereDate';
-                            $dateQuery->{$method}('service_valid_until', $expiringDate);
-                        }
-                    });
+                $query->whereNotNull('service_valid_until')
+                    ->whereDate('service_valid_until', '>=', $rangeStart)
+                    ->whereDate('service_valid_until', '<=', $rangeEnd);
             });
 
         return $query;
