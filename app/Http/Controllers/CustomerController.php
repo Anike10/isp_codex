@@ -735,8 +735,16 @@ class CustomerController extends Controller
     private function customerQueryForIndex(Request $request, bool $hasImportedSecretTable, bool $onlyDeleted): Builder
     {
         $query = $onlyDeleted ? Customer::onlyTrashed() : Customer::query();
-        $expiringInDays = $request->integer('expiring_in_days');
-        $expiredMoreThanDays = $request->integer('expired_more_than_days');
+        $normalizeDate = static function (mixed $value): ?string {
+            $date = trim((string) $value);
+            if (! preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $date, $matches)) {
+                return null;
+            }
+
+            return checkdate((int) $matches[2], (int) $matches[3], (int) $matches[1]) ? $date : null;
+        };
+        $expiringDate = $normalizeDate($request->query('expiring_date'));
+        $expiredDate = $normalizeDate($request->query('expired_date'));
 
         $query
             ->with('activeSubscription.package')
@@ -769,14 +777,18 @@ class CustomerController extends Controller
             ->when($hasImportedSecretTable, function ($query) {
                 return $query->withExists('importedSecret');
             })
-            ->when($expiringInDays > 0, function ($query) use ($expiringInDays) {
+            ->when($expiringDate || $expiredDate, function ($query) use ($expiringDate, $expiredDate) {
                 $query->whereNotNull('service_valid_until')
-                    ->whereDate('service_valid_until', '>=', now()->toDateString())
-                    ->whereDate('service_valid_until', '<=', now()->addDays($expiringInDays)->toDateString());
-            })
-            ->when($expiredMoreThanDays > 0 && ! $request->filled('expiring_in_days'), function ($query) use ($expiredMoreThanDays) {
-                $query->whereNotNull('service_valid_until')
-                    ->whereDate('service_valid_until', '<', now()->subDays($expiredMoreThanDays)->toDateString());
+                    ->where(function ($dateQuery) use ($expiringDate, $expiredDate) {
+                        if ($expiredDate) {
+                            $dateQuery->whereDate('service_valid_until', $expiredDate);
+                        }
+
+                        if ($expiringDate) {
+                            $method = $expiredDate ? 'orWhereDate' : 'whereDate';
+                            $dateQuery->{$method}('service_valid_until', $expiringDate);
+                        }
+                    });
             });
 
         return $query;
