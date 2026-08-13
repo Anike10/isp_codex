@@ -32,7 +32,9 @@
         hiddenFeatureIds: new Set(),
         features: new Map(),
         customerFeatures: new Map(),
+        customerLocationIndex: new Map(),
         customerPopup: null,
+        pendingPartyLocationCustomerId: null,
         editingFeatureId: null,
         dirty: false,
     };
@@ -60,6 +62,7 @@
         ['switch', 'Switches'],
         ['olt', 'OLTs'],
         ['splitter', 'Splitters'],
+        ['party_locations', 'Party Locations'],
         ['tj_box', 'TJ Boxes'],
         ['onu', 'ONUs'],
         ['fiber_cable', 'Fiber Links'],
@@ -286,6 +289,7 @@
         addNetworkLayers();
         loadTopology();
         loadCustomerLocations();
+        updatePartyLocationLayerVisibility();
 
         state.map.on('click', handleMapClick);
         state.map.on('dblclick', function (event) {
@@ -540,6 +544,14 @@
         document.getElementById('locationSearch').addEventListener('submit', searchLocation);
         document.getElementById('defaultViewForm').addEventListener('submit', applyDefaultViewForm);
         document.getElementById('useCurrentView').addEventListener('click', saveCurrentDefaultView);
+        document.getElementById('startPartyPlacementBtn').addEventListener('click', () => {
+            const panel = document.getElementById('partyPlacementPanel');
+            const customerId = panel?.dataset.customerId;
+            if (customerId) {
+                requestPartyLocationPlacement(customerId);
+            }
+        });
+        document.getElementById('cancelPartyPlacementBtn').addEventListener('click', cancelPartyLocationPlacement);
         syncDefaultViewInputs(loadDefaultView());
         renderVisibilityControls();
         document.getElementById('showAllMapItems').addEventListener('click', () => setAllMapVisibility(true));
@@ -558,6 +570,9 @@
                 closeOltPortPanel();
                 closeFeatureForm();
                 cancelDrawing();
+                if (state.pendingPartyLocationCustomerId) {
+                    cancelPartyLocationPlacement();
+                }
             }
             if (event.key === 'Backspace' || event.key === 'Delete') {
                 event.preventDefault();
@@ -668,12 +683,17 @@
         setStatus('Current map position saved as default view.');
     }
 
-    function loadVisibleTypes() {
+        function loadVisibleTypes() {
         try {
             const saved = JSON.parse(localStorage.getItem(visibilityStorageKey) || 'null');
             if (Array.isArray(saved)) {
                 const allowed = new Set(visibilityItems.map(([type]) => type));
-                return new Set(saved.filter((type) => allowed.has(type)));
+                const normalized = new Set(saved.filter((type) => allowed.has(type)));
+                if (normalized.size === 0) {
+                    return normalized;
+                }
+
+                return new Set([...normalized, 'party_locations']);
             }
         } catch (error) {
             localStorage.removeItem(visibilityStorageKey);
@@ -699,9 +719,13 @@
         const container = document.getElementById('visibilityControls');
         const openTypes = new Set([...container.querySelectorAll('.visibility-group[open]')].map((group) => group.dataset.visibilityGroup));
         container.innerHTML = visibilityItems.map(([type, label]) => {
-            const typeFeatures = features
+            const isPartyLayer = type === 'party_locations';
+            const typeFeatures = isPartyLayer ? [] : features
                 .filter((feature) => featureVisibilityType(feature) === type)
                 .sort((first, second) => featureDisplayName(first).localeCompare(featureDisplayName(second)));
+            const detailsMarkup = isPartyLayer
+                ? '<div class="visibility-empty">Party points are shown on map.</div>'
+                : `${typeFeatures.length ? typeFeatures.map((feature) => visibilityFeatureOption(feature)).join('') : '<div class="visibility-empty">No items yet.</div>'}`;
 
             return `
                 <details class="visibility-group" data-visibility-group="${escapeHtml(type)}" ${openTypes.has(type) ? 'open' : ''}>
@@ -711,7 +735,7 @@
                         <strong data-visibility-count="${escapeHtml(type)}">${escapeHtml(String(counts[type] || 0))}</strong>
                     </summary>
                     <div class="visibility-details">
-                        ${typeFeatures.length ? typeFeatures.map((feature) => visibilityFeatureOption(feature)).join('') : '<div class="visibility-empty">No items yet.</div>'}
+                        ${detailsMarkup}
                     </div>
                 </details>
             `;
@@ -729,6 +753,7 @@
                 persistVisibleTypes();
                 clearHiddenSelection();
                 refreshSources();
+                updatePartyLocationLayerVisibility();
                 setStatus('Map visibility updated.');
             });
         });
@@ -759,6 +784,8 @@
                 deleteVisibilityFeature(button.dataset.visibilityDelete);
             });
         });
+
+        updatePartyLocationLayerVisibility();
     }
 
     function visibilityFeatureOption(feature) {
@@ -835,6 +862,7 @@
         });
         clearHiddenSelection();
         refreshSources();
+        updatePartyLocationLayerVisibility();
         setStatus(visible ? 'All map items shown.' : 'All map items hidden.');
     }
 
@@ -853,6 +881,15 @@
     function isFeatureVisible(feature) {
         const featureId = String(feature.properties.id || feature.id);
         return state.visibleTypes.has(featureVisibilityType(feature)) && !state.hiddenFeatureIds.has(featureId);
+    }
+
+    function updatePartyLocationLayerVisibility() {
+        const visibility = state.visibleTypes.has('party_locations') ? 'visible' : 'none';
+        ['customer-locations-halo', 'customer-locations-circle', 'customer-locations-label'].forEach((layerId) => {
+            if (state.map?.getLayer(layerId)) {
+                state.map.setLayoutProperty(layerId, 'visibility', visibility);
+            }
+        });
     }
 
     function withMapLineColor(feature) {
@@ -1009,8 +1046,11 @@
             if (!response.ok) throw new Error(await responseErrorMessage(response, 'Unable to load party locations.'));
 
             const collection = await response.json();
-            state.customerFeatures = new Map((collection.features || []).map((feature) => [String(feature.properties.customer_id), feature]));
-            setSourceData('customer-locations', collection);
+            const customerFeatures = Array.isArray(collection.features) ? collection.features : [];
+            state.customerFeatures = new Map(customerFeatures.map((feature) => [String(feature.properties.customer_id), feature]));
+            rebuildCustomerLocationSource();
+            renderPartySearchResults(customerFeatures);
+            refreshStatsFromData();
 
             if (config.initialCustomerId) {
                 focusCustomer(String(config.initialCustomerId));
@@ -1020,24 +1060,192 @@
         }
     }
 
-    function searchCustomer(event) {
+    async function searchCustomer(event) {
         event.preventDefault();
         const input = document.getElementById('customerIdQuery');
-        const customerId = input.value.trim();
+        const query = input.value.trim();
 
-        if (!/^\d+$/.test(customerId)) {
-            setCustomerSearchResult('Enter a valid numeric party ID.', true);
+        if (!query) {
+            renderPartySearchResults([...state.customerFeatures.values()]);
+            setStatus('Showing all loaded parties.');
             return;
         }
 
-        focusCustomer(customerId);
+        const resultPanel = document.getElementById('customerSearchResult');
+        resultPanel.hidden = false;
+        resultPanel.innerHTML = '<div class="search-empty">Searching parties...</div>';
+        setStatus(`Searching party: ${query}`);
+
+        try {
+            const url = new URL(config.customersUrl);
+            url.searchParams.set('q', query);
+            const response = await fetch(url, {
+                headers: {
+                    Accept: 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(await responseErrorMessage(response, 'Unable to search party.'));
+            }
+
+            const result = await response.json();
+            const matches = Array.isArray(result.features) ? result.features : [];
+            cacheCustomerSearchMatches(matches);
+
+            if (matches.length === 1) {
+                const match = matches[0];
+                const customerId = String(match?.properties?.customer_id || '');
+                const featureName = match?.properties?.name ? ` - ${match.properties.name}` : '';
+                if (customerHasLocation(match)) {
+                    focusCustomer(customerId);
+                    return;
+                }
+
+                renderPartyNoLocationPrompt(match);
+                setStatus(`Party #${customerId}${featureName} has no saved map location.`);
+                return;
+            }
+
+            if (matches.length > 1) {
+                renderPartySearchResults(matches);
+                setStatus(`${matches.length} parties found for "${query}".`);
+                return;
+            }
+
+            setCustomerSearchResult(`No party found for "${query}".`, true);
+            setStatus('No party found.');
+        } catch (error) {
+            resultPanel.innerHTML = `<div class="search-empty">${escapeHtml(error.message)}</div>`;
+            setStatus(error.message);
+        }
+    }
+
+    function cacheCustomerSearchMatches(matches) {
+        matches.forEach((feature) => {
+            const customerId = feature?.properties?.customer_id;
+            if (!customerId) {
+                return;
+            }
+
+            upsertPartyFeature(feature);
+        });
+    }
+
+    function renderPartySearchResults(matches) {
+        const resultsPanel = document.getElementById('customerSearchResult');
+        const uniqueMatches = matches.filter((feature, index, all) => {
+            return index === all.findIndex((item) => String(item.properties.customer_id) === String(feature.properties.customer_id));
+        });
+        if (!uniqueMatches.length) {
+            resultsPanel.innerHTML = '<div class="search-empty">No matching party found.</div>';
+            resultsPanel.hidden = false;
+            return;
+        }
+
+        const listHtml = uniqueMatches
+            .slice(0, 30)
+            .map((feature) => {
+                const properties = feature.properties || {};
+                const id = properties.customer_id;
+                const details = compactJoin([
+                    properties.phone || '',
+                    properties.connection_id || properties.mikrotik_username || '',
+                    properties.address || '',
+                ]);
+                const hasLocation = Boolean(properties.has_map_location);
+
+                return `<div class="search-result" data-customer-id="${escapeHtml(id)}">
+                    <strong>${escapeHtml(`Party #${id} - ${properties.name || 'Unknown party'}`)}</strong>
+                    <span>${escapeHtml(details || 'No mobile / user ID / address')}</span>
+                    <div class="search-result-actions">
+                        <button type="button" class="search-result-action search-result-action--focus" data-focus-customer="${escapeHtml(id)}">View on map</button>
+                        ${hasLocation
+                            ? `<button type="button" class="search-result-action search-result-action--danger" data-remove-party-location="${escapeHtml(id)}">Remove location</button>`
+                            : `<button type="button" class="search-result-action search-result-action--primary" data-add-party-location="${escapeHtml(id)}">Add on map</button>`
+                        }
+                    </div>
+                </div>`;
+            })
+            .join('');
+
+        const hasMore = uniqueMatches.length > 30;
+        resultsPanel.innerHTML = `${listHtml}${hasMore ? `<div class="search-empty">Showing first 30 of ${uniqueMatches.length} parties.</div>` : ''}`;
+        resultsPanel.hidden = false;
+
+        resultsPanel.querySelectorAll('[data-focus-customer]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const customerId = button.dataset.focusCustomer;
+                resultsPanel.hidden = true;
+                focusCustomer(customerId);
+            });
+        });
+
+        resultsPanel.querySelectorAll('[data-add-party-location]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const customerId = button.dataset.addPartyLocation;
+                requestPartyLocationPlacement(customerId);
+            });
+        });
+
+        resultsPanel.querySelectorAll('[data-remove-party-location]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const customerId = button.dataset.removePartyLocation;
+                removePartyLocation(customerId);
+            });
+        });
+    }
+
+    function renderPartyNoLocationPrompt(feature) {
+        const customerId = String(feature?.properties?.customer_id || '');
+        const name = feature?.properties?.name ? ` - ${feature.properties.name}` : '';
+        const details = compactJoin([
+            feature?.properties?.phone || '',
+            feature?.properties?.connection_id || feature?.properties?.mikrotik_username || '',
+            feature?.properties?.address || '',
+        ]);
+
+        const resultsPanel = document.getElementById('customerSearchResult');
+        if (!resultsPanel) {
+            return;
+        }
+
+        resultsPanel.innerHTML = `
+            <div class="search-result" data-customer-id="${escapeHtml(customerId)}">
+                <strong>${escapeHtml(`Party #${customerId}${name} has no saved map location.`)}</strong>
+                <span>${escapeHtml(details || 'No mobile / user ID / address')}</span>
+                <div class="search-result-actions">
+                    <button type="button" class="search-result-action search-result-action--primary" data-add-party-location="${escapeHtml(customerId)}">Add on map</button>
+                </div>
+            </div>
+        `;
+        resultsPanel.hidden = false;
+
+        const addButton = resultsPanel.querySelector('[data-add-party-location]');
+        if (addButton) {
+            addButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                requestPartyLocationPlacement(customerId);
+            });
+        }
     }
 
     function focusCustomer(customerId) {
         const feature = state.customerFeatures.get(String(customerId));
-        if (!feature) {
-            setCustomerSearchResult(`Party #${customerId} has no saved map location.`, true);
-            setStatus(`No map location saved for party #${customerId}.`);
+        if (!feature || !customerHasLocation(feature)) {
+            const featureName = feature?.properties?.name ? ` - ${feature.properties.name}` : '';
+            if (feature) {
+                renderPartyNoLocationPrompt(feature);
+            } else {
+                setCustomerSearchResult(`Party #${customerId}${featureName} has no saved map location.`, true);
+            }
             return false;
         }
 
@@ -1058,6 +1266,17 @@
 
     function showCustomerPopup(feature) {
         const properties = feature.properties || {};
+        const siblingPorts = customerSiblingsAtLocation(feature.geometry?.coordinates || []);
+        const canEdit = customerHasLocation(feature);
+        const siblingSummary = siblingPorts.length > 1
+            ? siblingPorts.map((item, index) => {
+                return `<div>${escapeHtml(`Port ${String(index + 1).padStart(2, '0')}: #${item.properties.customer_id} ${item.properties.name || 'Unknown party'}`)}</div>`;
+            }).join('')
+            : '';
+        const removeButton = canEdit
+            ? `<button type="button" class="search-result-action search-result-action--danger" data-remove-party-location="${escapeHtml(String(properties.customer_id))}">Remove location</button>`
+            : '';
+
         state.customerPopup?.remove();
         state.customerPopup = new maplibregl.Popup({ offset: 16 })
             .setLngLat(feature.geometry.coordinates)
@@ -1067,16 +1286,271 @@
                 <dl class="popup-details">
                     <div><dt>Phone</dt><dd>${escapeHtml(properties.phone || 'Not provided')}</dd></div>
                     <div><dt>Address</dt><dd>${escapeHtml(properties.address || 'Not provided')}</dd></div>
-                    <div><dt>Actions</dt><dd><a href="${escapeHtml(properties.show_url)}">View</a> | <a href="${escapeHtml(properties.edit_url)}">Edit location</a></dd></div>
+                    ${siblingSummary ? `<div><dt>Multi-port at location</dt><dd>${siblingSummary}</dd></div>` : ''}
+                    <div><dt>Actions</dt><dd><a href="${escapeHtml(properties.show_url)}">View</a> | <a href="${escapeHtml(properties.edit_url)}">Edit location</a>${removeButton ? `<br>${removeButton}` : ''}</dd></div>
                 </dl>
             `)
             .addTo(state.map);
+
+        const removeButtonElement = state.customerPopup.getElement().querySelector('[data-remove-party-location]');
+        if (removeButtonElement) {
+            removeButtonElement.addEventListener('click', () => {
+                const customerId = removeButtonElement.dataset.removePartyLocation;
+                removePartyLocation(customerId);
+            });
+        }
+    }
+
+    function customerHasLocation(feature) {
+        return !!customerLocationKey(feature?.geometry?.coordinates || []);
+    }
+
+    function countPartyLocations() {
+        let total = 0;
+        state.customerFeatures.forEach((feature) => {
+            if (customerHasLocation(feature)) {
+                total += 1;
+            }
+        });
+
+        return total;
+    }
+
+    function refreshStatsFromData() {
+        if (!state.map) {
+            return;
+        }
+
+        renderStats([...state.features.values()]);
+    }
+
+    function upsertPartyFeature(feature) {
+        const customerId = feature?.properties?.customer_id;
+        if (!customerId) {
+            return;
+        }
+
+        state.customerFeatures.set(String(customerId), feature);
+        rebuildCustomerLocationSource();
+
+        const resultPanel = document.getElementById('customerSearchResult');
+        if (resultPanel && !resultPanel.hidden) {
+            renderPartySearchResults([...state.customerFeatures.values()]);
+        }
+
+        refreshStatsFromData();
+    }
+
+    function rebuildCustomerLocationSource() {
+        const locationFeatures = [];
+        const locationIndex = new Map();
+
+        state.customerFeatures.forEach((feature) => {
+            if (!customerHasLocation(feature)) {
+                return;
+            }
+
+            const key = customerLocationKey(feature.geometry.coordinates);
+            if (!key) {
+                return;
+            }
+
+            locationFeatures.push(feature);
+
+            const existing = locationIndex.get(key) || [];
+            existing.push(feature);
+            locationIndex.set(key, existing);
+        });
+
+        state.customerLocationIndex = locationIndex;
+        setSourceData('customer-locations', {
+            type: 'FeatureCollection',
+            features: locationFeatures,
+        });
+    }
+
+    function renderPartyPlacementPanel(feature) {
+        const panel = document.getElementById('partyPlacementPanel');
+        const info = document.getElementById('partyPlacementInfo');
+        const title = document.getElementById('partyPlacementTitle');
+        const customerId = feature?.properties?.customer_id;
+        if (!panel || !info || !title || !customerId) {
+            return;
+        }
+
+        panel.dataset.customerId = String(customerId);
+        title.textContent = `Place Party #${customerId} on map`;
+
+        const properties = feature.properties || {};
+        const details = [
+            ['Name', properties.name || 'Not provided'],
+            ['Mobile', properties.phone || 'Not provided'],
+            ['User ID', properties.connection_id || properties.mikrotik_username || 'Not provided'],
+            ['Address', properties.address || 'Not provided'],
+        ];
+
+        info.innerHTML = details
+            .map(([label, value]) => `<span class="detail"><span class="label">${escapeHtml(label)}:</span><strong>${escapeHtml(String(value))}</strong></span>`)
+            .join('');
+        panel.hidden = false;
+    }
+
+    function clearPartyPlacementPanel() {
+        const panel = document.getElementById('partyPlacementPanel');
+        if (!panel) {
+            return;
+        }
+
+        panel.hidden = true;
+        panel.removeAttribute('data-customer-id');
+        panel.dataset.customerId = '';
+        document.getElementById('partyPlacementInfo').innerHTML = '';
+        document.getElementById('partyPlacementTitle').textContent = 'Place party location';
+    }
+
+    function requestPartyLocationPlacement(customerId) {
+        const feature = state.customerFeatures.get(String(customerId));
+        if (!feature) {
+            return;
+        }
+
+        state.pendingPartyLocationCustomerId = String(customerId);
+        if (state.map?.getCanvas()) {
+            state.map.getCanvas().style.cursor = 'crosshair';
+        }
+
+        document.getElementById('customerIdQuery').value = String(customerId);
+        renderPartyPlacementPanel(feature);
+        setStatus(`Add mode: click map to set location for party #${customerId}.`);
+    }
+
+    function cancelPartyLocationPlacement() {
+        if (!state.pendingPartyLocationCustomerId) {
+            clearPartyPlacementPanel();
+            return;
+        }
+
+        state.pendingPartyLocationCustomerId = null;
+        if (state.map?.getCanvas()) {
+            state.map.getCanvas().style.cursor = '';
+        }
+        clearPartyPlacementPanel();
+
+        setStatus('Party location placement cancelled.');
+    }
+
+    async function placePartyLocationFromMapClick(customerId, longitude, latitude) {
+        const feature = await savePartyLocation(customerId, {
+            map_latitude: latitude,
+            map_longitude: longitude,
+        });
+
+        if (!feature) {
+            return;
+        }
+
+        upsertPartyFeature(feature);
+        state.pendingPartyLocationCustomerId = null;
+        if (state.map?.getCanvas()) {
+            state.map.getCanvas().style.cursor = '';
+        }
+        clearPartyPlacementPanel();
+
+        setCustomerSearchResult(`Saved location for Party #${customerId}.`);
+        setStatus(`Party #${customerId} saved on the map.`);
+        focusCustomer(customerId);
+        state.customerPopup = null;
+    }
+
+    async function savePartyLocation(customerId, payload) {
+        const url = `${config.customersUrl}/${encodeURIComponent(customerId)}/location`;
+        try {
+            const response = await fetch(url, {
+                method: 'PATCH',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': config.csrfToken,
+                },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                throw new Error(await responseErrorMessage(response, 'Unable to save party location.'));
+            }
+
+            return await response.json();
+        } catch (error) {
+            state.pendingPartyLocationCustomerId = String(customerId);
+            setStatus(error.message);
+            return null;
+        }
+    }
+
+    async function removePartyLocation(customerId) {
+        if (!customerId) {
+            return;
+        }
+
+        const feature = state.customerFeatures.get(String(customerId));
+        const name = feature?.properties?.name || 'this party';
+        if (!confirm(`Remove saved map location for Party #${customerId} (${name})?`)) {
+            return;
+        }
+
+        const url = `${config.customersUrl}/${encodeURIComponent(customerId)}/location`;
+        try {
+            const response = await fetch(url, {
+                method: 'DELETE',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': config.csrfToken,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(await responseErrorMessage(response, 'Unable to remove party location.'));
+            }
+
+            const updated = await response.json();
+            upsertPartyFeature(updated);
+            const placementPanel = document.getElementById('partyPlacementPanel');
+            if (String(placementPanel?.dataset.customerId) === String(customerId)) {
+                clearPartyPlacementPanel();
+            }
+            setCustomerSearchResult(`Party #${customerId} location removed.`);
+            setStatus(`Party #${customerId} no longer has a map location.`);
+            if (state.customerPopup) {
+                state.customerPopup.remove();
+                state.customerPopup = null;
+            }
+        } catch (error) {
+            setStatus(error.message);
+        }
     }
 
     function setCustomerSearchResult(message, isError = false) {
         const panel = document.getElementById('customerSearchResult');
         panel.hidden = false;
         panel.innerHTML = `<div class="search-empty${isError ? ' error' : ''}">${escapeHtml(message)}</div>`;
+    }
+
+    function customerLocationKey(coordinates) {
+        const longitude = Number(coordinates[0]);
+        const latitude = Number(coordinates[1]);
+
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+            return null;
+        }
+
+        return `${longitude.toFixed(8)},${latitude.toFixed(8)}`;
+    }
+
+    function customerSiblingsAtLocation(coordinates) {
+        const key = customerLocationKey(coordinates);
+        if (!key) return [];
+
+        return state.customerLocationIndex.get(key) || [];
     }
 
     async function loadTopology() {
@@ -1136,9 +1610,14 @@
         }
     }
 
-    function handleMapClick(event) {
+    async function handleMapClick(event) {
         if (state.nodeDragJustFinished) {
             state.nodeDragJustFinished = false;
+            return;
+        }
+
+        if (state.pendingPartyLocationCustomerId) {
+            await placePartyLocationFromMapClick(state.pendingPartyLocationCustomerId, event.lngLat.lng, event.lngLat.lat);
             return;
         }
 
@@ -3301,6 +3780,7 @@
             carry[type] = (carry[type] || 0) + 1;
             return carry;
         }, {});
+        byType.party_locations = countPartyLocations();
         const fiberKm = links.reduce((sum, feature) => sum + Number(feature.properties.length_meters || 0), 0) / 1000;
 
         renderVisibilityControls(byType, features);
@@ -3310,6 +3790,7 @@
             stat('Routers', byType.router || 0),
             stat('OLTs', byType.olt || 0),
             stat('Splitters', byType.splitter || 0),
+            stat('Party locations', byType.party_locations || 0),
             stat('Fiber km', fiberKm.toFixed(2)),
         ].join('');
     }

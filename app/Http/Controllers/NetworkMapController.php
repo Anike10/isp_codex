@@ -40,12 +40,25 @@ class NetworkMapController extends Controller
         ]);
     }
 
-    public function customers(): JsonResponse
+    public function customers(Request $request): JsonResponse
     {
+        $search = trim((string) $request->query('q', ''));
+
         $features = Customer::query()
-            ->whereNotNull('map_latitude')
-            ->whereNotNull('map_longitude')
-            ->orderBy('id')
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('connection_id', 'like', "%{$search}%")
+                        ->orWhere('mikrotik_username', 'like', "%{$search}%")
+                        ->orWhere('address', 'like', "%{$search}%");
+
+                    if (ctype_digit($search)) {
+                        $query->orWhere('id', (int) $search);
+                    }
+                });
+            })
+            ->orderBy('name')
             ->get([
                 'id',
                 'name',
@@ -57,31 +70,38 @@ class NetworkMapController extends Controller
                 'map_latitude',
                 'map_longitude',
             ])
-            ->map(fn (Customer $customer) => [
-                'type' => 'Feature',
-                'id' => 'customer-'.$customer->id,
-                'geometry' => [
-                    'type' => 'Point',
-                    'coordinates' => [(float) $customer->map_longitude, (float) $customer->map_latitude],
-                ],
-                'properties' => [
-                    'customer_id' => $customer->id,
-                    'name' => $customer->name,
-                    'phone' => $customer->phone,
-                    'connection_id' => $customer->connection_id,
-                    'mikrotik_username' => $customer->mikrotik_username,
-                    'address' => $customer->address,
-                    'status' => $customer->status,
-                    'show_url' => route('customers.show', $customer),
-                    'edit_url' => route('customers.edit', $customer),
-                ],
-            ])
+            ->map(fn (Customer $customer) => $this->customerToFeature($customer))
             ->values();
 
         return response()->json([
             'type' => 'FeatureCollection',
             'features' => $features,
         ]);
+    }
+
+    public function updateCustomerLocation(Request $request, Customer $customer): JsonResponse
+    {
+        $validated = $request->validate([
+            'map_latitude' => ['required', 'numeric', 'between:-90,90'],
+            'map_longitude' => ['required', 'numeric', 'between:-180,180'],
+        ]);
+
+        $customer->update([
+            'map_latitude' => (float) $validated['map_latitude'],
+            'map_longitude' => (float) $validated['map_longitude'],
+        ]);
+
+        return response()->json($this->customerToFeature($customer->fresh()));
+    }
+
+    public function clearCustomerLocation(Customer $customer): JsonResponse
+    {
+        $customer->update([
+            'map_latitude' => null,
+            'map_longitude' => null,
+        ]);
+
+        return response()->json($this->customerToFeature($customer->fresh()));
     }
 
     public function store(Request $request): JsonResponse
@@ -295,5 +315,31 @@ class NetworkMapController extends Controller
             'fiber_cable' => $properties['fiber_code'] ?? $properties['name'] ?? null,
             default => $properties['name'] ?? null,
         };
+    }
+
+    private function customerToFeature(Customer $customer): array
+    {
+        $hasLocation = ! is_null($customer->map_latitude) && ! is_null($customer->map_longitude);
+
+        return [
+            'type' => 'Feature',
+            'id' => 'customer-'.$customer->id,
+            'geometry' => $hasLocation ? [
+                'type' => 'Point',
+                'coordinates' => [(float) $customer->map_longitude, (float) $customer->map_latitude],
+            ] : null,
+            'properties' => [
+                'customer_id' => $customer->id,
+                'name' => $customer->name,
+                'phone' => $customer->phone,
+                'connection_id' => $customer->connection_id,
+                'mikrotik_username' => $customer->mikrotik_username,
+                'address' => $customer->address,
+                'status' => $customer->status,
+                'has_map_location' => $hasLocation,
+                'show_url' => route('customers.show', $customer),
+                'edit_url' => route('customers.edit', $customer),
+            ],
+        ];
     }
 }

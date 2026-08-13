@@ -2,7 +2,7 @@
 
 @section('content')
     <link rel="stylesheet" href="{{ asset('css/maplibre-gl.css') }}?v=4.7.1">
-    <link rel="stylesheet" href="{{ asset('css/network-map.css') }}?v=20260619-6">
+    <link rel="stylesheet" href="{{ asset('css/network-map.css') }}?v=20260813-7">
 
     <section class="network-map-page">
         <aside class="network-sidebar">
@@ -41,10 +41,18 @@
             </div>
 
             <div class="tool-section">
-                <h2>Party Location</h2>
+                <h2>Party Search</h2>
+                <div class="party-placement-panel" id="partyPlacementPanel" hidden>
+                    <p class="party-placement-title">Place party location</p>
+                    <div class="party-placement-info" id="partyPlacementInfo"></div>
+                    <div class="party-placement-actions">
+                        <button type="button" class="btn secondary" id="startPartyPlacementBtn">Add on map</button>
+                        <button type="button" class="btn light" id="cancelPartyPlacementBtn">Cancel</button>
+                    </div>
+                </div>
                 <form class="location-search" id="customerSearch">
-                    <input type="search" id="customerIdQuery" inputmode="numeric" placeholder="Enter party ID, e.g. 346" value="{{ $initialCustomerId }}">
-                    <button type="submit" class="btn secondary">Show Party</button>
+                    <input type="search" id="customerIdQuery" placeholder="Party name, mobile, or connection ID" value="{{ $initialCustomerId }}">
+                    <button type="submit" class="btn secondary">Search Party</button>
                 </form>
                 <div class="search-results" id="customerSearchResult" hidden></div>
             </div>
@@ -132,5 +140,5 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map.js') }}?v=20260813-2"></script>
+    <script src="{{ asset('js/network-map.js') }}?v=20260813-9"></script>
 @endsection
