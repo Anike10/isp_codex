@@ -26,6 +26,23 @@ class CustomerController extends Controller
     {
         $hasImportedSecretTable = $this->hasImportedSecretTable();
         $perPage = $this->perPage($request, 200);
+        $today = now()->toDateString();
+        $expiryCountQuery = Customer::query()->whereNotNull('service_valid_until');
+        $expirySummary = [
+            'expired_last_7' => (clone $expiryCountQuery)
+                ->whereDate('service_valid_until', '>=', now()->subDays(7)->toDateString())
+                ->whereDate('service_valid_until', '<', $today)
+                ->count(),
+            'today' => (clone $expiryCountQuery)
+                ->whereDate('service_valid_until', $today)
+                ->count(),
+            'tomorrow' => (clone $expiryCountQuery)
+                ->whereDate('service_valid_until', now()->addDay()->toDateString())
+                ->count(),
+            'in_7_days' => (clone $expiryCountQuery)
+                ->whereDate('service_valid_until', now()->addDays(7)->toDateString())
+                ->count(),
+        ];
         $customers = $this->customerQueryForIndex($request, $hasImportedSecretTable, false)
             ->latest()
             ->paginate($perPage)
@@ -35,6 +52,7 @@ class CustomerController extends Controller
             'customers' => $customers,
             'hasImportedSecretTable' => $hasImportedSecretTable,
             'packages' => InternetPackage::where('status', 'active')->orderBy('name')->get(),
+            'expirySummary' => $expirySummary,
             'showDeletedCustomers' => false,
             'perPage' => $perPage,
             'perPageDefault' => 200,
@@ -745,6 +763,12 @@ class CustomerController extends Controller
         };
         $expiringDate = $normalizeDate($request->query('expiring_date'));
         $expiredDate = $normalizeDate($request->query('expired_date'));
+        $expiryWindow = in_array($request->query('expiry_window'), [
+            'expired_last_7',
+            'today',
+            'tomorrow',
+            'in_7_days',
+        ], true) ? $request->query('expiry_window') : null;
 
         $query
             ->with('activeSubscription.package')
@@ -777,7 +801,21 @@ class CustomerController extends Controller
             ->when($hasImportedSecretTable, function ($query) {
                 return $query->withExists('importedSecret');
             })
-            ->when($expiringDate || $expiredDate, function ($query) use ($expiringDate, $expiredDate) {
+            ->when($expiryWindow === 'expired_last_7', function ($query) {
+                $query->whereNotNull('service_valid_until')
+                    ->whereDate('service_valid_until', '>=', now()->subDays(7)->toDateString())
+                    ->whereDate('service_valid_until', '<', now()->toDateString());
+            })
+            ->when($expiryWindow === 'today', function ($query) {
+                $query->whereDate('service_valid_until', now()->toDateString());
+            })
+            ->when($expiryWindow === 'tomorrow', function ($query) {
+                $query->whereDate('service_valid_until', now()->addDay()->toDateString());
+            })
+            ->when($expiryWindow === 'in_7_days', function ($query) {
+                $query->whereDate('service_valid_until', now()->addDays(7)->toDateString());
+            })
+            ->when(! $expiryWindow && ($expiringDate || $expiredDate), function ($query) use ($expiringDate, $expiredDate) {
                 $today = now()->toDateString();
                 $rangeStart = $expiredDate ?: $today;
                 $rangeEnd = $expiringDate ?: $today;

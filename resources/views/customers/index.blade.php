@@ -97,9 +97,61 @@
     }
     .customer-action-menu-list .customer-action-delete { color: #b42318; }
     .customer-action-menu-list form { margin: 0; }
+    .expiry-quick-filters {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(150px, 1fr));
+        gap: 10px;
+        margin: 0 0 14px;
+    }
+    .expiry-quick-filter {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 52px;
+        padding: 10px 13px;
+        border: 1px solid #d8dee9;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #344054;
+        text-decoration: none;
+        box-shadow: 0 5px 14px rgba(15, 23, 42, .06);
+    }
+    .expiry-quick-filter span {
+        font-size: 12px;
+        font-weight: 800;
+    }
+    .expiry-quick-filter strong {
+        display: grid;
+        min-width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 999px;
+        background: #eef3f8;
+        color: #172033;
+        font-size: 15px;
+    }
+    .expiry-quick-filter:hover,
+    .expiry-quick-filter.is-active {
+        border-color: #116149;
+        background: #e7f7ef;
+        color: #07543e;
+    }
+    .expiry-quick-filter.is-overdue strong {
+        background: #fff1f0;
+        color: #b42318;
+    }
     @media (max-width: 1500px) {
         .customer-filter-form {
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        }
+        .expiry-quick-filters {
+            grid-template-columns: repeat(2, minmax(150px, 1fr));
+        }
+    }
+    @media (max-width: 620px) {
+        .expiry-quick-filters {
+            grid-template-columns: 1fr;
         }
     }
 </style>
@@ -125,6 +177,27 @@
     <div><label>Expired Since Date</label><input type="date" name="expired_date" max="{{ now()->toDateString() }}" value="{{ request('expired_date') }}"></div>
     <div class="filter-actions"><button class="btn secondary" type="submit">Search</button><a class="btn light" href="{{ route($showDeletedCustomers ? 'customers.deleted' : 'customers.index') }}">Reset</a></div>
 </form>
+
+@if (! $showDeletedCustomers)
+    <nav class="expiry-quick-filters" aria-label="Quick expiry filters">
+        <a class="expiry-quick-filter is-overdue {{ request('expiry_window') === 'expired_last_7' ? 'is-active' : '' }}" href="{{ route('customers.index', ['expiry_window' => 'expired_last_7', 'per_page' => request('per_page')]) }}">
+            <span>Expired Last 7 Days</span>
+            <strong>{{ $expirySummary['expired_last_7'] }}</strong>
+        </a>
+        <a class="expiry-quick-filter {{ request('expiry_window') === 'today' ? 'is-active' : '' }}" href="{{ route('customers.index', ['expiry_window' => 'today', 'per_page' => request('per_page')]) }}">
+            <span>Expires Today</span>
+            <strong>{{ $expirySummary['today'] }}</strong>
+        </a>
+        <a class="expiry-quick-filter {{ request('expiry_window') === 'tomorrow' ? 'is-active' : '' }}" href="{{ route('customers.index', ['expiry_window' => 'tomorrow', 'per_page' => request('per_page')]) }}">
+            <span>Expires Tomorrow</span>
+            <strong>{{ $expirySummary['tomorrow'] }}</strong>
+        </a>
+        <a class="expiry-quick-filter {{ request('expiry_window') === 'in_7_days' ? 'is-active' : '' }}" href="{{ route('customers.index', ['expiry_window' => 'in_7_days', 'per_page' => request('per_page')]) }}">
+            <span>Expires In 7 Days</span>
+            <strong>{{ $expirySummary['in_7_days'] }}</strong>
+        </a>
+    </nav>
+@endif
 
 @include('partials.per_page')
 
