@@ -71,6 +71,7 @@
     const state = {
         map: null,
         activeBasemap: 'voyager',
+        allCustomers: new Map(),
         customers: new Map(),
         pendingPartyLocationCustomerId: null,
         selectedCustomerId: null,
@@ -348,6 +349,16 @@
         const trimmed = (query || '').trim();
 
         if (trimmed) {
+            const localMatches = findMatchingCustomers(trimmed);
+            if (state.allCustomers.size) {
+                state.customers = new Map(localMatches.map((feature) => [String(feature.properties?.customer_id || ''), feature]));
+                renderPartyLocationSource();
+                renderPartyList();
+                updatePartyStats();
+                setSearchStatus(`${localMatches.length} parties found for "${trimmed}".`);
+                return;
+            }
+
             url.searchParams.set('q', trimmed);
         } else {
             url.searchParams.delete('q');
@@ -379,6 +390,10 @@
                 return;
             }
 
+            if (!trimmed) {
+                state.allCustomers = new Map();
+            }
+
             state.customers = new Map();
             features.forEach((feature) => {
                 const customerId = feature?.properties?.customer_id;
@@ -387,6 +402,9 @@
                 }
 
                 state.customers.set(String(customerId), feature);
+                if (!trimmed) {
+                    state.allCustomers.set(String(customerId), feature);
+                }
             });
 
             renderPartyLocationSource();
@@ -854,6 +872,28 @@
         }
 
         return `Party #${id}`;
+    }
+
+    function findMatchingCustomers(query) {
+        const normalized = String(query || '').trim().toLowerCase();
+        if (!normalized) {
+            return [...state.allCustomers.values()];
+        }
+
+        const fields = (feature) => {
+            const properties = feature?.properties || {};
+            return [
+                String(properties.customer_id || ''),
+                String(properties.name || ''),
+                String(properties.phone || ''),
+                String(properties.connection_id || ''),
+                String(properties.mikrotik_username || ''),
+                String(properties.address || ''),
+                String(properties.comment || ''),
+            ];
+        };
+
+        return [...state.allCustomers.values()].filter((feature) => fields(feature).some((field) => String(field).toLowerCase().includes(normalized)));
     }
 
     function formatPartyComment(customerOrFeature) {

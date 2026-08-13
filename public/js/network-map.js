@@ -1045,6 +1045,16 @@
             const response = await fetch(config.customersUrl, { headers: { Accept: 'application/json' } });
             if (!response.ok) throw new Error(await responseErrorMessage(response, 'Unable to load party locations.'));
 
+            const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+            if (!contentType.includes('application/json')) {
+                const body = await response.text().catch(() => '');
+                if (body.toLowerCase().includes('<html') && body.toLowerCase().includes('login')) {
+                    throw new Error('Session expired. Please sign in again to load parties.');
+                }
+
+                throw new Error('Invalid response from customers API.');
+            }
+
             const collection = await response.json();
             const customerFeatures = Array.isArray(collection.features) ? collection.features : [];
             state.customerFeatures = new Map(customerFeatures.map((feature) => [String(feature.properties.customer_id), feature]));
@@ -1058,6 +1068,37 @@
         } catch (error) {
             setCustomerSearchResult(error.message, true);
         }
+    }
+
+    function getPartySearchTokens(feature) {
+        const properties = feature?.properties || {};
+        return [
+            String(properties.customer_id || ''),
+            String(properties.name || ''),
+            String(properties.phone || ''),
+            String(properties.connection_id || ''),
+            String(properties.mikrotik_username || ''),
+            String(properties.address || ''),
+            String(properties.comment || ''),
+        ];
+    }
+
+    function matchesPartySearch(feature, query) {
+        const normalized = String(query || '').trim().toLowerCase();
+        if (!normalized) {
+            return true;
+        }
+
+        return getPartySearchTokens(feature).some((value) => value.toLowerCase().includes(normalized));
+    }
+
+    function searchPartyFeaturesLocally(query) {
+        const all = [...state.customerFeatures.values()];
+        if (!query || !all.length) {
+            return all;
+        }
+
+        return all.filter((feature) => matchesPartySearch(feature, query));
     }
 
     async function searchCustomer(event) {
@@ -1075,6 +1116,24 @@
         resultPanel.hidden = false;
         resultPanel.innerHTML = '<div class="search-empty">Searching parties...</div>';
         setStatus(`Searching party: ${query}`);
+
+        const cachedMatches = searchPartyFeaturesLocally(query);
+        if (cachedMatches.length > 0) {
+            if (cachedMatches.length === 1) {
+                const match = cachedMatches[0];
+                renderPartySearchResults([match]);
+                if (customerHasLocation(match)) {
+                    setStatus(`1 party found for "${query}".`);
+                } else {
+                    setStatus(`${formatPartyLabel(match) || query} has no saved map location.`);
+                }
+                return;
+            }
+
+            renderPartySearchResults(cachedMatches);
+            setStatus(`${cachedMatches.length} parties found for "${query}".`);
+            return;
+        }
 
         try {
             let matches = await searchPartiesByQuery(query, 'q');
@@ -1099,6 +1158,13 @@
             setCustomerSearchResult(`No party found for "${query}".`, true);
             setStatus('No party found.');
         } catch (error) {
+            const localFallback = searchPartyFeaturesLocally(query);
+            if (localFallback.length) {
+                renderPartySearchResults(localFallback);
+                setStatus(`${localFallback.length} parties found for "${query}".`);
+                return;
+            }
+
             if (!/^\d+$/.test(query) && /numeric party id/i.test(error.message || '')) {
                 try {
                     const fallbackMatches = await searchPartiesByQuery(query, 'customer_id');

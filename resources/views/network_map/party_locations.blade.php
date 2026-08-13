@@ -65,5 +65,5 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-party-locations.js') }}?v=20260813-4"></script>
+    <script src="{{ asset('js/network-party-locations.js') }}?v=20260813-5"></script>
 @endsection
