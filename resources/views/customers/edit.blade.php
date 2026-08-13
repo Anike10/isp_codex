@@ -10,7 +10,7 @@
     $selectedRouterIds = array_map('intval', old('mikrotik_router_ids', $savedRouterIds));
 @endphp
 
-<link rel="stylesheet" href="{{ asset('css/customer-edit.css') }}?v=20260813-1">
+<link rel="stylesheet" href="{{ asset('css/customer-edit.css') }}?v=20260813-2">
 
 <div class="party-edit-shell">
     <header class="party-edit-header">
