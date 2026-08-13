@@ -50,7 +50,10 @@ class NetworkMapController extends Controller
 
     public function customers(Request $request): JsonResponse
     {
-        $search = trim((string) $request->query('q', ''));
+        $search = trim((string) $request->query(
+            'q',
+            $request->query('search', $request->query('query', $request->query('customer_id', '')))
+        ));
 
         $features = Customer::query()
             ->with('importedSecret')

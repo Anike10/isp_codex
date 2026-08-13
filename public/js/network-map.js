@@ -1077,21 +1077,7 @@
         setStatus(`Searching party: ${query}`);
 
         try {
-            const url = new URL(config.customersUrl);
-            url.searchParams.set('q', query);
-            const response = await fetch(url, {
-                headers: {
-                    Accept: 'application/json',
-                },
-            });
-
-            if (!response.ok) {
-                throw new Error(await responseErrorMessage(response, 'Unable to search party.'));
-            }
-
-            const result = await response.json();
-            const matches = Array.isArray(result.features) ? result.features : [];
-            cacheCustomerSearchMatches(matches);
+            let matches = await searchPartiesByQuery(query, 'q');
 
             if (matches.length === 1) {
                 const match = matches[0];
@@ -1113,9 +1099,50 @@
             setCustomerSearchResult(`No party found for "${query}".`, true);
             setStatus('No party found.');
         } catch (error) {
+            if (!/^\d+$/.test(query) && /numeric party id/i.test(error.message || '')) {
+                try {
+                    const fallbackMatches = await searchPartiesByQuery(query, 'customer_id');
+                    if (fallbackMatches.length) {
+                        cacheCustomerSearchMatches(fallbackMatches);
+                        renderPartySearchResults(fallbackMatches);
+                        setStatus(fallbackMatches.length === 1
+                            ? `1 party found for "${query}".`
+                            : `${fallbackMatches.length} parties found for "${query}".`);
+                        return;
+                    }
+                } catch (_) {
+                    // keep original error below
+                }
+            }
+
             resultPanel.innerHTML = `<div class="search-empty">${escapeHtml(error.message)}</div>`;
             setStatus(error.message);
         }
+    }
+
+    async function searchPartiesByQuery(query, paramName = 'q') {
+        const url = new URL(config.customersUrl);
+        const trimmed = (query || '').trim();
+        const canSearch = trimmed.length > 0;
+
+        if (canSearch) {
+            url.searchParams.set(paramName, trimmed);
+        } else {
+            url.searchParams.delete(paramName);
+        }
+
+        const response = await fetch(url, {
+            headers: {
+                Accept: 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(await responseErrorMessage(response, 'Unable to search party.'));
+        }
+
+        const result = await response.json();
+        return Array.isArray(result.features) ? result.features : [];
     }
 
     function cacheCustomerSearchMatches(matches) {
