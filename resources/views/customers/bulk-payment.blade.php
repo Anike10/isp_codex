@@ -71,15 +71,18 @@
                 Payment Date
                 <input type="date" name="payment_date" value="{{ old('payment_date', now()->toDateString()) }}" required>
             </label>
-            <label>
-                Payment Method
-                <select name="payment_method" id="bulkPaymentMethod">
-                    <option value="cash" @selected($selectedPaymentMethod === 'cash')>Cash</option>
-                    <option value="bkash" @selected($selectedPaymentMethod === 'bkash')>bKash</option>
-                    <option value="nagad" @selected($selectedPaymentMethod === 'nagad')>Nagad</option>
-                    <option value="bank" @selected($selectedPaymentMethod === 'bank')>Bank</option>
-                </select>
-            </label>
+            <div class="full" style="display:flex;align-items:flex-end;gap:16px">
+                <label style="flex:1;margin:0">
+                    Payment Method
+                    <select name="payment_method" id="bulkPaymentMethod">
+                        <option value="cash" @selected($selectedPaymentMethod === 'cash')>Cash</option>
+                        <option value="bkash" @selected($selectedPaymentMethod === 'bkash')>bKash</option>
+                        <option value="nagad" @selected($selectedPaymentMethod === 'nagad')>Nagad</option>
+                        <option value="bank" @selected($selectedPaymentMethod === 'bank')>Bank</option>
+                    </select>
+                </label>
+                <div style="padding-bottom:9px;white-space:nowrap">@include('partials.payment_default_checkbox')</div>
+            </div>
             <label>
                 Payment Account
                 <select name="payment_account_id" id="bulkPaymentAccount"><option value="">Select account</option></select>
@@ -92,7 +95,6 @@
                 Note
                 <textarea name="note" rows="2" placeholder="Optional bulk payment note">{{ old('note') }}</textarea>
             </label>
-            <div class="full">@include('partials.payment_default_checkbox')</div>
         </section>
 
         <section class="bulk-payment-summary">
