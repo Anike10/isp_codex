@@ -32,6 +32,11 @@
         position: relative;
         display: inline-block;
     }
+    .customer-row-actions {
+        vertical-align: middle;
+        text-align: right;
+        white-space: nowrap;
+    }
     .customer-action-menu > summary {
         min-width: 88px;
         cursor: pointer;
@@ -231,7 +236,7 @@
             @if ($showDeletedCustomers)
                 <td>{{ optional($customer->deleted_at)->format('d/m/Y H:i') }}</td>
             @endif
-            <td class="actions">
+            <td class="customer-row-actions">
             @if ($showDeletedCustomers)
                     <form method="post" action="{{ route('customers.restore', $customer->id) }}" onsubmit="return confirm('Restore this party to active list?');" style="display:inline">
                         @csrf
