@@ -3,11 +3,12 @@
 namespace App\Services;
 
 use App\Models\Customer;
-use App\Models\CustomerBalanceTransaction;
+use App\Models\Invoice;
+use App\Models\Payment;
+use App\Models\PaymentAllocation;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Throwable;
 
@@ -44,101 +45,138 @@ class BulkCustomerPaymentService
         $paymentDate = Carbon::parse($data['payment_date'])->startOfDay();
         $reference = trim((string) ($data['reference'] ?? '')) ?: 'BULK-'.strtoupper(substr($batchToken, 0, 12));
 
-        $result = DB::transaction(function () use ($customerIds, $data, $duration, $paymentDate, $reference, $entryBy): array {
-            $customers = Customer::query()
-                ->whereKey($customerIds)
-                ->lockForUpdate()
-                ->orderBy('id')
-                ->get();
+        $processingParty = null;
+        $processingStep = 'loading selected parties';
 
-            if ($customers->count() !== count($customerIds)) {
-                throw new InvalidArgumentException('One or more selected parties no longer exist.');
-            }
+        try {
+            $result = DB::transaction(function () use ($customerIds, $data, $duration, $paymentDate, $reference, $entryBy, &$processingParty, &$processingStep): array {
+                $customers = Customer::query()
+                    ->whereKey($customerIds)
+                    ->lockForUpdate()
+                    ->orderBy('id')
+                    ->get();
 
-            $customers->load(['activeSubscription.package', 'latestSubscription.package']);
-            $total = 0.0;
-
-            foreach ($customers as $customer) {
-                $subscription = $customer->activeSubscription ?: $customer->latestSubscription;
-                $package = $subscription?->package;
-
-                if (! $subscription || ! $package) {
-                    throw new InvalidArgumentException("Party #{$customer->id} ({$customer->name}) has no assigned package.");
+                if ($customers->count() !== count($customerIds)) {
+                    throw new InvalidArgumentException('One or more selected parties no longer exist.');
                 }
 
-                $amount = $this->amountForPrice((float) $package->monthly_price, $duration);
-                if ($amount <= 0) {
-                    throw new InvalidArgumentException("Party #{$customer->id} ({$customer->name}) has a zero-price package.");
+                $customers->load(['activeSubscription.package', 'latestSubscription.package']);
+                $total = 0.0;
+                $invoiceIds = [];
+
+                foreach ($customers as $customer) {
+                    $processingParty = $customer;
+                    $processingStep = 'validating assigned package';
+                    $subscription = $customer->activeSubscription ?: $customer->latestSubscription;
+                    $package = $subscription?->package;
+
+                    if (! $subscription || ! $package) {
+                        throw new InvalidArgumentException('No assigned package was found.');
+                    }
+
+                    $amount = $this->amountForPrice((float) $package->monthly_price, $duration);
+                    if ($amount <= 0) {
+                        throw new InvalidArgumentException('The assigned package has a zero price.');
+                    }
+
+                    $note = trim((string) ($data['note'] ?? ''));
+                    $durationLabel = $this->durationOptions()[$duration];
+                    $paymentNote = trim("Bulk {$durationLabel} package payment for {$package->name}. Reference: {$reference}. {$note}");
+
+                    $processingStep = 'creating invoice';
+                    $invoice = Invoice::create([
+                        'entry_by' => $entryBy,
+                        'customer_id' => $customer->id,
+                        'invoice_no' => Invoice::generateInvoiceNo($customer->id, $paymentDate->format('Y-m')),
+                        'billing_month' => $paymentDate->format('Y-m'),
+                        'invoice_type' => 'service',
+                        'subtotal' => $amount,
+                        'gross_total' => $amount,
+                        'discount' => 0,
+                        'discount_type' => 'amount',
+                        'discount_value' => 0,
+                        'vat' => 0,
+                        'vat_type' => 'amount',
+                        'vat_value' => 0,
+                        'total' => $amount,
+                        'paid_amount' => $amount,
+                        'due_amount' => 0,
+                        'status' => 'paid',
+                        'finalized_at' => now(),
+                        'due_date' => $paymentDate->toDateString(),
+                        'payment_note' => $paymentNote,
+                        'private_note' => $paymentNote,
+                    ]);
+
+                    $processingStep = 'recording payment';
+                    $payment = Payment::create([
+                        'entry_by' => $entryBy,
+                        'customer_id' => $customer->id,
+                        'invoice_id' => $invoice->id,
+                        'amount' => $amount,
+                        'payment_method' => $data['payment_method'],
+                        'payment_account_id' => $data['payment_account_id'] ?? null,
+                        'payment_date' => $paymentDate->toDateString(),
+                        'note' => $paymentNote,
+                    ]);
+
+                    $processingStep = 'allocating payment to invoice';
+                    PaymentAllocation::create([
+                        'entry_by' => $entryBy,
+                        'customer_id' => $customer->id,
+                        'invoice_id' => $invoice->id,
+                        'payment_id' => $payment->id,
+                        'source_type' => 'payment',
+                        'amount' => $amount,
+                        'allocated_at' => $paymentDate->toDateString(),
+                        'note' => $paymentNote,
+                    ]);
+
+                    $processingStep = 'extending service validity';
+                    $periodStart = $customer->service_valid_until
+                        && $customer->service_valid_until->copy()->startOfDay()->gte($paymentDate)
+                            ? $customer->service_valid_until->copy()->startOfDay()->addDay()
+                            : $paymentDate->copy();
+                    $periodEnd = $duration === 'month_1'
+                        ? $periodStart->copy()->addMonthNoOverflow()->subDay()
+                        : $periodStart->copy()->addDays($this->durationDays($duration) - 1);
+                    $validityNote = sprintf(
+                        '[%s] Bulk invoice %s paid: %s, %s to %s, amount %s, reference %s.',
+                        now()->format('d/m/Y H:i'),
+                        $invoice->invoice_no,
+                        $durationLabel,
+                        $periodStart->format('d/m/Y'),
+                        $periodEnd->format('d/m/Y'),
+                        number_format($amount, 2, '.', ''),
+                        $reference,
+                    );
+
+                    $customer->update([
+                        'status' => 'active',
+                        'service_valid_from' => $periodStart->toDateString(),
+                        'service_valid_until' => $periodEnd->toDateString(),
+                        'service_validity_note' => $validityNote,
+                        'grace_until' => null,
+                        'grace_days' => null,
+                        'grace_used_at' => null,
+                        'notes' => trim(implode("\n", array_filter([$customer->notes, $validityNote]))),
+                    ]);
+                    $subscription->update(['status' => 'active', 'end_date' => null]);
+                    $invoiceIds[] = $invoice->id;
+                    $total = round($total + $amount, 2);
                 }
 
-                $oldBalance = round((float) $customer->account_balance, 2);
-                $temporaryBalance = round($oldBalance + $amount, 2);
-                $note = trim((string) ($data['note'] ?? ''));
-                $durationLabel = $this->durationOptions()[$duration];
-                $transactionNote = trim("Bulk {$durationLabel} package payment for {$package->name}. {$note}");
-
-                CustomerBalanceTransaction::create([
-                    'entry_by' => $entryBy,
-                    'customer_id' => $customer->id,
-                    'payment_account_id' => $data['payment_account_id'] ?? null,
-                    'payment_method' => $data['payment_method'],
-                    'direction' => 'credit',
-                    'amount' => $amount,
-                    'balance_after' => $temporaryBalance,
-                    'transaction_date' => $paymentDate->toDateString(),
-                    'reference' => $reference,
-                    'operation_key' => (string) Str::uuid(),
-                    'note' => $transactionNote,
-                ]);
-
-                CustomerBalanceTransaction::create([
-                    'entry_by' => $entryBy,
-                    'customer_id' => $customer->id,
-                    'payment_account_id' => null,
-                    'payment_method' => 'advance',
-                    'direction' => 'debit',
-                    'amount' => $amount,
-                    'balance_after' => $oldBalance,
-                    'transaction_date' => $paymentDate->toDateString(),
-                    'reference' => $reference,
-                    'operation_key' => (string) Str::uuid(),
-                    'note' => 'Bulk payment applied to package validity.',
-                ]);
-
-                $periodStart = $customer->service_valid_until
-                    && $customer->service_valid_until->copy()->startOfDay()->gte($paymentDate)
-                        ? $customer->service_valid_until->copy()->startOfDay()->addDay()
-                        : $paymentDate->copy();
-                $periodEnd = $duration === 'month_1'
-                    ? $periodStart->copy()->addMonthNoOverflow()->subDay()
-                    : $periodStart->copy()->addDays($this->durationDays($duration) - 1);
-                $validityNote = sprintf(
-                    '[%s] Bulk payment: %s, %s to %s, amount %s, reference %s.',
-                    now()->format('d/m/Y H:i'),
-                    $durationLabel,
-                    $periodStart->format('d/m/Y'),
-                    $periodEnd->format('d/m/Y'),
-                    number_format($amount, 2, '.', ''),
-                    $reference,
-                );
-
-                $customer->update([
-                    'status' => 'active',
-                    'account_balance' => $oldBalance,
-                    'service_valid_from' => $periodStart->toDateString(),
-                    'service_valid_until' => $periodEnd->toDateString(),
-                    'service_validity_note' => $validityNote,
-                    'grace_until' => null,
-                    'grace_days' => null,
-                    'grace_used_at' => null,
-                    'notes' => trim(implode("\n", array_filter([$customer->notes, $validityNote]))),
-                ]);
-                $subscription->update(['status' => 'active', 'end_date' => null]);
-                $total = round($total + $amount, 2);
-            }
-
-            return ['customers' => $customers, 'total' => $total];
-        });
+                return ['customers' => $customers, 'invoice_ids' => $invoiceIds, 'total' => $total];
+            });
+        } catch (Throwable $exception) {
+            $partyLabel = $processingParty
+                ? "Party #{$processingParty->id} ({$processingParty->name})"
+                : 'Selected party batch';
+            throw new InvalidArgumentException(
+                "{$partyLabel} failed while {$processingStep}: {$exception->getMessage()}",
+                previous: $exception,
+            );
+        }
 
         $syncFailures = 0;
         foreach ($result['customers'] as $customer) {
@@ -155,6 +193,7 @@ class BulkCustomerPaymentService
 
         return [
             'count' => $result['customers']->count(),
+            'invoice_count' => count($result['invoice_ids']),
             'total' => $result['total'],
             'sync_failures' => $syncFailures,
         ];

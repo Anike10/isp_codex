@@ -8,7 +8,7 @@ use App\Services\BulkCustomerPaymentService;
 use App\Services\PaymentAccountPreferenceService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use InvalidArgumentException;
+use Throwable;
 
 class BulkCustomerPaymentController extends Controller
 {
@@ -112,8 +112,12 @@ class BulkCustomerPaymentController extends Controller
                 $request->user()?->id,
                 $token,
             );
-        } catch (InvalidArgumentException $exception) {
-            return back()->withInput()->withErrors(['bulk_payment' => $exception->getMessage()]);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->withInput()->withErrors([
+                'bulk_payment' => 'Bulk payment failed ('.class_basename($exception).'): '.$exception->getMessage(),
+            ]);
         }
 
         $preferenceService->remember(
@@ -125,8 +129,9 @@ class BulkCustomerPaymentController extends Controller
         $request->session()->forget($this->selectionKey($token));
 
         $message = sprintf(
-            'Bulk payment completed for %d parties. Total received: %s.',
+            'Bulk payment completed for %d parties with %d paid invoices. Total received: %s.',
             $result['count'],
+            $result['invoice_count'],
             number_format($result['total'], 2),
         );
 

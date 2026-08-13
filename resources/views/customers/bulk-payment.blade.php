@@ -37,13 +37,20 @@
     <header class="bulk-payment-hero">
         <div>
             <h1>Bulk Party Payment</h1>
-            <p>Review selected parties, choose validity and complete one payment batch.</p>
+        <p>Review selected parties, create a paid invoice for each party and complete one payment batch.</p>
         </div>
         <a class="btn light" href="{{ route('customers.index') }}">Back to Parties</a>
     </header>
 
     @if ($errors->any())
-        <div class="bulk-payment-error">{{ $errors->first() }}</div>
+        <div class="bulk-payment-error">
+            <strong>Bulk payment could not be completed.</strong>
+            <ul style="margin:8px 0 0;padding-left:20px">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
     @endif
     @if ($hasUnpayableRows)
         <div class="bulk-payment-error">One or more selected parties have no payable assigned package. Go back and remove those parties before completing payment.</div>
