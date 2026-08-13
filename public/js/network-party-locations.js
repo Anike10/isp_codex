@@ -338,6 +338,7 @@
                 renderPartyLocationSource();
                 renderPartyList();
                 updatePartyStats();
+                setStatus(`${localMatches.length} matching parties shown.`);
                 setSearchStatus(`${localMatches.length} parties found for "${trimmed}".`);
                 return;
             }
@@ -393,6 +394,11 @@
             renderPartyLocationSource();
             renderPartyList();
             updatePartyStats();
+
+            const locationCount = features.filter(customerHasLocation).length;
+            setStatus(trimmed
+                ? `${features.length} matching parties shown.`
+                : `${features.length} parties loaded. ${locationCount} locations shown on the map.`);
 
             if (trimmed) {
                 setSearchStatus(`${features.length} parties found for "${trimmed}".`);
