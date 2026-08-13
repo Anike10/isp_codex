@@ -261,10 +261,7 @@
                 @else
                     <span class="badge {{ $customer->status }}">{{ $customer->status }}</span>
                     @if ($customer->status === 'inactive' && $inactiveSince)
-                        <div class="muted">
-                            {{ $inactiveDays === 0 ? 'Inactive today' : 'Inactive for '.$inactiveDays.' days' }}
-                        </div>
-                        <div class="muted" style="font-size:11px;">Since {{ $inactiveSince->format('d/m/Y') }}</div>
+                        <div class="muted">{{ $inactiveDays }} days</div>
                     @endif
                     @if ($customer->hasActiveGracePeriod())
                         <span class="badge pending">Grace</span>
