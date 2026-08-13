@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountingLedgerController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BkashSmsPaymentController;
+use App\Http\Controllers\BulkCustomerPaymentController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerPaymentController;
 use App\Http\Controllers\DashboardController;
@@ -59,6 +60,9 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('permission:manage_customers')->group(function () {
+        Route::post('customers/bulk-payments/selection', [BulkCustomerPaymentController::class, 'select'])->name('customers.bulk-payments.select');
+        Route::get('customers/bulk-payments/{token}', [BulkCustomerPaymentController::class, 'create'])->name('customers.bulk-payments.create');
+        Route::post('customers/bulk-payments/{token}', [BulkCustomerPaymentController::class, 'store'])->name('customers.bulk-payments.store');
         Route::get('customers/{customer}/payments/create', [CustomerPaymentController::class, 'create'])->name('customers.payments.create');
         Route::post('customers/{customer}/payments', [CustomerPaymentController::class, 'store'])->name('customers.payments.store');
         Route::get('customers/{customer}/advance-payments/create', [CustomerPaymentController::class, 'createAdvance'])->name('customers.advance-payments.create');

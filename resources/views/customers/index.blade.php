@@ -156,6 +156,18 @@
         margin: 0;
         white-space: nowrap;
     }
+    .bulk-payment-toolbar {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 7px;
+        margin: 0;
+        white-space: nowrap;
+    }
+    .bulk-select-column { display: none; }
+    .customer-bulk-selection-active .bulk-select-column { display: table-cell; }
+    .customer-bulk-selection-active tr.is-bulk-selected > td { background: #e7f7ef; }
+    .bulk-row-checkbox { width: 17px; height: 17px; margin: 0; accent-color: #116149; }
     @media (max-width: 1500px) {
         .customer-filter-form {
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -207,11 +219,20 @@
         </nav>
     @endif
 
+    @if (! $showDeletedCustomers)
+        <form method="post" action="{{ route('customers.bulk-payments.select') }}" class="bulk-payment-toolbar" id="bulkPaymentSelectionForm">
+            @csrf
+            <button class="btn secondary" type="button" id="bulkPaymentToggle">Bulk Payment</button>
+            <button class="btn light" type="button" id="bulkSelectAll" hidden>Select All</button>
+            <button class="btn light" type="button" id="bulkDeselectAll" hidden>Deselect All</button>
+        </form>
+    @endif
+
     @include('partials.per_page')
 </div>
 
 <table>
-    <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Role</th><th>User ID</th><th>Package</th><th>Balance</th><th>Status</th><th>Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
+    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th>Role</th><th>User ID</th><th>Package</th><th>Balance</th><th>Status</th><th>Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
         @php
@@ -229,6 +250,11 @@
             $canQuickActivate = ($hasImportedSecretTable ?? false) && ($customer->imported_secret_exists ?? false) && ! ($customer->invoices_exists ?? false);
         @endphp
         <tr class="{{ $customer->never_suspend ? 'customer-row-special' : '' }}" @if(! $showDeletedCustomers) data-href="{{ route('customers.show', $customer) }}" @endif>
+            @if (! $showDeletedCustomers)
+                <td class="bulk-select-column">
+                    <input class="bulk-row-checkbox" type="checkbox" name="customer_ids[]" value="{{ $customer->id }}" form="bulkPaymentSelectionForm" aria-label="Select {{ $customer->name }}">
+                </td>
+            @endif
             <td>{{ $customers->firstItem() + $loop->index }}</td>
             <td @if(! $showDeletedCustomers) data-inline-field="name" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif>
                 <span data-inline-value>{{ $customer->name }}</span>
@@ -522,6 +548,64 @@ document.querySelectorAll('.customer-action-menu').forEach((menu) => {
             if (otherMenu !== menu) otherMenu.removeAttribute('open');
         });
     });
+});
+
+const bulkPaymentToggle = document.getElementById('bulkPaymentToggle');
+const bulkSelectAll = document.getElementById('bulkSelectAll');
+const bulkDeselectAll = document.getElementById('bulkDeselectAll');
+const bulkHeaderCheckbox = document.getElementById('bulkHeaderCheckbox');
+const bulkSelectionForm = document.getElementById('bulkPaymentSelectionForm');
+const bulkRowCheckboxes = [...document.querySelectorAll('.bulk-select-column input[name="customer_ids[]"]')];
+let bulkSelectionActive = false;
+
+function updateBulkSelectionUi() {
+    const selected = bulkRowCheckboxes.filter((checkbox) => checkbox.checked);
+    bulkPaymentToggle.textContent = bulkSelectionActive ? `Show Bulk Payment (${selected.length})` : 'Bulk Payment';
+    bulkSelectAll.hidden = ! bulkSelectionActive;
+    bulkDeselectAll.hidden = ! bulkSelectionActive;
+    if (bulkHeaderCheckbox) {
+        bulkHeaderCheckbox.checked = selected.length > 0 && selected.length === bulkRowCheckboxes.length;
+        bulkHeaderCheckbox.indeterminate = selected.length > 0 && selected.length < bulkRowCheckboxes.length;
+    }
+    bulkRowCheckboxes.forEach((checkbox) => checkbox.closest('tr')?.classList.toggle('is-bulk-selected', checkbox.checked));
+}
+
+bulkPaymentToggle?.addEventListener('click', function () {
+    if (! bulkSelectionActive) {
+        bulkSelectionActive = true;
+        document.body.classList.add('customer-bulk-selection-active');
+        updateBulkSelectionUi();
+        return;
+    }
+
+    if (! bulkRowCheckboxes.some((checkbox) => checkbox.checked)) {
+        alert('Select at least one party for bulk payment.');
+        return;
+    }
+
+    bulkSelectionForm.requestSubmit();
+});
+
+bulkSelectAll?.addEventListener('click', function () {
+    bulkRowCheckboxes.forEach((checkbox) => { checkbox.checked = true; });
+    updateBulkSelectionUi();
+});
+
+bulkDeselectAll?.addEventListener('click', function () {
+    bulkRowCheckboxes.forEach((checkbox) => { checkbox.checked = false; });
+    updateBulkSelectionUi();
+});
+
+bulkHeaderCheckbox?.addEventListener('change', function () {
+    bulkRowCheckboxes.forEach((checkbox) => { checkbox.checked = bulkHeaderCheckbox.checked; });
+    updateBulkSelectionUi();
+});
+
+bulkRowCheckboxes.forEach((checkbox) => {
+    checkbox.addEventListener('click', function (event) {
+        event.stopPropagation();
+    });
+    checkbox.addEventListener('change', updateBulkSelectionUi);
 });
 </script>
 @endif
