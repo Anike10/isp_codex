@@ -6,7 +6,9 @@
 .network-map-page {
     display: grid;
     grid-template-columns: 340px minmax(0, 1fr);
+    height: calc(100dvh - 63px);
     min-height: calc(100vh - 63px);
+    overflow: hidden;
     background: #eef3f8;
 }
 
@@ -14,6 +16,7 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    min-height: 0;
     padding: 18px;
     overflow-y: auto;
     border-right: 1px solid #d8dee9;
@@ -473,6 +476,7 @@
 .map-stage {
     position: relative;
     min-width: 0;
+    min-height: 0;
 }
 
 #networkMap {
@@ -1364,6 +1368,8 @@
     .network-map-page {
         grid-template-columns: 1fr;
         grid-template-rows: auto 68vh;
+        height: auto;
+        overflow: visible;
     }
 
     .network-sidebar {

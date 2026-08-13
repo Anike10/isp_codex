@@ -316,23 +316,6 @@
             },
         });
 
-        state.map.addLayer({
-            id: 'party-location-label',
-            type: 'symbol',
-            source: 'party-locations',
-            layout: {
-                'text-field': ['concat', '#', ['get', 'customer_id']],
-                'text-size': 11,
-                'text-offset': [0, 1.35],
-                'text-anchor': 'top',
-                'text-allow-overlap': false,
-            },
-            paint: {
-                'text-color': '#134e4a',
-                'text-halo-color': '#ffffff',
-                'text-halo-width': 1.2,
-            },
-        });
     }
 
     async function loadCustomers(query = '') {
