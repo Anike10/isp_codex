@@ -988,7 +988,7 @@ document.querySelectorAll('[data-olt-help-toggle]').forEach(function (button) {
 
         help.hidden = !help.hidden;
         button.setAttribute('aria-expanded', help.hidden ? 'false' : 'true');
-        button.textContent = help.hidden ? 'Show button help' : 'Hide button help';
+        button.textContent = help.hidden ? 'বাটনের কাজ দেখুন' : 'বাটনের কাজ লুকান';
     });
 });
 
