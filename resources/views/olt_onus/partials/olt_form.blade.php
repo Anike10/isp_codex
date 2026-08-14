@@ -15,8 +15,41 @@
         </div>
         <div>
             <label for="protocol_profile">OLT Protocol/Profile</label>
+            @php
+                $resolvedProtocolProfiles = is_array($protocolProfiles ?? null) ? $protocolProfiles : [];
+                $resolvedProfileDefaults = is_array($profileDefaults ?? null) ? $profileDefaults : [];
+                $fallbackProtocolProfiles = [
+                    'hsgq_epon' => 'HSGQ EPON OLT',
+                    'hsgq_gpon' => 'HSGQ GPON OLT',
+                ];
+                $fallbackProfileDefaults = [
+                    'hsgq_epon' => [
+                        'brand' => 'HSGQ',
+                        'read_context_commands' => "enable\nconfig",
+                        'onu_status_command' => 'show onu-info all',
+                        'onu_power_command' => 'show optical-info',
+                        'onu_alarm_command' => 'show onu-info-alarm {onu_id}',
+                        'onu_vlan_command' => 'show port-vlan',
+                        'onu_mac_command' => 'show mac-address epon all',
+                        'pon_ports' => '1,2,3,4,5,6,7,8',
+                    ],
+                    'hsgq_gpon' => [
+                        'brand' => 'HSGQ',
+                        'read_context_commands' => 'config',
+                        'onu_status_command' => 'show ont-info all',
+                        'onu_power_command' => 'show ont-optical all',
+                        'onu_alarm_command' => 'show ont-info {onu_id}',
+                        'onu_vlan_command' => 'show service-port all',
+                        'onu_mac_command' => 'show mac-address all',
+                        'pon_ports' => '1,2,3,4,5,6,7,8',
+                    ],
+                ];
+
+                $resolvedProtocolProfiles = array_replace($fallbackProtocolProfiles, $resolvedProtocolProfiles);
+                $resolvedProfileDefaults = array_replace_recursive($fallbackProfileDefaults, $resolvedProfileDefaults);
+            @endphp
             <select id="protocol_profile" name="protocol_profile" required>
-                @foreach ($protocolProfiles as $value => $label)
+                @foreach ($resolvedProtocolProfiles as $value => $label)
                     <option value="{{ $value }}" @selected(old('protocol_profile', $oltDevice->protocol_profile ?: 'hsgq_epon') === $value)>{{ $label }}</option>
                 @endforeach
             </select>
@@ -162,7 +195,7 @@ document.getElementById('access_method').addEventListener('change', event => {
 document.getElementById('port').addEventListener('input', event => {
     event.target.dataset.touched = '1';
 });
-const profileDefaults = @json($profileDefaults ?? []);
+const profileDefaults = @json($resolvedProfileDefaults);
 
 document.getElementById('protocol_profile').addEventListener('change', event => {
     applyOltProfileDefaults(event.target.value);
