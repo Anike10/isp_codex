@@ -2,6 +2,15 @@
 
 **শেষ আপডেট (লোকাল ডেস্কটপে):** 2026-08-11
 
+## বাধ্যতামূলক লোকাল/লাইভ নিয়ম
+
+- লোকালে একই পরিবর্তন না করে লাইভ application code-এ কোনো পরিবর্তন করা যাবে না।
+- প্রতিটি পরিবর্তন আগে লোকালে করতে হবে, commit করে `origin/main`-এ push করতে হবে, তারপর live server-এ deploy করতে হবে।
+- Production-only hotfix বা live file manual edit করা যাবে না।
+- Deploy-এর আগে local `main` clean এবং `origin/main`-এর সমান হতে হবে।
+- Deploy-এর পরে local, `origin/main` ও production একই commit এবং clean tracked state-এ আছে নিশ্চিত করতে হবে।
+- Local ও live code আলাদা থাকলে deployment সম্পন্ন বলে গণ্য হবে না।
+
 ## 1) লোকালে সব পরীক্ষা শেষে কমিট করা
 1. `git status` clean আছে কিনা দেখুন
 2. `php artisan test` (যদি সম্ভব)

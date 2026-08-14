@@ -2,6 +2,15 @@
 
 This file documents how to update the live Laravel app on **isp.us.com.bd**.
 
+## Mandatory Local/Live Sync Rule
+
+- Never change production before making the same change locally.
+- Make every code change locally, commit it, and push it to `origin/main` before deploying it to production.
+- Do not create production-only hotfixes or manually edit live application files.
+- Before deployment, confirm local `main` is clean and matches `origin/main`.
+- After deployment, confirm local, `origin/main`, and production are on the same commit with clean tracked working trees.
+- A deployment is not complete while local and production code differ.
+
 Keep passwords, API keys, database credentials, and SSH private keys out of this
 repository. Use the server owner, password manager, or approved secure note when
 credentials are needed.
