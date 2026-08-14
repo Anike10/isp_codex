@@ -72,14 +72,14 @@ class OltSshClient
             }
         };
 
-        // Some HSGQ VTY builds consume the separator immediately before a
-        // trailing "all" while auto-completing commands such as "ont-info".
-        // Explicit TAB completion preserves the following argument separator.
+        // Some HSGQ VTY builds consume the first separator after TAB
+        // completion. Send a sacrificial extra separator so commands such as
+        // "show ont-info all" do not arrive as "show ont-infoall".
         if (preg_match('/^(.*?)\s+all$/i', $command, $match)) {
             $writeCharacters($match[1]);
             $this->ssh->write("\t");
             usleep(300000);
-            $writeCharacters(' all');
+            $writeCharacters('  all');
         } else {
             $writeCharacters($command);
         }
