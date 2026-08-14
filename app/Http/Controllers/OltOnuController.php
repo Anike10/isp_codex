@@ -1816,20 +1816,89 @@ class OltOnuController extends Controller
                 : [['label' => 'show black-onu all', 'commands' => ['show black-onu all']]];
         }
 
-        return $oltDevice->protocol_profile === 'hsgq_gpon'
-            ? [['label' => 'show ont-autofind-table all', 'commands' => ['show ont-autofind-table all']]]
-            : [['label' => 'show onu-autofind all', 'commands' => ['show onu-autofind all']]];
+        if ($oltDevice->protocol_profile === 'hsgq_gpon') {
+            $ports = $this->ponPorts($oltDevice->pon_ports) ?: range(1, 8);
+            $commands = ['config'];
+
+            foreach ($ports as $ponPort) {
+                $commands[] = "interface gpon {$ponPort}";
+                $commands[] = 'show ont-autofind';
+                $commands[] = 'exit';
+            }
+
+            return [[
+                'label' => 'All configured PON auto discovery candidates',
+                'commands' => $commands,
+            ]];
+        }
+
+        return [['label' => 'show onu-autofind all', 'commands' => ['show onu-autofind all']]];
     }
 
     private function parseUtilityRows(string $output, OltDevice $oltDevice, string $type): array
     {
         $rows = [];
+        $detailPonPort = null;
+        $detailOnuId = null;
 
         foreach (preg_split('/\R/', Utf8Text::clean($output) ?? '') ?: [] as $line) {
             $line = trim($line);
 
             if ($line === '' || preg_match('/^(show|---|total|warning|there|command failed)/i', $line)) {
                 continue;
+            }
+
+            if ($type === 'discovery' && $oltDevice->protocol_profile === 'hsgq_gpon') {
+                if (preg_match('/^interface\s+gpon\s+(\d{1,2})$/i', $line, $match)) {
+                    $detailPonPort = (int) $match[1];
+                    $detailOnuId = null;
+
+                    continue;
+                }
+
+                if (preg_match('/^PON\s+ID\s*:\s*(\d{1,2})$/i', $line, $match)) {
+                    $detailPonPort = (int) $match[1];
+
+                    continue;
+                }
+
+                if (preg_match('/^(?:ONU|ONT)\s+ID\s*:\s*(\d{1,3})$/i', $line, $match)) {
+                    $detailOnuId = (int) $match[1];
+
+                    continue;
+                }
+
+                if (
+                    $detailPonPort !== null
+                    && $detailOnuId !== null
+                    && preg_match('/^(?:ONU|ONT)\s+SN\s*:\s*(.+)$/i', $line, $match)
+                ) {
+                    $serialValue = trim($match[1]);
+                    $serial = null;
+
+                    if (preg_match('/\(([^)]+)\)/', $serialValue, $serialMatch)) {
+                        $serial = $this->parseUtilitySerial($serialMatch[1], '');
+                    }
+
+                    $serial ??= $this->parseUtilitySerial($serialValue, '');
+
+                    if ($serial !== null) {
+                        $rows[] = [
+                            'olt_device_id' => $oltDevice->id,
+                            'olt_name' => $oltDevice->name,
+                            'olt_protocol_profile' => $oltDevice->protocol_profile,
+                            'pon_port' => $detailPonPort,
+                            'onu_id' => $this->nextOnuId($oltDevice, $detailPonPort),
+                            'source_onu_id' => $detailOnuId,
+                            'auto_assign_onu_id' => false,
+                            'serial' => $serial,
+                            'status' => 'discovered',
+                            'raw' => 'PON ID: '.$detailPonPort.' | ONU ID: '.$detailOnuId.' | '.$line,
+                        ];
+                    }
+
+                    continue;
+                }
             }
 
             if (preg_match('/^\S+(?:\([^)]+\))?[#>]/', $line)) {
