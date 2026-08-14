@@ -10,59 +10,41 @@ use Illuminate\Support\Facades\DB;
 class OrganizationController extends Controller
 {
     private const PAYMENT_NOTE_SETTING_KEY = 'invoice_payment_note';
-    private const OVERDUE_DISCONNECT_TIME_SETTING_KEY = 'overdue_disconnect_time';
 
     public function index() { return view('organizations.index', ['organizations' => Organization::orderByDesc('is_default')->orderBy('name')->get()]); }
-    public function create()
-    {
-        return view('organizations.form', [
-            'organization' => new Organization,
-            'defaultPaymentNote' => $this->defaultPaymentNote(),
-            'defaultOverdueDisconnectTime' => $this->defaultOverdueDisconnectTime(),
-        ]);
-    }
+    public function create() { return view('organizations.form', ['organization' => new Organization, 'defaultPaymentNote' => $this->defaultPaymentNote()]); }
     public function edit(Organization $organization)
     {
         return view('organizations.form', [
             'organization' => $organization,
             'defaultPaymentNote' => $this->defaultPaymentNote(),
-            'defaultOverdueDisconnectTime' => $this->defaultOverdueDisconnectTime(),
         ]);
     }
 
     public function store(Request $request)
     {
-        $data = $this->validated($request);
-        $paymentNote = $data['payment_note'] ?? null;
-        $overdueDisconnectTime = $data['overdue_disconnect_time'] ?? null;
-        unset($data['payment_note']);
-        unset($data['overdue_disconnect_time']);
-
-        DB::transaction(function () use ($data): void {
+        $paymentNote = null;
+        DB::transaction(function () use ($request, &$paymentNote) {
+            $data = $this->validated($request);
+            $paymentNote = $data['payment_note'] ?? null;
+            unset($data['payment_note']);
             if ($data['is_default']) Organization::query()->update(['is_default' => false]);
-            Organization::create($data);
+            return Organization::create($data);
         });
-
         AppSetting::setValue(self::PAYMENT_NOTE_SETTING_KEY, $paymentNote);
-        AppSetting::setValue(self::OVERDUE_DISCONNECT_TIME_SETTING_KEY, $overdueDisconnectTime ?? '10:00');
         return redirect()->route('organizations.index')->with('success', 'Organization saved successfully.');
     }
 
     public function update(Request $request, Organization $organization)
     {
-        $data = $this->validated($request);
-        $paymentNote = $data['payment_note'] ?? null;
-        $overdueDisconnectTime = $data['overdue_disconnect_time'] ?? null;
-        unset($data['payment_note']);
-        unset($data['overdue_disconnect_time']);
-
-        DB::transaction(function () use ($organization, $data): void {
+        DB::transaction(function () use ($request, $organization) {
+            $data = $this->validated($request);
+            $paymentNote = $data['payment_note'] ?? null;
+            unset($data['payment_note']);
             if ($data['is_default']) Organization::whereKeyNot($organization->id)->update(['is_default' => false]);
             $organization->update($data);
+            AppSetting::setValue(self::PAYMENT_NOTE_SETTING_KEY, $paymentNote);
         });
-
-        AppSetting::setValue(self::PAYMENT_NOTE_SETTING_KEY, $paymentNote);
-        AppSetting::setValue(self::OVERDUE_DISCONNECT_TIME_SETTING_KEY, $overdueDisconnectTime ?? '10:00');
         return redirect()->route('organizations.index')->with('success', 'Organization updated successfully.');
     }
 
@@ -94,7 +76,6 @@ class OrganizationController extends Controller
             'bank_name' => ['nullable', 'string', 'max:255'], 'bank_account_name' => ['nullable', 'string', 'max:255'],
             'bank_account_number' => ['nullable', 'string', 'max:100'], 'bank_branch' => ['nullable', 'string', 'max:255'],
             'bank_routing_number' => ['nullable', 'string', 'max:100'], 'show_bank_info_on_invoice' => ['nullable', 'boolean'],
-            'overdue_disconnect_time' => ['nullable', 'date_format:H:i'],
             'is_default' => ['nullable', 'boolean'], 'is_active' => ['nullable', 'boolean'],
         ]);
         $data['default_without_signature'] = $request->boolean('default_without_signature');
@@ -110,12 +91,4 @@ class OrganizationController extends Controller
     {
         return AppSetting::value(self::PAYMENT_NOTE_SETTING_KEY, '') ?: '';
     }
-
-    private function defaultOverdueDisconnectTime(): string
-    {
-        $time = AppSetting::value(self::OVERDUE_DISCONNECT_TIME_SETTING_KEY, '10:00');
-
-        return preg_match('/^\d{2}:\d{2}$/', (string) $time) ? $time : '10:00';
-    }
 }
-

@@ -129,24 +129,6 @@ class Customer extends Model
         return (int) now()->startOfDay()->diffInDays($activeUntil->copy()->startOfDay(), false);
     }
 
-    public function isAutoSuspendCandidateExpired(): bool
-    {
-        if ($this->never_suspend || $this->status !== 'active') {
-            return false;
-        }
-
-        if ($this->hasActiveGracePeriod()) {
-            return false;
-        }
-
-        return ($this->activeDaysRemaining() ?? 0) < 0;
-    }
-
-    public function displayStatus(): string
-    {
-        return $this->isAutoSuspendCandidateExpired() ? 'inactive' : $this->status;
-    }
-
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);

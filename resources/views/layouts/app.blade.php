@@ -418,46 +418,16 @@
     </div>
     </header>
     <main class="main @yield('main_class')">
-        @php
-            $flashSuccess = session('success');
-            $flashWarning = session('warning');
-            $flashError = session('error');
-        @endphp
-
-        @if ($flashSuccess)
-            <div class="alert success">{{ $flashSuccess }}</div>
+        @if (session('success'))
+            <div class="alert success">{{ session('success') }}</div>
         @endif
 
-        @if (is_array($flashWarning))
-            <div class="alert warning">
-                @foreach ($flashWarning as $line)
-                    <div>{{ $line }}</div>
-                @endforeach
-            </div>
-        @elseif (is_string($flashWarning) && trim($flashWarning) !== '')
-            <div class="alert warning">
-                @foreach (preg_split('/\\R/', $flashWarning) as $line)
-                    @if (trim((string) $line) !== '')
-                        <div>{{ trim((string) $line) }}</div>
-                    @endif
-                @endforeach
-            </div>
+        @if (session('warning'))
+            <div class="alert warning">{{ session('warning') }}</div>
         @endif
 
-        @if (is_array($flashError))
-            <div class="alert error">
-                @foreach ($flashError as $line)
-                    <div>{{ $line }}</div>
-                @endforeach
-            </div>
-        @elseif (is_string($flashError) && trim($flashError) !== '')
-            <div class="alert error">
-                @foreach (preg_split('/\\R/', $flashError) as $line)
-                    @if (trim((string) $line) !== '')
-                        <div>{{ trim((string) $line) }}</div>
-                    @endif
-                @endforeach
-            </div>
+        @if (session('error'))
+            <div class="alert error">{{ session('error') }}</div>
         @endif
 
         @if ($errors->any())
@@ -468,9 +438,9 @@
             </div>
         @endif
 
-        @yield('content')
-
         @include('partials.page_help')
+
+        @yield('content')
     </main>
     <footer class="app-footer">Powered by Ultimate Solution</footer>
 </div>

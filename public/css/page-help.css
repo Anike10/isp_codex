@@ -5,7 +5,7 @@
     --page-help-brand: #116149;
     --page-help-soft: #f4faf7;
     width: 100%;
-    margin: 16px 0 0;
+    margin: 0 0 18px;
     overflow: hidden;
     border: 1px solid var(--page-help-line);
     border-radius: 12px;
@@ -113,7 +113,7 @@
 }
 
 @media (max-width: 560px) {
-    .page-help { margin-top: 14px; border-radius: 10px; }
+    .page-help { margin-bottom: 12px; border-radius: 10px; }
     .page-help > summary { min-height: 48px; padding: 9px 11px; }
     .page-help__content { padding: 13px; }
     .page-help__header h2 { font-size: 18px; }

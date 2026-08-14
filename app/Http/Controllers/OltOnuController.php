@@ -189,12 +189,7 @@ class OltOnuController extends Controller
         $data = $this->validateOlt($request, $oltDevice);
 
         if ($oltDevice->protocol_profile !== $data['protocol_profile']) {
-            $profile = $this->resolveProtocolProfile($data['protocol_profile']);
-
-            if (! $profile) {
-                return back()->with('error', 'Invalid OLT protocol/profile selected.');
-            }
-
+            $profile = OltProtocolProfile::query()->where('key', $data['protocol_profile'])->firstOrFail();
             $data = array_merge($data, $this->profileDefaultValues($profile));
         }
 
@@ -230,29 +225,11 @@ class OltOnuController extends Controller
 
     public function downloadConfigBackup(OltDevice $oltDevice)
     {
-        $commandPlans = $this->configBackupCommandPlans($oltDevice);
-        $attemptedCommands = [];
-        $output = '';
-
         try {
-            foreach ($commandPlans as $plan) {
-                $commands = array_values(array_filter(array_map('trim', (array) ($plan['commands'] ?? []))));
-                $includeContext = (bool) ($plan['includeContextCommands'] ?? true);
-
-                if ($commands === []) {
-                    continue;
-                }
-
-                $attemptedCommands[] = implode(' && ', $commands).($includeContext ? '' : ' [without context]');
-                $output = $this->runOltReadCommands($oltDevice, $commands, $includeContext);
-
-                if (! $this->hasOltCommandError($output)) {
-                    break;
-                }
-            }
+            $output = $this->runOltReadCommands($oltDevice, ['show running-config']);
 
             if ($this->hasOltCommandError($output)) {
-                throw new \RuntimeException('None of the backup commands were accepted. Tried: '.implode(', ', $attemptedCommands).'. Last response: '.$this->summarizeOltOutput($output));
+                throw new \RuntimeException($this->summarizeOltOutput($output));
             }
         } catch (Throwable $exception) {
             return back()->with('error', 'OLT config backup failed: '.(Utf8Text::clean($exception->getMessage()) ?? 'Unknown error'));
@@ -281,44 +258,6 @@ class OltOnuController extends Controller
                 'Cache-Control' => 'no-store, private',
             ]
         );
-    }
-
-    private function configBackupCommandPlans(OltDevice $oltDevice): array
-    {
-        $profile = strtolower(trim((string) $oltDevice->protocol_profile));
-
-        return match ($profile) {
-            'hsgq_gpon' => [
-                ['commands' => ['show current-config'], 'includeContextCommands' => false],
-                ['commands' => ['show saved-config'], 'includeContextCommands' => false],
-                ['commands' => ['do show current-config']],
-                ['commands' => ['show current-config']],
-                ['commands' => ['show saved-config']],
-                ['commands' => ['show configuration']],
-                ['commands' => ['show current-configuration'], 'includeContextCommands' => false],
-                ['commands' => ['display current-configuration'], 'includeContextCommands' => false],
-                ['commands' => ['show running-config'], 'includeContextCommands' => false],
-            ],
-            'hsgq_epon' => [
-                ['commands' => ['show running-config']],
-                ['commands' => ['show current-config'], 'includeContextCommands' => false],
-                ['commands' => ['show saved-config'], 'includeContextCommands' => false],
-                ['commands' => ['show startup-config'], 'includeContextCommands' => false],
-                ['commands' => ['show configuration']],
-                ['commands' => ['show current-configuration'], 'includeContextCommands' => false],
-                ['commands' => ['display current-configuration'], 'includeContextCommands' => false],
-            ],
-            default => [
-                ['commands' => ['show running-config']],
-                ['commands' => ['show startup-config']],
-                ['commands' => ['show current-config'], 'includeContextCommands' => false],
-                ['commands' => ['show saved-config'], 'includeContextCommands' => false],
-                ['commands' => ['show current-configuration'], 'includeContextCommands' => false],
-                ['commands' => ['display current-configuration'], 'includeContextCommands' => false],
-                ['commands' => ['display running-config'], 'includeContextCommands' => false],
-                ['commands' => ['show configuration']],
-            ],
-        };
     }
 
     public function applyProfileDefaults(OltDevice $oltDevice)
@@ -2546,7 +2485,6 @@ class OltOnuController extends Controller
 
         return $baseCommands;
     }
-
     private function ponPorts(?string $ports): array
     {
         $values = preg_split('/[,\s]+/', (string) $ports) ?: [];
@@ -2699,7 +2637,7 @@ class OltOnuController extends Controller
 
     private function protocolProfileDefaults(): array
     {
-        $defaults = OltProtocolProfile::query()
+        return OltProtocolProfile::query()
             ->get()
             ->mapWithKeys(fn (OltProtocolProfile $profile): array => [
                 $profile->key => [
@@ -2714,12 +2652,6 @@ class OltOnuController extends Controller
                 ],
             ])
             ->all();
-
-        foreach ($this->localProtocolProfiles() as $key => $profile) {
-            $defaults[$key] = $defaults[$key] ?? $this->profileDefaultsFromArray($profile);
-        }
-
-        return $defaults;
     }
 
     private function profileDefaultValues(OltProtocolProfile $profile): array
@@ -2734,92 +2666,6 @@ class OltOnuController extends Controller
             'onu_vlan_command' => $profile->default_onu_vlan_command,
             'onu_mac_command' => $profile->default_onu_mac_command,
         ], fn ($value): bool => $value !== null);
-    }
-
-    private function isLocalProtocolProfile(string $key): bool
-    {
-        return array_key_exists($key, $this->localProtocolProfiles());
-    }
-
-    private function localProtocolProfiles(): array
-    {
-        return [
-            'hsgq_epon' => [
-                'id' => 1,
-                'key' => 'hsgq_epon',
-                'label' => 'HSGQ EPON OLT',
-                'brand' => 'HSGQ',
-                'pon_interface_command' => 'interface epon {pon_port}',
-                'onu_context_command' => 'interface onu {pon_port}/{onu_id}',
-                'supports_vlan_polling' => true,
-                'supports_mac_polling' => true,
-                'default_read_context_commands' => "enable\nconfig",
-                'default_onu_status_command' => 'show onu-info all',
-                'default_onu_power_command' => 'show optical-info',
-                'default_onu_alarm_command' => 'show onu-info-alarm {onu_id}',
-                'default_onu_vlan_command' => 'show port-vlan',
-                'default_onu_mac_command' => 'show mac-address epon all',
-                'vlan_write_context_command' => 'interface onu {pon_port}/{onu_id}',
-                'vlan_write_command' => 'port-vlan {port} mode tag {vlan} pri {priority}',
-                'port_admin_context_command' => null,
-                'port_admin_command' => null,
-                'save_config_command' => 'save',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            'hsgq_gpon' => [
-                'id' => 2,
-                'key' => 'hsgq_gpon',
-                'label' => 'HSGQ GPON OLT',
-                'brand' => 'HSGQ',
-                'pon_interface_command' => 'interface gpon {pon_port}',
-                'onu_context_command' => 'interface ont {pon_port}/{onu_id}',
-                'supports_vlan_polling' => true,
-                'supports_mac_polling' => true,
-                'default_read_context_commands' => "enable\nconfig",
-                'default_onu_status_command' => 'show ont-info all',
-                'default_onu_power_command' => 'show ont-optical all',
-                'default_onu_alarm_command' => 'show ont-info {onu_id}',
-                'default_onu_vlan_command' => 'show service-port all',
-                'default_onu_mac_command' => 'show mac-address all',
-                'vlan_write_context_command' => 'interface gpon {pon_port}',
-                'vlan_write_command' => 'ont port native-vlan {onu_id} eth {port} vlan {vlan} {priority}',
-                'port_admin_context_command' => 'interface gpon {pon_port}',
-                'port_admin_command' => 'ont port attribute {onu_id} eth {port} admin-status {state}',
-                'save_config_command' => 'save',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ];
-    }
-
-    private function profileDefaultsFromArray(array $profile): array
-    {
-        return [
-            'brand' => $profile['brand'],
-            'read_context_commands' => $profile['default_read_context_commands'],
-            'onu_status_command' => $profile['default_onu_status_command'],
-            'onu_power_command' => $profile['default_onu_power_command'],
-            'onu_alarm_command' => $profile['default_onu_alarm_command'],
-            'onu_vlan_command' => $profile['default_onu_vlan_command'],
-            'onu_mac_command' => $profile['default_onu_mac_command'],
-            'pon_ports' => implode(',', $this->defaultPonPorts($profile['key'])),
-        ];
-    }
-
-    private function resolveProtocolProfile(string $key): ?OltProtocolProfile
-    {
-        $profile = OltProtocolProfile::query()->where('key', $key)->first();
-
-        if ($profile) {
-            return $profile;
-        }
-
-        if (! $this->isLocalProtocolProfile($key)) {
-            return null;
-        }
-
-        return new OltProtocolProfile($this->localProtocolProfiles()[$key]);
     }
 
     private function defaultPonPorts(string $profileKey): array
@@ -3347,7 +3193,7 @@ class OltOnuController extends Controller
         throw new \RuntimeException('OLT rejected command "'.$lastCommand.'": '.$this->summarizeOltOutput(end($outputs) ?: ''));
     }
 
-    private function runOltReadCommands(OltDevice $oltDevice, array $commands, bool $includeContextCommands = true): string
+    private function runOltReadCommands(OltDevice $oltDevice, array $commands): string
     {
         $commands = array_values(array_filter(array_map('trim', $commands)));
         $accessMethod = $this->readAccessMethod($oltDevice);
@@ -3355,7 +3201,6 @@ class OltOnuController extends Controller
             ? 23
             : (int) $oltDevice->port;
         $client = $accessMethod === 'telnet' ? app(OltTelnetClient::class) : app(OltSshClient::class);
-        $outputs = [];
 
         try {
             if ($client instanceof OltTelnetClient) {
@@ -3364,10 +3209,8 @@ class OltOnuController extends Controller
                 $client->connect($oltDevice->host, $port, $oltDevice->username, $oltDevice->password);
             }
 
-            if ($includeContextCommands) {
-                foreach ($this->baseContextCommands($this->contextCommands($oltDevice->read_context_commands), $oltDevice) as $contextCommand) {
-                    $outputs[] = $client->command($contextCommand);
-                }
+            foreach ($this->baseContextCommands($this->contextCommands($oltDevice->read_context_commands), $oltDevice) as $contextCommand) {
+                $outputs[] = $client->command($contextCommand);
             }
 
             foreach ($commands as $command) {
@@ -3545,7 +3388,9 @@ class OltOnuController extends Controller
 
     private function protocolProfile(OltDevice $oltDevice): ?OltProtocolProfile
     {
-        return $this->resolveProtocolProfile((string) $oltDevice->protocol_profile);
+        return OltProtocolProfile::query()
+            ->where('key', $oltDevice->protocol_profile)
+            ->first();
     }
 
     private function alarmCommandsForPort(?string $commandTemplate, array $records, int $ponPort): array
