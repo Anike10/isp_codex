@@ -2577,17 +2577,22 @@ class OltOnuController extends Controller
 
     private function validateOlt(Request $request, ?OltDevice $oltDevice = null): array
     {
+        $request->merge([
+            'olt_access_username' => $request->input('olt_access_username', $request->input('username')),
+            'olt_access_password' => $request->input('olt_access_password', $request->input('password')),
+        ]);
+
         $passwordRules = $oltDevice ? ['nullable', 'string', 'max:255'] : ['required', 'string', 'max:255'];
 
-        return $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'brand' => ['required', 'string', 'max:255'],
             'protocol_profile' => ['required', Rule::in(array_keys($this->protocolProfileOptions()))],
             'host' => ['required', 'string', 'max:255'],
             'access_method' => ['required', Rule::in(['ssh', 'telnet'])],
             'port' => ['required', 'integer', 'min:1', 'max:65535'],
-            'username' => ['required', 'string', 'max:255'],
-            'password' => $passwordRules,
+            'olt_access_username' => ['required', 'string', 'max:255'],
+            'olt_access_password' => $passwordRules,
             'enable_password' => ['nullable', 'string', 'max:255'],
             'snmp_enabled' => ['nullable', 'boolean'],
             'snmp_version' => ['required', Rule::in(['1', '2c'])],
@@ -2617,6 +2622,12 @@ class OltOnuController extends Controller
         ]) + [
             'snmp_enabled' => false,
         ];
+
+        $data['username'] = $data['olt_access_username'];
+        $data['password'] = $data['olt_access_password'];
+        unset($data['olt_access_username'], $data['olt_access_password']);
+
+        return $data;
     }
 
     private function validateProtocolProfile(Request $request, ?OltProtocolProfile $profile = null): array

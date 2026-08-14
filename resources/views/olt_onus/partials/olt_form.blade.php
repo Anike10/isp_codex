@@ -79,19 +79,19 @@
             </select>
         </div>
         <div>
-            <label for="username">Username</label>
-            <input id="username" name="username" value="{{ old('username', $oltDevice->username) }}" required>
+            <label for="olt_access_username">Username</label>
+            <input id="olt_access_username" name="olt_access_username" value="{{ old('olt_access_username', old('username', $oltDevice->username)) }}" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" required>
         </div>
         <div>
-            <label for="password">Password</label>
-            <input id="password" name="password" type="password" @required(! $oltDevice->exists)>
+            <label for="olt_access_password">Password</label>
+            <input id="olt_access_password" name="olt_access_password" type="password" autocomplete="new-password" @required(! $oltDevice->exists)>
             @if ($oltDevice->exists)
                 <div class="muted" style="margin-top:6px">Leave empty to keep the current password.</div>
             @endif
         </div>
         <div>
             <label for="enable_password">Enable Password</label>
-            <input id="enable_password" name="enable_password" type="password">
+            <input id="enable_password" name="enable_password" type="password" autocomplete="new-password">
             <div class="muted" style="margin-top:6px">Optional. Leave empty to keep current value when editing.</div>
         </div>
         <div class="full" style="border-top:1px solid var(--line); padding-top:14px; margin-top:4px">
