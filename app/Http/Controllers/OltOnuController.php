@@ -20,6 +20,11 @@ use Throwable;
 
 class OltOnuController extends Controller
 {
+    private const BUILT_IN_PROTOCOL_PROFILE_OPTIONS = [
+        'hsgq_epon' => 'HSGQ EPON OLT',
+        'hsgq_gpon' => 'HSGQ GPON OLT',
+    ];
+
     public function index(Request $request)
     {
         $query = OltOnu::query()
@@ -2577,14 +2582,7 @@ class OltOnuController extends Controller
         return $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'brand' => ['required', 'string', 'max:255'],
-            'protocol_profile' => [
-                'required',
-                function (string $attribute, mixed $value, \Closure $fail): void {
-                    if (! $this->isValidProtocolProfile($value)) {
-                        $fail("The {$attribute} field must be a valid OLT protocol/profile.");
-                    }
-                },
-            ],
+            'protocol_profile' => ['required', Rule::in(array_keys($this->protocolProfileOptions()))],
             'host' => ['required', 'string', 'max:255'],
             'access_method' => ['required', Rule::in(['ssh', 'telnet'])],
             'port' => ['required', 'integer', 'min:1', 'max:65535'],
@@ -2655,8 +2653,8 @@ class OltOnuController extends Controller
             ->pluck('label', 'key')
             ->all();
 
-        foreach ($this->localProtocolProfiles() as $key => $profile) {
-            $profiles[$key] = $profiles[$key] ?? $profile['label'];
+        foreach (self::BUILT_IN_PROTOCOL_PROFILE_OPTIONS as $key => $label) {
+            $profiles[$key] = $profiles[$key] ?? $label;
         }
 
         asort($profiles, SORT_STRING);
@@ -2701,19 +2699,6 @@ class OltOnuController extends Controller
             'onu_vlan_command' => $profile->default_onu_vlan_command,
             'onu_mac_command' => $profile->default_onu_mac_command,
         ], fn ($value): bool => $value !== null);
-    }
-
-    private function isValidProtocolProfile(string|int|null $key): bool
-    {
-        $key = (string) $key;
-
-        if ($this->isLocalProtocolProfile($key)) {
-            return true;
-        }
-
-        return OltProtocolProfile::query()
-            ->where('key', $key)
-            ->exists();
     }
 
     private function isLocalProtocolProfile(string $key): bool
