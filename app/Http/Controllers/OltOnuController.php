@@ -1072,7 +1072,7 @@ class OltOnuController extends Controller
         }
 
         $profile = $this->protocolProfile($oltDevice);
-        $statusCommand = $oltDevice->onu_status_command ?: $profile?->default_onu_status_command;
+        $statusCommand = $this->normalizeOltStatusCommand($oltDevice->onu_status_command ?: $profile?->default_onu_status_command);
         $powerCommand = $oltDevice->onu_power_command ?: $profile?->default_onu_power_command;
         $alarmCommand = $oltDevice->onu_alarm_command ?: $profile?->default_onu_alarm_command;
         $vlanCommand = $oltDevice->onu_vlan_command ?: $profile?->default_onu_vlan_command;
@@ -1585,7 +1585,7 @@ class OltOnuController extends Controller
         }
 
         $profile = $this->protocolProfile($oltDevice);
-        $statusCommand = $oltDevice->onu_status_command ?: $profile?->default_onu_status_command;
+        $statusCommand = $this->normalizeOltStatusCommand($oltDevice->onu_status_command ?: $profile?->default_onu_status_command);
         $powerCommand = $oltDevice->onu_power_command ?: $profile?->default_onu_power_command;
         $vlanCommand = $oltDevice->onu_vlan_command ?: $profile?->default_onu_vlan_command;
         $macCommand = $oltDevice->onu_mac_command ?: $profile?->default_onu_mac_command;
@@ -1725,7 +1725,7 @@ class OltOnuController extends Controller
             str_replace('{pon_port}', (string) $oltOnu->pon_port, $ponInterfaceTemplate),
         ];
 
-        $command = trim((string) $statusCommand);
+        $command = trim((string) $this->normalizeOltStatusCommand($statusCommand));
 
         if ($command === '') {
             $command = $oltDevice->protocol_profile === 'hsgq_gpon' 
@@ -1766,6 +1766,21 @@ class OltOnuController extends Controller
         }
 
         return array_values(array_filter($commands));
+    }
+
+    private function normalizeOltStatusCommand(?string $command): ?string
+    {
+        if ($command === null) {
+            return null;
+        }
+
+        $normalized = trim((string) $command);
+
+        if ($normalized === '') {
+            return $normalized;
+        }
+
+        return preg_replace('/\b(onu|ont)-infoall\b/i', '$1-info all', $normalized) ?? $normalized;
     }
 
     private function substituteOnuPollTemplate(string $command, OltOnu $oltOnu): string
