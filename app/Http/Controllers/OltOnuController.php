@@ -1143,7 +1143,7 @@ class OltOnuController extends Controller
 
             $this->updateRefreshProgress(20, 'Connected; reading OLT data');
 
-            foreach ($this->baseContextCommands($contextCommands) as $contextCommand) {
+            foreach ($this->baseContextCommands($contextCommands, $oltDevice) as $contextCommand) {
                 $client->command($contextCommand);
             }
 
@@ -1275,7 +1275,7 @@ class OltOnuController extends Controller
                     $client->close();
                     $connectClient();
 
-                    foreach ($this->baseContextCommands($contextCommands) as $contextCommand) {
+                    foreach ($this->baseContextCommands($contextCommands, $oltDevice) as $contextCommand) {
                         $client->command($contextCommand);
                     }
                 }
@@ -2530,12 +2530,21 @@ class OltOnuController extends Controller
         ));
     }
 
-    private function baseContextCommands(array $commands): array
+    private function baseContextCommands(array $commands, ?OltDevice $oltDevice = null): array
     {
-        return array_values(array_filter(
+        $baseCommands = array_values(array_filter(
             $commands,
             fn (string $command): bool => ! preg_match('/^interface\s+(?:epon|gpon)\s+(?:[1-9]|1[0-6])$/', strtolower(trim($command)))
         ));
+
+        if (
+            $oltDevice?->protocol_profile === 'hsgq_gpon'
+            && ! collect($baseCommands)->contains(fn (string $command): bool => strtolower(trim($command)) === 'enable')
+        ) {
+            array_unshift($baseCommands, 'enable');
+        }
+
+        return $baseCommands;
     }
 
     private function ponPorts(?string $ports): array
@@ -2767,7 +2776,7 @@ class OltOnuController extends Controller
                 'onu_context_command' => 'interface ont {pon_port}/{onu_id}',
                 'supports_vlan_polling' => true,
                 'supports_mac_polling' => true,
-                'default_read_context_commands' => 'config',
+                'default_read_context_commands' => "enable\nconfig",
                 'default_onu_status_command' => 'show ont-info all',
                 'default_onu_power_command' => 'show ont-optical all',
                 'default_onu_alarm_command' => 'show ont-info {onu_id}',
@@ -3279,7 +3288,7 @@ class OltOnuController extends Controller
                 $client->connect($oltDevice->host, $port, $oltDevice->username, $oltDevice->password);
             }
 
-            foreach ($this->baseContextCommands($this->contextCommands($oltDevice->read_context_commands)) as $contextCommand) {
+            foreach ($this->baseContextCommands($this->contextCommands($oltDevice->read_context_commands), $oltDevice) as $contextCommand) {
                 $outputs[] = $client->command($contextCommand);
             }
 
@@ -3356,7 +3365,7 @@ class OltOnuController extends Controller
             }
 
             if ($includeContextCommands) {
-                foreach ($this->baseContextCommands($this->contextCommands($oltDevice->read_context_commands)) as $contextCommand) {
+                foreach ($this->baseContextCommands($this->contextCommands($oltDevice->read_context_commands), $oltDevice) as $contextCommand) {
                     $outputs[] = $client->command($contextCommand);
                 }
             }

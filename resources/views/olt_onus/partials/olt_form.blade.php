@@ -35,7 +35,7 @@
                     ],
                     'hsgq_gpon' => [
                         'brand' => 'HSGQ',
-                        'read_context_commands' => 'config',
+                        'read_context_commands' => "enable\nconfig",
                         'onu_status_command' => 'show ont-info all',
                         'onu_power_command' => 'show ont-optical all',
                         'onu_alarm_command' => 'show ont-info {onu_id}',

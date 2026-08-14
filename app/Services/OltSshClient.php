@@ -72,17 +72,7 @@ class OltSshClient
             }
         };
 
-        // Some HSGQ VTY builds consume the first separator after TAB
-        // completion. Send a sacrificial extra separator so commands such as
-        // "show ont-info all" do not arrive as "show ont-infoall".
-        if (preg_match('/^(.*?)\s+all$/i', $command, $match)) {
-            $writeCharacters($match[1]);
-            $this->ssh->write("\t");
-            usleep(300000);
-            $writeCharacters('  all');
-        } else {
-            $writeCharacters($command);
-        }
+        $writeCharacters($command);
 
         $this->ssh->write("\r");
     }
