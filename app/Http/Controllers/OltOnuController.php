@@ -2822,7 +2822,10 @@ class OltOnuController extends Controller
         $mismatches = [];
 
         foreach ($fields as $deviceField => [$label, $profileField]) {
-            if (trim((string) $oltDevice->{$deviceField}) !== trim((string) $profile->{$profileField})) {
+            $configured = str_replace(["\r\n", "\r"], "\n", trim((string) $oltDevice->{$deviceField}));
+            $expected = str_replace(["\r\n", "\r"], "\n", trim((string) $profile->{$profileField}));
+
+            if ($configured !== $expected) {
                 $mismatches[] = $label;
             }
         }
