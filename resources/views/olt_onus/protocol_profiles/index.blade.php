@@ -5,6 +5,7 @@
     <div>
         <h1>OLT Protocol/Profile</h1>
         <div class="muted">Brand/profile defaults used by OLT polling.</div>
+        <div class="muted" style="margin-top:6px">Use this after changing EPON/GPON profile so incompatible polling commands are replaced.</div>
     </div>
     <div class="actions">
         <a class="btn light" href="{{ route('olt-onus.index') }}">OLT ONUs</a>
