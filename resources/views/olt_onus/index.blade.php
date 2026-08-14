@@ -1,4 +1,4 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('main_class', 'olt-onus-wide')
 
@@ -36,19 +36,19 @@
 
                         if (preg_match('/(?:authentication|login failed|credential)/i', $connectionError)) {
                             $connectionBadge = 'Login failed';
-                            $connectionMessage = 'OLT-এর IP/Port-এ সংযোগ হয়েছে, কিন্তু Username বা Password গ্রহণ করেনি। Edit OLT থেকে Username ও Password ঠিক করে Save করুন, তারপর Fast Status Refresh দিন।';
+                            $connectionMessage = 'Check OLT IP/Port, Username, and Password. Edit OLT if needed, save, then run Fast Status Refresh.';
                         } elseif (preg_match('/connection refused/i', $connectionError)) {
                             $connectionBadge = 'Connection refused';
-                            $connectionMessage = 'OLT সংযোগ গ্রহণ করছে না। IP, Port এবং OLT-এর SSH/Telnet service চালু আছে কি না যাচাই করুন।';
+                            $connectionMessage = 'OLT refused login. Verify OLT IP/Port and whether SSH/Telnet service is enabled.';
                         } elseif (preg_match('/(?:timed? out|timeout)/i', $connectionError)) {
                             $connectionBadge = 'Connection timeout';
-                            $connectionMessage = 'নির্ধারিত সময়ের মধ্যে OLT থেকে উত্তর পাওয়া যায়নি। Network, IP, Port এবং OLT চালু আছে কি না যাচাই করুন।';
+                            $connectionMessage = 'Connection timeout while connecting to OLT. Check Network, IP, Port, and OLT access method.';
                         } elseif (preg_match('/(?:cannot connect|connection (?:failed|reset)|socket|host unreachable|network is unreachable|no route to host|not connected|broken pipe)/i', $connectionError)) {
                             $connectionBadge = 'Connection failed';
-                            $connectionMessage = 'OLT-এর IP/Port-এ সংযোগ করা যায়নি। Network, IP, Port এবং access method যাচাই করুন। বিস্তারিত: '.$connectionError;
+                            $connectionMessage = 'Unable to connect to OLT IP/Port. Verify Network, IP, Port, and access method. Detail: ' . $connectionError;
                         } else {
                             $connectionBadge = 'Refresh/action failed';
-                            $connectionMessage = 'OLT-তে সংযোগ হয়েছিল, কিন্তু সর্বশেষ কাজটি সম্পন্ন হয়নি। বিস্তারিত: '.$connectionError;
+                            $connectionMessage = 'OLT connection failed while polling. Detail: ' . $connectionError;
                         }
                     } elseif ($oltDevice->last_polled_at) {
                         $connectionBadge = 'Connected';
@@ -60,95 +60,124 @@
                         $connectionMessage = 'No successful OLT connection has been completed yet.';
                     }
                 @endphp
-                <div style="border-bottom:1px solid var(--line); padding:12px 0">
-                    <div class="actions" style="justify-content:space-between; align-items:flex-start">
-                        <div style="min-width:0">
-                        <div class="muted" style="white-space:nowrap; overflow-x:auto; padding-bottom:2px">
-                            <strong>{{ $oltDevice->name }}</strong>
-                            | {{ $oltDevice->host }}:{{ $oltDevice->port }}
-                            | {{ $oltDevice->brand ?: 'Unknown Brand' }}
-                            | {{ $protocolProfiles[$oltDevice->protocol_profile] ?? $oltDevice->protocol_profile ?? 'Unknown Profile' }}
-                            | Last: {{ $oltDevice->last_polled_at?->format('d/m/Y H:i:s') ?? 'Never' }}
-                            | Cached: {{ number_format($oltDevice->onus_count) }}
-                            | Online: {{ number_format($oltDevice->online_onus_count) }}
-                            | PON data:
-                            @forelse ($ponSummary as $ponRow)
-                                {{ $loop->first ? '' : ', ' }}{{ $ponRow->pon_port }} ({{ $ponRow->total }})
-                            @empty
-                                none
-                            @endforelse
-                            | <span class="badge {{ $connectionBadgeClass }}">{{ $connectionBadge }}</span>
-                            <span style="display:block; margin-top:6px; white-space:normal">{{ $connectionMessage }}</span>
+                <div style="margin:12px 0; border:1px solid var(--line); border-radius:14px; padding:14px; background:rgba(0,0,0,0.02)">
+                    <div class="actions" style="justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap">
+                        <div style="min-width:0; flex:1 1 430px">
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+                                <h3 style="margin:0; font-size:22px; line-height:1.2">{{ $oltDevice->name }}</h3>
+                                <span class="badge {{ $oltDevice->status === 'active' ? 'active' : 'inactive' }}">Configured {{ ucfirst($oltDevice->status) }}</span>
+                            </div>
+                            <div class="muted" style="margin-top:6px; line-height:1.55; display:flex; flex-wrap:wrap; gap:8px 14px">
+                                <span>IP: {{ $oltDevice->host }}:{{ $oltDevice->port }}</span>
+                                <span>Brand: {{ $oltDevice->brand ?: 'Unknown Brand' }}</span>
+                                <span>Profile: {{ $protocolProfiles[$oltDevice->protocol_profile] ?? $oltDevice->protocol_profile ?? 'Unknown Profile' }}</span>
+                                <span>Last Poll: {{ $oltDevice->last_polled_at?->format('d/m/Y H:i:s') ?? 'Never' }}</span>
+                                <span>Cached: {{ number_format($oltDevice->onus_count) }}</span>
+                                <span>Online: {{ number_format($oltDevice->online_onus_count) }}</span>
+                                <span>
+                                    PON data:
+                                    @forelse ($ponSummary as $ponRow)
+                                        {{ $loop->first ? '' : ', ' }}{{ $ponRow->pon_port }} ({{ $ponRow->total }})
+                                    @empty
+                                        none
+                                    @endforelse
+                                </span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px">
+                                <span class="badge {{ $connectionBadgeClass }}">{{ $connectionBadge }}</span>
+                                <span style="color:var(--muted); font-size:14px">{{ $connectionMessage }}</span>
+                            </div>
                         </div>
-                        @if ($commandWarnings !== [])
-                            <div class="badge failed" style="margin-top:8px">Profile mismatch: {{ implode(', ', $commandWarnings) }}</div>
-                        @endif
-                        </div>
-                        <span class="badge {{ $oltDevice->status === 'active' ? 'active' : 'inactive' }}">Configured {{ ucfirst($oltDevice->status) }}</span>
                     </div>
 
                     @if ($commandWarnings !== [])
-                        <div class="actions" style="margin-top:10px">
-                            <form method="post" action="{{ route('olt-onus.olts.apply-profile-defaults', $oltDevice) }}" onsubmit="return confirm('Replace incompatible polling commands with the selected profile defaults?')">
-                                @csrf
-                                <button class="btn secondary" type="submit">Repair Profile Commands</button>
-                            </form>
-                            <span class="muted">Repair this before the next refresh.</span>
+                        <div style="margin-top:12px; border:1px dashed rgba(255,100,100,.55); background:rgba(255,100,100,.08); border-radius:10px; padding:10px 12px">
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:6px">
+                                <strong class="muted">Profile mismatch</strong>
+                                <form method="post" action="{{ route('olt-onus.olts.apply-profile-defaults', $oltDevice) }}" onsubmit="return confirm('Replace incompatible polling commands with the selected profile defaults?')">
+                                    @csrf
+                                    <button class="btn secondary" type="submit">Repair Profile Commands</button>
+                                </form>
+                            </div>
+                            <div style="color:#a63e3e">{{ implode(', ', $commandWarnings) }}</div>
+                            <div class="muted" style="margin-top:4px">Repair this before the next refresh.</div>
                         </div>
                     @endif
 
-                    <div class="actions" style="margin-top:10px; gap:8px">
-                        <a class="btn light" href="{{ route('olt-onus.olts.edit', $oltDevice) }}">Edit OLT</a>
-                        <form method="post" action="{{ route('olt-onus.olts.save-config', $oltDevice) }}">
-                            @csrf
-                            <button class="btn light" type="submit">Save OLT Config</button>
-                        </form>
-                        <form method="post" action="{{ route('olt-onus.olts.config-backup', $oltDevice) }}">
-                            @csrf
-                            <button class="btn light" type="submit">Download Config Backup</button>
-                        </form>
-                        <form method="post" action="{{ route('olt-onus.olts.refresh', $oltDevice) }}">
-                            @csrf
-                            <button class="btn secondary" type="submit">Fast Status Refresh</button>
-                        </form>
-                        <form method="post" action="{{ route('olt-onus.olts.refresh', $oltDevice) }}" class="actions" data-background-refresh-form data-progress-target="olt-refresh-progress-{{ $oltDevice->id }}" style="gap:8px">
-                            @csrf
-                            <input type="hidden" name="refresh_mode" value="{{ $oltDevice->protocol_profile === 'hsgq_gpon' ? 'full_mac' : 'full' }}">
-                            <select name="pon_port" aria-label="PON port for refresh" style="width:150px">
-                                <option value="">All configured PONs</option>
-                                @foreach (($oltPonPorts[$oltDevice->id] ?? []) as $oltPonPort)
-                                    <option value="{{ $oltPonPort }}" @selected((string) request('pon_port') === (string) $oltPonPort && (string) request('olt_device_id') === (string) $oltDevice->id)>
-                                        PON {{ $oltPonPort }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <button class="btn light" type="submit">
-                                Power/VLAN + MAC Refresh
-                            </button>
-                        </form>
-                        <form method="post" action="{{ route('olt-onus.olts.cached-onus.destroy', $oltDevice) }}">
-                            @csrf
-                            @method('DELETE')
-                            <button class="btn light" type="submit">Clear Refresh Error</button>
-                        </form>
-                        <form method="post" action="{{ route('olt-onus.olts.destroy', $oltDevice) }}" onsubmit="return confirm('Delete OLT {{ addslashes($oltDevice->name) }} and all of its cached ONU/ONT rows? This cannot be undone.')">
-                            @csrf
-                            @method('DELETE')
-                            <button class="btn danger" type="submit">Delete OLT</button>
-                        </form>
+                    <div style="margin-top:12px; display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+                        <section style="background:rgba(255,255,255,0.55); border:1px solid var(--line); border-radius:10px; padding:10px">
+                            <div class="muted" style="font-weight:600; margin-bottom:8px">OLT সেটিংস</div>
+                            <div class="actions" style="gap:8px; flex-wrap:wrap">
+                                <a class="btn light" href="{{ route('olt-onus.olts.edit', $oltDevice) }}">Edit OLT</a>
+                                <form method="post" action="{{ route('olt-onus.olts.save-config', $oltDevice) }}">
+                                    @csrf
+                                    <button class="btn light" type="submit">Save OLT Config</button>
+                                </form>
+                                <form method="post" action="{{ route('olt-onus.olts.config-backup', $oltDevice) }}">
+                                    @csrf
+                                    <button class="btn light" type="submit">Download Config Backup</button>
+                                </form>
+                            </div>
+                        </section>
+
+                        <section style="background:rgba(255,255,255,0.55); border:1px solid var(--line); border-radius:10px; padding:10px">
+                            <div class="muted" style="font-weight:600; margin-bottom:8px">রিফ্রেশ অপারেশন</div>
+                            <div class="actions" style="gap:8px; flex-wrap:wrap">
+                                <form method="post" action="{{ route('olt-onus.olts.refresh', $oltDevice) }}">
+                                    @csrf
+                                    <button class="btn secondary" type="submit">Fast Status Refresh</button>
+                                </form>
+                                <form method="post" action="{{ route('olt-onus.olts.refresh', $oltDevice) }}" class="actions" data-background-refresh-form data-progress-target="olt-refresh-progress-{{ $oltDevice->id }}" style="gap:8px; flex-wrap:wrap">
+                                    @csrf
+                                    <input type="hidden" name="refresh_mode" value="{{ $oltDevice->protocol_profile === 'hsgq_gpon' ? 'full_mac' : 'full' }}">
+                                    <select name="pon_port" aria-label="PON port for refresh" style="width:150px">
+                                        <option value="">All configured PONs</option>
+                                        @foreach (($oltPonPorts[$oltDevice->id] ?? []) as $oltPonPort)
+                                            <option value="{{ $oltPonPort }}" @selected((string) request('pon_port') === (string) $oltPonPort && (string) request('olt_device_id') === (string) $oltDevice->id)>
+                                                PON {{ $oltPonPort }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <button class="btn light" type="submit">
+                                        Power/VLAN + MAC Refresh
+                                    </button>
+                                </form>
+                            </div>
+                        </section>
+
+                        <section style="background:rgba(255,255,255,0.55); border:1px solid var(--line); border-radius:10px; padding:10px">
+                            <div class="muted" style="font-weight:600; margin-bottom:8px">রক্ষণাবেক্ষণ</div>
+                            <div class="actions" style="gap:8px; flex-wrap:wrap">
+                                <form method="post" action="{{ route('olt-onus.olts.cached-onus.destroy', $oltDevice) }}">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button class="btn light" type="submit">Clear Refresh Error</button>
+                                </form>
+                                <form method="post" action="{{ route('olt-onus.olts.destroy', $oltDevice) }}" onsubmit="return confirm('Delete OLT {{ addslashes($oltDevice->name) }} and all of its cached ONU/ONT rows? This cannot be undone.')">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button class="btn danger" type="submit">Delete OLT</button>
+                                </form>
+                            </div>
+                        </section>
+                    </div>
+
+                    <div style="margin-top:10px">
                         <button class="btn light" type="button" data-olt-help-toggle data-help-target="olt-button-help-{{ $oltDevice->id }}" aria-controls="olt-button-help-{{ $oltDevice->id }}" aria-expanded="false">বাটনের কাজ দেখুন</button>
                     </div>
-                    <div id="olt-button-help-{{ $oltDevice->id }}" class="muted" style="margin-top:8px; line-height:1.65" hidden>
-                        <strong>বাটনগুলোর কাজ:</strong>
-                        Edit OLT = OLT-এর IP, পোর্ট, লগইন ও PON সেটিং পরিবর্তন করুন।
-                        Save OLT Config = OLT-তে করা পরিবর্তন স্থায়ীভাবে সংরক্ষণ করুন।
-                        Download Config Backup = OLT-এর বর্তমান কনফিগারেশনের ব্যাকআপ ডাউনলোড করুন।
-                        Fast Status Refresh = দ্রুত অনলাইন/অফলাইন স্ট্যাটাস আপডেট করুন।
-                        All configured PONs = সব কনফিগার করা PON একসাথে বেছে নিন।
-                        Power/VLAN + MAC Refresh = পাওয়ার, VLAN ও MAC-সহ পূর্ণ তথ্য ব্যাকগ্রাউন্ডে আপডেট করুন; সময় লাগতে পারে।
-                        Clear Refresh Error = শুধু আগের refresh error/output মুছুন, ONU তালিকা থাকবে।
-                        Delete OLT = OLT এবং তার cached ONU/ONT তালিকা স্থায়ীভাবে মুছে ফেলুন।
+                    <div id="olt-button-help-{{ $oltDevice->id }}" class="muted" style="margin-top:8px; line-height:1.65; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#fff" hidden>
+                        <div style="font-weight:600; margin-bottom:6px">বাটনের কাজ</div>
+                        <ul style="margin:0; padding-left:18px">
+                            <li><strong>Edit OLT</strong> — OLT-এর IP/Username/Password এবং PON কনফিগরেশন এডিট করুন।</li>
+                            <li><strong>Save OLT Config</strong> — বর্তমান OLT কনফিগ থেকে ডাটা সেভ করুন।</li>
+                            <li><strong>Download Config Backup</strong> — OLT-এর বর্তমান কনফিগ ব্যাকআপ ফাইল ডাউনলোড করুন।</li>
+                            <li><strong>Fast Status Refresh</strong> — দ্রুত OLT লাইটের (লাইভ) অবস্থা রিফ্রেশ করুন।</li>
+                            <li><strong>Power/VLAN + MAC Refresh</strong> — সব অথবা নির্দিষ্ট PON-এর Power/VLAN/MAC আপডেট করুন।</li>
+                            <li><strong>Clear Refresh Error</strong> — আগের রিফ্রেশের ত্রুটি মুছে পরবর্তী রিফ্রেশের জন্য পরিষ্কার করুন।</li>
+                            <li><strong>Delete OLT</strong> — এই OLT ও সম্পর্কিত ক্যাশড ONU/ONT ডেটা স্থায়ীভাবে মুছে ফেলে (ফিরে আনা যাবে না)।</li>
+                        </ul>
                     </div>
+                </div>
                     @php
                         $activeRefreshRun = $oltDevice->latestRefreshRun?->isActive() ? $oltDevice->latestRefreshRun : null;
                     @endphp
@@ -185,7 +214,7 @@
         @if (request()->filled('pon_port'))
             PON {{ (int) request('pon_port') }}
         @else
-            all PONs with cached data{{ $ponPorts->isNotEmpty() ? ' — PON '. $ponPorts->implode(', ') : '' }}
+            all PONs with cached data{{ $ponPorts->isNotEmpty() ? ' â€” PON '. $ponPorts->implode(', ') : '' }}
         @endif
     </div>
 @endif
@@ -411,7 +440,7 @@
                                     <option
                                         value="{{ $ethernetPort }}"
                                         style="background:{{ $portIsEnabled ? '#dcfce7' : '#fee2e2' }}; color:{{ $portIsEnabled ? '#166534' : '#991b1b' }}"
-                                    >Port {{ $ethernetPort }} — {{ $portIsEnabled ? 'Enabled' : 'Disabled' }}</option>
+                                    >Port {{ $ethernetPort }} â€” {{ $portIsEnabled ? 'Enabled' : 'Disabled' }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -959,7 +988,7 @@ document.querySelectorAll('[data-olt-help-toggle]').forEach(function (button) {
 
         help.hidden = !help.hidden;
         button.setAttribute('aria-expanded', help.hidden ? 'false' : 'true');
-        button.textContent = help.hidden ? 'বাটনের কাজ দেখুন' : 'বাটনের কাজ লুকান';
+        button.textContent = help.hidden ? 'Show button help' : 'Hide button help';
     });
 });
 

@@ -661,17 +661,47 @@ class CustomerController extends Controller
 
         try {
             $status = app(MikrotikCustomerSyncService::class)->sync($customer->refresh());
+            $warnings = $this->extractMikrotikSyncWarnings($status);
 
             return [
                 'status' => $status,
-                'warning' => str_contains($status, 'failed -') ? 'Some MikroTik routers failed. '.$status : null,
+                'warning' => $warnings,
             ];
         } catch (Throwable $exception) {
+            $reason = trim($exception->getMessage());
+            if ($reason === '') {
+                $reason = 'Unknown error while syncing with MikroTik.';
+            }
+
             return [
                 'status' => 'not synced',
-                'warning' => 'MikroTik sync failed: '.$exception->getMessage(),
+                'warning' => [
+                    'MikroTik sync failed.',
+                    'Error: '.$reason,
+                ],
             ];
         }
+    }
+
+    private function extractMikrotikSyncWarnings(string $status): ?array
+    {
+        $parts = preg_split('/,\s*(?=[^,]+: (?:created|updated|moved_inactive|skipped|failed - ))/', $status, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $failures = [];
+
+        foreach ($parts as $part) {
+            if ($part !== '' && str_contains($part, 'failed -')) {
+                $failures[] = $part;
+            }
+        }
+
+        if ($failures === []) {
+            return null;
+        }
+
+        return array_merge(
+            ['Some MikroTik routers failed:'],
+            array_map(static fn (string $failure) => '• '.$failure, $failures),
+        );
     }
 
     private function normalizeCustomerConnectionData(array &$data, ?Customer $customer = null): void
@@ -793,7 +823,7 @@ class CustomerController extends Controller
                         ->orWhere('mikrotik_username', 'like', "%{$search}%");
                 });
             })
-            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))
+            ->when($request->query('status'), fn ($query, string $status) => $this->applyDisplayStatusFilter($query, $status))
             ->when($request->query('role') === 'customer', fn ($query) => $query->where('is_customer', true))
             ->when($request->query('role') === 'vendor', fn ($query) => $query->where('is_vendor', true))
             ->when($request->query('role') === 'reseller', fn ($query) => $query->where('is_reseller', true))
@@ -830,5 +860,51 @@ class CustomerController extends Controller
             });
 
         return $query;
+    }
+
+    private function applyDisplayStatusFilter(Builder $query, string $status): void
+    {
+        if (! in_array($status, ['active', 'inactive'], true)) {
+            $query->where('status', $status);
+
+            return;
+        }
+
+        if ($status === 'inactive') {
+            $query->where(function ($query): void {
+                $today = now()->toDateString();
+
+                $query->where('status', 'inactive')
+                    ->orWhere(function ($query) use ($today): void {
+                        $query->where('status', 'active')
+                            ->where('never_suspend', false)
+                            ->whereNotNull('service_valid_until')
+                            ->whereDate('service_valid_until', '<', $today)
+                            ->where(function ($query) use ($today): void {
+                                $query->whereNull('grace_until')
+                                    ->orWhereDate('grace_until', '<', $today);
+                            });
+                    });
+            });
+
+            return;
+        }
+
+        $query->where(function ($query): void {
+            $today = now()->toDateString();
+
+            $query->where('status', 'active')
+                ->where(function ($query) use ($today): void {
+                    $query->where('never_suspend', true)
+                        ->orWhere(function ($query) use ($today): void {
+                            $query->whereNull('service_valid_until')
+                                ->orWhereDate('service_valid_until', '>=', $today)
+                                ->orWhere(function ($query) use ($today): void {
+                                    $query->whereNotNull('grace_until')
+                                        ->whereDate('grace_until', '>=', $today);
+                                });
+                        });
+                });
+        });
     }
 }

@@ -25,7 +25,7 @@
     }
 
     $servicePackage = $serviceSubscription?->package;
-    $isActive = $customer->status === 'active';
+    $isActive = $customer->displayStatus() === 'active';
 
     $routerTargetsExists = $customer->mikrotik_username || $customer->connection_id;
     if (empty($assignedRouterIds) && $assignedRouters->isNotEmpty()) {
@@ -497,9 +497,9 @@
             </div>
         </div>
         <div class="customer-summary">
-            <div class="hero-kpi">
-                <div class="hero-kpi__label">Service status</div>
-                <div class="hero-kpi__value">{{ strtoupper($customer->status) }}</div>
+                <div class="hero-kpi">
+                    <div class="hero-kpi__label">Service status</div>
+                    <div class="hero-kpi__value">{{ strtoupper($customer->displayStatus()) }}</div>
                 <div class="hero-kpi__meta">{{ $daysLeftLabel }}</div>
             </div>
             <div class="hero-kpi">
@@ -655,9 +655,9 @@
                 </div>
             @endif
 
-            <div class="form-panel">
+        <div class="form-panel">
                 <h3 class="form-panel__title">Service control</h3>
-                @if ($customer->status === 'active')
+                @if ($isActive)
                     <form method="post" action="{{ route('customers.force-inactive', $customer) }}" class="form-grid-2" onsubmit="return confirm('Temporarily make this service inactive now?')">
                         @csrf
                         <div style="grid-column:1/-1">

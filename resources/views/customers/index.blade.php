@@ -223,8 +223,6 @@
         <form method="post" action="{{ route('customers.bulk-payments.select') }}" class="bulk-payment-toolbar" id="bulkPaymentSelectionForm">
             @csrf
             <button class="btn secondary" type="button" id="bulkPaymentToggle">Bulk Payment</button>
-            <button class="btn light" type="button" id="bulkSelectAll" hidden>Select All</button>
-            <button class="btn light" type="button" id="bulkDeselectAll" hidden>Deselect All</button>
         </form>
     @endif
 
@@ -235,14 +233,15 @@
     <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th>Role</th><th>User ID</th><th>Package</th><th>Balance</th><th>Status</th><th>Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
-        @php
-            $netBalance = (float) $customer->account_balance - (float) ($customer->total_due_amount ?? 0);
-            $activeUntil = $customer->activeUntil();
-            $daysRemaining = $customer->activeDaysRemaining();
-            $assignedSubscription = $customer->activeSubscription ?: $customer->latestSubscription;
-            $inactiveSince = $activeUntil && $daysRemaining < 0
-                ? $activeUntil->copy()->startOfDay()
-                : $customer->updated_at?->copy()->startOfDay();
+    @php
+        $netBalance = (float) $customer->account_balance - (float) ($customer->total_due_amount ?? 0);
+        $activeUntil = $customer->activeUntil();
+        $daysRemaining = $customer->activeDaysRemaining();
+        $isStatusActive = $customer->displayStatus() === 'active';
+        $assignedSubscription = $customer->activeSubscription ?: $customer->latestSubscription;
+        $inactiveSince = $activeUntil && $daysRemaining < 0
+            ? $activeUntil->copy()->startOfDay()
+            : $customer->updated_at?->copy()->startOfDay();
             $inactiveDays = $inactiveSince
                 ? (int) $inactiveSince->diffInDays(now()->startOfDay())
                 : null;
@@ -285,8 +284,8 @@
                 @if ($showDeletedCustomers)
                     <span class="muted">Deleted</span>
                 @else
-                    <span class="badge {{ $customer->status }}">{{ $customer->status }}</span>
-                    @if ($customer->status === 'inactive' && $inactiveSince)
+                <span class="badge {{ $customer->displayStatus() }}">{{ $customer->displayStatus() }}</span>
+                    @if (! $isStatusActive && $inactiveSince)
                         <div class="muted">{{ $inactiveDays }} days</div>
                     @endif
                     @if ($customer->hasActiveGracePeriod())
@@ -298,7 +297,7 @@
                 @if ($showDeletedCustomers)
                     <span class="muted">Deleted</span>
                 @else
-                @if ($customer->status === 'active' && $activeUntil)
+                @if ($isStatusActive && $activeUntil)
                     <strong>{{ $activeUntil->format('d/m/Y') }}</strong>
                     @if ($daysRemaining > 0)
                         <div class="muted">{{ $daysRemaining }} days left</div>
@@ -318,7 +317,7 @@
                             <a class="btn light" style="margin-top:6px" href="{{ route('customers.edit', $customer) }}">Assign package for grace</a>
                         @endif
                     @endif
-                @elseif ($customer->status === 'active')
+                @elseif ($isStatusActive)
                     <span class="muted">No paid month</span>
                     @if ($customer->subscriptions_exists && $canQuickActivate)
                         <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
@@ -551,8 +550,6 @@ document.querySelectorAll('.customer-action-menu').forEach((menu) => {
 });
 
 const bulkPaymentToggle = document.getElementById('bulkPaymentToggle');
-const bulkSelectAll = document.getElementById('bulkSelectAll');
-const bulkDeselectAll = document.getElementById('bulkDeselectAll');
 const bulkHeaderCheckbox = document.getElementById('bulkHeaderCheckbox');
 const bulkSelectionForm = document.getElementById('bulkPaymentSelectionForm');
 const bulkRowCheckboxes = [...document.querySelectorAll('.bulk-select-column input[name="customer_ids[]"]')];
@@ -561,8 +558,6 @@ let bulkSelectionActive = false;
 function updateBulkSelectionUi() {
     const selected = bulkRowCheckboxes.filter((checkbox) => checkbox.checked);
     bulkPaymentToggle.textContent = bulkSelectionActive ? `Show Bulk Payment (${selected.length})` : 'Bulk Payment';
-    bulkSelectAll.hidden = ! bulkSelectionActive;
-    bulkDeselectAll.hidden = ! bulkSelectionActive;
     if (bulkHeaderCheckbox) {
         bulkHeaderCheckbox.checked = selected.length > 0 && selected.length === bulkRowCheckboxes.length;
         bulkHeaderCheckbox.indeterminate = selected.length > 0 && selected.length < bulkRowCheckboxes.length;
@@ -574,7 +569,6 @@ bulkPaymentToggle?.addEventListener('click', function () {
     if (! bulkSelectionActive) {
         bulkSelectionActive = true;
         document.body.classList.add('customer-bulk-selection-active');
-        updateBulkSelectionUi();
         return;
     }
 
@@ -584,15 +578,6 @@ bulkPaymentToggle?.addEventListener('click', function () {
     }
 
     bulkSelectionForm.requestSubmit();
-});
-
-bulkSelectAll?.addEventListener('click', function () {
-    bulkRowCheckboxes.forEach((checkbox) => { checkbox.checked = true; });
-    updateBulkSelectionUi();
-});
-
-bulkDeselectAll?.addEventListener('click', function () {
-    bulkRowCheckboxes.forEach((checkbox) => { checkbox.checked = false; });
     updateBulkSelectionUi();
 });
 

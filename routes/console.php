@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Customer;
+use App\Models\AppSetting;
 use App\Models\Invoice;
 use App\Models\MikrotikRouter;
 use App\Services\MikrotikCustomerSyncService;
@@ -95,8 +96,43 @@ Artisan::command('mikrotik:sync-router-users {--force : Sync every active router
     return $failed === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Verify and sync PPPoE users on MikroTik routers by each router interval');
 
-Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defaults to today}', function (MikrotikCustomerSyncService $syncService) {
-    $date = $this->option('date') ? \Carbon\Carbon::parse($this->option('date'))->toDateString() : now()->toDateString();
+Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defaults to today} {--force : Run immediately, ignoring disconnect window}', function (MikrotikCustomerSyncService $syncService) {
+    $manualDateInput = $this->option('date');
+    $isManualRun = $manualDateInput !== null && $manualDateInput !== '';
+    $isForceRun = (bool) $this->option('force');
+    $shouldCheckSchedule = ! $isManualRun && ! $isForceRun;
+    $date = now()->toDateString();
+
+    if ($isManualRun) {
+        try {
+            $date = \Carbon\Carbon::parse($manualDateInput)->toDateString();
+        } catch (\Throwable) {
+            $this->error("Invalid date provided for --date. Use YYYY-MM-DD.");
+            return self::FAILURE;
+        }
+    }
+
+    if ($shouldCheckSchedule) {
+        $configuredTime = AppSetting::value('overdue_disconnect_time', '10:00');
+        if (! preg_match('/^\d{2}:\d{2}$/', (string) $configuredTime)) {
+            $configuredTime = '10:00';
+        }
+
+        $now = now();
+        $disconnectAt = $now->copy()->setTimeFromTimeString($configuredTime);
+        $lastRunDate = AppSetting::value('overdue_disable_last_run_date');
+
+        if ($now->lt($disconnectAt)) {
+            $this->warn("Skipping overdue disable. Configured time is {$configuredTime}; current time is {$now->format('H:i')}.");
+            return self::SUCCESS;
+        }
+
+        if ($lastRunDate === $now->toDateString()) {
+            $this->warn("Skipping overdue disable. Already executed for {$lastRunDate}.");
+            return self::SUCCESS;
+        }
+    }
+
     $disabled = 0;
 
     $overdueCustomerIds = Invoice::query()
@@ -153,6 +189,10 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
                 $this->line("{$customer->connection_id}: disabled for overdue invoice.");
             }
         });
+
+    if ($shouldCheckSchedule) {
+        AppSetting::setValue('overdue_disable_last_run_date', $date);
+    }
 
     $this->info("Overdue disable finished. Disabled customers: {$disabled}.");
 
