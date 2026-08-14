@@ -21,7 +21,7 @@
                 @endforeach
             </select>
             <button class="btn light" id="load-profile-defaults" type="button" style="margin-top:8px">Load Profile Defaults</button>
-            <div class="muted" style="margin-top:6px">Use this after changing EPON/GPON profile so incompatible polling commands are replaced.</div>
+            <div class="muted" style="margin-top:8px; color:#173a31; font-weight:700">Use this after changing EPON/GPON profile so incompatible polling commands are replaced.</div>
         </div>
         <div>
             <label for="host">Host/IP</label>
