@@ -168,13 +168,14 @@
                     <div id="olt-button-help-{{ $oltDevice->id }}" class="muted" style="margin-top:8px; line-height:1.65; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#fff" hidden>
                         <div style="font-weight:600; margin-bottom:6px">বাটনের কাজ</div>
                         <ul style="margin:0; padding-left:18px">
-                            <li><strong>Edit OLT</strong> — OLT-এর IP/Username/Password এবং PON কনফিগরেশন এডিট করুন।</li>
-                            <li><strong>Save OLT Config</strong> — বর্তমান OLT কনফিগ থেকে ডাটা সেভ করুন।</li>
-                            <li><strong>Download Config Backup</strong> — OLT-এর বর্তমান কনফিগ ব্যাকআপ ফাইল ডাউনলোড করুন।</li>
-                            <li><strong>Fast Status Refresh</strong> — দ্রুত OLT লাইটের (লাইভ) অবস্থা রিফ্রেশ করুন।</li>
-                            <li><strong>Power/VLAN + MAC Refresh</strong> — সব অথবা নির্দিষ্ট PON-এর Power/VLAN/MAC আপডেট করুন।</li>
-                            <li><strong>Clear Refresh Error</strong> — আগের রিফ্রেশের ত্রুটি মুছে পরবর্তী রিফ্রেশের জন্য পরিষ্কার করুন।</li>
-                            <li><strong>Delete OLT</strong> — এই OLT ও সম্পর্কিত ক্যাশড ONU/ONT ডেটা স্থায়ীভাবে মুছে ফেলে (ফিরে আনা যাবে না)।</li>
+                            <li><strong>Edit OLT</strong> — OLT-এর IP, পোর্ট, লগইন ও PON সেটিং পরিবর্তন করুন।</li>
+                            <li><strong>Save OLT Config</strong> — OLT-তে করা পরিবর্তন স্থায়ীভাবে সংরক্ষণ করুন।</li>
+                            <li><strong>Download Config Backup</strong> — OLT-এর বর্তমান কনফিগারেশনের ব্যাকআপ ডাউনলোড করুন।</li>
+                            <li><strong>Fast Status Refresh</strong> — দ্রুত অনলাইন/অফলাইন স্ট্যাটাস আপডেট করুন।</li>
+                            <li><strong>All configured PONs</strong> — সব কনফিগার করা PON একসাথে বেছে নিন।</li>
+                            <li><strong>Power/VLAN + MAC Refresh</strong> — পাওয়ার, VLAN ও MAC-সহ পূর্ণ তথ্য ব্যাকগ্রাউন্ডে আপডেট করুন; সময় লাগতে পারে।</li>
+                            <li><strong>Clear Refresh Error</strong> — শুধু আগের refresh error/output মুছুন, ONU তালিকা থাকবে।</li>
+                            <li><strong>Delete OLT</strong> — এই OLT এবং তার cached ONU/ONT তালিকা স্থায়ীভাবে মুছে ফেলে (ফিরে আনা যাবে না)।</li>
                         </ul>
                     </div>
                 </div>
