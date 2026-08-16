@@ -339,6 +339,17 @@
         background: #fff;
     }
 
+    .manual-number-input {
+        appearance: textfield;
+        -moz-appearance: textfield;
+    }
+
+    .manual-number-input::-webkit-outer-spin-button,
+    .manual-number-input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
     .line-field textarea {
         min-height: 72px;
         resize: vertical;
@@ -593,8 +604,8 @@
                     <div class="section-body">
                         <div class="input-grid">
                             <div class="field">
-                                <label for="customer_phone">Mobile Number <span class="required">*</span></label>
-                                <input id="customer_phone" name="customer_phone" value="{{ $selectedCustomerPhone }}" placeholder="01xxxxxxxxx" required>
+                                <label for="customer_phone">Mobile Number</label>
+                                <input id="customer_phone" name="customer_phone" value="{{ $selectedCustomerPhone }}" placeholder="01xxxxxxxxx">
                             </div>
                             <div class="field">
                                 <label for="invoice_type">Document Type Name <span class="required">*</span></label>
@@ -628,7 +639,7 @@
                             <div class="field">
                                 <label for="discount">Discount <span class="help-tip" title="Use fixed BDT value or percentage.">i</span></label>
                                 <div class="amount-pair">
-                                    <input id="discount" type="number" name="discount" step="0.01" min="0" value="{{ $discountValue }}">
+                                    <input id="discount" type="number" class="manual-number-input" inputmode="decimal" name="discount" step="0.01" min="0" value="{{ $discountValue }}">
                                     <select id="discountType" name="discount_type">
                                         <option value="amount" @selected($discountType === 'amount')>BDT</option>
                                         <option value="percent" @selected($discountType === 'percent')>%</option>
@@ -638,7 +649,7 @@
                             <div class="field">
                                 <label for="vat">VAT <span class="help-tip" title="Use VAT after discount.">i</span></label>
                                 <div class="amount-pair">
-                                    <input id="vat" type="number" name="vat" step="0.01" min="0" value="{{ $vatValue }}">
+                                    <input id="vat" type="number" class="manual-number-input" inputmode="decimal" name="vat" step="0.01" min="0" value="{{ $vatValue }}">
                                     <select id="vatType" name="vat_type">
                                         <option value="amount" @selected($vatType === 'amount')>BDT</option>
                                         <option value="percent" @selected($vatType === 'percent')>%</option>
@@ -785,21 +796,21 @@
                         <input type="checkbox" class="line-track-toggle" checked> Track serial / stock adjustment
                     </label>
                     <input type="hidden" class="line-track-hidden">
-                    <input type="number" class="line-serialless" min="0" placeholder="Serial-less qty">
+                    <input type="number" class="line-serialless manual-number-input" inputmode="decimal" min="0" placeholder="Serial-less qty">
                     <small class="stock-count">Serial-less stock: <span class="line-serialless-stock">0</span></small>
                 </div>
             </div>
         <div class="line-field">
             <label>Qty</label>
-            <input type="number" class="line-qty" min="1" value="1">
+            <input type="number" class="line-qty manual-number-input" inputmode="decimal" min="1" value="1">
         </div>
         <div class="line-field">
             <label>Unit Price</label>
-            <input type="number" class="line-unit-price" step="0.01" min="0">
+            <input type="number" class="line-unit-price manual-number-input" inputmode="decimal" step="0.01" min="0">
         </div>
         <div class="line-field">
             <label>Line Discount</label>
-            <input type="number" class="line-line-discount" step="0.01" min="0" value="0">
+            <input type="number" class="line-line-discount manual-number-input" inputmode="decimal" step="0.01" min="0" value="0">
         </div>
         <div class="line-field">
             <label>Total</label>
@@ -863,6 +874,31 @@
     let activeCustomerRow = -1;
     let customerSuggestionsData = [];
     let customerTimer = null;
+
+    function disableStepperByMouseAndArrows() {
+        if (!form) {
+            return;
+        }
+
+        form.addEventListener('wheel', (event) => {
+            const field = event.target.closest('.manual-number-input');
+            if (!field) {
+                return;
+            }
+            event.preventDefault();
+        }, { passive: false });
+
+        form.addEventListener('keydown', (event) => {
+            const field = event.target.closest('.manual-number-input');
+            if (!field) {
+                return;
+            }
+
+            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                event.preventDefault();
+            }
+        });
+    }
 
     function toNumber(value) {
         const num = parseFloat(value);
@@ -1382,6 +1418,7 @@
         account_balance: summaryState.advanceBalance,
         reseller_commission_percent: summaryState.resellerPercent,
     });
+    disableStepperByMouseAndArrows();
     updateSummary();
     const billingMonthField = document.getElementById('billing_month');
     const documentDateField = document.getElementById('documentDate');

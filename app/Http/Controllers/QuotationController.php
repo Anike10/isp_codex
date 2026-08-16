@@ -158,6 +158,29 @@ class QuotationController extends Controller
         return redirect()->route('quotations.show', $quotation)->with('success', 'Quotation updated successfully.');
     }
 
+    public function copy(Quotation $quotation)
+    {
+        $copy = DB::transaction(function () use ($quotation): Quotation {
+            $quotation = Quotation::query()->with('items')->whereKey($quotation->id)->lockForUpdate()->firstOrFail();
+
+            $newQuotation = $quotation->replicate();
+            $newQuotation->quotation_no = Quotation::generateQuotationNo();
+            $newQuotation->status = 'draft';
+            $newQuotation->converted_invoice_id = null;
+            $newQuotation->save();
+
+            foreach ($quotation->items as $item) {
+                $newItem = $item->replicate();
+                $newItem->quotation_id = $newQuotation->id;
+                $newItem->save();
+            }
+
+            return $newQuotation;
+        });
+
+        return redirect()->route('quotations.show', $copy)->with('success', 'Quotation copied successfully.');
+    }
+
     public function print(Request $request, Quotation $quotation, PrintContextService $printContext)
     {
         $quotation->load(['customer', 'items']);
@@ -174,7 +197,7 @@ class QuotationController extends Controller
         return $request->validate([
             'customer_id' => ['nullable', 'exists:customers,id'],
             'customer_name' => ['required_without:customer_id', 'nullable', 'string', 'max:255'],
-            'customer_phone' => ['required_without:customer_id', 'nullable', 'string', 'max:30'],
+            'customer_phone' => ['nullable', 'string', 'max:30'],
             'quotation_date' => ['required', 'date'],
             'valid_until' => ['nullable', 'date', 'after_or_equal:quotation_date'],
             'billing_month' => ['required', 'date_format:Y-m'],
@@ -202,14 +225,28 @@ class QuotationController extends Controller
     {
         $customerId = $data['customer_id'] ?? null;
         if (! $customerId) {
-            $customer = Customer::firstOrCreate(
-                ['phone' => $data['customer_phone']],
-                [
-                    'name' => $data['customer_name'],
+            $customerPhone = trim((string) ($data['customer_phone'] ?? ''));
+            $customerName = trim((string) ($data['customer_name'] ?? ''));
+
+            if ($customerPhone !== '') {
+                $customer = Customer::where('phone', $customerPhone)->first()
+                    ?? Customer::where('name', $customerName)->first();
+            } else {
+                $customer = Customer::where('name', $customerName)->first();
+            }
+
+            if (! $customer) {
+                $customer = Customer::create([
+                    'name' => $customerName,
+                    'phone' => $customerPhone,
                     'connection_id' => 'AUTO-QT-'.now()->format('YmdHis').'-'.random_int(100, 999),
-                    'address' => '', 'status' => 'active', 'is_customer' => true, 'is_vendor' => false,
-                ],
-            );
+                    'address' => '',
+                    'status' => 'active',
+                    'is_customer' => true,
+                    'is_vendor' => false,
+                ]);
+            }
+
             $customerId = $customer->id;
         }
 

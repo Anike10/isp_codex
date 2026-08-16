@@ -1,6 +1,19 @@
 @extends('layouts.app')
 
 @section('content')
+<style>
+    .manual-number-input {
+        appearance: textfield;
+        -moz-appearance: textfield;
+    }
+
+    .manual-number-input::-webkit-outer-spin-button,
+    .manual-number-input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+</style>
+
 <div class="invoice-detail-page">
 @php
     $canViewPaymentVoucher = auth()->user()?->hasPermission('manage_payments');
@@ -118,7 +131,7 @@
         </div>
         <div>
             <label>Amount</label>
-            <input type="number" step="0.01" min="1" name="amount" value="{{ old('amount', number_format((float) $invoice->due_amount, 2, '.', '')) }}" required>
+            <input id="recordPaymentAmount" type="number" class="manual-number-input" inputmode="decimal" step="0.01" min="1" name="amount" value="{{ old('amount', number_format((float) $invoice->due_amount, 2, '.', '')) }}" required>
             <span class="muted">Due is {{ number_format($invoice->due_amount, 2) }}. Extra amount will stay in party advance balance.</span>
         </div>
         <div>
@@ -292,6 +305,23 @@ const invoiceNewAccountNameWrap = document.getElementById('invoiceNewAccountName
 const invoiceNewAccountNumberWrap = document.getElementById('invoiceNewAccountNumberWrap');
 const invoiceNewAccountName = document.getElementById('invoiceNewAccountName');
 const invoiceNewAccountNumber = document.getElementById('invoiceNewAccountNumber');
+const invoicePaymentAmount = document.getElementById('recordPaymentAmount');
+
+function disableNumericInputWheelAndArrows(input) {
+    if (!input) {
+        return;
+    }
+
+    input.addEventListener('wheel', (event) => {
+        event.preventDefault();
+    }, { passive: false });
+
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            event.preventDefault();
+        }
+    });
+}
 
 function refreshInvoiceAccounts() {
     const method = invoiceMethodSelect.value;
@@ -333,6 +363,7 @@ function refreshInvoiceNewAccountFields() {
     invoiceNewAccountNumber.required = addingNew;
 }
 
+disableNumericInputWheelAndArrows(invoicePaymentAmount);
 invoiceMethodSelect.addEventListener('change', refreshInvoiceAccounts);
 invoiceAccountSelect.addEventListener('change', refreshInvoiceNewAccountFields);
 refreshInvoiceAccounts();

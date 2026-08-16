@@ -74,6 +74,10 @@
                 <td>
                     <div class="actions">
                         <a class="btn light" href="{{ route('quotations.show', $quotation) }}">View</a>
+                        <form method="post" action="{{ route('quotations.copy', $quotation) }}" onsubmit="return confirm('Copy this quotation as a new draft quotation?');">
+                            @csrf
+                            <button class="btn light" type="submit">Copy</button>
+                        </form>
                         <a class="btn light" href="{{ route('quotations.print', $quotation) }}" target="_blank">Print</a>
                         @if (! $quotation->converted_invoice_id)
                             <a class="btn secondary" href="{{ route('quotations.edit', $quotation) }}">Edit</a>

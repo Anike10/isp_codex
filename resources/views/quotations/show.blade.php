@@ -7,12 +7,16 @@
     <div>
         <h1>{{ $quotation->quotation_no }}</h1>
         <div class="muted">{{ $quotation->customer->name }} - {{ $quotation->formatted_billing_month }}</div>
-        <div style="margin-top:8px">
+    <div style="margin-top:8px">
             <span class="badge {{ $quotation->status === 'converted' ? 'active' : 'due' }}">{{ ucfirst($quotation->status) }}</span>
             <span class="badge">Not included in accounting</span>
         </div>
     </div>
     <div class="actions">
+        <form method="post" action="{{ route('quotations.copy', $quotation) }}" onsubmit="return confirm('Copy this quotation as a new draft quotation?');">
+            @csrf
+            <button class="btn light" type="submit">Copy</button>
+        </form>
         @if (! $quotation->converted_invoice_id)
             <a class="btn secondary" href="{{ route('quotations.edit', $quotation) }}">Edit</a>
             <form method="post" action="{{ route('quotations.make-invoice', $quotation) }}" onsubmit="return confirm('Create a new draft invoice from this quotation? Stock will be adjusted now.');">

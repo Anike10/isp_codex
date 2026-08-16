@@ -93,6 +93,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('permission:manage_invoices')->group(function () {
         Route::resource('organizations', OrganizationController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
         Route::get('quotations/{quotation}/print', [QuotationController::class, 'print'])->name('quotations.print');
+        Route::post('quotations/{quotation}/copy', [QuotationController::class, 'copy'])->name('quotations.copy');
         Route::post('quotations/{quotation}/make-invoice', [InvoiceController::class, 'makeFromQuotation'])->name('quotations.make-invoice');
         Route::resource('quotations', QuotationController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update']);
         Route::get('invoices/payment-note-default', [InvoiceController::class, 'editPaymentNoteDefault'])->name('invoices.payment-note-default.edit');

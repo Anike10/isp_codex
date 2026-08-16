@@ -158,9 +158,7 @@
             return '';
         };
         $amountInWords = function (float $amount) use ($numberToWords): string {
-            $taka = (int) floor($amount);
-            $paisa = (int) round(($amount - $taka) * 100);
-            return $numberToWords($taka).' Taka'.($paisa > 0 ? ' and '.$numberToWords($paisa).' Paisa' : '').' Only';
+            return $numberToWords((int) round($amount)).' Taka Only';
         };
     @endphp
 
@@ -174,8 +172,6 @@
         <button onclick="recordPrint('{{ $isStandaloneQuotation ? 'quotation' : 'invoice_quotation' }}', {{ $invoice->id }})" class="btn">Print Quotation</button>
         <a href="{{ $backUrl }}" class="btn light">Back to {{ $isStandaloneQuotation ? 'Quotation' : 'Invoice' }}</a>
     </div>
-
-    @include('partials.page_help', ['variant' => 'print'])
 
     <main class="page">
         <section class="brand-bar">

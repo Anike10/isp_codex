@@ -539,22 +539,11 @@
         };
 
         $amountInWords = function (float $amount) use ($numberToWords): string {
-            $taka = (int) floor($amount);
-            $paisa = (int) round(($amount - $taka) * 100);
-            $words = $numberToWords($taka).' Taka';
-
-            if ($paisa > 0) {
-                $words .= ' and '.$numberToWords($paisa).' Paisa';
-            }
-
-            return $words.' Only';
+            return $numberToWords((int) round($amount)).' Taka Only';
         };
-        $grossTotal = (float) ($invoice->gross_total ?: $invoice->total);
         $netTotal = (float) $invoice->total;
         $commissionAmount = (float) ($invoice->reseller_commission_amount ?? 0);
         $netDiscount = (float) $invoice->discount;
-        $fullDiscount = max(0, $netDiscount - $commissionAmount);
-        $fullDue = max(0, $grossTotal - (float) $invoice->paid_amount);
     @endphp
 
     <div class="toolbar">
@@ -566,12 +555,6 @@
             <input type="checkbox" id="noSignatureOption" @checked($selectedOrganization->default_without_signature)>
             Print without signature
         </label>
-        @if($commissionAmount > 0)
-            <label class="print-option">
-                <input type="checkbox" id="totalPayableOption">
-                Total Payable (show full amount)
-            </label>
-        @endif
         @if(filled($selectedOrganization->bank_account_number))
             <label class="print-option">
                 <input type="checkbox" id="showBankInformationOption" @checked($selectedOrganization->show_bank_info_on_invoice)>
@@ -734,18 +717,6 @@
         const showBankInformationOption = document.getElementById('showBankInformationOption');
         showBankInformationOption?.addEventListener('change', function () {
             document.body.classList.toggle('show-bank-information', this.checked);
-        });
-
-        const totalPayableOption = document.getElementById('totalPayableOption');
-        totalPayableOption?.addEventListener('change', function () {
-            const showFull = this.checked;
-            const discount = showFull ? {{ json_encode($fullDiscount) }} : {{ json_encode($netDiscount) }};
-            document.getElementById('invoicePrintTotal').textContent = (showFull ? {{ json_encode($grossTotal) }} : {{ json_encode($netTotal) }}).toFixed(2);
-            document.getElementById('invoicePrintDue').textContent = (showFull ? {{ json_encode($fullDue) }} : {{ json_encode((float)$invoice->due_amount) }}).toFixed(2);
-            document.getElementById('invoiceAmountWords').textContent = showFull ? @json($amountInWords($grossTotal)) : @json($amountInWords($netTotal));
-            document.getElementById('invoiceDiscountAmount').textContent = Number(discount).toFixed(2);
-            document.getElementById('invoiceDiscountRow').style.display = discount > 0 ? 'flex' : 'none';
-            document.getElementById('resellerCommissionRow')?.style.setProperty('display', showFull ? 'none' : 'flex');
         });
 
         document.querySelectorAll('input[name="print_mode"]').forEach((input) => {

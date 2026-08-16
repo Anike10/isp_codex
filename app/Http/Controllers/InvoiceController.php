@@ -623,7 +623,7 @@ class InvoiceController extends Controller
         return $request->validate([
             'customer_id' => ['nullable', 'exists:customers,id'],
             'customer_name' => ['required_without:customer_id', 'nullable', 'string', 'max:255'],
-            'customer_phone' => ['required_without:customer_id', 'nullable', 'string', 'max:30'],
+            'customer_phone' => ['nullable', 'string', 'max:30'],
             'billing_month' => ['required', 'date_format:Y-m'],
             'invoice_type' => ['nullable', 'in:service,product'],
             'items' => ['required', 'array', 'min:1'],
@@ -652,12 +652,19 @@ class InvoiceController extends Controller
         $customerId = $data['customer_id'] ?? null;
 
         if (! $customerId) {
-            $customer = Customer::where('phone', $data['customer_phone'])->first();
+            $customerPhone = trim((string) ($data['customer_phone'] ?? ''));
+            $customerName = trim((string) ($data['customer_name'] ?? ''));
+
+            if ($customerPhone !== '') {
+                $customer = Customer::where('phone', $customerPhone)->first();
+            } else {
+                $customer = Customer::where('name', $customerName)->first();
+            }
 
             if (! $customer) {
                 $customer = Customer::create([
                     'name' => $data['customer_name'],
-                    'phone' => $data['customer_phone'],
+                    'phone' => $customerPhone,
                     'connection_id' => $this->generateCustomerConnectionId(),
                     'address' => '',
                     'status' => 'active',

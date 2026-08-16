@@ -54,7 +54,7 @@
 
                 <label class="edit-field">
                     <span class="label-with-badge">Phone <em>Multiple allowed</em></span>
-                    <input name="phone" value="{{ old('phone', $customer->phone) }}" required autocomplete="tel">
+                    <input name="phone" value="{{ old('phone', $customer->phone) }}" autocomplete="tel">
                     <small>Separate numbers with commas or spaces, e.g. 01710000000, 01820000000.</small>
                 </label>
 
@@ -72,8 +72,8 @@
                 </label>
 
                 <label class="edit-field edit-field--wide">
-                    <span>Address <b>*</b></span>
-                    <textarea name="address" rows="3" required autocomplete="street-address">{{ old('address', $customer->address) }}</textarea>
+                    <span>Address</span>
+                    <textarea name="address" rows="3" autocomplete="street-address">{{ old('address', $customer->address) }}</textarea>
                 </label>
 
                 <label class="edit-field edit-field--wide">

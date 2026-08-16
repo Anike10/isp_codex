@@ -93,10 +93,10 @@ class CustomerController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
             'connection_id' => ['required_with:internet_package_id', 'required_if:use_fixed_ip,1', 'nullable', 'string', 'max:100', 'unique:customers,connection_id'],
-            'address' => ['required', 'string'],
+            'address' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
             'is_customer' => ['nullable', 'boolean'],
@@ -114,6 +114,9 @@ class CustomerController extends Controller
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
             'start_date' => ['nullable', 'date'],
         ]);
+
+        $data['phone'] = trim((string) ($data['phone'] ?? ''));
+        $data['address'] = trim((string) ($data['address'] ?? ''));
 
         $this->normalizeCustomerConnectionData($data);
         $data['is_customer'] = (bool) ($data['is_customer'] ?? false) || ! empty($data['internet_package_id']);
@@ -170,10 +173,10 @@ class CustomerController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
             'connection_id' => ['required_with:internet_package_id', 'required_if:use_fixed_ip,1', 'nullable', 'string', 'max:100', Rule::unique('customers', 'connection_id')->ignore($customer->id)],
-            'address' => ['required', 'string'],
+            'address' => ['nullable', 'string'],
             'map_latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:map_longitude'],
             'map_longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:map_latitude'],
             'notes' => ['nullable', 'string'],
@@ -193,6 +196,9 @@ class CustomerController extends Controller
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
             'start_date' => ['nullable', 'date'],
         ]);
+
+        $data['phone'] = trim((string) ($data['phone'] ?? ''));
+        $data['address'] = trim((string) ($data['address'] ?? ''));
 
         $this->normalizeCustomerConnectionData($data, $customer);
         $data['is_customer'] = (bool) ($data['is_customer'] ?? false) || ! empty($data['internet_package_id']);
@@ -313,17 +319,18 @@ class CustomerController extends Controller
 
         $validationRules = [
             'name' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:255'],
             'package' => ['nullable', 'integer', 'exists:internet_packages,id'],
         ];
 
+        $validationMessages = [];
+        if ($field === 'name') {
+            $validationMessages['value.required'] = 'Customer name is required.';
+        }
+
         $validated = $request->validate([
             'value' => $validationRules[$field],
-        ], [
-            'value.required' => $field === 'name'
-                ? 'Customer name is required.'
-                : 'Phone is required.',
-        ]);
+        ], $validationMessages);
 
         $value = $validated['value'];
 

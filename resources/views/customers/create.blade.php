@@ -11,7 +11,7 @@
     <div><label>Name</label><input name="name" value="{{ old('name') }}" required></div>
     <div>
         <label>Phone</label>
-        <input name="phone" value="{{ old('phone') }}" required>
+        <input name="phone" value="{{ old('phone') }}">
         <span class="muted">Multiple phone numbers allowed: use comma or space, for example 01710000000, 01820000000</span>
     </div>
     <div><label>Email</label><input type="email" name="email" value="{{ old('email') }}"></div>
@@ -48,7 +48,7 @@
         <input id="fixed-ip-address" name="fixed_ip_address" value="{{ old('fixed_ip_address') }}" placeholder="Example: 10.10.10.25">
         <span class="muted">Required only when Fixed IP is selected.</span>
     </div>
-    <div class="full"><label>Address</label><textarea name="address" required>{{ old('address') }}</textarea></div>
+    <div class="full"><label>Address</label><textarea name="address">{{ old('address') }}</textarea></div>
     <div class="full"><label>Note</label><textarea name="notes">{{ old('notes') }}</textarea></div>
     <div>
         <label>Status</label>
