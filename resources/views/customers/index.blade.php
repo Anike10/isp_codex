@@ -36,6 +36,15 @@
         vertical-align: middle;
         text-align: right;
         white-space: nowrap;
+        overflow: visible;
+        position: relative;
+    }
+    .customer-table {
+        overflow: visible;
+    }
+    .customer-table th,
+    .customer-table td {
+        overflow: visible;
     }
     .customer-action-menu > summary {
         min-width: 88px;
@@ -231,7 +240,7 @@
     @include('partials.per_page')
 </div>
 
-<table>
+<table class="customer-table">
     <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th>Role</th><th>User ID</th><th>Package</th><th>Balance</th><th>Status</th><th>Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)

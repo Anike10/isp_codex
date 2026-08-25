@@ -129,6 +129,24 @@ class Customer extends Model
         return (int) now()->startOfDay()->diffInDays($activeUntil->copy()->startOfDay(), false);
     }
 
+    public function displayStatus(): string
+    {
+        if ($this->status === 'inactive') {
+            return 'Inactive';
+        }
+
+        if ($this->status === 'active') {
+            return 'Active';
+        }
+
+        return ucfirst((string) $this->status ?: 'Unknown');
+    }
+
+    public function getDisplayStatusAttribute(): string
+    {
+        return $this->displayStatus();
+    }
+
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);
