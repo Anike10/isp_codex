@@ -1,8 +1,10 @@
 @extends('layouts.app')
 
+@section('main_class', 'network-map-main')
+
 @section('content')
     <link rel="stylesheet" href="{{ asset('css/maplibre-gl.css') }}?v=4.7.1">
-    <link rel="stylesheet" href="{{ asset('css/network-map.css') }}?v=20260826-1">
+    <link rel="stylesheet" href="{{ asset('css/network-map.css') }}?v=20260826-13">
 
     <section class="network-map-page">
         <aside class="network-sidebar">
@@ -11,6 +13,17 @@
                 <h1>FTTX Network Map</h1>
                 <p class="muted">Draw nodes and fiber routes, add infrastructure attributes, then persist the full topology as GeoJSON.</p>
             </div>
+
+            <section class="unmapped-party-panel" aria-labelledby="unmappedPartyHeading">
+                <div class="unmapped-party-head">
+                    <h2 id="unmappedPartyHeading">Unmapped Parties</h2>
+                    <span id="unmappedPartyCount">0</span>
+                </div>
+                <input type="search" id="unmappedPartyFilter" placeholder="Filter by ID, name, user or mobile">
+                <div class="unmapped-party-list" id="unmappedPartyList">
+                    <div class="unmapped-party-empty">Loading parties...</div>
+                </div>
+            </section>
 
             <div class="tool-section">
                 <h2>Map Style</h2>
@@ -140,5 +153,5 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map.js') }}?v=20260826-1"></script>
+    <script src="{{ asset('js/network-map.js') }}?v=20260826-13"></script>
 @endsection

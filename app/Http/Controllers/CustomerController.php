@@ -313,7 +313,7 @@ class CustomerController extends Controller
     public function inlineUpdate(Request $request, Customer $customer)
     {
         $field = $request->validate([
-            'field' => ['required', 'in:name,phone,package,connection_id'],
+            'field' => ['required', 'in:name,phone,package,connection_id,address,comment'],
             'value' => ['nullable'],
         ])['field'];
 
@@ -322,6 +322,8 @@ class CustomerController extends Controller
             'phone' => ['nullable', 'string', 'max:255'],
             'package' => ['nullable', 'integer', 'exists:internet_packages,id'],
             'connection_id' => ['nullable', 'string', 'max:100', Rule::unique('customers', 'connection_id')->ignore($customer->id)],
+            'address' => ['nullable', 'string', 'max:1000'],
+            'comment' => ['nullable', 'string', 'max:255'],
         ];
 
         $validationMessages = [];
@@ -345,6 +347,25 @@ class CustomerController extends Controller
             return response()->json([
                 'message' => 'Party updated.',
                 'value' => $customer->fresh()->connection_id,
+            ]);
+        }
+
+        if ($field === 'comment') {
+            $importedSecret = $customer->importedSecret()->first();
+            if (! $importedSecret) {
+                return response()->json([
+                    'message' => 'No imported MikroTik record is linked to this party.',
+                ], 422);
+            }
+
+            $normalizedValue = trim((string) $value);
+            $importedSecret->update([
+                'router_comment' => $normalizedValue === '' ? null : $normalizedValue,
+            ]);
+
+            return response()->json([
+                'message' => 'Party updated.',
+                'value' => $importedSecret->fresh()->router_comment,
             ]);
         }
 
