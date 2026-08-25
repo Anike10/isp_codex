@@ -1240,24 +1240,36 @@
                 const id = properties.customer_id;
                 const label = formatPartyLabel(feature);
                 const comment = formatPartyComment(feature);
+                const inlineUpdateUrl = mapPartyInlineUpdateUrl(feature);
                 const userName = formatPartyUserName(properties);
                 const statusText = formatPartyStatus(properties.status);
+                const statusClass = formatPartyStatusClass(properties.status);
+                const nameValue = String(formatPartyDisplayName(feature) || '').trim();
+                const phoneValue = String(properties.phone || '').trim();
+                const userIdValue = String(properties.connection_id || properties.mikrotik_username || '').trim();
+                const addressValue = String(properties.address || '').trim();
                 const details = compactJoin([
-                    properties.phone || '',
-                    properties.connection_id || properties.mikrotik_username || '',
-                    properties.address || '',
+                    addressValue || '',
                     statusText !== 'Not provided' ? `Status: ${statusText}` : '',
                     `User: ${userName}`,
+                    phoneValue ? `Mobile: ${phoneValue}` : '',
+                    userIdValue ? `User ID: ${userIdValue}` : '',
+                    comment ? `Comment: ${comment}` : '',
                 ]);
                 const hasLocation = Boolean(properties.has_map_location);
+                const actionsMarkup = mapPartyShareButtonsMarkup(feature);
 
                 return `<div class="search-result" data-customer-id="${escapeHtml(id)}">
                     <strong>${escapeHtml(label)}</strong>
                     ${comment ? `<span>${escapeHtml(`Comment: ${comment}`)}</span>` : ''}
-                    ${statusText ? `<span><span class="badge ${formatPartyStatusClass(properties.status)}">${escapeHtml(statusText)}</span></span>` : ''}
+                    ${statusText ? `<span><span class="badge ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span></span>` : ''}
+                    <span>Name: ${mapPartyInlineFieldHtml('name', id, inlineUpdateUrl, nameValue, 'Not provided')}</span>
+                    <span>Mobile: ${mapPartyInlineFieldHtml('phone', id, inlineUpdateUrl, phoneValue, 'Not provided')}</span>
+                    <span>User ID: ${mapPartyInlineFieldHtml('connection_id', id, inlineUpdateUrl, userIdValue, 'Not assigned')}</span>
                     <span>${escapeHtml(details || 'No mobile / user ID / address')}</span>
                     <div class="search-result-actions">
                         <button type="button" class="search-result-action search-result-action--focus" data-focus-customer="${escapeHtml(id)}">View on map</button>
+                        ${actionsMarkup}
                         ${hasLocation
                             ? `<button type="button" class="search-result-action search-result-action--danger" data-remove-party-location="${escapeHtml(id)}">Remove location</button>`
                             : `<button type="button" class="search-result-action search-result-action--primary" data-add-party-location="${escapeHtml(id)}">Add on map</button>`
@@ -1299,17 +1311,22 @@
                 removePartyLocation(customerId);
             });
         });
+
+        bindMapPartySearchActions(resultsPanel);
+        bindMapPartySearchInlineFields(resultsPanel);
     }
 
     function renderPartyNoLocationPrompt(feature) {
         const customerId = String(feature?.properties?.customer_id || '');
         const label = formatPartyLabel(feature);
         const comment = formatPartyComment(feature);
+        const inlineUpdateUrl = mapPartyInlineUpdateUrl(feature);
         const details = compactJoin([
             feature?.properties?.phone || '',
             feature?.properties?.connection_id || feature?.properties?.mikrotik_username || '',
             feature?.properties?.address || '',
         ]);
+        const actionsMarkup = mapPartyShareButtonsMarkup(feature);
 
         const resultsPanel = document.getElementById('customerSearchResult');
         if (!resultsPanel) {
@@ -1320,9 +1337,13 @@
             <div class="search-result" data-customer-id="${escapeHtml(customerId)}">
                 <strong>${escapeHtml(`${label} has no saved map location.`)}</strong>
                 ${comment ? `<span>${escapeHtml(`Comment: ${comment}`)}</span>` : ''}
+                <span>Name: ${mapPartyInlineFieldHtml('name', customerId, inlineUpdateUrl, formatPartyDisplayName(feature) || '', 'Not provided')}</span>
+                <span>Mobile: ${mapPartyInlineFieldHtml('phone', customerId, inlineUpdateUrl, feature?.properties?.phone || '', 'Not provided')}</span>
+                <span>User ID: ${mapPartyInlineFieldHtml('connection_id', customerId, inlineUpdateUrl, feature?.properties?.connection_id || feature?.properties?.mikrotik_username || '', 'Not assigned')}</span>
                 <span>${escapeHtml(details || 'No mobile / user ID / address')}</span>
                 <div class="search-result-actions">
                     <button type="button" class="search-result-action search-result-action--primary" data-add-party-location="${escapeHtml(customerId)}">Add on map</button>
+                    ${actionsMarkup}
                 </div>
             </div>
         `;
@@ -1336,6 +1357,9 @@
                 requestPartyLocationPlacement(customerId);
             });
         }
+
+        bindMapPartySearchActions(resultsPanel);
+        bindMapPartySearchInlineFields(resultsPanel);
     }
 
     function focusCustomer(customerId, options = {}) {
@@ -1376,6 +1400,9 @@
         const displayName = formatPartyDisplayName(properties);
         const userName = formatPartyUserName(properties);
         const statusText = formatPartyStatus(properties.status);
+        const inlineUpdateUrl = mapPartyInlineUpdateUrl(feature);
+        const shareControls = mapPartyShareButtonsMarkup(feature);
+        const userId = properties.connection_id || properties.mikrotik_username || '';
         const siblingSummary = siblingPorts.length > 1
             ? siblingPorts.map((item, index) => {
                 return `<div>${escapeHtml(`Port ${String(index + 1).padStart(2, '0')}: ${formatPartyLabel(item)}`)}</div>`;
@@ -1398,14 +1425,15 @@
                     <span>${escapeHtml(userName)}</span>
                 </p>
                 <dl class="popup-details">
-                    <div><dt>Name</dt><dd>${escapeHtml(displayName || 'Not provided')}</dd></div>
+                    <div><dt>Name</dt><dd>${mapPartyInlineFieldHtml('name', properties.customer_id, inlineUpdateUrl, String(displayName || ''), 'Not provided')}</dd></div>
                     <div><dt>Party ID</dt><dd>${escapeHtml(formatPartyLabel(properties) || 'N/A')}</dd></div>
-                    <div><dt>User Name</dt><dd>${escapeHtml(userName)}</dd></div>
+                    <div><dt>User Name</dt><dd>${mapPartyInlineFieldHtml('connection_id', properties.customer_id, inlineUpdateUrl, String(userId || ''), 'Not assigned')}</dd></div>
                     <div><dt>Active Status</dt><dd><span class="badge ${formatPartyStatusClass(properties.status)}">${escapeHtml(statusText)}</span></dd></div>
                     ${showCommentRow ? `<div><dt>Comment</dt><dd>${escapeHtml(comment || 'Not provided')}</dd></div>` : ''}
-                    <div><dt>Phone</dt><dd>${escapeHtml(properties.phone || 'Not provided')}</dd></div>
+                    <div><dt>Phone</dt><dd>${mapPartyInlineFieldHtml('phone', properties.customer_id, inlineUpdateUrl, String(properties.phone || ''), 'Not provided')}</dd></div>
                     <div><dt>Address</dt><dd>${escapeHtml(properties.address || 'Not provided')}</dd></div>
                     ${siblingSummary ? `<div><dt>Multi-port at location</dt><dd>${siblingSummary}</dd></div>` : ''}
+                    <div><dt>Share</dt><dd>${shareControls}</dd></div>
                     <div><dt>Actions</dt><dd><a href="${escapeHtml(properties.show_url)}">View</a> | <a href="${escapeHtml(properties.edit_url)}">Edit location</a>${removeButton ? `<br>${removeButton}` : ''}</dd></div>
                 </dl>
             `)
@@ -1418,6 +1446,9 @@
                 removePartyLocation(customerId);
             });
         }
+
+        bindMapPartySearchActions(state.customerPopup.getElement());
+        bindMapPartySearchInlineFields(state.customerPopup.getElement());
     }
 
     function customerHasLocation(feature) {
@@ -1655,6 +1686,287 @@
         const panel = document.getElementById('customerSearchResult');
         panel.hidden = false;
         panel.innerHTML = `<div class="search-empty${isError ? ' error' : ''}">${escapeHtml(message)}</div>`;
+    }
+
+    function bindMapPartySearchActions(root = null) {
+        const container = root || document.getElementById('customerSearchResult');
+        if (!container) {
+            return;
+        }
+
+        container.querySelectorAll('[data-copy-party]').forEach((button) => {
+            const feature = state.customerFeatures.get(String(button.dataset.copyParty || ''));
+            if (!feature) {
+                return;
+            }
+
+            button.addEventListener('click', async () => {
+                await copyMapPartyShareText(buildMapPartyShareText(feature), button);
+            }, { once: true });
+        });
+
+        container.querySelectorAll('[data-whatsapp-share]').forEach((button) => {
+            const feature = state.customerFeatures.get(String(button.dataset.whatsappShare || ''));
+            if (!feature) {
+                return;
+            }
+
+            mapPartyWhatsappButton(button, feature);
+            button.addEventListener('click', (event) => {
+                if (!customerHasLocation(feature)) {
+                    event.preventDefault();
+                }
+            }, { once: true });
+        });
+    }
+
+    function bindMapPartySearchInlineFields(root = null) {
+        const container = root || document.getElementById('customerSearchResult');
+        if (!container) {
+            return;
+        }
+
+        container.querySelectorAll('[data-inline-field]').forEach((fieldElement) => {
+            fieldElement.classList.add('inline-edit-field');
+            fieldElement.title = 'Double click to edit';
+            fieldElement.addEventListener('dblclick', (event) => {
+                event.preventDefault();
+                startMapPartyInlineEdit(fieldElement);
+            }, { once: true });
+        });
+    }
+
+    function mapPartyInlineUpdateUrl(feature) {
+        const properties = feature?.properties || {};
+        const raw = String(properties.show_url || '').trim();
+        if (!raw) {
+            return '';
+        }
+
+        return raw.endsWith('/') ? `${raw}inline` : `${raw}/inline`;
+    }
+
+    function mapPartyInlineFieldHtml(field, customerId, inlineUrl, value, emptyText) {
+        const normalized = (value === null || value === undefined ? '' : String(value)).trim();
+        const displayValue = normalized || emptyText;
+        const safeField = escapeHtml(field);
+        const safeCustomerId = escapeHtml(customerId);
+        const safeInlineUrl = escapeHtml(inlineUrl);
+        const safeDisplay = escapeHtml(displayValue);
+        const safeValue = escapeHtml(normalized);
+        const safeEmptyText = escapeHtml(emptyText);
+
+        return inlineUrl
+            ? `<span class="inline-edit-field" data-inline-field="${safeField}" data-inline-url="${safeInlineUrl}" data-customer-id="${safeCustomerId}" data-inline-value="${safeValue}" data-inline-empty-text="${safeEmptyText}">${safeDisplay}</span>`
+            : safeDisplay;
+    }
+
+    async function startMapPartyInlineEdit(fieldElement) {
+        const field = fieldElement?.dataset?.inlineField;
+        const customerId = fieldElement?.dataset?.customerId;
+        const inlineUrl = fieldElement?.dataset?.inlineUrl;
+        if (!field || !customerId || !inlineUrl) {
+            return;
+        }
+
+        const currentValue = fieldElement.dataset.inlineValue || '';
+        const emptyText = fieldElement.dataset.inlineEmptyText || 'Not provided';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentValue;
+        input.className = 'inline-edit-input';
+        input.autocomplete = 'off';
+        input.dataset.inlineInput = '1';
+
+        const restore = (value) => {
+            const normalized = value === null || value === undefined ? '' : String(value).trim();
+            fieldElement.textContent = normalized || emptyText;
+            fieldElement.dataset.inlineValue = normalized;
+        };
+
+        let isSaving = false;
+        const finish = async (shouldSave) => {
+            if (isSaving) {
+                return;
+            }
+
+            isSaving = true;
+            const nextValue = String(input.value || '').trim();
+            if (!shouldSave || nextValue === currentValue) {
+                restore(currentValue);
+                return;
+            }
+
+            try {
+                const response = await fetch(inlineUrl, {
+                    method: 'PATCH',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': config.csrfToken,
+                    },
+                    body: JSON.stringify({
+                        field,
+                        value: nextValue,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(await responseErrorMessage(response, 'Unable to update this value.'));
+                }
+
+                const payload = await response.json();
+                const value = payload.value;
+                upsertMapPartyFeatureValue(customerId, field, value);
+                restore(value);
+            } catch (error) {
+                setStatus(error.message);
+                restore(currentValue);
+            }
+        };
+
+        fieldElement.dataset.inlineEditing = '1';
+        fieldElement.replaceChildren(input);
+        input.focus();
+        input.select();
+
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                finish(true);
+                fieldElement.dataset.inlineEditing = '0';
+            }
+
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                finish(false);
+                fieldElement.dataset.inlineEditing = '0';
+            }
+        });
+
+        input.addEventListener('blur', () => {
+            finish(true);
+            fieldElement.dataset.inlineEditing = '0';
+        });
+    }
+
+    function upsertMapPartyFeatureValue(customerId, field, value) {
+        const normalized = value === null || value === undefined ? '' : String(value).trim();
+        const feature = state.customerFeatures.get(String(customerId));
+        if (!feature || !feature.properties) {
+            return;
+        }
+
+        const nextFeature = { ...feature, properties: { ...feature.properties } };
+        if (field === 'connection_id') {
+            nextFeature.properties.connection_id = normalized;
+            nextFeature.properties.mikrotik_username = normalized;
+        } else {
+            nextFeature.properties[field] = normalized;
+        }
+
+        state.customerFeatures.set(String(customerId), nextFeature);
+        rebuildCustomerLocationSource();
+        const resultPanel = document.getElementById('customerSearchResult');
+        if (resultPanel && !resultPanel.hidden) {
+            renderPartySearchResults([...state.customerFeatures.values()]);
+        }
+
+        refreshStatsFromData();
+        if (state.customerPopup) {
+            const popupFeature = state.customerFeatures.get(String(customerId));
+            if (popupFeature) {
+                showCustomerPopup(popupFeature);
+            }
+        }
+    }
+
+    function mapPartyShareButtonsMarkup(feature) {
+        const properties = feature?.properties || {};
+        const customerId = String(properties.customer_id || '').trim();
+        const hasLocation = customerHasLocation(feature);
+        const primaryClass = 'search-result-action search-result-action--primary';
+        const disabled = hasLocation ? '' : ' is-disabled';
+        const shareState = hasLocation ? '' : ' data-share-disabled="1"';
+
+        return `<button type="button" class="search-result-action" data-copy-party="${escapeHtml(customerId)}">Copy</button>`
+            + `<a href="#" class="${primaryClass}${disabled}" data-whatsapp-share="${escapeHtml(customerId)}"${shareState}>WhatsApp</a>`;
+    }
+
+    function mapPartyWhatsappButton(button, feature) {
+        if (!button || !feature) {
+            return;
+        }
+
+        const hasLocation = customerHasLocation(feature);
+        const shareText = buildMapPartyShareText(feature);
+        button.href = hasLocation ? `https://wa.me/?text=${encodeURIComponent(shareText)}` : '#';
+        button.classList.toggle('is-disabled', !hasLocation);
+        button.setAttribute('aria-disabled', hasLocation ? 'false' : 'true');
+        if (!hasLocation) {
+            button.setAttribute('tabindex', '-1');
+        } else {
+            button.removeAttribute('tabindex');
+        }
+    }
+
+    function buildMapPartyMapUrl(feature) {
+        const longitude = Number(feature?.geometry?.coordinates?.[0]);
+        const latitude = Number(feature?.geometry?.coordinates?.[1]);
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+            return '';
+        }
+
+        return `https://maps.google.com/?q=${latitude.toFixed(8)},${longitude.toFixed(8)}`;
+    }
+
+    function buildMapPartyShareText(feature) {
+        const properties = feature?.properties || {};
+        const name = formatPartyDisplayName(feature) || 'Not provided';
+        const phone = properties.phone || 'Not provided';
+        const userId = properties.connection_id || properties.mikrotik_username || 'Not assigned';
+        const statusText = formatPartyStatus(properties.status);
+        const mapUrl = buildMapPartyMapUrl(feature);
+        const address = properties.address || 'Not provided';
+        const customerLabel = formatPartyLabel(feature) || `Party #${properties.customer_id || 'Unknown'}`;
+
+        return [
+            customerLabel,
+            `Name: ${name}`,
+            `Mobile: ${phone}`,
+            `User ID: ${userId}`,
+            `Address: ${address}`,
+            `Active Status: ${statusText}`,
+            mapUrl ? `Map location: ${mapUrl}` : 'Map location: not set',
+        ].join('\n');
+    }
+
+    async function copyMapPartyShareText(text, triggerButton) {
+        if (!text) {
+            return;
+        }
+
+        const originalText = triggerButton?.textContent || '';
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch (error) {
+            const backup = document.createElement('textarea');
+            backup.value = text;
+            backup.setAttribute('readonly', 'readonly');
+            backup.style.position = 'fixed';
+            backup.style.opacity = '0';
+            document.body.appendChild(backup);
+            backup.select();
+            document.execCommand('copy');
+            backup.remove();
+        }
+
+        if (triggerButton) {
+            triggerButton.textContent = 'Copied';
+            window.setTimeout(() => {
+                triggerButton.textContent = originalText || 'Copy';
+            }, 1000);
+        }
     }
 
     function customerLocationKey(coordinates) {

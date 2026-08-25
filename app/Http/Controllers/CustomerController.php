@@ -313,7 +313,7 @@ class CustomerController extends Controller
     public function inlineUpdate(Request $request, Customer $customer)
     {
         $field = $request->validate([
-            'field' => ['required', 'in:name,phone,package'],
+            'field' => ['required', 'in:name,phone,package,connection_id'],
             'value' => ['nullable'],
         ])['field'];
 
@@ -321,6 +321,7 @@ class CustomerController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:255'],
             'package' => ['nullable', 'integer', 'exists:internet_packages,id'],
+            'connection_id' => ['nullable', 'string', 'max:100', Rule::unique('customers', 'connection_id')->ignore($customer->id)],
         ];
 
         $validationMessages = [];
@@ -333,6 +334,19 @@ class CustomerController extends Controller
         ], $validationMessages);
 
         $value = $validated['value'];
+
+        if ($field === 'connection_id') {
+            $normalizedValue = trim((string) $value);
+            $customer->update([
+                'connection_id' => $normalizedValue === '' ? null : $normalizedValue,
+                'mikrotik_username' => $normalizedValue === '' ? null : $normalizedValue,
+            ]);
+
+            return response()->json([
+                'message' => 'Party updated.',
+                'value' => $customer->fresh()->connection_id,
+            ]);
+        }
 
         if ($field === 'package') {
             $packageId = blank($value) ? null : (int) $value;
@@ -839,3 +853,4 @@ class CustomerController extends Controller
         return $query;
     }
 }
+

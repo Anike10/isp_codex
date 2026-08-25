@@ -55,6 +55,131 @@
     if ($customer->is_vendor) {
         $roleBadges->push(['label' => 'Vendor', 'class' => 'pending']);
     }
+
+    $partyNoteEvents = collect();
+    $rawPartyNote = trim((string) $customer->notes);
+
+    if ($rawPartyNote !== '') {
+        $timestampPattern = '(?:\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}(?::\d{2})?';
+        $noteSegments = preg_split('/(?=\['.$timestampPattern.'\])/', $rawPartyNote, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        foreach ($noteSegments as $segmentIndex => $segment) {
+            $segment = trim($segment);
+            if ($segment === '') {
+                continue;
+            }
+
+            $content = $segment;
+            $recordedAt = null;
+            $recordedText = null;
+
+            if (preg_match('/^\[('.$timestampPattern.')\]\s*(.*)$/s', $segment, $timestampMatch)) {
+                $recordedText = $timestampMatch[1];
+                $content = trim($timestampMatch[2]);
+            } elseif (preg_match('/\bat\s+('.$timestampPattern.')(?:\R|$)/i', $segment, $timestampMatch)) {
+                $recordedText = $timestampMatch[1];
+            }
+
+            if ($recordedText) {
+                foreach (['d/m/Y H:i:s', 'd/m/Y H:i', 'Y-m-d H:i:s', 'Y-m-d H:i'] as $dateFormat) {
+                    try {
+                        $candidate = \Carbon\Carbon::createFromFormat($dateFormat, $recordedText);
+                        if ($candidate !== false) {
+                            $recordedAt = $candidate;
+                            break;
+                        }
+                    } catch (\Throwable) {
+                        // Try the next supported timestamp format.
+                    }
+                }
+            }
+
+            $event = [
+                'title' => 'Party note',
+                'tone' => 'note',
+                'message' => $content,
+                'facts' => [],
+                'recorded_at' => $recordedAt,
+                'sort_at' => (($recordedAt?->timestamp ?? 0) * 1000) + $segmentIndex,
+            ];
+
+            if (str_starts_with(strtolower($content), 'imported from mikrotik')) {
+                $event['title'] = 'MikroTik import';
+                $event['tone'] = 'import';
+                $event['message'] = 'Party information was imported from the router.';
+                $importLines = preg_split('/\R+/', $content, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+                $importHeader = trim((string) array_shift($importLines));
+
+                if (preg_match('/^Imported from MikroTik:\s*(.*?)\s*\(([^)]+)\)\s+at\s+(.+)$/i', $importHeader, $importMatch)) {
+                    $event['facts'][] = ['label' => 'Router', 'value' => trim($importMatch[1])];
+                    $event['facts'][] = ['label' => 'IP / port', 'value' => trim($importMatch[2])];
+                } else {
+                    $event['facts'][] = ['label' => 'Source', 'value' => $importHeader];
+                }
+
+                foreach ($importLines as $importLine) {
+                    if (preg_match('/^([^:]+):\s*(.*)$/', trim($importLine), $importFact)) {
+                        $event['facts'][] = ['label' => trim($importFact[1]), 'value' => trim($importFact[2]) ?: 'Not provided'];
+                    }
+                }
+            } elseif (str_starts_with(strtolower($content), 'paid validity:')) {
+                $event['title'] = 'Payment & validity';
+                $event['tone'] = 'payment';
+                $event['message'] = 'Paid service validity was updated.';
+                $paymentText = trim((string) preg_replace('/^Paid validity:\s*/i', '', $content));
+                $paymentParts = preg_split('/;\s*|(?<=\.)\s+(?=Payment note:)/i', $paymentText, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+                foreach ($paymentParts as $paymentPart) {
+                    $paymentPart = trim($paymentPart, " \t\n\r\0\x0B.");
+                    $label = 'Details';
+                    $value = $paymentPart;
+
+                    foreach ([
+                        '/^payment date\s+(.+)$/i' => 'Payment date',
+                        '/^one-month period\s+(.+)$/i' => 'Billing period',
+                        '/^grace deducted\s+(.+)$/i' => 'Grace deducted',
+                        '/^validity\s+(.+)$/i' => 'Service validity',
+                        '/^Payment note:\s*(.+)$/i' => 'Payment note',
+                    ] as $paymentPattern => $paymentLabel) {
+                        if (preg_match($paymentPattern, $paymentPart, $paymentMatch)) {
+                            $label = $paymentLabel;
+                            $value = trim($paymentMatch[1]);
+                            break;
+                        }
+                    }
+
+                    $event['facts'][] = ['label' => $label, 'value' => $value];
+                }
+            } elseif (preg_match('/^Bulk activated until\s+([^\s]+)\s+for customer with no paid month\.?$/i', $content, $bulkMatch)) {
+                $event['title'] = 'Bulk activation';
+                $event['tone'] = 'activation';
+                $event['message'] = 'Service was activated through a bulk action.';
+                $event['facts'] = [
+                    ['label' => 'Valid until', 'value' => $bulkMatch[1]],
+                    ['label' => 'Reason', 'value' => 'No paid month was found'],
+                ];
+            } elseif (preg_match('/^Activated package to\s+([^\s]+)\s+via\s+(.+)\.?$/i', $content, $activationMatch)) {
+                $event['title'] = 'Package activated';
+                $event['tone'] = 'activation';
+                $event['message'] = 'The customer package was activated.';
+                $event['facts'] = [
+                    ['label' => 'Valid until', 'value' => $activationMatch[1]],
+                    ['label' => 'Action', 'value' => rtrim($activationMatch[2], '.')],
+                ];
+            } elseif (str_starts_with(strtolower($content), 'manual validity override:')) {
+                $event['title'] = 'Validity changed';
+                $event['tone'] = 'change';
+                $event['message'] = trim((string) preg_replace('/^Manual validity override:\s*/i', 'Validity changed from ', $content));
+            } elseif (str_contains(strtolower($content), 'force-inactivated')) {
+                $event['title'] = 'Service status changed';
+                $event['tone'] = 'change';
+            }
+
+            $partyNoteEvents->push($event);
+        }
+
+        $partyNoteEvents = $partyNoteEvents->sortByDesc('sort_at')->values();
+    }
 @endphp
 
 <style>
@@ -218,6 +343,148 @@
         border-top: 1px dashed #d3deea;
         margin-top: 3px;
         padding-top: 10px;
+    }
+    .party-note-panel {
+        padding: 0;
+        overflow: hidden;
+        border-color: #cddbec;
+        background: #f8fbff;
+    }
+    .party-note-panel__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 11px 13px;
+        color: #17365d;
+        background: linear-gradient(110deg, #eaf4ff, #effbf5);
+        border-bottom: 1px solid #d6e4f2;
+    }
+    .party-note-panel__head strong {
+        font-size: 13px;
+    }
+    .party-note-panel__head span {
+        color: #65758b;
+        font-size: 11px;
+        font-weight: 700;
+    }
+    .party-note-timeline {
+        max-height: 360px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 13px 12px 13px 15px;
+        scrollbar-color: #9bb6d2 #eaf0f7;
+        scrollbar-width: thin;
+    }
+    .party-note-event {
+        --event-color: #64748b;
+        position: relative;
+        margin-left: 10px;
+        padding: 0 0 15px 21px;
+        border-left: 2px solid #dbe6f1;
+    }
+    .party-note-event:last-child {
+        padding-bottom: 0;
+        border-left-color: transparent;
+    }
+    .party-note-event::before {
+        content: "";
+        position: absolute;
+        top: 10px;
+        left: -7px;
+        width: 12px;
+        height: 12px;
+        border: 3px solid #fff;
+        border-radius: 50%;
+        background: var(--event-color);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--event-color) 28%, transparent);
+    }
+    .party-note-event--payment { --event-color: #059669; }
+    .party-note-event--activation { --event-color: #16803b; }
+    .party-note-event--change { --event-color: #d97706; }
+    .party-note-event--import { --event-color: #2563eb; }
+    .party-note-event__card {
+        padding: 12px;
+        border: 1px solid #dde7f1;
+        border-radius: 11px;
+        background: #fff;
+        box-shadow: 0 3px 10px rgba(30, 64, 100, .06);
+    }
+    .party-note-event:first-child .party-note-event__card {
+        border-color: color-mix(in srgb, var(--event-color) 35%, #dce6f0);
+        box-shadow: 0 6px 16px rgba(30, 64, 100, .1);
+    }
+    .party-note-event__head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 7px;
+    }
+    .party-note-event__type,
+    .party-note-event__latest {
+        display: inline-flex;
+        align-items: center;
+        min-height: 23px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        line-height: 1;
+        font-weight: 800;
+    }
+    .party-note-event__type {
+        color: var(--event-color);
+        background: color-mix(in srgb, var(--event-color) 10%, white);
+        border: 1px solid color-mix(in srgb, var(--event-color) 24%, white);
+    }
+    .party-note-event__latest {
+        color: #fff;
+        background: #102f54;
+    }
+    .party-note-event__time {
+        margin-left: auto;
+        color: #637188;
+        font-size: 11px;
+        font-weight: 700;
+    }
+    .party-note-event__message {
+        margin: 9px 0 0;
+        color: #26374b;
+        font-size: 13px;
+        line-height: 1.55;
+    }
+    .party-note-facts {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+        margin: 10px 0 0;
+    }
+    .party-note-fact {
+        min-width: 0;
+        padding: 8px 9px;
+        border-radius: 8px;
+        background: #f5f8fc;
+        border: 1px solid #e4ebf3;
+    }
+    .party-note-fact dt {
+        margin: 0;
+        color: #6b778b;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .035em;
+        text-transform: uppercase;
+    }
+    .party-note-fact dd {
+        margin: 4px 0 0;
+        color: #152b46;
+        font-size: 12px;
+        line-height: 1.35;
+        font-weight: 700;
+        overflow-wrap: anywhere;
+    }
+    .party-note-empty {
+        padding: 18px;
+        color: #667085;
+        text-align: center;
     }
     .badge-row {
         margin-top: 2px;
@@ -451,6 +718,13 @@
         .customer-shell {
             padding: 0 2px;
         }
+        .party-note-facts {
+            grid-template-columns: 1fr;
+        }
+        .party-note-event__time {
+            width: 100%;
+            margin-left: 0;
+        }
     }
     @media (max-width: 560px) {
         .customer-hero__title {
@@ -571,8 +845,45 @@
                 <dd class="kv-grid__value kv-grid__note">{{ $customer->address ?: 'Not provided' }}</dd>
 
                 <dt class="kv-grid__label">Party note</dt>
-                <dd class="kv-grid__value kv-grid__note">
-                    {{ $customer->notes ?: 'No note' }}
+                <dd class="kv-grid__value kv-grid__note party-note-panel">
+                    @if ($partyNoteEvents->isNotEmpty())
+                        <div class="party-note-panel__head">
+                            <strong>Activity history</strong>
+                            <span>Newest first &bull; {{ $partyNoteEvents->count() }} {{ \Illuminate\Support\Str::plural('event', $partyNoteEvents->count()) }}</span>
+                        </div>
+                        <div class="party-note-timeline" tabindex="0" aria-label="Party activity history, newest event first">
+                            @foreach ($partyNoteEvents as $event)
+                                <article class="party-note-event party-note-event--{{ $event['tone'] }}">
+                                    <div class="party-note-event__card">
+                                        <header class="party-note-event__head">
+                                            <span class="party-note-event__type">{{ $event['title'] }}</span>
+                                            @if ($loop->first)
+                                                <span class="party-note-event__latest">Latest</span>
+                                            @endif
+                                            <time class="party-note-event__time" @if ($event['recorded_at']) datetime="{{ $event['recorded_at']->toIso8601String() }}" @endif>
+                                                {{ $event['recorded_at']?->format('d M Y, h:i A') ?? 'Date not recorded' }}
+                                            </time>
+                                        </header>
+                                        @if ($event['message'])
+                                            <p class="party-note-event__message">{{ $event['message'] }}</p>
+                                        @endif
+                                        @if (! empty($event['facts']))
+                                            <dl class="party-note-facts">
+                                                @foreach ($event['facts'] as $fact)
+                                                    <div class="party-note-fact">
+                                                        <dt>{{ $fact['label'] }}</dt>
+                                                        <dd>{{ $fact['value'] }}</dd>
+                                                    </div>
+                                                @endforeach
+                                            </dl>
+                                        @endif
+                                    </div>
+                                </article>
+                            @endforeach
+                        </div>
+                    @else
+                        <div class="party-note-empty">No activity note recorded.</div>
+                    @endif
                 </dd>
                 <dt class="kv-grid__label">MikroTik comment</dt>
                 <dd class="kv-grid__value kv-grid__note">

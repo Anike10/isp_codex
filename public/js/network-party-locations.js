@@ -176,6 +176,7 @@
         }
         if (dom.partyList) {
             dom.partyList.addEventListener('click', onPartyListClick);
+            dom.partyList.addEventListener('dblclick', onPartyListDblClick);
         }
         if (dom.cancelPlacementBtn) {
             dom.cancelPlacementBtn.addEventListener('click', cancelPartyLocationPlacement);
@@ -236,6 +237,20 @@
         if (action === 'remove') {
             removePartyLocation(customerId);
         }
+    }
+
+    function onPartyListDblClick(event) {
+        const inlineField = event.target.closest('[data-inline-field]');
+        if (!inlineField) {
+            return;
+        }
+
+        if (!dom.partyList?.contains(inlineField)) {
+            return;
+        }
+
+        event.preventDefault();
+        startInlineEdit(inlineField);
     }
 
     function onMapClick(event) {
@@ -451,40 +466,47 @@
             const properties = feature.properties || {};
             const customerId = String(properties.customer_id || '').trim();
             const label = formatPartyLabel(feature);
-            const partyName = formatPartyDisplayName(feature) || 'Name not provided';
+            const nameValue = String(formatPartyDisplayName(feature) || '').trim();
             const userName = formatPartyUserName(feature);
+            const phoneValue = String(properties.phone || '').trim();
+            const userIdValue = String(properties.connection_id || properties.mikrotik_username || '').trim();
             const statusText = formatPartyStatus(properties.status);
             const statusClass = formatPartyStatusClass(properties.status);
             const comment = formatPartyComment(feature);
             const hasLocation = customerHasLocation(feature);
             const locationText = hasLocation ? 'Location saved' : 'No location';
+            const inlineUpdateUrl = partyInlineUpdateUrl(feature);
+            const addressText = String(properties.address || '').trim();
 
             const details = compactJoin([
-                properties.phone ? `Mobile: ${properties.phone}` : '',
-                properties.connection_id ? `User ID: ${properties.connection_id}` : '',
-                properties.mikrotik_username ? `Mikrotik: ${properties.mikrotik_username}` : '',
-                properties.address ? `Address: ${properties.address}` : '',
+                addressText ? `Address: ${addressText}` : '',
+                comment ? `Comment: ${comment}` : '',
             ]);
 
             return `
                 <div class="party-list-item ${hasLocation ? 'has-location' : ''} ${String(state.selectedCustomerId) === customerId ? 'is-active' : ''}" data-customer-row="${escapeHtml(customerId)}">
                     <div class="party-list-title">${escapeHtml(label)}</div>
                     <div class="party-list-meta">
-                        <span>Name: ${escapeHtml(partyName)}</span>
+                        <span>Name: ${inlineFieldHtml('name', customerId, inlineUpdateUrl, nameValue, 'Not provided')}</span>
                         <span><span class="badge ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span></span>
                         <span>User: ${escapeHtml(userName)}</span>
+                        <span>Mobile: ${inlineFieldHtml('phone', customerId, inlineUpdateUrl, phoneValue, 'Not provided')}</span>
+                        <span>User ID: ${inlineFieldHtml('connection_id', customerId, inlineUpdateUrl, userIdValue, 'Not assigned')}</span>
                         <span>${escapeHtml(locationText)}</span>
-                        ${comment ? `<span>Comment: ${escapeHtml(comment)}</span>` : ''}
                         ${details ? `<span>${escapeHtml(details)}</span>` : ''}
                     </div>
                     <div class="party-list-actions">
                         <button type="button" class="search-result-action search-result-action--focus" data-party-action="focus" data-customer-id="${escapeHtml(customerId)}">View on map</button>
                         <button type="button" class="${hasLocation ? 'search-result-action' : 'search-result-action search-result-action--primary'}" data-party-action="${hasLocation ? 'edit' : 'add'}" data-customer-id="${escapeHtml(customerId)}">${hasLocation ? 'Edit location' : 'Add location'}</button>
+                        <button type="button" class="search-result-action" data-copy-party="${escapeHtml(customerId)}">Copy</button>
+                        <a href="#" class="search-result-action search-result-action--primary" data-whatsapp-share="${escapeHtml(customerId)}" data-share-label="${escapeHtml(label || 'Party')}" ${hasLocation ? '' : 'data-share-disabled=\"1\"'}>Hotspot share</a>
                         ${hasLocation ? `<button type="button" class="search-result-action search-result-action--danger" data-party-action="remove" data-customer-id="${escapeHtml(customerId)}">Delete location</button>` : ''}
                     </div>
                 </div>
             `;
         }).join('');
+
+        bindPartyListInlineActions();
     }
 
     function updatePartyStats() {
@@ -542,6 +564,10 @@
         const userName = formatPartyUserName(properties);
         const statusText = formatPartyStatus(properties.status);
         const statusClass = formatPartyStatusClass(properties.status);
+        const inlineUpdateUrl = partyInlineUpdateUrl(feature);
+        const phoneValue = String(properties.phone || '').trim();
+        const userIdValue = String(properties.connection_id || properties.mikrotik_username || '').trim();
+        const shareControls = shareButtonsMarkup(feature);
 
         if (state.popup) {
             state.popup.remove();
@@ -558,12 +584,14 @@
                     <span>${escapeHtml(userName)}</span>
                 </p>
                 <dl class="popup-details">
-                    <div><dt>Name</dt><dd>${escapeHtml(customerName || 'Not provided')}</dd></div>
-                    <div><dt>User Name</dt><dd>${escapeHtml(userName)}</dd></div>
+                    <div><dt>Name</dt><dd>${inlineFieldHtml('name', customerId, inlineUpdateUrl, String(customerName || ''), 'Not provided')}</dd></div>
+                    <div><dt>Party ID</dt><dd>${escapeHtml(formatPartyLabel(feature) || `Party #${customerId}`)}</dd></div>
+                    <div><dt>User Name</dt><dd>${inlineFieldHtml('connection_id', customerId, inlineUpdateUrl, userIdValue, 'Not assigned')}</dd></div>
                     <div><dt>Active Status</dt><dd><span class="badge ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span></dd></div>
                     <div><dt>Comment</dt><dd>${escapeHtml(properties.comment || 'Not provided')}</dd></div>
-                    <div><dt>Phone</dt><dd>${escapeHtml(properties.phone || 'Not provided')}</dd></div>
+                    <div><dt>Phone</dt><dd>${inlineFieldHtml('phone', customerId, inlineUpdateUrl, phoneValue, 'Not provided')}</dd></div>
                     <div><dt>Address</dt><dd>${escapeHtml(properties.address || 'Not provided')}</dd></div>
+                    <div><dt>Share</dt><dd>${shareControls}</dd></div>
                     <div><dt>Actions</dt><dd><button type="button" class="search-result-action search-result-action--primary" data-popup-action="edit" data-popup-party="${escapeHtml(customerId)}">Edit location</button> <button type="button" class="search-result-action search-result-action--danger" data-popup-action="remove" data-popup-party="${escapeHtml(customerId)}">Delete location</button></dd></div>
                 </dl>
             `)
@@ -572,6 +600,9 @@
         const popupElement = state.popup.getElement();
         const editButton = popupElement.querySelector('[data-popup-action="edit"]');
         const removeButton = popupElement.querySelector('[data-popup-action="remove"]');
+        const copyButton = popupElement.querySelector('[data-copy-party]');
+        const whatsappButton = popupElement.querySelector('[data-whatsapp-share]');
+        const copyTarget = findPartyFeature(customerId);
 
         if (editButton) {
             editButton.addEventListener('click', function () {
@@ -594,6 +625,23 @@
                 }
             });
         }
+
+        if (copyButton && copyTarget) {
+            copyButton.addEventListener('click', async function () {
+                await copyPartyShareText(buildPartyShareText(copyTarget), copyButton);
+            });
+        }
+
+        if (whatsappButton && copyTarget) {
+            bindPartyWhatsappButton(whatsappButton, copyTarget);
+            whatsappButton.addEventListener('click', (event) => {
+                if (!customerHasLocation(copyTarget)) {
+                    event.preventDefault();
+                }
+            });
+        }
+
+        bindPartyListInlineFields(popupElement);
     }
 
     function requestPartyLocationPlacement(customerId) {
@@ -789,6 +837,293 @@
         if (dom.searchStatus) {
             dom.searchStatus.hidden = true;
             dom.searchStatus.textContent = '';
+        }
+    }
+
+    function bindPartyListInlineActions() {
+        if (!dom.partyList) {
+            return;
+        }
+
+        dom.partyList.querySelectorAll('[data-copy-party]').forEach((button) => {
+            const feature = findPartyFeature(button.dataset.copyParty);
+            if (!feature) {
+                return;
+            }
+
+            button.addEventListener('click', async () => {
+                await copyPartyShareText(buildPartyShareText(feature), button);
+            }, { once: true });
+        });
+
+        dom.partyList.querySelectorAll('[data-whatsapp-share]').forEach((button) => {
+            const feature = findPartyFeature(button.dataset.whatsappShare);
+            if (!feature) {
+                return;
+            }
+
+            bindPartyWhatsappButton(button, feature);
+            button.addEventListener('click', (event) => {
+                if (!customerHasLocation(feature)) {
+                    event.preventDefault();
+                }
+            }, { once: true });
+        });
+    }
+
+    function bindPartyListInlineFields(container) {
+        const root = container || dom.partyList;
+        if (!root) {
+            return;
+        }
+
+        root.querySelectorAll('[data-inline-field]').forEach((field) => {
+            if (field.classList) {
+                field.classList.add('inline-edit-field');
+            }
+            field.title = 'Double click to edit';
+            field.addEventListener('dblclick', (event) => {
+                event.preventDefault();
+                startPartyInlineEdit(field);
+            }, { once: true });
+        });
+    }
+
+    function bindPartyWhatsappButton(button, feature) {
+        if (!button || !feature) {
+            return;
+        }
+
+        const hasLocation = customerHasLocation(feature);
+        const shareText = buildPartyShareText(feature);
+        button.href = hasLocation ? `https://wa.me/?text=${encodeURIComponent(shareText)}` : '#';
+        button.classList.toggle('is-disabled', !hasLocation);
+        button.setAttribute('aria-disabled', hasLocation ? 'false' : 'true');
+        if (hasLocation) {
+            button.removeAttribute('tabindex');
+        } else {
+            button.setAttribute('tabindex', '-1');
+        }
+    }
+
+    function shareButtonsMarkup(feature) {
+        const properties = feature?.properties || {};
+        const customerId = String(properties.customer_id || '').trim();
+        const hasLocation = customerHasLocation(feature);
+        const primaryClass = 'search-result-action search-result-action--primary';
+        const disabled = hasLocation ? '' : ' is-disabled';
+        return `<button type="button" class="${primaryClass}" data-copy-party="${escapeHtml(customerId)}">Copy</button><br><a href="#" class="${primaryClass}${disabled}" data-whatsapp-share="${escapeHtml(customerId)}"${hasLocation ? '' : ' data-share-disabled="1"'}>Hotspot share</a>`;
+    }
+
+    function partyInlineUpdateUrl(feature) {
+        const properties = feature?.properties || {};
+        const raw = String(properties.show_url || '').trim();
+        if (!raw) {
+            return '';
+        }
+
+        return raw.endsWith('/') ? `${raw}inline` : `${raw}/inline`;
+    }
+
+    function inlineFieldHtml(field, customerId, inlineUrl, value, emptyText) {
+        const cleanedValue = value === null || value === undefined ? '' : String(value);
+        const normalized = cleanedValue.trim();
+        const displayValue = normalized || emptyText;
+        const safeField = escapeHtml(field);
+        const safeCustomer = escapeHtml(customerId);
+        const safeUrl = escapeHtml(inlineUrl);
+        const safeDisplay = escapeHtml(displayValue);
+        const safeRaw = escapeHtml(normalized);
+        const safeEmpty = escapeHtml(emptyText);
+
+        return inlineUrl
+            ? `<span class="inline-edit-field" data-inline-field="${safeField}" data-inline-url="${safeUrl}" data-customer-id="${safeCustomer}" data-inline-value="${safeRaw}" data-inline-empty-text="${safeEmpty}">${safeDisplay}</span>`
+            : safeDisplay;
+    }
+
+    async function startPartyInlineEdit(fieldElement) {
+        const field = fieldElement?.dataset?.inlineField;
+        const customerId = fieldElement?.dataset?.customerId;
+        const inlineUrl = fieldElement?.dataset?.inlineUrl;
+        if (!field || !customerId || !inlineUrl) {
+            return;
+        }
+
+        const currentValue = fieldElement.dataset.inlineValue || '';
+        const emptyText = fieldElement.dataset.inlineEmptyText || 'Not provided';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentValue;
+        input.className = 'inline-edit-input';
+        input.autocomplete = 'off';
+        input.dataset.inlineInput = '1';
+
+        const restore = (value) => {
+            const normalized = value === null || value === undefined ? '' : String(value).trim();
+            fieldElement.textContent = normalized || emptyText;
+            fieldElement.dataset.inlineValue = normalized;
+        };
+
+        let isSaving = false;
+        const finish = async (shouldSave) => {
+            if (isSaving) {
+                return;
+            }
+
+            isSaving = true;
+            const nextValue = String(input.value || '').trim();
+            if (!shouldSave || nextValue === currentValue) {
+                restore(currentValue);
+                return;
+            }
+
+            try {
+                const response = await fetch(inlineUrl, {
+                    method: 'PATCH',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': config.csrfToken,
+                    },
+                    body: JSON.stringify({
+                        field,
+                        value: nextValue,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(await responseErrorMessage(response, 'Unable to update this value.'));
+                }
+
+                const payload = await response.json();
+                const value = payload.value;
+                upsertPartyFeatureValue(customerId, field, value);
+                restore(value);
+            } catch (error) {
+                setStatus(error.message);
+                restore(currentValue);
+            }
+        };
+
+        fieldElement.dataset.inlineEditing = '1';
+        fieldElement.replaceChildren(input);
+        input.focus();
+        input.select();
+
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                finish(true).then(() => {
+                    fieldElement.dataset.inlineEditing = '0';
+                });
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                finish(false);
+                fieldElement.dataset.inlineEditing = '0';
+            }
+        });
+        input.addEventListener('blur', () => {
+            finish(true);
+            fieldElement.dataset.inlineEditing = '0';
+        });
+    }
+
+    function upsertPartyFeatureValue(customerId, field, value) {
+        const normalized = value === null || value === undefined ? '' : String(value).trim();
+        const maps = [state.customers, state.allCustomers];
+        maps.forEach((collection) => {
+            const feature = collection.get(String(customerId));
+            if (!feature?.properties) {
+                return;
+            }
+
+            const properties = { ...feature.properties };
+            if (field === 'connection_id') {
+                properties.connection_id = normalized;
+                properties.mikrotik_username = normalized;
+            } else {
+                properties[field] = normalized;
+            }
+
+            collection.set(String(customerId), { ...feature, properties });
+        });
+
+        const activeFeature = state.customers.get(String(customerId));
+        renderPartyLocationSource();
+        renderPartyList();
+        updatePartyStats();
+
+        if (activeFeature && state.popup) {
+            openPartyPopup(activeFeature);
+        }
+    }
+
+    function findPartyFeature(customerId) {
+        const id = String(customerId || '').trim();
+        if (!id) {
+            return null;
+        }
+
+        return state.customers.get(id) || state.allCustomers.get(id) || null;
+    }
+
+    function buildPartyMapUrl(feature) {
+        const longitude = Number(feature?.geometry?.coordinates?.[0]);
+        const latitude = Number(feature?.geometry?.coordinates?.[1]);
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+            return '';
+        }
+
+        return `https://maps.google.com/?q=${latitude.toFixed(8)},${longitude.toFixed(8)}`;
+    }
+
+    function buildPartyShareText(feature) {
+        const properties = feature?.properties || {};
+        const name = formatPartyDisplayName(feature) || 'Not provided';
+        const phone = properties.phone || 'Not provided';
+        const userId = properties.connection_id || properties.mikrotik_username || 'Not assigned';
+        const statusText = formatPartyStatus(properties.status);
+        const mapUrl = buildPartyMapUrl(feature);
+        const address = properties.address || 'Not provided';
+        const customerLabel = formatPartyLabel(feature) || `Party #${properties.customer_id || 'Unknown'}`;
+
+        return [
+            customerLabel,
+            `Name: ${name}`,
+            `Mobile: ${phone}`,
+            `User ID: ${userId}`,
+            `Address: ${address}`,
+            `Active Status: ${statusText}`,
+            mapUrl ? `Map location: ${mapUrl}` : 'Map location: not set',
+        ].join('\n');
+    }
+
+    async function copyPartyShareText(text, triggerButton) {
+        if (!text) {
+            return;
+        }
+
+        const buttonOriginalText = triggerButton?.textContent || '';
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch (error) {
+            const fallback = document.createElement('textarea');
+            fallback.value = text;
+            fallback.setAttribute('readonly', 'readonly');
+            fallback.style.position = 'fixed';
+            fallback.style.opacity = '0';
+            document.body.appendChild(fallback);
+            fallback.select();
+            document.execCommand('copy');
+            fallback.remove();
+        }
+
+        if (triggerButton) {
+            triggerButton.textContent = 'Copied';
+            window.setTimeout(() => {
+                triggerButton.textContent = buttonOriginalText || 'Copy';
+            }, 1000);
         }
     }
 
