@@ -70,7 +70,11 @@ class InvoiceController extends Controller
                         });
                 });
             })
-            ->when($request->status, fn ($query, string $status) => $query->where('status', $status))
+            ->when($request->status, function ($query, string $status) {
+                return $status === 'unpaid_partial'
+                    ? $query->whereIn('status', ['unpaid', 'partial'])
+                    : $query->where('status', $status);
+            })
             ->when($request->billing_month, fn ($query, string $month) => $query->where('billing_month', $month))
             ->when($request->invoice_type, fn ($query, string $type) => $query->where('invoice_type', $type))
             ->when($request->final_state === 'draft', fn ($query) => $query->whereNull('finalized_at'))

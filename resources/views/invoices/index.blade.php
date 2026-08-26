@@ -249,6 +249,7 @@
         <label>Payment Status</label>
         <select name="status">
             <option value="">All statuses</option>
+            <option value="unpaid_partial" @selected(request('status') === 'unpaid_partial')>Unpaid / Partial</option>
             @foreach (['unpaid', 'partial', 'paid', 'returned'] as $status)
                 <option value="{{ $status }}" @selected(request('status') === $status)>{{ ucfirst($status) }}</option>
             @endforeach
