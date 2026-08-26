@@ -255,9 +255,13 @@ class MikrotikCustomerSyncService
         $profile = $inactive ? $router->inactive_pppoe_profile : ($package?->mikrotik_profile ?: $package?->name);
         $remoteAddress = $this->remoteAddressFor($customer, $package?->id);
 
+        if (! $inactive && strcasecmp(trim((string) $profile), trim((string) $router->inactive_pppoe_profile)) === 0) {
+            throw new RuntimeException("Package {$package->name} uses the reserved inactive PPPoE profile.");
+        }
+
         $existing = $client->command('/ppp/secret/print', [
             '?name' => $username,
-            '.proplist' => '.id,profile,disabled,remote-address',
+            '.proplist' => '.id,name,password,profile,service,comment,disabled,remote-address',
         ]);
 
         $this->ensurePppProfile(
@@ -291,16 +295,29 @@ class MikrotikCustomerSyncService
         }
 
         unset($payload['name']);
-        if (! $remoteAddress && $oldRemoteAddress) {
+        if (! $remoteAddress && $this->normalizeRemoteAddress($oldRemoteAddress)) {
             $payload['remote-address'] = '';
         }
 
-        $client->command('/ppp/secret/set', [
-            '.id' => $existing[0]['.id'],
-            ...$payload,
-        ]);
+        $changes = [];
+        foreach ($payload as $attribute => $value) {
+            if (! $this->secretAttributeMatches($attribute, $existing[0][$attribute] ?? null, $value)) {
+                $changes[$attribute] = $value;
+            }
+        }
 
-        if ($oldProfile !== $profile || $oldDisabled === 'true' || ($oldRemoteAddress ?: null) !== ($remoteAddress ?: null)) {
+        if ($changes !== []) {
+            $client->command('/ppp/secret/set', [
+                '.id' => $existing[0]['.id'],
+                ...$changes,
+            ]);
+        }
+
+        $profileChanged = trim((string) $oldProfile) !== trim((string) $profile);
+        $remoteAddressChanged = $this->normalizeRemoteAddress($oldRemoteAddress)
+            !== $this->normalizeRemoteAddress($remoteAddress);
+
+        if ($profileChanged || $this->routerBoolean($oldDisabled) || (! $inactive && $remoteAddressChanged)) {
             $this->disconnectActiveSession($client, $username);
         }
 
@@ -311,10 +328,14 @@ class MikrotikCustomerSyncService
     {
         $existing = $client->command('/ppp/profile/print', [
             '?name' => $profile,
-            '.proplist' => '.id,remote-address,rate-limit',
+            '.proplist' => '.id,name,remote-address,rate-limit',
         ]);
 
         if ($existing !== []) {
+            if (count($existing) !== 1 || trim((string) ($existing[0]['name'] ?? '')) !== trim($profile)) {
+                throw new RuntimeException("RouterOS returned a mismatched PPP profile while syncing {$profile}.");
+            }
+
             $changes = [];
             if ($defaultIpPool && ($existing[0]['remote-address'] ?? null) !== $defaultIpPool) {
                 $changes['remote-address'] = $defaultIpPool;
@@ -384,6 +405,31 @@ class MikrotikCustomerSyncService
         return preg_match('/^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/i', $callerId)
             ? strtoupper($callerId)
             : $callerId;
+    }
+
+    private function secretAttributeMatches(string $attribute, mixed $current, mixed $expected): bool
+    {
+        if ($attribute === 'disabled') {
+            return $this->routerBoolean($current) === $this->routerBoolean($expected);
+        }
+
+        if ($attribute === 'remote-address') {
+            return $this->normalizeRemoteAddress($current) === $this->normalizeRemoteAddress($expected);
+        }
+
+        return trim((string) $current) === trim((string) $expected);
+    }
+
+    private function routerBoolean(mixed $value): bool
+    {
+        return in_array(strtolower(trim((string) $value)), ['true', 'yes', '1', 'on'], true);
+    }
+
+    private function normalizeRemoteAddress(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return in_array($value, ['', '0.0.0.0'], true) ? null : $value;
     }
 
     private function disconnectActiveSession(RouterOsClient $client, string $username): void

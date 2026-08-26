@@ -110,6 +110,7 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
                 });
         })
         ->whereHas('customer', fn ($query) => $query
+            ->where('status', 'active')
             ->where('never_suspend', false)
             ->where(function ($query) use ($date) {
                 $query->whereNull('grace_until')
@@ -125,8 +126,20 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
         ->whereDate('grace_until', '<', $date)
         ->pluck('id');
 
+    $expiredValidityCustomerIds = Customer::query()
+        ->where('status', 'active')
+        ->where('never_suspend', false)
+        ->whereNotNull('service_valid_until')
+        ->whereDate('service_valid_until', '<', $date)
+        ->where(function ($query) use ($date) {
+            $query->whereNull('grace_until')
+                ->orWhereDate('grace_until', '<', $date);
+        })
+        ->pluck('id');
+
     $customerIds = $overdueCustomerIds
         ->merge($expiredGraceCustomerIds)
+        ->merge($expiredValidityCustomerIds)
         ->unique()
         ->values();
 
@@ -150,14 +163,18 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
                 }
 
                 $disabled++;
-                $this->line("{$customer->connection_id}: disabled for overdue invoice.");
+                $this->line("{$customer->connection_id}: disabled after billing or service expiry.");
             }
         });
 
-    $this->info("Overdue disable finished. Disabled customers: {$disabled}.");
+    $this->info("Billing/service expiry disable finished. Disabled customers: {$disabled}.");
 
     return self::SUCCESS;
-})->purpose('Disable non-special customers with overdue due invoices and sync MikroTik inactive profile');
+})->purpose('Disable non-special customers after billing or service expiry and sync MikroTik inactive profile');
+
+Schedule::command('billing:disable-overdue-customers')
+    ->hourly()
+    ->withoutOverlapping();
 
 Schedule::command('mikrotik:sync-router-users')
     ->hourly()
