@@ -123,6 +123,9 @@ Route::middleware('auth')->group(function () {
     Route::post('invoices/pay-selected', [InvoiceController::class, 'paySelected'])
         ->middleware('permission:manage_payments')
         ->name('invoices.pay-selected');
+    Route::post('invoices/{invoice}/pay-from-advance', [InvoiceController::class, 'payFromAdvance'])
+        ->middleware('permission:manage_payments')
+        ->name('invoices.pay-from-advance');
 
     Route::middleware('permission:manage_payments')->group(function () {
         Route::get('payments/{payment}/voucher', [PaymentController::class, 'voucher'])->name('payments.voucher');

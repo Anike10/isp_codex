@@ -479,6 +479,40 @@ class InvoiceController extends Controller
         return back()->with('success', $invoices->count().' selected invoice(s) paid with one payment.');
     }
 
+    public function payFromAdvance(Request $request, Invoice $invoice, PaymentService $paymentService)
+    {
+        $invoice->loadMissing('customer');
+
+        $dueAmount = round((float) $invoice->due_amount, 2);
+        $advanceBalance = round((float) $invoice->customer->account_balance, 2);
+        $amount = min($dueAmount, $advanceBalance);
+
+        if ($dueAmount <= 0) {
+            return back()->withErrors(['advance_payment' => 'This invoice is already paid.']);
+        }
+
+        if ($advanceBalance <= 0) {
+            return back()->withErrors(['advance_payment' => 'This party has no advance balance to apply.']);
+        }
+
+        try {
+            $paymentService->applyAdvanceToInvoice($invoice->customer, $invoice, [
+                'amount' => $amount,
+                'payment_date' => now()->toDateString(),
+                'note' => 'Paid from party advance balance from the invoice list.',
+                'entry_by' => $request->user()?->id,
+            ]);
+        } catch (InvalidArgumentException $exception) {
+            return back()->withErrors(['advance_payment' => $exception->getMessage()]);
+        }
+
+        $message = $amount >= $dueAmount
+            ? 'Invoice paid successfully from party advance balance.'
+            : 'Party advance balance applied successfully. The remaining invoice amount is still due.';
+
+        return back()->with('success', $message);
+    }
+
     public function copyForNextMonth(Invoice $invoice)
     {
         $invoice->loadMissing('items.product');

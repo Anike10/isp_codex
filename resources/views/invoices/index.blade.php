@@ -66,6 +66,27 @@
         font-size: 13px;
     }
 
+    .invoice-advance-payment {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 7px;
+        width: 100%;
+        margin-top: 7px;
+        padding-top: 7px;
+        border-top: 1px solid #d9e6df;
+        color: #17603a;
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .invoice-advance-payment .btn {
+        background: #17603a;
+        border-color: #17603a;
+        color: #fff;
+    }
+
     .invoice-table {
         overflow: visible;
     }
@@ -415,9 +436,7 @@
             </td>
             <td class="invoice-row-actions">
                 <div class="actions">
-                    <a class="btn light" href="{{ route('invoices.show', $invoice) }}">View</a>
                     @if (! $invoice->isFinalized())
-                        <a class="btn secondary" href="{{ route('invoices.edit', $invoice) }}">Edit</a>
                         @if ($canFinalizeInvoices)
                             <form method="post" action="{{ route('invoices.finalize', $invoice) }}" onsubmit="return confirm('Finalize {{ $invoice->invoice_no }}? You will not be able to edit it after finalizing.');">
                                 @csrf
@@ -431,6 +450,9 @@
                     <details class="action-menu">
                         <summary class="btn light">More</summary>
                         <div class="action-menu-panel">
+                            @if (! $invoice->isFinalized())
+                                <a class="btn secondary" href="{{ route('invoices.edit', $invoice) }}">Edit</a>
+                            @endif
                             <a class="btn light" href="{{ route('invoices.invoice', $invoice) }}" target="_blank">Print Bill</a>
                             <a class="btn light" href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank">Challan</a>
                             @if ($canManageInvoices)
@@ -442,6 +464,23 @@
                         </div>
                     </details>
                 </div>
+                @if ((float) $invoice->due_amount > 0 && (float) $invoice->customer->account_balance > 0)
+                    @php
+                        $advancePaymentAmount = min(
+                            round((float) $invoice->due_amount, 2),
+                            round((float) $invoice->customer->account_balance, 2)
+                        );
+                    @endphp
+                    <div class="invoice-advance-payment">
+                        <span>Advance: ৳ {{ number_format($invoice->customer->account_balance, 2) }}</span>
+                        @if ($canRecordPayments)
+                            <form method="post" action="{{ route('invoices.pay-from-advance', $invoice) }}" onsubmit="return confirm('Apply ৳ {{ number_format($advancePaymentAmount, 2) }} from this party advance balance to {{ $invoice->invoice_no }}?');">
+                                @csrf
+                                <button class="btn" type="submit">Pay From Advance</button>
+                            </form>
+                        @endif
+                    </div>
+                @endif
             </td>
         </tr>
     @empty
