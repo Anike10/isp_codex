@@ -21,6 +21,36 @@ class PaymentServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_invoice_detail_payment_form_includes_and_submits_the_owning_customer_id(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $user->permissions()->attach(Permission::where('name', 'manage_payments')->firstOrFail());
+        $customer = $this->createCustomer();
+        $invoice = $this->createInvoice($customer, '2026-08', 500, '2026-08-10');
+
+        $this->actingAs($user)
+            ->get(route('invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('name="customer_id" value="'.$customer->id.'"', false)
+            ->assertSee('name="invoice_id" value="'.$invoice->id.'"', false);
+
+        $this->post(route('payments.store'), [
+            'customer_id' => $customer->id,
+            'invoice_id' => $invoice->id,
+            'redirect_to' => 'invoice',
+            'amount' => 500,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-08-11',
+            'note' => 'Payment recorded from the invoice detail form.',
+        ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('invoices.show', $invoice));
+
+        $this->assertSame(0.0, (float) $invoice->refresh()->due_amount);
+        $this->assertSame('paid', $invoice->status);
+    }
+
     public function test_payment_from_invoice_page_pays_that_invoice_before_older_customer_dues(): void
     {
         $customer = $this->createCustomer();

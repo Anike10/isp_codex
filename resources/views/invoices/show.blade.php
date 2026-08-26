@@ -122,6 +122,7 @@
     <h2>Record Payment</h2>
     <form method="post" action="{{ route('payments.store') }}" class="form-grid" onsubmit="return confirm('Record this payment for {{ $invoice->invoice_no }}?');">
         @csrf
+        <input type="hidden" name="customer_id" value="{{ $invoice->customer_id }}">
         <input type="hidden" name="invoice_id" value="{{ $invoice->id }}">
         <input type="hidden" name="redirect_to" value="invoice">
 
