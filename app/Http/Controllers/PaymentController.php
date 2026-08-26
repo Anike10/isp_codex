@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\CustomerBalanceTransaction;
 use App\Models\Payment;
@@ -77,6 +78,10 @@ class PaymentController extends Controller
     {
         return view('payments.create', [
             'invoices' => Invoice::with('customer')->where('due_amount', '>', 0)->latest()->get(),
+            'customers' => Customer::query()
+                ->orderBy('name')
+                ->orderBy('id')
+                ->get(['id', 'name', 'phone', 'connection_id', 'account_balance']),
             'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
             'paymentDefault' => $preferenceService->forUser($request->user()),
         ]);
@@ -109,18 +114,22 @@ class PaymentController extends Controller
     public function store(Request $request, PaymentService $paymentService, PaymentAccountPreferenceService $preferenceService)
     {
         $data = $request->validate([
-            'invoice_id' => ['required', 'exists:invoices,id'],
+            'customer_id' => ['required', 'exists:customers,id'],
+            'invoice_id' => ['nullable', 'exists:invoices,id'],
             'amount' => ['required', 'numeric', 'min:1'],
             'payment_method' => ['required', 'in:cash,bkash,nagad,bank'],
             'payment_account_id' => ['nullable'],
             'new_account_name' => ['nullable', 'string', 'max:255'],
             'new_account_number' => ['nullable', 'string', 'max:100'],
             'payment_date' => ['required', 'date'],
+            'reference' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string'],
             'set_as_default' => ['nullable', 'boolean'],
         ]);
+        $invoiceId = $data['invoice_id'] ?? null;
+        $customerId = $data['customer_id'];
         $rememberAsDefault = $request->boolean('set_as_default');
-        unset($data['set_as_default']);
+        unset($data['invoice_id'], $data['customer_id'], $data['set_as_default']);
 
         if ($data['payment_method'] === 'cash') {
             $data['payment_account_id'] = null;
@@ -158,7 +167,37 @@ class PaymentController extends Controller
             $data['payment_account_id'] = $account->id;
         }
 
-        $invoice = Invoice::findOrFail($data['invoice_id']);
+        $customer = Customer::findOrFail($customerId);
+
+        if (! $invoiceId) {
+
+            try {
+                $paymentService->addAdvanceCredit($customer, $data);
+            } catch (InvalidArgumentException $exception) {
+                return back()->withInput()->withErrors(['amount' => $exception->getMessage()]);
+            }
+
+            $preferenceService->remember(
+                $request->user(),
+                $rememberAsDefault,
+                $data['payment_method'],
+                $data['payment_account_id']
+            );
+
+            return redirect()->route('payments.index')->with('success', 'Payment added to the party ledger successfully.');
+        }
+
+        $invoice = Invoice::query()
+            ->whereKey($invoiceId)
+            ->where('customer_id', $customer->id)
+            ->where('due_amount', '>', 0)
+            ->first();
+
+        if (! $invoice) {
+            return back()->withInput()->withErrors([
+                'invoice_id' => 'Please select a valid unpaid invoice for the selected party.',
+            ]);
+        }
 
         try {
             $paymentService->recordPayment($invoice, $data);
