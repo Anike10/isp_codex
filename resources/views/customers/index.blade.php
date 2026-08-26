@@ -381,7 +381,7 @@
                             <a href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}">Ledger</a>
                             <a href="{{ route('customers.show', $customer) }}">View</a>
                             <a href="{{ route('customers.edit', $customer) }}">Edit</a>
-                            <form method="post" action="{{ route('customers.destroy', $customer) }}" onsubmit="return confirm('Delete this party and keep all history?');">
+                            <form method="post" action="{{ route('customers.destroy', $customer) }}" onsubmit="return confirm('Delete this party, disconnect its active session, remove its MikroTik secret, and keep all App history?');">
                                 @csrf
                                 @method('delete')
                                 <button class="customer-action-delete" type="submit">Delete</button>

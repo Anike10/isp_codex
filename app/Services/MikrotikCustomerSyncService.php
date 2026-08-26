@@ -50,6 +50,65 @@ class MikrotikCustomerSyncService
         return implode(', ', [...$results, ...$failures]);
     }
 
+    public function remove(Customer $customer): string
+    {
+        $username = $customer->mikrotik_username ?: $customer->connection_id;
+        if (! $username) {
+            return 'skipped (no connection ID)';
+        }
+
+        $customer->loadMissing('mikrotikRouters');
+        $routers = $customer->mikrotikRouters->isNotEmpty()
+            ? $customer->mikrotikRouters->where('status', 'active')->sortBy('id')->values()
+            : ($customer->mikrotik_router_id
+                ? MikrotikRouter::whereKey($customer->mikrotik_router_id)->where('status', 'active')->get()
+                : MikrotikRouter::where('status', 'active')->orderBy('id')->get());
+
+        if ($routers->isEmpty()) {
+            throw new RuntimeException('No active MikroTik router configured.');
+        }
+
+        $results = [];
+        $failures = [];
+
+        foreach ($routers as $router) {
+            $client = new RouterOsClient;
+            $routerLabel = "{$router->name} ({$router->ip_address}:{$router->api_port})";
+
+            try {
+                $client->connect($router->ip_address, $router->api_port, $router->username, $router->apiPassword());
+                $this->disconnectActiveSession($client, $username);
+
+                $secrets = $client->command('/ppp/secret/print', [
+                    '?name' => $username,
+                    '.proplist' => '.id',
+                ]);
+
+                $removed = 0;
+                foreach ($secrets as $secret) {
+                    if (! isset($secret['.id'])) {
+                        continue;
+                    }
+
+                    $client->command('/ppp/secret/remove', ['.id' => $secret['.id']]);
+                    $removed++;
+                }
+
+                $results[] = "{$routerLabel}: {$removed} secret(s) removed";
+            } catch (Throwable $exception) {
+                $failures[] = "{$routerLabel}: ".$exception->getMessage();
+            } finally {
+                $client->close();
+            }
+        }
+
+        if ($failures !== []) {
+            throw new RuntimeException('MikroTik removal failed. '.implode(' | ', $failures));
+        }
+
+        return implode(', ', $results);
+    }
+
     public function syncRouter(MikrotikRouter $router): array
     {
         $client = new RouterOsClient;

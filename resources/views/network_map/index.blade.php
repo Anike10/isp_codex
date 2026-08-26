@@ -4,7 +4,7 @@
 
 @section('content')
     <link rel="stylesheet" href="{{ asset('css/maplibre-gl.css') }}?v=4.7.1">
-    <link rel="stylesheet" href="{{ asset('css/network-map.css') }}?v=20260826-13">
+    <link rel="stylesheet" href="{{ asset('css/network-map.css') }}?v=20260826-14">
 
     <section class="network-map-page">
         <aside class="network-sidebar">
@@ -153,5 +153,5 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map.js') }}?v=20260826-13"></script>
+    <script src="{{ asset('js/network-map.js') }}?v=20260826-14"></script>
 @endsection

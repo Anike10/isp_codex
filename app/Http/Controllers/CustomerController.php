@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -432,12 +433,34 @@ class CustomerController extends Controller
     public function destroy(Customer $customer)
     {
         $customerName = $customer->name;
+        $mikrotikResult = null;
+        $mikrotikWarning = null;
+
+        try {
+            $mikrotikResult = app(MikrotikCustomerSyncService::class)->remove($customer);
+        } catch (Throwable $exception) {
+            Log::error('Customer soft-deleted after MikroTik secret removal failed.', [
+                'customer_id' => $customer->id,
+                'customer_name' => $customer->name,
+                'mikrotik_username' => $customer->mikrotik_username ?: $customer->connection_id,
+                'mikrotik_router_id' => $customer->mikrotik_router_id,
+                'exception' => $exception,
+            ]);
+            $mikrotikWarning = 'Party was deleted, but its MikroTik secret could not be removed. The failure was written to the application log.';
+        }
 
         $customer->delete();
 
+        $message = "\"{$customerName}\" moved to deleted parties. ";
+        $message .= $mikrotikWarning
+            ? 'MikroTik removal failed and was logged. '
+            : "MikroTik secret removal result: {$mikrotikResult}. ";
+        $message .= 'You can still view its history from Deleted Parties.';
+
         return redirect()
             ->route('customers.deleted')
-            ->with('success', "\"{$customerName}\" moved to deleted parties. You can still view its history from Deleted Parties.");
+            ->with('success', $message)
+            ->with('warning', $mikrotikWarning);
     }
 
     public function deletedHistory(int $customerId)
