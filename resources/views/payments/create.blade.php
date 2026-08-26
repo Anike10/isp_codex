@@ -1,6 +1,71 @@
 @extends('layouts.app')
 
 @section('content')
+<style>
+    .payment-party-picker {
+        position: relative;
+    }
+
+    #partySuggestions {
+        display: none;
+        position: absolute;
+        z-index: 70;
+        right: 0;
+        left: 0;
+        top: calc(100% + 5px);
+        max-height: 360px;
+        overflow-y: auto;
+        border: 1px solid #c9d8d1;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 18px 38px rgba(17, 55, 42, 0.18);
+    }
+
+    #partySuggestions:not(:empty) {
+        display: block;
+    }
+
+    #partySuggestions button {
+        display: grid;
+        gap: 3px;
+        width: 100%;
+        padding: 11px 13px;
+        border: 0;
+        border-bottom: 1px solid #e4ece8;
+        color: #33473f;
+        background: #fff;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    #partySuggestions button:last-child {
+        border-bottom: 0;
+    }
+
+    #partySuggestions button:hover,
+    #partySuggestions button:focus-visible {
+        outline: 0;
+        background: #edf7f2;
+    }
+
+    #partySuggestions strong {
+        color: #163f30;
+        font-size: 14px;
+    }
+
+    .party-suggestion-detail {
+        color: #667a71;
+        font-size: 12px;
+        line-height: 1.35;
+    }
+
+    .party-suggestion-balance {
+        color: #14724d;
+        font-size: 12px;
+        font-weight: 800;
+    }
+</style>
+
 <div class="topbar">
     <div><h1>Record Payment</h1><div class="muted">Collect against an invoice or deposit directly to any party ledger</div></div>
     <a class="btn light" href="{{ route('payments.index') }}">Back</a>
@@ -37,7 +102,7 @@
 
 <form method="post" action="{{ route('payments.store') }}" class="card form-grid">
     @csrf
-    <div class="full" style="position:relative">
+    <div class="full payment-party-picker">
         <label>Party</label>
         <input id="partySearch" placeholder="Search by party name, connection ID, or phone" autocomplete="off">
         <input type="hidden" name="customer_id" id="partyId" value="{{ $selectedCustomerId }}">
@@ -167,7 +232,20 @@ function refreshPartySuggestions() {
         .forEach(party => {
             const button = document.createElement('button');
             button.type = 'button';
-            button.textContent = partyLabel(party);
+            const name = document.createElement('strong');
+            const connection = document.createElement('span');
+            const mobile = document.createElement('span');
+            const balance = document.createElement('span');
+
+            name.textContent = party.name || 'Unnamed party';
+            connection.className = 'party-suggestion-detail';
+            connection.textContent = `Connection ID: ${party.connection_id || 'Not assigned'}`;
+            mobile.className = 'party-suggestion-detail';
+            mobile.textContent = `Mobile: ${party.phone || 'Not provided'}`;
+            balance.className = 'party-suggestion-balance';
+            balance.textContent = `Advance Balance: BDT ${party.balance}`;
+
+            button.append(name, connection, mobile, balance);
             button.addEventListener('click', () => selectParty(party));
             partySuggestions.appendChild(button);
         });
