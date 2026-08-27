@@ -36,7 +36,9 @@ use App\Models\Warehouse;
 use App\Models\WarrantyClaim;
 use App\Models\WarrantyClaimLog;
 use App\Observers\EntryByObserver;
+use App\Observers\InternetPackageIpPoolObserver;
 use App\Observers\RecordVersionObserver;
+use App\Observers\SubscriptionIpObserver;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Schema;
@@ -119,5 +121,8 @@ class AppServiceProvider extends ServiceProvider
         ] as $model) {
             $model::observe(RecordVersionObserver::class);
         }
+
+        InternetPackage::observe(InternetPackageIpPoolObserver::class);
+        Subscription::observe(SubscriptionIpObserver::class);
     }
 }

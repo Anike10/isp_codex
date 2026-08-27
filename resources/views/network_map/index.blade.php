@@ -28,12 +28,12 @@
             <div class="tool-section">
                 <h2>Map Style</h2>
                 <div class="basemap-grid" id="basemapTools">
-                    <button type="button" class="basemap-tool active" data-basemap="voyager">Voyager</button>
+                    <button type="button" class="basemap-tool" data-basemap="voyager">Voyager</button>
                     <button type="button" class="basemap-tool" data-basemap="osm">OSM</button>
                     <button type="button" class="basemap-tool" data-basemap="light">Light</button>
                     <button type="button" class="basemap-tool" data-basemap="dark">Dark</button>
                     <button type="button" class="basemap-tool" data-basemap="satellite">Satellite</button>
-                    <button type="button" class="basemap-tool" data-basemap="google_road">Google Road</button>
+                    <button type="button" class="basemap-tool active" data-basemap="google_road">Google Road</button>
                     <button type="button" class="basemap-tool" data-basemap="google_satellite">Google Sat</button>
                 </div>
                 <form class="default-view-form" id="defaultViewForm">
@@ -153,5 +153,5 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map.js') }}?v=20260826-14"></script>
+    <script src="{{ asset('js/network-map.js') }}?v=20260827-15"></script>
 @endsection

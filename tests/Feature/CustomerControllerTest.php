@@ -168,6 +168,12 @@ class CustomerControllerTest extends TestCase
             'start_date' => '2026-07-01',
             'status' => 'active',
         ]);
+        $customer->update([
+            'learned_ip_address' => '10.10.0.25',
+            'learned_ip_package_id' => $packageOne->id,
+            'last_connected_ip' => '10.10.0.25',
+            'last_connected_at' => now(),
+        ]);
 
         $this->actingAs($user)->patchJson(route('customers.inline-update', $customer), [
             'field' => 'package',
@@ -178,6 +184,46 @@ class CustomerControllerTest extends TestCase
         $this->assertSame($packageTwo->id, $subscription->internet_package_id);
         $this->assertSame('active', $subscription->status);
         $this->assertNull($subscription->end_date);
+        $customer->refresh();
+        $this->assertNull($customer->learned_ip_address);
+        $this->assertNull($customer->learned_ip_package_id);
+        $this->assertNull($customer->last_connected_ip);
+        $this->assertNull($customer->last_connected_at);
+    }
+
+    public function test_parties_list_shows_last_dial_up_ip_only_for_dynamic_ip_users(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        Customer::create([
+            'name' => 'Dynamic IP Party',
+            'phone' => '01710000101',
+            'connection_id' => 'DYNAMIC-IP-USER',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'use_fixed_ip' => false,
+            'last_connected_ip' => '10.55.0.25',
+        ]);
+        Customer::create([
+            'name' => 'Fixed IP Party',
+            'phone' => '01710000102',
+            'connection_id' => 'FIXED-IP-USER',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'use_fixed_ip' => true,
+            'fixed_ip_address' => '10.66.0.10',
+            'last_connected_ip' => '10.66.0.99',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee('DYNAMIC-IP-USER')
+            ->assertSee('Last dial-up IP: 10.55.0.25')
+            ->assertSee('FIXED-IP-USER')
+            ->assertDontSee('Last dial-up IP: 10.66.0.99');
     }
 
     public function test_customer_show_displays_mikrotik_comment_from_imported_secret(): void
@@ -855,6 +901,59 @@ class CustomerControllerTest extends TestCase
                 ->assertSee('No paid month')
                 ->assertSee('Activate until')
                 ->assertSee('Grace already used');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_special_isp_customer_has_no_visible_or_filterable_validity_date(): void
+    {
+        Carbon::setTestNow('2026-08-27 10:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+            $normalCustomer = Customer::create([
+                'name' => 'Normal Expiry Party',
+                'phone' => '01710000001',
+                'connection_id' => 'NORMAL-EXPIRY',
+                'address' => 'Kushtia',
+                'status' => 'active',
+                'is_customer' => true,
+                'service_valid_until' => '2026-08-27',
+            ]);
+            $specialCustomer = Customer::create([
+                'name' => 'Special Expiry Party',
+                'phone' => '01710000002',
+                'connection_id' => 'SPECIAL-EXPIRY',
+                'address' => 'Kushtia',
+                'status' => 'active',
+                'is_customer' => true,
+                'never_suspend' => true,
+                'service_valid_until' => '2035-12-31',
+            ]);
+
+            $this->actingAs($user)
+                ->get(route('customers.index'))
+                ->assertOk()
+                ->assertViewHas('expirySummary', fn (array $summary) => $summary['today'] === 1)
+                ->assertSee($normalCustomer->name)
+                ->assertSee($specialCustomer->name)
+                ->assertSee('No validity limit')
+                ->assertDontSee('31/12/2035');
+
+            $this->actingAs($user)
+                ->get(route('customers.index', ['expiry_window' => 'today']))
+                ->assertOk()
+                ->assertSee($normalCustomer->name)
+                ->assertDontSee($specialCustomer->name);
+
+            $this->actingAs($user)
+                ->get(route('customers.show', $specialCustomer))
+                ->assertOk()
+                ->assertSee('No validity limit')
+                ->assertDontSee('31/12/2035')
+                ->assertDontSee('Force validity date');
         } finally {
             Carbon::setTestNow();
         }

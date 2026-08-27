@@ -19,7 +19,7 @@ credentials are needed.
 
 ```text
 Domain: isp.us.com.bd
-Proxmox SSH host: 162.4.6.8:22
+Proxmox SSH host: 162.4.6.8:2233
 SSH user: root
 Production VM: 102 (anike-CyberPanel-Hosting)
 VM private IP: 192.168.8.252
@@ -36,7 +36,7 @@ Known SSH host key fingerprint:
 SHA256:ajsC09Yg/+hgcn2YAETDOYavBgcqxEqQDQcyeYRd33c
 ```
 
-The fingerprint is for the Proxmox host on port 22. Never store its root
+The fingerprint is for the Proxmox host on port 2233. Never store its root
 password in this repository. Obtain it from the owner/approved secret source.
 
 Important state observed on 2026-07-18: the VM checkout contains many
@@ -97,13 +97,13 @@ access. Do not deploy unpushed local-only changes unless there is an emergency.
 Windows PowerShell with PuTTY (connects to the Proxmox host):
 
 ```powershell
-& 'C:\Program Files\PuTTY\plink.exe' -P 22 -ssh root@162.4.6.8 -hostkey 'SHA256:ajsC09Yg/+hgcn2YAETDOYavBgcqxEqQDQcyeYRd33c'
+& 'C:\Program Files\PuTTY\plink.exe' -P 2233 -ssh root@162.4.6.8 -hostkey 'SHA256:ajsC09Yg/+hgcn2YAETDOYavBgcqxEqQDQcyeYRd33c'
 ```
 
 OpenSSH:
 
 ```bash
-ssh root@162.4.6.8
+ssh -p 2233 root@162.4.6.8
 ```
 
 The Laravel app is inside VM 102, not on the Proxmox host filesystem. Run app
@@ -217,7 +217,7 @@ Current UI is Blade/CSS only, so no frontend build is normally required.
 Use this only after the code is committed and pushed to GitHub.
 
 ```powershell
-& 'C:\Program Files\PuTTY\plink.exe' -P 22 -ssh root@162.4.6.8 -hostkey 'SHA256:ajsC09Yg/+hgcn2YAETDOYavBgcqxEqQDQcyeYRd33c' "qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git pull --ff-only origin main && php artisan optimize:clear'"
+& 'C:\Program Files\PuTTY\plink.exe' -P 2233 -ssh root@162.4.6.8 -hostkey 'SHA256:ajsC09Yg/+hgcn2YAETDOYavBgcqxEqQDQcyeYRd33c' "qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git pull --ff-only origin main && php artisan optimize:clear'"
 ```
 
 If the server asks for a sudo password, enter it interactively. Do not place the

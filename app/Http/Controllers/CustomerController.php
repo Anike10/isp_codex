@@ -28,7 +28,9 @@ class CustomerController extends Controller
         $hasImportedSecretTable = $this->hasImportedSecretTable();
         $perPage = $this->perPage($request, 200);
         $today = now()->toDateString();
-        $expiryCountQuery = Customer::query()->whereNotNull('service_valid_until');
+        $expiryCountQuery = Customer::query()
+            ->where('never_suspend', false)
+            ->whereNotNull('service_valid_until');
         $expirySummary = [
             'expired_last_7' => (clone $expiryCountQuery)
                 ->whereDate('service_valid_until', '>=', now()->subDays(7)->toDateString())
@@ -232,6 +234,8 @@ class CustomerController extends Controller
             if ($oldPackageId !== $newPackageId || $connectionChanged || $switchedFromFixedToDynamic) {
                 $customerData['learned_ip_address'] = null;
                 $customerData['learned_ip_package_id'] = null;
+                $customerData['last_connected_ip'] = null;
+                $customerData['last_connected_at'] = null;
             }
 
             RecordVersionObserver::withoutRecording(fn () => $customer->update($customerData));
@@ -867,6 +871,9 @@ class CustomerController extends Controller
             ->when($request->query('due_state') === 'advance', fn ($query) => $query->where('account_balance', '>', 0))
             ->when($hasImportedSecretTable, function ($query) {
                 return $query->withExists('importedSecret');
+            })
+            ->when($expiryWindow || $expiringDate || $expiredDate, function ($query) {
+                $query->where('never_suspend', false);
             })
             ->when($expiryWindow === 'expired_last_7', function ($query) {
                 $query->whereNotNull('service_valid_until')

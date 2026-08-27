@@ -251,7 +251,7 @@ https://isp.us.com.bd
 Production server/app details:
 
 ```text
-Proxmox SSH host: 162.4.6.8:22
+Proxmox SSH host: 162.4.6.8:2233
 SSH user: root (credential from approved secret source only)
 Production VM: 102
 Laravel root inside VM: /home/isp.us.com.bd/isp_codex
@@ -274,7 +274,7 @@ Minimum deploy flow:
 ```bash
 php artisan test
 git push origin main
-ssh root@162.4.6.8
+ssh -p 2233 root@162.4.6.8
 qm status 102
 qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/isp_codex && git status -sb'
 ```
@@ -1240,6 +1240,9 @@ Read this section before changing billing, bKash SMS, customer status, or MikroT
 - Customer `connection_id` is optional for product-only customers who are not ISP subscribers.
 - When assigning an internet package/subscription, `connection_id` is required because it becomes the ISP/MikroTik user ID.
 - Customer `mikrotik_username` is displayed as User ID on `/customers`; if missing, use `connection_id`; if both are missing, treat the customer as product-only.
+- Customers without a fixed IP show their latest dial-up/learned IP beneath the User ID on `/customers`; fixed-IP customers do not show that secondary value.
+- Customer and network location maps open with the Google Roads layer selected by default.
+- `never_suspend` (Special ISP) customers have no validity deadline. Customer lists, filters, summaries, forms, and details must not present an expiry date for them.
 - The `customers` table also acts as the party ledger. Use `is_customer` and `is_vendor` to classify parties as customer, vendor, or both.
 - A party must have at least one role selected. Vendor-only parties can be used for wholesale purchase bill entry.
 - Default customer MikroTik/PPPoE password is `4321`.
@@ -1390,6 +1393,9 @@ PPPoE sync:
 - Inactive/due/no-package customers are not disabled.
 - Inactive users are moved to the router's `inactive_pppoe_profile`.
 - If a profile/status changes, remove the active PPP session from `/ppp/active` so the new profile applies after reconnect.
+- When a customer's package changes, clear its learned/current dynamic IP before synchronization because the replacement package may use a different address pool.
+- When a package's `default_ip_pool` changes, clear the learned/current IP for every dynamic-IP subscriber on that package. Fixed IP assignments remain unchanged.
+- A dial-up IP may be learned or pinned only when it belongs to the current package pool ranges stored in `app_ip_pools`. If a learned address or active session is outside those ranges, clear the stale App value, unset the secret's remote address, and disconnect the session so RouterOS can reconnect it from the correct pool.
 - If one router fails, sync should continue on other eligible routers.
 - A router marked inactive from `/mikrotik-routers` is temporarily disabled:
   live connection checks return `Inactive`, and scheduled/customer PPPoE sync

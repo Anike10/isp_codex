@@ -148,6 +148,26 @@ class PackageControllerTest extends TestCase
             'name' => 'Inline Pool Plan', 'speed' => '30 Mbps', 'mikrotik_profile' => 'inline30',
             'default_ip_pool' => 'home-pool', 'monthly_price' => 1000, 'status' => 'active',
         ]);
+        $customer = Customer::create([
+            'name' => 'Inline Pool Customer',
+            'phone' => '01700000009',
+            'connection_id' => 'inline-pool-customer',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+        Subscription::create([
+            'customer_id' => $customer->id,
+            'internet_package_id' => $package->id,
+            'start_date' => now()->toDateString(),
+            'status' => 'active',
+        ]);
+        $customer->update([
+            'learned_ip_address' => '10.20.0.25',
+            'learned_ip_package_id' => $package->id,
+            'last_connected_ip' => '10.20.0.25',
+            'last_connected_at' => now(),
+        ]);
 
         $this->actingAs($user)->patchJson(route('packages.inline-update', $package), [
             'field' => 'default_ip_pool',
@@ -157,6 +177,11 @@ class PackageControllerTest extends TestCase
             'value' => 'business-pool',
         ]);
         $this->assertSame('business-pool', $package->fresh()->default_ip_pool);
+        $customer->refresh();
+        $this->assertNull($customer->learned_ip_address);
+        $this->assertNull($customer->learned_ip_package_id);
+        $this->assertNull($customer->last_connected_ip);
+        $this->assertNull($customer->last_connected_at);
 
         $this->actingAs($user)->patchJson(route('packages.inline-update', $package), [
             'field' => 'default_ip_pool',
@@ -195,6 +220,12 @@ class PackageControllerTest extends TestCase
             'customer_id' => $customer->id, 'internet_package_id' => $assigned->id,
             'start_date' => now()->toDateString(), 'status' => 'active',
         ]);
+        $customer->update([
+            'learned_ip_address' => '10.70.0.20',
+            'learned_ip_package_id' => $assigned->id,
+            'last_connected_ip' => '10.70.0.20',
+            'last_connected_at' => now(),
+        ]);
 
         $this->actingAs($user)->delete(route('packages.destroy', $assigned))
             ->assertSessionHas('error', fn ($message) => str_contains($message, "Package 'Assigned Legacy'"));
@@ -217,5 +248,10 @@ class PackageControllerTest extends TestCase
 
         $this->assertDatabaseMissing('internet_packages', ['id' => $assigned->id]);
         $this->assertSame($replacement->id, $subscription->fresh()->internet_package_id);
+        $customer->refresh();
+        $this->assertNull($customer->learned_ip_address);
+        $this->assertNull($customer->learned_ip_package_id);
+        $this->assertNull($customer->last_connected_ip);
+        $this->assertNull($customer->last_connected_at);
     }
 }

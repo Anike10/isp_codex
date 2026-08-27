@@ -246,8 +246,8 @@
     @forelse ($customers as $customer)
         @php
             $netBalance = (float) $customer->account_balance - (float) ($customer->total_due_amount ?? 0);
-            $activeUntil = $customer->activeUntil();
-            $daysRemaining = $customer->activeDaysRemaining();
+            $activeUntil = $customer->never_suspend ? null : $customer->activeUntil();
+            $daysRemaining = $customer->never_suspend ? null : $customer->activeDaysRemaining();
             $assignedSubscription = $customer->activeSubscription ?: $customer->latestSubscription;
             $inactiveSince = $activeUntil && $daysRemaining < 0
                 ? $activeUntil->copy()->startOfDay()
@@ -279,7 +279,12 @@
                     <span class="badge special">Special ISP</span>
                 @endif
             </td>
-            <td>{{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}</td>
+            <td>
+                {{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}
+                @if (! $customer->use_fixed_ip && ($customer->mikrotik_username || $customer->connection_id))
+                    <div class="muted">Last dial-up IP: {{ $customer->last_connected_ip ?: 'Not learned yet' }}</div>
+                @endif
+            </td>
             <td @if(! $showDeletedCustomers) data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif data-package-id="{{ $assignedSubscription?->internet_package_id }}">
                 @php $currentPackageName = $assignedSubscription?->package?->name ?: 'No package'; @endphp
                 <span data-inline-value>{{ $currentPackageName }}</span>
@@ -307,7 +312,10 @@
                 @if ($showDeletedCustomers)
                     <span class="muted">Deleted</span>
                 @else
-                @if ($customer->status === 'active' && $activeUntil)
+                @if ($customer->never_suspend)
+                    <span class="badge special">Special ISP</span>
+                    <div class="muted">No validity limit</div>
+                @elseif ($customer->status === 'active' && $activeUntil)
                     <strong>{{ $activeUntil->format('d/m/Y') }}</strong>
                     @if ($daysRemaining > 0)
                         <div class="muted">{{ $daysRemaining }} days left</div>

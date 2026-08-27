@@ -69,7 +69,7 @@
                     id: `party-basemap-${key}`,
                     type: 'raster',
                     source: `party-basemap-${key}`,
-                    layout: { visibility: key === 'voyager' ? 'visible' : 'none' },
+                    layout: { visibility: key === 'google_road' ? 'visible' : 'none' },
                 })),
             },
             center: saved ? [saved.longitude, saved.latitude] : fallbackCenter,

@@ -9,8 +9,9 @@
         || auth()->user()?->hasPermission('manage_warranty_claims')
         || auth()->user()?->hasPermission('manage_products');
 
-    $activeUntil = $customer->activeUntil();
-    $daysRemaining = $customer->activeDaysRemaining();
+    $isSpecial = (bool) $customer->never_suspend;
+    $activeUntil = $isSpecial ? null : $customer->activeUntil();
+    $daysRemaining = $isSpecial ? null : $customer->activeDaysRemaining();
     $totalDue = (float) $customer->invoices->sum('due_amount');
     $netBalance = (float) $customer->account_balance - $totalDue;
     $serviceSubscription = $customer->activeSubscription ?: $customer->subscriptions->sortByDesc('id')->first();
@@ -33,12 +34,14 @@
     }
 
     $daysLeftLabel = match (true) {
+        $isSpecial => 'No auto suspension',
         $daysRemaining === null => 'No active validity found',
         $daysRemaining < 0 => 'Expired '.abs($daysRemaining).' day(s) ago',
         $daysRemaining === 0 => 'Last day',
         default => $daysRemaining.' day(s) remaining',
     };
     $validityTone = match (true) {
+        $isSpecial => 'success',
         $daysRemaining === null => 'neutral',
         $daysRemaining < 0 => 'danger',
         $daysRemaining <= 3 => 'warning',
@@ -777,9 +780,15 @@
                 <div class="hero-kpi__meta">{{ $daysLeftLabel }}</div>
             </div>
             <div class="hero-kpi">
-                <div class="hero-kpi__label">Validity until</div>
-                <div class="hero-kpi__value">{{ $activeUntil?->format('d/m/Y') ?? 'Not set' }}</div>
-                <div class="hero-kpi__meta">Expires in: {{ $daysLeftLabel }}</div>
+                @if ($isSpecial)
+                    <div class="hero-kpi__label">Suspension rule</div>
+                    <div class="hero-kpi__value">Special ISP</div>
+                    <div class="hero-kpi__meta">No validity limit</div>
+                @else
+                    <div class="hero-kpi__label">Validity until</div>
+                    <div class="hero-kpi__value">{{ $activeUntil?->format('d/m/Y') ?? 'Not set' }}</div>
+                    <div class="hero-kpi__meta">Expires in: {{ $daysLeftLabel }}</div>
+                @endif
             </div>
             <div class="hero-kpi">
                 <div class="hero-kpi__label">Current due</div>
@@ -861,7 +870,7 @@
                                                 <span class="party-note-event__latest">Latest</span>
                                             @endif
                                             <time class="party-note-event__time" @if ($event['recorded_at']) datetime="{{ $event['recorded_at']->toIso8601String() }}" @endif>
-                                                {{ $event['recorded_at']?->format('d M Y, h:i A') ?? 'Date not recorded' }}
+                                                {{ $event['recorded_at']?->format('d/m/Y, h:i A') ?? 'Date not recorded' }}
                                             </time>
                                         </header>
                                         @if ($event['message'])
@@ -895,8 +904,8 @@
         <article class="customer-card">
             <h2 class="customer-card__heading">Billing &amp; Package Info</h2>
             <div class="stat-pill {{ $validityTone }}">
-                <span>Validity status:</span>
-                <strong class="stat-pill__big" style="margin-left:6px;">{{ $daysLeftLabel }}</strong>
+                <span>{{ $isSpecial ? 'Special ISP customer:' : 'Validity status:' }}</span>
+                <strong class="stat-pill__big" style="margin-left:6px;">{{ $isSpecial ? 'No validity limit' : $daysLeftLabel }}</strong>
             </div>
             <dl class="kv-grid" style="margin-top:10px;">
                 <dt class="kv-grid__label">Current package</dt>
@@ -910,13 +919,15 @@
                     @endif
                 </dd>
 
-                <dt class="kv-grid__label">Validity until</dt>
-                <dd class="kv-grid__value">
-                    {{ $activeUntil?->format('d/m/Y') ?? 'Not set' }}
-                    @if ($customer->hasActiveGracePeriod())
-                        <div class="muted">Grace until: {{ $customer->grace_until?->format('d/m/Y') }}</div>
-                    @endif
-                </dd>
+                @unless ($isSpecial)
+                    <dt class="kv-grid__label">Validity until</dt>
+                    <dd class="kv-grid__value">
+                        {{ $activeUntil?->format('d/m/Y') ?? 'Not set' }}
+                        @if ($customer->hasActiveGracePeriod())
+                            <div class="muted">Grace until: {{ $customer->grace_until?->format('d/m/Y') }}</div>
+                        @endif
+                    </dd>
+                @endunless
 
                 <dt class="kv-grid__label">Advance balance</dt>
                 <dd class="kv-grid__value">৳ {{ number_format((float) $customer->account_balance, 2) }}</dd>
@@ -931,23 +942,25 @@
                 <dd class="kv-grid__value">৳ {{ number_format($customer->invoices->sum('total'), 2) }}</dd>
             </dl>
 
-            <div class="form-panel">
-                <h3 class="form-panel__title">Force validity date</h3>
-                <form method="post" action="{{ route('customers.service-validity.update', $customer) }}" class="form-grid-2">
-                    @csrf
-                    <div>
-                        <label>New validity date</label>
-                        <input type="date" name="service_valid_until" value="{{ old('service_valid_until', $customer->service_valid_until?->format('Y-m-d')) }}" required>
-                    </div>
-                    <div>
-                        <label>Reason / note</label>
-                        <input type="text" name="validity_note" value="{{ old('validity_note') }}" placeholder="Reason is required" required>
-                    </div>
-                    <div class="action-row" style="grid-column:1/-1">
-                        <button class="btn secondary" type="submit">Save validity</button>
-                    </div>
-                </form>
-            </div>
+            @unless ($isSpecial)
+                <div class="form-panel">
+                    <h3 class="form-panel__title">Force validity date</h3>
+                    <form method="post" action="{{ route('customers.service-validity.update', $customer) }}" class="form-grid-2">
+                        @csrf
+                        <div>
+                            <label>New validity date</label>
+                            <input type="date" name="service_valid_until" value="{{ old('service_valid_until', $customer->service_valid_until?->format('Y-m-d')) }}" required>
+                        </div>
+                        <div>
+                            <label>Reason / note</label>
+                            <input type="text" name="validity_note" value="{{ old('validity_note') }}" placeholder="Reason is required" required>
+                        </div>
+                        <div class="action-row" style="grid-column:1/-1">
+                            <button class="btn secondary" type="submit">Save validity</button>
+                        </div>
+                    </form>
+                </div>
+            @endunless
 
             @if ($servicePackage && (float) $customer->account_balance >= (float) ($servicePackage->monthly_price ?: 0))
                 <div class="form-panel">

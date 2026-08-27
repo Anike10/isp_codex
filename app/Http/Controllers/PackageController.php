@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AppIpPool;
+use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\MikrotikImportedProfile;
 use App\Models\MikrotikRouter;
@@ -146,11 +147,26 @@ class PackageController extends Controller
 
             $replacement = InternetPackage::findOrFail($replacementId);
             $subscriptionCount = Subscription::query()->whereIn('internet_package_id', $packageIds)->count();
-            DB::transaction(function () use ($packageIds, $packages, $replacementId): void {
+            $activeCustomerIds = Subscription::query()
+                ->whereIn('internet_package_id', $packageIds)
+                ->where('status', 'active')
+                ->distinct()
+                ->pluck('customer_id');
+
+            DB::transaction(function () use ($packageIds, $packages, $replacementId, $activeCustomerIds): void {
                 Subscription::query()->whereIn('internet_package_id', $packageIds)->update([
                     'internet_package_id' => $replacementId,
                     'updated_at' => now(),
                 ]);
+                Customer::query()
+                    ->whereIn('id', $activeCustomerIds)
+                    ->where('use_fixed_ip', false)
+                    ->update([
+                        'learned_ip_address' => null,
+                        'learned_ip_package_id' => null,
+                        'last_connected_ip' => null,
+                        'last_connected_at' => null,
+                    ]);
                 $packages->each->delete();
             });
 

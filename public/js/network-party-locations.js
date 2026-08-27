@@ -70,7 +70,7 @@
 
     const state = {
         map: null,
-        activeBasemap: 'voyager',
+        activeBasemap: 'google_road',
         allCustomers: new Map(),
         customers: new Map(),
         pendingPartyLocationCustomerId: null,

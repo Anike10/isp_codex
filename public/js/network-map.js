@@ -12,7 +12,7 @@
 
     const state = {
         map: null,
-        activeBasemap: 'voyager',
+        activeBasemap: 'google_road',
         activeTool: null,
         activeNodeType: null,
         draftLine: [],

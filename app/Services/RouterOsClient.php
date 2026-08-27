@@ -40,6 +40,7 @@ class RouterOsClient
         $this->writeSentence($words);
 
         $responses = [];
+        $trapMessage = null;
 
         while (true) {
             $sentence = $this->readSentence();
@@ -52,11 +53,30 @@ class RouterOsClient
             $data = $this->parseAttributes($sentence);
 
             if ($reply === '!trap') {
+                // RouterOS terminates a trapped command with a trailing !done.
+                // Keep reading until that terminator so the next command cannot
+                // consume this command's !done and shift the response stream.
+                $trapMessage ??= $this->formatTrapExceptionMessage($data);
+
+                continue;
+            }
+
+            if ($reply === '!fatal') {
                 throw new RuntimeException($this->formatTrapExceptionMessage($data));
             }
 
             if ($reply === '!done') {
+                if ($trapMessage !== null) {
+                    throw new RuntimeException($trapMessage);
+                }
+
                 return $responses;
+            }
+
+            // RouterOS 7.18+ may emit !empty before the final !done for
+            // commands that do not return data.
+            if ($reply === '!empty') {
+                continue;
             }
 
             if ($reply === '!re') {
@@ -157,7 +177,7 @@ class RouterOsClient
         }
     }
 
-    private function writeSentence(array $words): void
+    protected function writeSentence(array $words): void
     {
         foreach ($words as $word) {
             $this->writeLength(strlen($word));
@@ -167,7 +187,7 @@ class RouterOsClient
         $this->writeLength(0);
     }
 
-    private function readSentence(): array
+    protected function readSentence(): array
     {
         $sentence = [];
 

@@ -49,7 +49,7 @@
         <strong>Map Style</strong>
         <div class="party-map-style-options">
             @foreach (['voyager' => 'Voyager', 'osm' => 'OSM', 'light' => 'Light', 'dark' => 'Dark', 'satellite' => 'Satellite', 'google_road' => 'Google Road', 'google_satellite' => 'Google Sat'] as $styleKey => $styleLabel)
-                <button type="button" data-map-style="{{ $styleKey }}" class="{{ $styleKey === 'voyager' ? 'active' : '' }}">{{ $styleLabel }}</button>
+                <button type="button" data-map-style="{{ $styleKey }}" class="{{ $styleKey === 'google_road' ? 'active' : '' }}">{{ $styleLabel }}</button>
             @endforeach
         </div>
     </div>
@@ -78,4 +78,4 @@
 </section>
 
 <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-<script src="{{ asset('js/customer-location-map.js') }}?v=20260813-5"></script>
+<script src="{{ asset('js/customer-location-map.js') }}?v=20260827-6"></script>

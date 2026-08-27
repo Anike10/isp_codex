@@ -44,6 +44,17 @@ class NetworkMapControllerTest extends TestCase
         $this->assertStringContainsString("'line-offset': ['coalesce', ['get', '_map_line_offset'], 0]", $script);
         $this->assertStringContainsString('return completedCore.color_hex', $script);
         $this->assertStringNotContainsString("window.prompt('Fiber core number or color", $script);
+        $this->assertStringContainsString("activeBasemap: 'google_road'", $script);
+
+        $partyLocationsScript = File::get(public_path('js/network-party-locations.js'));
+        $customerLocationScript = File::get(public_path('js/customer-location-map.js'));
+        $networkMapView = File::get(resource_path('views/network_map/index.blade.php'));
+        $partyLocationsView = File::get(resource_path('views/network_map/party_locations.blade.php'));
+
+        $this->assertStringContainsString("activeBasemap: 'google_road'", $partyLocationsScript);
+        $this->assertStringContainsString("visibility: key === 'google_road'", $customerLocationScript);
+        $this->assertStringContainsString('class="basemap-tool active" data-basemap="google_road"', $networkMapView);
+        $this->assertStringContainsString('class="basemap-tool active" data-basemap="google_road"', $partyLocationsView);
     }
 
     public function test_network_map_topology_can_be_saved_and_returned_as_geojson(): void
