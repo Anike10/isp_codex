@@ -9,6 +9,12 @@
         || auth()->user()?->hasPermission('manage_warranty_claims')
         || auth()->user()?->hasPermission('manage_products');
 
+    $authUser = auth()->user();
+    $canGrantGrace = (bool) $authUser?->hasPermission('grant_grace_period');
+    $canOverrideValidity = (bool) $authUser?->hasPermission('override_service_validity');
+    $canQuickActivate = (bool) $authUser?->hasPermission('quick_activate_service');
+    $canForceStatus = (bool) $authUser?->hasPermission('force_service_status');
+
     $isSpecial = (bool) $customer->never_suspend;
     $activeUntil = $isSpecial ? null : $customer->activeUntil();
     $daysRemaining = $isSpecial ? null : $customer->activeDaysRemaining();
@@ -942,7 +948,7 @@
                 <dd class="kv-grid__value">৳ {{ number_format($customer->invoices->sum('total'), 2) }}</dd>
             </dl>
 
-            @unless ($isSpecial)
+            @if (! $isSpecial && $canOverrideValidity)
                 <div class="form-panel">
                     <h3 class="form-panel__title">Force validity date</h3>
                     <form method="post" action="{{ route('customers.service-validity.update', $customer) }}" class="form-grid-2">
@@ -960,7 +966,7 @@
                         </div>
                     </form>
                 </div>
-            @endunless
+            @endif
 
             @if ($servicePackage && (float) $customer->account_balance >= (float) ($servicePackage->monthly_price ?: 0))
                 <div class="form-panel">
@@ -979,32 +985,34 @@
                 </div>
             @endif
 
-            <div class="form-panel">
-                <h3 class="form-panel__title">Service control</h3>
-                @if ($customer->status === 'active')
-                    <form method="post" action="{{ route('customers.force-inactive', $customer) }}" class="form-grid-2" onsubmit="return confirm('Temporarily make this service inactive now?')">
-                        @csrf
-                        <div style="grid-column:1/-1">
-                            <label>Reason / note</label>
-                            <input type="text" name="inactive_note" value="{{ old('inactive_note') }}" placeholder="Reason is required" required>
-                        </div>
-                        <div class="action-row" style="grid-column:1/-1">
-                            <button class="btn danger" type="submit">Temporary inactive</button>
-                        </div>
-                    </form>
-                @else
-                    <form method="post" action="{{ route('customers.force-active', $customer) }}" class="form-grid-2" onsubmit="return confirm('Temporarily make this service active now?')">
-                        @csrf
-                        <div style="grid-column:1/-1">
-                            <label>Reason / note</label>
-                            <input type="text" name="active_note" value="{{ old('active_note') }}" placeholder="Reason is required" required>
-                        </div>
-                        <div class="action-row" style="grid-column:1/-1">
-                            <button class="btn secondary" type="submit">Temporary active</button>
-                        </div>
-                    </form>
-                @endif
-            </div>
+            @if ($canForceStatus)
+                <div class="form-panel">
+                    <h3 class="form-panel__title">Service control</h3>
+                    @if ($customer->status === 'active')
+                        <form method="post" action="{{ route('customers.force-inactive', $customer) }}" class="form-grid-2" onsubmit="return confirm('Temporarily make this service inactive now?')">
+                            @csrf
+                            <div style="grid-column:1/-1">
+                                <label>Reason / note</label>
+                                <input type="text" name="inactive_note" value="{{ old('inactive_note') }}" placeholder="Reason is required" required>
+                            </div>
+                            <div class="action-row" style="grid-column:1/-1">
+                                <button class="btn danger" type="submit">Temporary inactive</button>
+                            </div>
+                        </form>
+                    @else
+                        <form method="post" action="{{ route('customers.force-active', $customer) }}" class="form-grid-2" onsubmit="return confirm('Temporarily make this service active now?')">
+                            @csrf
+                            <div style="grid-column:1/-1">
+                                <label>Reason / note</label>
+                                <input type="text" name="active_note" value="{{ old('active_note') }}" placeholder="Reason is required" required>
+                            </div>
+                            <div class="action-row" style="grid-column:1/-1">
+                                <button class="btn secondary" type="submit">Temporary active</button>
+                            </div>
+                        </form>
+                    @endif
+                </div>
+            @endif
         </article>
 
         <article class="customer-card">

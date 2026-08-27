@@ -34,6 +34,17 @@ return [
                 'manage_expenses' => ['label' => 'Employees & Expenses', 'menus' => ['Employees', 'Salary & Expenses', 'Expenses']],
             ],
         ],
+        'concessions' => [
+            'label' => 'Party Concessions',
+            'items' => [
+                'grant_grace_period' => ['label' => 'Grant Grace Period', 'menus' => ['Party grace period action']],
+                'override_service_validity' => ['label' => 'Force / Override Validity Date', 'menus' => ['Party validity override action']],
+                'quick_activate_service' => ['label' => 'Quick-Activate To Next Date', 'menus' => ['Party quick-activate action']],
+                'force_service_status' => ['label' => 'Force Service Active / Inactive', 'menus' => ['Party force active/inactive action']],
+                'mark_special_customer' => ['label' => 'Mark Party Special (Never Suspend)', 'menus' => ['Special party toggle']],
+                'view_concession_reports' => ['label' => 'View Concession Reports', 'menus' => ['Concession Reports']],
+            ],
+        ],
         'support' => [
             'label' => 'Support',
             'items' => [
@@ -109,6 +120,7 @@ return [
                 'bkash_sms' => ['label' => 'bKash SMS', 'permission' => 'manage_payments', 'routes' => ['bkash-sms-payments.*']],
                 'payment_accounts' => ['label' => 'Payment Accounts', 'permission' => 'manage_payment_accounts', 'routes' => ['payment-accounts.*']],
                 'accounting_ledger' => ['label' => 'Accounting Ledger', 'permission' => 'manage_payment_accounts', 'permissions' => ['manage_payment_accounts', 'manage_customers'], 'routes' => ['accounting.ledger*']],
+                'concession_reports' => ['label' => 'Concession Reports', 'permission' => 'view_concession_reports', 'routes' => ['concession-reports.*']],
                 'employees' => ['label' => 'Employees', 'permission' => 'manage_expenses', 'routes' => ['employees.*']],
                 'expenses' => ['label' => 'Salary & Expenses', 'permission' => 'manage_expenses', 'routes' => ['expenses.*']],
             ],

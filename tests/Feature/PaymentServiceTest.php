@@ -949,7 +949,10 @@ class PaymentServiceTest extends TestCase
 
     private function paymentService(): PaymentService
     {
-        return new PaymentService($this->createMock(MikrotikCustomerSyncService::class));
+        return new PaymentService(
+            $this->createMock(MikrotikCustomerSyncService::class),
+            app(\App\Services\ConcessionLogService::class),
+        );
     }
 
     private function createCustomer(): Customer

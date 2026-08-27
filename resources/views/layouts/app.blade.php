@@ -220,7 +220,7 @@
                 $currentUser = auth()->user();
                 $canMenu = fn (string $key): bool => (bool) $currentUser?->canAccessMenu($key);
                 $canManageNetwork = collect(['packages', 'mikrotik_routers', 'ip_pools', 'network_map', 'olt_onus', 'onu_deny_list', 'onu_auto_discovery', 'olt_protocol_profiles'])->contains($canMenu);
-                $canManageBilling = collect(['parties', 'resellers', 'invoices', 'create_invoice', 'sale_returns', 'quotations', 'create_quotation', 'payment_note_default', 'organizations', 'print_history', 'payments', 'bkash_sms', 'payment_accounts', 'accounting_ledger', 'employees', 'expenses'])->contains($canMenu);
+                $canManageBilling = collect(['parties', 'resellers', 'invoices', 'create_invoice', 'sale_returns', 'quotations', 'create_quotation', 'payment_note_default', 'organizations', 'print_history', 'payments', 'bkash_sms', 'payment_accounts', 'accounting_ledger', 'concession_reports', 'employees', 'expenses'])->contains($canMenu);
                 $canManageWarranty = collect(['warranty_claims', 'new_warranty_claim'])->contains($canMenu);
                 $canManageAdmin = collect(['users', 'roles', 'database_backup'])->contains($canMenu);
                 $canManageFleet = collect(['fleet_vehicles', 'fleet_add_vehicle', 'fleet_maintenance_schedules', 'fleet_log_maintenance', 'fleet_settings', 'fleet_reports', 'fleet_expense_report', 'fleet_maintenance_report', 'fleet_due_report', 'fleet_duty_history'])->contains($canMenu)
@@ -312,6 +312,9 @@
                         @endif
                         @if ($canMenu('accounting_ledger'))
                             <a href="{{ route('accounting.ledger') }}">Accounting Ledger</a>
+                        @endif
+                        @if ($canMenu('concession_reports'))
+                            <a href="{{ route('concession-reports.index') }}">Concession Reports</a>
                         @endif
                         @if ($canMenu('employees'))
                             <a href="{{ route('employees.index') }}">Employees</a>

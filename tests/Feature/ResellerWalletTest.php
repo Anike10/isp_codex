@@ -368,7 +368,10 @@ class ResellerWalletTest extends TestCase
 
     private function paymentService(): PaymentService
     {
-        return new PaymentService($this->createMock(MikrotikCustomerSyncService::class));
+        return new PaymentService(
+            $this->createMock(MikrotikCustomerSyncService::class),
+            app(\App\Services\ConcessionLogService::class),
+        );
     }
 
     private function createReseller(float $balance, ?float $dailyLimit, float $commission = 0): Customer

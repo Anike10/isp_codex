@@ -2,7 +2,11 @@
 
 @section('content')
 <meta name="csrf-token" content="{{ csrf_token() }}">
-@php $showDeletedCustomers = $showDeletedCustomers ?? false; @endphp
+@php
+    $showDeletedCustomers = $showDeletedCustomers ?? false;
+    $mayGrantGrace = (bool) auth()->user()?->hasPermission('grant_grace_period');
+    $mayQuickActivate = (bool) auth()->user()?->hasPermission('quick_activate_service');
+@endphp
 <style>
     .customer-filter-form {
         display: grid;
@@ -324,7 +328,7 @@
                     @else
                         <div><span class="badge overdue">Expired {{ abs($daysRemaining) }} days ago</span></div>
                     @endif
-                    @if ($daysRemaining < 0 && ! $customer->grace_used_at)
+                    @if ($daysRemaining < 0 && ! $customer->grace_used_at && $mayGrantGrace)
                         @if ($customer->subscriptions_exists)
                             <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
                                 @csrf
@@ -337,7 +341,7 @@
                     @endif
                 @elseif ($customer->status === 'active')
                     <span class="muted">No paid month</span>
-                    @if ($customer->subscriptions_exists && $canQuickActivate)
+                    @if ($customer->subscriptions_exists && $canQuickActivate && $mayQuickActivate)
                         <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
                             @csrf
                             <input type="date" name="active_until" value="{{ $nextActiveDate }}" min="{{ now()->toDateString() }}" style="width:165px">
@@ -349,7 +353,7 @@
                     @if ($customer->grace_used_at)
                         <div class="muted" style="font-size:12px;">Grace already used</div>
                     @endif
-                    @if ($customer->subscriptions_exists && $canQuickActivate)
+                    @if ($customer->subscriptions_exists && $canQuickActivate && $mayQuickActivate)
                         <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
                             @csrf
                             <input type="date" name="active_until" value="{{ $nextActiveDate }}" min="{{ now()->toDateString() }}" style="width:165px">
@@ -357,13 +361,13 @@
                         </form>
                     @endif
                 @elseif ($customer->subscriptions_exists)
-                    @if (! $customer->grace_used_at)
+                    @if (! $customer->grace_used_at && $mayGrantGrace)
                         <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="gap:6px">
                             @csrf
                             <input type="number" name="grace_days" min="1" max="365" placeholder="Days" style="width:78px" required>
                             <button class="btn secondary" type="submit">Grace</button>
                         </form>
-                    @else
+                    @elseif ($customer->grace_used_at)
                         <a class="btn light" href="{{ route('customers.edit', $customer) }}">Assign package for grace</a>
                     @endif
                 @else

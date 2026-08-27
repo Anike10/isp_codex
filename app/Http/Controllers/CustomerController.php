@@ -8,6 +8,7 @@ use App\Models\MikrotikRouter;
 use App\Models\ResellerCommissionHistory;
 use App\Models\Subscription;
 use App\Observers\RecordVersionObserver;
+use App\Services\ConcessionLogService;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\RecordVersionService;
 use Carbon\Carbon;
@@ -127,10 +128,17 @@ class CustomerController extends Controller
         $this->normalizeResellerData($data);
         $this->ensurePartyHasRole($data);
         $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
+        if ($data['never_suspend'] && ! $request->user()?->hasPermission('mark_special_customer')) {
+            $data['never_suspend'] = false;
+        }
         $this->normalizeIpMode($data);
 
         $customer = Customer::create(Arr::except($data, ['mikrotik_router_ids']));
         $customer->mikrotikRouters()->sync($data['mikrotik_router_ids']);
+
+        if ($customer->never_suspend) {
+            app(ConcessionLogService::class)->recordSpecialToggle($customer, true, 'Set while creating the party.');
+        }
 
         if ($customer->is_reseller) {
             ResellerCommissionHistory::create([
@@ -209,6 +217,10 @@ class CustomerController extends Controller
         $this->normalizeResellerData($data, $customer);
         $this->ensurePartyHasRole($data);
         $data['never_suspend'] = (bool) ($data['never_suspend'] ?? false);
+        $wasSpecial = (bool) $customer->never_suspend;
+        if ($data['never_suspend'] !== $wasSpecial && ! $request->user()?->hasPermission('mark_special_customer')) {
+            $data['never_suspend'] = $wasSpecial;
+        }
         $this->normalizeIpMode($data);
 
         DB::transaction(function () use (&$customer, $data, $recordVersionService): void {
@@ -281,6 +293,10 @@ class CustomerController extends Controller
                 ]);
             }
         });
+
+        if ($data['never_suspend'] !== $wasSpecial) {
+            app(ConcessionLogService::class)->recordSpecialToggle($customer->refresh(), $data['never_suspend'], 'Changed from party edit.');
+        }
 
         $syncResult = $this->syncMikrotikCustomer($customer);
 
@@ -493,7 +509,7 @@ class CustomerController extends Controller
             ->with('success', "\"{$customer->name}\" restored successfully.");
     }
 
-    public function grantGracePeriod(Request $request, Customer $customer)
+    public function grantGracePeriod(Request $request, Customer $customer, ConcessionLogService $concessionLog)
     {
         $data = $request->validate([
             'grace_days' => ['required', 'integer', 'min:1', 'max:365'],
@@ -525,6 +541,8 @@ class CustomerController extends Controller
             'end_date' => null,
         ]);
 
+        $concessionLog->recordGracePeriod($customer, $subscription, (int) $data['grace_days'], null);
+
         $syncResult = $this->syncMikrotikCustomer($customer);
 
         return back()
@@ -532,7 +550,7 @@ class CustomerController extends Controller
             ->with('warning', $syncResult['warning']);
     }
 
-    public function activateUntilNextDate(Request $request, Customer $customer)
+    public function activateUntilNextDate(Request $request, Customer $customer, ConcessionLogService $concessionLog)
     {
         $subscription = $customer->activeSubscription ?: $customer->subscriptions()->with('package')->latest()->first();
         $data = $request->validate([
@@ -543,6 +561,7 @@ class CustomerController extends Controller
             return back()->withErrors(['active_until' => 'No package found for this customer to activate.']);
         }
 
+        $previousValidUntil = $customer->service_valid_until;
         $nextDate = $data['active_until'] ?? now()->addMonthNoOverflow()->toDateString();
         $detail = sprintf(
             '[%s] Activated package to %s via quick-activate action.',
@@ -571,6 +590,16 @@ class CustomerController extends Controller
             ]);
         });
 
+        $concessionLog->closeOpenForceActive($customer, now(), 'quick_activate');
+        $concessionLog->recordValidityChange(
+            $customer,
+            $subscription,
+            'quick_activate',
+            $previousValidUntil,
+            Carbon::parse($nextDate),
+            null,
+        );
+
         $syncResult = $this->syncMikrotikCustomer($customer->refresh());
 
         return back()
@@ -578,14 +607,15 @@ class CustomerController extends Controller
             ->with('warning', $syncResult['warning']);
     }
 
-    public function updateServiceValidity(Request $request, Customer $customer)
+    public function updateServiceValidity(Request $request, Customer $customer, ConcessionLogService $concessionLog)
     {
         $data = $request->validate([
             'service_valid_until' => ['required', 'date'],
             'validity_note' => ['required', 'string', 'min:3', 'max:2000'],
         ]);
 
-        $previous = $customer->service_valid_until?->format('d/m/Y') ?? 'not set';
+        $previousValidUntil = $customer->service_valid_until;
+        $previous = $previousValidUntil?->format('d/m/Y') ?? 'not set';
         $newUntil = $data['service_valid_until'];
         $detail = sprintf(
             '[%s] Manual validity override: %s → %s. Reason: %s',
@@ -611,6 +641,16 @@ class CustomerController extends Controller
                 'end_date' => $expiresToday ? $newUntil : null,
             ]);
         }
+
+        $concessionLog->closeOpenForceActive($customer, now(), 'validity_override');
+        $concessionLog->recordValidityChange(
+            $customer,
+            $subscription,
+            'validity_override',
+            $previousValidUntil,
+            Carbon::parse($newUntil),
+            trim($data['validity_note']),
+        );
 
         $syncResult = $this->syncMikrotikCustomer($customer);
         $state = $expiresToday ? 'expired and moved to the inactive profile' : 'made active and synced to the service profile';
@@ -645,7 +685,7 @@ class CustomerController extends Controller
             ->with('warning', $syncResult['warning']);
     }
 
-    public function forceInactive(Request $request, Customer $customer)
+    public function forceInactive(Request $request, Customer $customer, ConcessionLogService $concessionLog)
     {
         $data = $request->validate([
             'inactive_note' => ['required', 'string', 'min:3', 'max:2000'],
@@ -673,6 +713,8 @@ class CustomerController extends Controller
             ]);
         });
 
+        $concessionLog->recordForceInactive($customer->refresh(), null, trim($data['inactive_note']));
+
         $syncResult = $this->syncMikrotikCustomer($customer->refresh());
 
         return back()
@@ -680,7 +722,7 @@ class CustomerController extends Controller
             ->with('warning', $syncResult['warning']);
     }
 
-    public function forceActive(Request $request, Customer $customer)
+    public function forceActive(Request $request, Customer $customer, ConcessionLogService $concessionLog)
     {
         $data = $request->validate([
             'active_note' => ['required', 'string', 'min:3', 'max:2000'],
@@ -711,6 +753,12 @@ class CustomerController extends Controller
                 'end_date' => null,
             ]);
         });
+
+        $concessionLog->recordForceActive(
+            $customer->refresh(),
+            Subscription::with('package')->find($subscriptionId),
+            trim($data['active_note']),
+        );
 
         $syncResult = $this->syncMikrotikCustomer($customer->refresh());
 

@@ -15,7 +15,10 @@ use Throwable;
 
 class PaymentService
 {
-    public function __construct(private readonly MikrotikCustomerSyncService $mikrotikSyncService) {}
+    public function __construct(
+        private readonly MikrotikCustomerSyncService $mikrotikSyncService,
+        private readonly ConcessionLogService $concessionLog,
+    ) {}
 
     public function recordPayment(Invoice $invoice, array $data): Payment
     {
@@ -643,6 +646,10 @@ class PaymentService
             'grace_used_at' => null,
             'notes' => trim(implode("\n", array_filter([$customer->notes, $detail]))),
         ]);
+
+        // A payment that brings the party current ends any open force-active
+        // concession, so its running give-away value is settled here.
+        $this->concessionLog->closeOpenForceActive($customer, Carbon::parse($paymentDate), 'payment');
     }
 
     private function money(mixed $amount): float

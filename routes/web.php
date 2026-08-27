@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountingLedgerController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BkashSmsPaymentController;
 use App\Http\Controllers\BulkCustomerPaymentController;
+use App\Http\Controllers\ConcessionReportController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerPaymentController;
 use App\Http\Controllers\DashboardController;
@@ -69,13 +70,13 @@ Route::middleware('auth')->group(function () {
         Route::post('customers/{customer}/advance-payments', [CustomerPaymentController::class, 'storeAdvance'])->name('customers.advance-payments.store');
         Route::post('customers/{customer}/advance-payments/apply', [CustomerPaymentController::class, 'applyAdvance'])->name('customers.advance-payments.apply');
         Route::post('customers/{customer}/advance-payments/renew', [CustomerPaymentController::class, 'renewFromAdvance'])->name('customers.advance-renewal.store');
-        Route::post('customers/{customer}/grace-period', [CustomerController::class, 'grantGracePeriod'])->name('customers.grace-period');
-        Route::post('customers/{customer}/activate-next-date', [CustomerController::class, 'activateUntilNextDate'])->name('customers.activate-next-date');
+        Route::post('customers/{customer}/grace-period', [CustomerController::class, 'grantGracePeriod'])->middleware('permission:grant_grace_period')->name('customers.grace-period');
+        Route::post('customers/{customer}/activate-next-date', [CustomerController::class, 'activateUntilNextDate'])->middleware('permission:quick_activate_service')->name('customers.activate-next-date');
         Route::patch('customers/{customer}/inline', [CustomerController::class, 'inlineUpdate'])->name('customers.inline-update');
-        Route::post('customers/{customer}/service-validity', [CustomerController::class, 'updateServiceValidity'])->name('customers.service-validity.update');
+        Route::post('customers/{customer}/service-validity', [CustomerController::class, 'updateServiceValidity'])->middleware('permission:override_service_validity')->name('customers.service-validity.update');
         Route::post('customers/{customer}/mikrotik-targets', [CustomerController::class, 'updateMikrotikTargets'])->name('customers.mikrotik-targets.update');
-        Route::post('customers/{customer}/force-inactive', [CustomerController::class, 'forceInactive'])->name('customers.force-inactive');
-        Route::post('customers/{customer}/force-active', [CustomerController::class, 'forceActive'])->name('customers.force-active');
+        Route::post('customers/{customer}/force-inactive', [CustomerController::class, 'forceInactive'])->middleware('permission:force_service_status')->name('customers.force-inactive');
+        Route::post('customers/{customer}/force-active', [CustomerController::class, 'forceActive'])->middleware('permission:force_service_status')->name('customers.force-active');
         Route::get('customers/{customer}/history', [CustomerController::class, 'history'])->name('customers.history');
         Route::get('customers/deleted', [CustomerController::class, 'deleted'])->name('customers.deleted');
         Route::get('customers/deleted/{customer}/history', [CustomerController::class, 'deletedHistory'])->name('customers.deleted.history');
@@ -141,6 +142,11 @@ Route::middleware('auth')->group(function () {
     Route::middleware('permission:manage_payment_accounts,manage_customers')->group(function () {
         Route::get('accounting/ledger', [AccountingLedgerController::class, 'index'])->name('accounting.ledger');
         Route::get('accounting/ledger/print', [AccountingLedgerController::class, 'print'])->name('accounting.ledger.print');
+    });
+
+    Route::middleware('permission:view_concession_reports')->group(function () {
+        Route::get('concession-reports', [ConcessionReportController::class, 'index'])->name('concession-reports.index');
+        Route::get('concession-reports/summary', [ConcessionReportController::class, 'summary'])->name('concession-reports.summary');
     });
 
     Route::middleware('permission:manage_payment_accounts')->group(function () {
