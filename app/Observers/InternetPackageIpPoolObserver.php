@@ -18,6 +18,10 @@ class InternetPackageIpPoolObserver
             ->distinct()
             ->pluck('customer_id');
 
+        if ($customerIds->isEmpty()) {
+            return;
+        }
+
         Customer::query()
             ->whereIn('id', $customerIds)
             ->where('use_fixed_ip', false)
@@ -26,6 +30,7 @@ class InternetPackageIpPoolObserver
                 'learned_ip_package_id' => null,
                 'last_connected_ip' => null,
                 'last_connected_at' => null,
+                'updated_at' => now(),
             ]);
     }
 }

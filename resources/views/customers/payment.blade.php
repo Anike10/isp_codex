@@ -362,13 +362,13 @@
                         <input
                             id="amountInput"
                             name="amount"
-                            type="text"
-                            inputmode="decimal"
+                            type="text" inputmode="decimal"
                             autocomplete="off"
                             value="{{ $amountDefault }}"
                             required
                         >
                         <p class="muted" style="margin:0;">If payment is for multiple invoices, type total amount once.</p>
+                        <p class="muted" style="margin:0;">This field has no mouse-wheel or arrow-step adjustment.</p>
                     </div>
 
                     <div class="field">

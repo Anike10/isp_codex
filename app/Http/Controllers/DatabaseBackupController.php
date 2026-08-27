@@ -9,6 +9,15 @@ class DatabaseBackupController extends Controller
 {
     public function download(): StreamedResponse
     {
+        // The dump below is built from MySQL-only statements (SHOW TABLES,
+        // SHOW CREATE TABLE). On any other driver it would silently stream a
+        // broken file, so fail loudly instead.
+        abort_unless(
+            DB::connection()->getDriverName() === 'mysql',
+            422,
+            'Database backup download is only supported on MySQL connections.'
+        );
+
         $database = DB::getDatabaseName();
         $filename = $database.'_backup_'.now()->format('Ymd_His').'.sql';
 

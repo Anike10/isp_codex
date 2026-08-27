@@ -201,10 +201,17 @@ class PaymentService
                 throw new InvalidArgumentException('Selected invoice list contains paid invoices or invoices from another party.');
             }
 
-            $selectedDue = round((float) $invoices->sum('due_amount'), 2);
             $paymentAmount = round((float) $data['amount'], 2);
 
-            if ($paymentAmount !== $selectedDue) {
+            // Compare in integer paisa. Float subtraction of two 2-decimal values
+            // can render a true one-paisa gap as 0.00999999…, so neither strict
+            // float equality nor an epsilon threshold is reliable. Rounding to
+            // the nearest paisa before the int cast absorbs representation drift
+            // in the summed due total.
+            $selectedDuePaisa = (int) round(((float) $invoices->sum('due_amount')) * 100);
+            $paymentAmountPaisa = (int) round($paymentAmount * 100);
+
+            if ($paymentAmountPaisa !== $selectedDuePaisa) {
                 throw new InvalidArgumentException('Payment amount must match the selected invoice due total.');
             }
 
