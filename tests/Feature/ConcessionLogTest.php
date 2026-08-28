@@ -9,6 +9,7 @@ use App\Models\Invoice;
 use App\Models\Permission;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\ConcessionLogService;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -120,6 +121,45 @@ class ConcessionLogTest extends TestCase
         $this->assertSame('final', $log->value_status);
         $this->assertSame(5, $log->free_days);
         $this->assertSame(round(5 * (3100 / $monthDays), 2), (float) $log->estimated_value);
+    }
+
+    public function test_marking_special_logs_a_running_give_away_that_settles_when_removed(): void
+    {
+        Carbon::setTestNow('2026-08-10 09:00:00');
+
+        $user = $this->userWith(['manage_customers']);
+        $this->actingAs($user);
+
+        $customer = $this->customerWithExpiredService(3000);
+        $service = app(ConcessionLogService::class);
+
+        $service->recordSpecialToggle($customer, true, 'Marked special.');
+
+        $log = ConcessionLog::where('action_type', 'mark_special')->firstOrFail();
+        $this->assertSame('pending', $log->value_status);
+        $this->assertNull($log->closed_at);
+        $this->assertTrue($log->isRunning());
+
+        $monthDays = Carbon::parse('2026-08-10')->diffInDays(Carbon::parse('2026-08-10')->addMonthNoOverflow());
+        $daily = 3000 / $monthDays;
+
+        // The day the flag was set counts as the first give-away day.
+        $this->assertSame(round($daily, 2), $log->displayValue());
+
+        // Five days on it is still running and now worth six days (10th-15th).
+        Carbon::setTestNow('2026-08-15 09:00:00');
+        $this->assertSame(round(6 * $daily, 2), $log->fresh()->displayValue());
+
+        // Removing the flag settles the same open row at six days.
+        $service->recordSpecialToggle($customer, false, 'Removed special.');
+
+        $log->refresh();
+        $this->assertSame('final', $log->value_status);
+        $this->assertNotNull($log->closed_at);
+        $this->assertSame(6, $log->free_days);
+        $this->assertSame(round(6 * $daily, 2), (float) $log->estimated_value);
+        $this->assertFalse($log->isRunning());
+        $this->assertSame(1, ConcessionLog::where('action_type', 'mark_special')->count());
     }
 
     public function test_reports_require_the_view_permission_and_show_totals(): void

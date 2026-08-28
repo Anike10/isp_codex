@@ -182,6 +182,33 @@
             } elseif (str_contains(strtolower($content), 'force-inactivated')) {
                 $event['title'] = 'Service status changed';
                 $event['tone'] = 'change';
+            } elseif (preg_match('/^(?:Bulk invoice\s+(\S+?)\s+)?paid:\s*(.+?),\s*(\d{2}\/\d{2}\/\d{4})\s+to\s+(\d{2}\/\d{2}\/\d{4}),\s*amount\s*([0-9.,]+),\s*reference\s*(.+?)\.?$/i', $content, $paidMatch)) {
+                $paidInvoiceNo = trim((string) ($paidMatch[1] ?? ''));
+                $paidInvoice = $paidInvoiceNo !== ''
+                    ? $customer->invoices->firstWhere('invoice_no', $paidInvoiceNo)
+                    : null;
+                $paidByAdmin = $paidInvoice
+                    ? ($paidInvoice->payments->first()?->entryByUser?->name
+                        ?? $paidInvoice->entryByUser?->name
+                        ?? $paidInvoice->enteredByLabel)
+                    : null;
+                $paidAmount = (float) str_replace(',', '', $paidMatch[5]);
+
+                $event['title'] = 'Payment received';
+                $event['tone'] = 'payment';
+                $event['message'] = 'A service payment was recorded and validity was extended.';
+                $event['admin'] = $paidByAdmin;
+                $event['package'] = $servicePackage?->name;
+                $event['validity_change'] = $paidMatch[3].' → '.$paidMatch[4];
+                $event['value_display'] = '৳ '.number_format($paidAmount, 2);
+                $event['facts'] = array_values(array_filter([
+                    ['label' => 'Duration', 'value' => trim($paidMatch[2])],
+                    ['label' => 'Service period', 'value' => $paidMatch[3].' → '.$paidMatch[4]],
+                    ['label' => 'Amount', 'value' => '৳ '.number_format($paidAmount, 2)],
+                    ['label' => 'Reference', 'value' => trim($paidMatch[6])],
+                    $paidInvoiceNo !== '' ? ['label' => 'Invoice', 'value' => $paidInvoiceNo] : null,
+                    ['label' => 'Payment taken by', 'value' => $paidByAdmin ?: 'Not recorded'],
+                ]));
             }
 
             $partyNoteEvents->push($event);
@@ -189,6 +216,52 @@
 
         $partyNoteEvents = $partyNoteEvents->sortByDesc('sort_at')->values();
     }
+
+    // One full-width table that merges the parsed party notes with the
+    // concession log rows recorded for this party.
+    $activityRows = collect();
+
+    foreach ($partyNoteEvents as $event) {
+        $activityRows->push([
+            'sort_at' => $event['recorded_at']?->timestamp ?? 0,
+            'when' => $event['recorded_at'],
+            'admin' => $event['admin'] ?? null,
+            'action' => $event['title'],
+            'tone' => $event['tone'],
+            'detail' => $event['message'] ?: null,
+            'facts' => $event['facts'] ?? [],
+            'free_days' => null,
+            'validity_change' => $event['validity_change'] ?? null,
+            'package' => $event['package'] ?? null,
+            'value' => $event['value_display'] ?? null,
+            'running' => false,
+        ]);
+    }
+
+    foreach ($customer->concessionLogs as $log) {
+        $activityRows->push([
+            'sort_at' => $log->created_at?->timestamp ?? 0,
+            'when' => $log->created_at,
+            'admin' => $log->user_name ?: 'System',
+            'action' => $log->actionLabel(),
+            'tone' => match ($log->action_type) {
+                'force_active', 'mark_special' => 'activation',
+                'grace_period', 'quick_activate', 'validity_override' => 'change',
+                default => 'change',
+            },
+            'detail' => $log->reason ?: null,
+            'facts' => [],
+            'free_days' => $log->displayFreeDays(),
+            'validity_change' => $log->new_valid_until
+                ? (($log->previous_valid_until?->format('d/m/Y') ?? 'not set').' → '.$log->new_valid_until->format('d/m/Y'))
+                : null,
+            'package' => $log->package?->name,
+            'value' => '৳ '.number_format($log->displayValue(), 2),
+            'running' => $log->isRunning(),
+        ]);
+    }
+
+    $activityRows = $activityRows->sortByDesc('sort_at')->values();
 @endphp
 
 <style>
@@ -673,6 +746,79 @@
     .details-stack .table-wrap {
         margin-top: 10px;
     }
+    .customer-activity {
+        margin-top: 16px;
+        border-radius: 15px;
+        padding: 18px;
+        border: 1px solid #dce6f4;
+        background: #fff;
+        box-shadow: 0 7px 24px rgba(15, 23, 42, .08);
+    }
+    .customer-activity__head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+    .customer-activity__head .customer-card__heading {
+        margin: 0;
+    }
+    .customer-activity__count {
+        color: #65758b;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .customer-activity__scroll {
+        overflow-x: auto;
+        border: 1px solid #e2e9f2;
+        border-radius: 10px;
+    }
+    .customer-activity__table {
+        min-width: 940px;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+        font-size: 13px;
+    }
+    .customer-activity__table th,
+    .customer-activity__table td {
+        padding: 9px 11px;
+    }
+    .customer-activity__table td.activity-detail {
+        max-width: 340px;
+    }
+    .customer-activity__table td.activity-value {
+        white-space: nowrap;
+        font-weight: 700;
+    }
+    .activity-tag {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+        color: #334155;
+        background: #eef2f7;
+        border: 1px solid #dbe3ee;
+    }
+    .activity-tag--payment { color: #047a54; background: #e6f7ef; border-color: #b8e6d0; }
+    .activity-tag--activation { color: #1f6f37; background: #e8f6ec; border-color: #bde3c6; }
+    .activity-tag--change { color: #b45309; background: #fdf1e3; border-color: #f2d9b8; }
+    .activity-tag--import { color: #1d4ed8; background: #e8effc; border-color: #c3d5f5; }
+    .activity-tag--note { color: #475467; background: #eef2f7; border-color: #dbe3ee; }
+    .activity-facts {
+        margin: 5px 0 0;
+        padding-left: 16px;
+        color: #475467;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+    .activity-facts b {
+        color: #334155;
+    }
 
     @media (max-width: 1120px) {
         .customer-grid {
@@ -860,45 +1006,8 @@
                 <dd class="kv-grid__value kv-grid__note">{{ $customer->address ?: 'Not provided' }}</dd>
 
                 <dt class="kv-grid__label">Party note</dt>
-                <dd class="kv-grid__value kv-grid__note party-note-panel">
-                    @if ($partyNoteEvents->isNotEmpty())
-                        <div class="party-note-panel__head">
-                            <strong>Activity history</strong>
-                            <span>Newest first &bull; {{ $partyNoteEvents->count() }} {{ \Illuminate\Support\Str::plural('event', $partyNoteEvents->count()) }}</span>
-                        </div>
-                        <div class="party-note-timeline" tabindex="0" aria-label="Party activity history, newest event first">
-                            @foreach ($partyNoteEvents as $event)
-                                <article class="party-note-event party-note-event--{{ $event['tone'] }}">
-                                    <div class="party-note-event__card">
-                                        <header class="party-note-event__head">
-                                            <span class="party-note-event__type">{{ $event['title'] }}</span>
-                                            @if ($loop->first)
-                                                <span class="party-note-event__latest">Latest</span>
-                                            @endif
-                                            <time class="party-note-event__time" @if ($event['recorded_at']) datetime="{{ $event['recorded_at']->toIso8601String() }}" @endif>
-                                                {{ $event['recorded_at']?->format('d/m/Y, h:i A') ?? 'Date not recorded' }}
-                                            </time>
-                                        </header>
-                                        @if ($event['message'])
-                                            <p class="party-note-event__message">{{ $event['message'] }}</p>
-                                        @endif
-                                        @if (! empty($event['facts']))
-                                            <dl class="party-note-facts">
-                                                @foreach ($event['facts'] as $fact)
-                                                    <div class="party-note-fact">
-                                                        <dt>{{ $fact['label'] }}</dt>
-                                                        <dd>{{ $fact['value'] }}</dd>
-                                                    </div>
-                                                @endforeach
-                                            </dl>
-                                        @endif
-                                    </div>
-                                </article>
-                            @endforeach
-                        </div>
-                    @else
-                        <div class="party-note-empty">No activity note recorded.</div>
-                    @endif
+                <dd class="kv-grid__value kv-grid__note">
+                    See the full <a href="#party-activity">party activity &amp; concession log</a> table below.
                 </dd>
                 <dt class="kv-grid__label">MikroTik comment</dt>
                 <dd class="kv-grid__value kv-grid__note">
@@ -1106,6 +1215,68 @@
                 </div>
             </div>
         </article>
+    </section>
+
+    <section class="customer-activity" id="party-activity">
+        <div class="customer-activity__head">
+            <h2 class="customer-card__heading">Party activity &amp; concession log</h2>
+            <span class="customer-activity__count">
+                {{ $activityRows->count() }} {{ \Illuminate\Support\Str::plural('record', $activityRows->count()) }} &bull; newest first
+            </span>
+        </div>
+        <div class="customer-activity__scroll">
+            <table class="customer-activity__table">
+                <thead>
+                    <tr>
+                        <th>SL</th>
+                        <th>When</th>
+                        <th>Admin</th>
+                        <th>Action</th>
+                        <th>Details / reason</th>
+                        <th>Free days</th>
+                        <th>Validity change</th>
+                        <th>Package</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($activityRows as $row)
+                        <tr>
+                            <td>{{ $loop->iteration }}</td>
+                            <td>{{ $row['when']?->format('d/m/Y H:i') ?? 'Not recorded' }}</td>
+                            <td>{{ $row['admin'] ?: '—' }}</td>
+                            <td><span class="activity-tag activity-tag--{{ $row['tone'] }}">{{ $row['action'] }}</span></td>
+                            <td class="activity-detail">
+                                @if ($row['detail'])
+                                    <span>{{ $row['detail'] }}</span>
+                                @endif
+                                @if (! empty($row['facts']))
+                                    <ul class="activity-facts">
+                                        @foreach ($row['facts'] as $fact)
+                                            <li><b>{{ $fact['label'] }}:</b> {{ $fact['value'] }}</li>
+                                        @endforeach
+                                    </ul>
+                                @endif
+                                @if (! $row['detail'] && empty($row['facts']))
+                                    —
+                                @endif
+                            </td>
+                            <td>{{ $row['free_days'] !== null ? $row['free_days'] : '—' }}</td>
+                            <td>{{ $row['validity_change'] ?: '—' }}</td>
+                            <td>{{ $row['package'] ?: '—' }}</td>
+                            <td class="activity-value">
+                                {{ $row['value'] ?: '—' }}
+                                @if ($row['running'])
+                                    <span class="muted">(running)</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="9" class="muted">No activity or concession records for this party yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
     </section>
 
     <section class="customer-tabs">

@@ -340,7 +340,11 @@ class CustomerController extends Controller
             'loginUsers.roles',
             'reseller.commissionHistories.changedByUser',
             'commissionHistories.changedByUser',
-            'invoices' => fn ($query) => $query->latest(),
+            'invoices' => fn ($query) => $query->latest()->with([
+                'entryByUser:id,name',
+                'payments' => fn ($paymentQuery) => $paymentQuery->oldest('id')->with('entryByUser:id,name'),
+            ]),
+            'concessionLogs' => fn ($query) => $query->with(['user:id,name', 'package:id,name'])->latest('id'),
             'balanceTransactions' => fn ($query) => $query->latest()->limit(10),
             'tickets' => fn ($query) => $query->latest(),
             'productSerials' => fn ($query) => $query->with(['product', 'invoice', 'warrantyClaims'])->latest('sold_at')->limit(50),

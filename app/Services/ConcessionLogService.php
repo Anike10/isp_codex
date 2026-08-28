@@ -98,11 +98,51 @@ class ConcessionLogService
         $subscription = $this->resolveSubscription($customer);
         $rate = $this->rateFor($subscription, Carbon::today());
 
+        if (! $isSpecialNow) {
+            // Turning the flag off settles the give-away that has been running
+            // for as long as the party was marked special.
+            $this->closeOpenSpecial($customer, Carbon::now());
+        }
+
         return $this->write($customer, $subscription, [
             'action_type' => $isSpecialNow ? 'mark_special' : 'unmark_special',
             'reason' => $reason,
             'estimated_value' => 0,
+            'value_status' => $isSpecialNow ? 'pending' : 'final',
         ], $rate);
+    }
+
+    /**
+     * Settle the most recent open "marked special" period for a party. The row
+     * stays open (closed_at null) while the never-suspend flag is on, so its
+     * value keeps growing until this is called.
+     */
+    public function closeOpenSpecial(Customer $customer, CarbonInterface $closedAt): ?ConcessionLog
+    {
+        $open = ConcessionLog::query()
+            ->where('customer_id', $customer->id)
+            ->where('action_type', 'mark_special')
+            ->whereNull('closed_at')
+            ->latest('id')
+            ->first();
+
+        if (! $open) {
+            return null;
+        }
+
+        $closedAt = Carbon::parse($closedAt);
+        $days = $this->inclusiveDays($open->created_at, $closedAt);
+        $daily = (float) ($open->daily_rate ?: $this->rateFor($this->resolveSubscription($customer), $open->created_at)['daily']);
+
+        $open->forceFill([
+            'free_days' => $days,
+            'estimated_value' => $this->money($days * $daily),
+            'value_status' => 'final',
+            'closed_at' => $closedAt,
+            'meta' => array_merge($open->meta ?? [], ['closed_via' => 'unmark_special']),
+        ])->save();
+
+        return $open;
     }
 
     /**
@@ -124,6 +164,8 @@ class ConcessionLogService
         }
 
         $closedAt = Carbon::parse($closedAt);
+        // Half-open interval: the day forced active counts, the day it is settled
+        // is covered by the payment, so it does not.
         $days = (int) max(0, $open->created_at->copy()->startOfDay()->diffInDays($closedAt->copy()->startOfDay()));
 
         $daily = (float) ($open->daily_rate ?: $this->rateFor($this->resolveSubscription($customer), $open->created_at)['daily']);
@@ -192,5 +234,21 @@ class ConcessionLogService
     private function money(float $amount): float
     {
         return round($amount, 2);
+    }
+
+    /**
+     * Whole days from start to end, counting the day the concession started as
+     * the first day. Same-day start and end therefore counts as one day.
+     */
+    private function inclusiveDays(CarbonInterface $start, CarbonInterface $end): int
+    {
+        $start = Carbon::parse($start)->startOfDay();
+        $end = Carbon::parse($end)->startOfDay();
+
+        if ($end->lessThan($start)) {
+            return 0;
+        }
+
+        return (int) $start->diffInDays($end) + 1;
     }
 }

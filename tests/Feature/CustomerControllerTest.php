@@ -226,6 +226,59 @@ class CustomerControllerTest extends TestCase
             ->assertDontSee('Last dial-up IP: 10.66.0.99');
     }
 
+    public function test_customer_show_activity_table_lists_the_admin_who_took_a_payment(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $paidByAdmin = User::factory()->create(['name' => 'Rokeya Collector']);
+
+        $package = InternetPackage::create([
+            'name' => 'Activity Package',
+            'speed' => '20 Mbps',
+            'monthly_price' => 500,
+            'status' => 'active',
+        ]);
+        $customer = Customer::create([
+            'name' => 'Activity Party',
+            'phone' => '01755555555',
+            'connection_id' => 'ACT-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'notes' => '[27/08/2026 14:30] Bulk invoice INV-ACT-1 paid: 1 Month, 27/08/2026 to 26/09/2026, amount 500.00, reference BULK-41BB5ED856F8.',
+        ]);
+        Subscription::create([
+            'customer_id' => $customer->id,
+            'internet_package_id' => $package->id,
+            'start_date' => '2026-08-27',
+            'status' => 'active',
+        ]);
+        $invoice = Invoice::create([
+            'entry_by' => $paidByAdmin->id,
+            'customer_id' => $customer->id,
+            'invoice_no' => 'INV-ACT-1',
+            'billing_month' => '2026-08',
+            'invoice_type' => 'service',
+            'subtotal' => 500, 'discount' => 0, 'vat' => 0, 'total' => 500,
+            'paid_amount' => 500, 'due_amount' => 0, 'status' => 'paid',
+            'due_date' => '2026-08-27',
+        ]);
+        $invoice->payments()->create([
+            'entry_by' => $paidByAdmin->id,
+            'customer_id' => $customer->id,
+            'amount' => 500,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-08-27',
+        ]);
+
+        $this->actingAs($user)->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Party activity &amp; concession log', false)
+            ->assertSee('Payment received')
+            ->assertSee('BULK-41BB5ED856F8')
+            ->assertSee('Rokeya Collector');
+    }
+
     public function test_customer_show_displays_mikrotik_comment_from_imported_secret(): void
     {
         $user = User::factory()->create();

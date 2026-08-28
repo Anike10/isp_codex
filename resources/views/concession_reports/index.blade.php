@@ -77,7 +77,12 @@
                 </td>
                 <td>{{ $log->actionLabel() }}</td>
                 <td class="muted" style="max-width:280px">{{ $log->reason }}</td>
-                <td>{{ $log->free_days !== null ? $log->free_days : '—' }}</td>
+                <td>
+                    {{ $log->displayFreeDays() ?? '—' }}
+                    @if ($log->isRunning() && $log->displayFreeDays() !== null)
+                        <span class="muted">(running)</span>
+                    @endif
+                </td>
                 <td>
                     @if ($log->new_valid_until)
                         {{ $log->previous_valid_until?->format('d/m/Y') ?? 'not set' }} &rarr; {{ $log->new_valid_until->format('d/m/Y') }}
@@ -87,8 +92,8 @@
                 </td>
                 <td>{{ $log->package?->name ?? '—' }}</td>
                 <td>
-                    {{ $fmt($log->estimated_value) }}
-                    @if ($log->value_status === 'pending')
+                    {{ $fmt($log->displayValue()) }}
+                    @if ($log->isRunning())
                         <span class="muted">(running)</span>
                     @endif
                 </td>

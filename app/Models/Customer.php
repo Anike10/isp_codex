@@ -191,6 +191,11 @@ class Customer extends Model
         return $this->hasMany(Invoice::class);
     }
 
+    public function concessionLogs(): HasMany
+    {
+        return $this->hasMany(ConcessionLog::class);
+    }
+
     public function latestInvoice(): HasOne
     {
         return $this->hasOne(Invoice::class)->latestOfMany();

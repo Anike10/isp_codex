@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 class ConcessionLog extends Model
 {
@@ -73,6 +75,60 @@ class ConcessionLog extends Model
     public function actionLabel(): string
     {
         return self::ACTION_LABELS[$this->action_type] ?? ucfirst(str_replace('_', ' ', (string) $this->action_type));
+    }
+
+    /**
+     * A concession whose money value is still growing: force-active periods that
+     * have not been settled, and special (never-suspend) flags that are still on.
+     */
+    public function isRunning(): bool
+    {
+        return $this->value_status === 'pending'
+            || ($this->action_type === 'mark_special' && $this->closed_at === null);
+    }
+
+    /**
+     * Days of give-away to attribute to this concession right now. A "marked
+     * special" period counts both the day it started and today, since the party
+     * is special for the whole of each; other running periods use a half-open
+     * interval so a later payment can cover the closing day.
+     */
+    public function displayFreeDays(?CarbonInterface $asOf = null): ?int
+    {
+        if (! $this->isRunning()) {
+            return $this->free_days;
+        }
+
+        $end = $this->closed_at
+            ? Carbon::parse($this->closed_at)
+            : ($asOf ? Carbon::parse($asOf) : Carbon::now());
+
+        $startDay = ($this->created_at ?? $end)->copy()->startOfDay();
+        $endDay = $end->copy()->startOfDay();
+
+        if ($endDay->lessThan($startDay)) {
+            return 0;
+        }
+
+        $days = (int) $startDay->diffInDays($endDay);
+        if ($this->action_type === 'mark_special') {
+            $days += 1;
+        }
+
+        return $days;
+    }
+
+    /**
+     * Money value to show right now: the stored figure for settled rows, or the
+     * give-away accrued so far for a still-running concession.
+     */
+    public function displayValue(?CarbonInterface $asOf = null): float
+    {
+        if (! $this->isRunning()) {
+            return (float) $this->estimated_value;
+        }
+
+        return round((int) $this->displayFreeDays($asOf) * (float) $this->daily_rate, 2);
     }
 
     public function scopeAction(Builder $query, ?string $actionType): Builder
