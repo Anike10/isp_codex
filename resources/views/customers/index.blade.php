@@ -6,6 +6,7 @@
     $showDeletedCustomers = $showDeletedCustomers ?? false;
     $mayGrantGrace = (bool) auth()->user()?->hasPermission('grant_grace_period');
     $mayQuickActivate = (bool) auth()->user()?->hasPermission('quick_activate_service');
+    $maySpecial = (bool) auth()->user()?->hasPermission('mark_special_customer');
 @endphp
 <style>
     .customer-filter-form {
@@ -110,6 +111,24 @@
     }
     .customer-action-menu-list .customer-action-delete { color: #b42318; }
     .customer-action-menu-list form { margin: 0; }
+    .special-toggle-form { margin: 4px 0 0; }
+    .special-toggle-btn {
+        cursor: pointer;
+        border: 1px solid #cdd9e6;
+        background: #f4f7fb;
+        color: #33475f;
+        border-radius: 999px;
+        padding: 2px 9px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.5;
+    }
+    .special-toggle-btn:hover { background: #e7eef7; }
+    .special-toggle-btn.is-on {
+        border-color: #f0c98b;
+        background: #fff4e2;
+        color: #92561a;
+    }
     .customer-list-toolbar {
         display: flex;
         align-items: center;
@@ -276,11 +295,21 @@
                 <span data-inline-value>{{ $customer->phone }}</span>
             </td>
             <td>
-                @if ($customer->is_customer)<span class="badge active">Customer</span>@endif
-                @if ($customer->is_vendor)<span class="badge pending">Vendor</span>@endif
-                @if ($customer->is_reseller)<span class="badge active">Reseller</span>@endif
                 @if ($customer->never_suspend)
-                    <span class="badge special">Special ISP</span>
+                    <span class="badge special">Special</span>
+                @else
+                    @if ($customer->is_customer)<span class="badge active">Customer</span>@endif
+                    @if ($customer->is_vendor)<span class="badge pending">Vendor</span>@endif
+                    @if ($customer->is_reseller)<span class="badge active">Reseller</span>@endif
+                @endif
+                @if ($maySpecial && ! $showDeletedCustomers)
+                    <form method="post" action="{{ route('customers.toggle-special', $customer) }}" class="special-toggle-form"
+                          onsubmit="return confirm('{{ $customer->never_suspend ? 'Remove the Special ISP flag from' : 'Make Special ISP (never suspend):' }} {{ addslashes($customer->name) }}?')">
+                        @csrf
+                        <button type="submit" class="special-toggle-btn {{ $customer->never_suspend ? 'is-on' : '' }}">
+                            {{ $customer->never_suspend ? 'Unset Special' : 'Set Special ISP' }}
+                        </button>
+                    </form>
                 @endif
             </td>
             <td>

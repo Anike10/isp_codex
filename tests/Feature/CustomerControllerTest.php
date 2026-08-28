@@ -1126,6 +1126,73 @@ class CustomerControllerTest extends TestCase
         $this->assertFalse($customer->fresh()->trashed());
     }
 
+    public function test_special_isp_flag_can_be_toggled_from_the_party_list(): void
+    {
+        $user = User::factory()->create();
+        foreach (['manage_customers', 'mark_special_customer'] as $name) {
+            $user->permissions()->attach(Permission::where('name', $name)->firstOrFail());
+        }
+
+        $package = InternetPackage::create([
+            'name' => 'Toggle Package', 'speed' => '10 Mbps', 'monthly_price' => 700, 'status' => 'active',
+        ]);
+        $customer = Customer::create([
+            'name' => 'Toggle Party', 'phone' => '01799999999',
+            'connection_id' => 'TOGGLE-1', 'address' => 'Kushtia',
+            'status' => 'active', 'is_customer' => true, 'never_suspend' => false,
+        ]);
+        Subscription::create([
+            'customer_id' => $customer->id, 'internet_package_id' => $package->id,
+            'start_date' => now()->subMonth()->toDateString(), 'status' => 'active',
+        ]);
+
+        $this->actingAs($user)->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee('Set Special ISP');
+
+        $this->actingAs($user)
+            ->from(route('customers.index'))
+            ->post(route('customers.toggle-special', $customer))
+            ->assertRedirect(route('customers.index'));
+
+        $this->assertTrue($customer->fresh()->never_suspend);
+        $this->assertDatabaseHas('concession_logs', [
+            'customer_id' => $customer->id, 'action_type' => 'mark_special',
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('customers.index'))
+            ->post(route('customers.toggle-special', $customer))
+            ->assertRedirect(route('customers.index'));
+
+        $this->assertFalse($customer->fresh()->never_suspend);
+        $this->assertDatabaseHas('concession_logs', [
+            'customer_id' => $customer->id, 'action_type' => 'unmark_special',
+        ]);
+    }
+
+    public function test_special_toggle_needs_the_mark_special_permission(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        $customer = Customer::create([
+            'name' => 'Plain Party', 'phone' => '01788888888',
+            'connection_id' => 'PLAIN-1', 'address' => 'Kushtia',
+            'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $this->actingAs($user)->get(route('customers.index'))
+            ->assertOk()
+            ->assertDontSee('Set Special ISP');
+
+        $this->actingAs($user)
+            ->post(route('customers.toggle-special', $customer))
+            ->assertForbidden();
+
+        $this->assertFalse($customer->fresh()->never_suspend);
+    }
+
     public function test_special_customer_cannot_be_force_inactivated(): void
     {
         $user = User::factory()->create();

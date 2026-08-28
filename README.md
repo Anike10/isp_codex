@@ -258,6 +258,11 @@ inactive or active in either direction without changing saved validity/grace
 data; the customer and latest subscription change together and MikroTik sync
 applies the matching inactive or package profile.
 
+Users with the `mark_special_customer` permission can toggle Special ISP
+(never-suspend) status directly from the party list. Enabling it keeps the party
+active, restores its latest subscription when necessary, records the concession
+period, and immediately syncs the MikroTik user.
+
 Users with the `view_unmanaged_router_users` permission can open
 `/router-users` or use the dashboard panel to review PPPoE secrets that exist on
 active routers but have no matching app party. `php artisan

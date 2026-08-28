@@ -812,6 +812,43 @@ class CustomerController extends Controller
             ->with('warning', $syncResult['warning']);
     }
 
+    /**
+     * One-click Special ISP (never-suspend) toggle from the party list. Mirrors
+     * the special-flag side effects of a full party edit: a special line is
+     * kept active with a live subscription, and the concession log records the
+     * running give-away.
+     */
+    public function toggleSpecial(Request $request, Customer $customer, ConcessionLogService $concessionLog)
+    {
+        $makeSpecial = ! $customer->never_suspend;
+
+        DB::transaction(function () use (&$customer, $makeSpecial): void {
+            $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+
+            $customer->update($makeSpecial
+                ? ['never_suspend' => true, 'status' => 'active']
+                : ['never_suspend' => false]);
+
+            if ($makeSpecial && ! $customer->activeSubscription()->exists()) {
+                Subscription::where('customer_id', $customer->id)
+                    ->orderByDesc('id')
+                    ->limit(1)
+                    ->update(['status' => 'active', 'end_date' => null]);
+            }
+        });
+
+        $concessionLog->recordSpecialToggle($customer->refresh(), $makeSpecial, 'Toggled from the party list.');
+
+        $syncResult = $this->syncMikrotikCustomer($customer->refresh());
+
+        return back()
+            ->with('success', ($makeSpecial
+                ? '"'.$customer->name.'" is now a Special ISP customer.'
+                : 'Special ISP flag removed from "'.$customer->name.'".')
+                .' MikroTik user '.$syncResult['status'].'.')
+            ->with('warning', $syncResult['warning']);
+    }
+
     private function syncMikrotikCustomer(Customer $customer): array
     {
         if (! $customer->mikrotik_username && ! $customer->connection_id) {

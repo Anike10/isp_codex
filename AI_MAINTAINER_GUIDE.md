@@ -1136,16 +1136,21 @@ Routes:
 - `/customers/create`
 - `/customers/{customer}`
 - `/customers/{customer}/edit`
+- `POST /customers/{customer}/toggle-special`
 
 Permission:
 
 - `manage_customers`
+- `mark_special_customer` for the party-list Special ISP toggle
 
 Important behavior:
 
 - Creating a customer can optionally create an active subscription.
 - Editing a customer can assign/change/remove active package.
 - Removing the package marks the active subscription inactive.
+- The party-list Special ISP toggle keeps the customer active, restores the
+  latest subscription when needed, records the concession period, and syncs the
+  MikroTik user. The action and button both require `mark_special_customer`.
 
 Monthly bills need active subscriptions.
 
