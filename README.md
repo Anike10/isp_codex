@@ -258,6 +258,15 @@ inactive or active in either direction without changing saved validity/grace
 data; the customer and latest subscription change together and MikroTik sync
 applies the matching inactive or package profile.
 
+Users with the `view_unmanaged_router_users` permission can open
+`/router-users` or use the dashboard panel to review PPPoE secrets that exist on
+active routers but have no matching app party. `php artisan
+mikrotik:import-secrets` refreshes the imported secret snapshot; the Laravel
+scheduler runs this refresh every three hours. Selected unmanaged users can be
+created as parties from either screen. A party marked as a special ISP customer
+is kept active and is synced to its service profile instead of the inactive
+profile.
+
 Setup:
 
 1. Start menu থেকে `Task Scheduler` খুলুন।

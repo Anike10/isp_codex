@@ -985,7 +985,7 @@
                 </div>
             @endif
 
-            @if ($canForceStatus)
+            @if ($canForceStatus && ! $isSpecial)
                 <div class="form-panel">
                     <h3 class="form-panel__title">Service control</h3>
                     @if ($customer->status === 'active')
@@ -1078,7 +1078,7 @@
                     </div>
                     <div class="action-row">
                         @if ($routerTargetsExists && $routers->isNotEmpty())
-                            <button class="btn secondary" type="submit">Save &amp; Sync targets</button>
+                            <button class="btn secondary" type="submit">Save &amp; sync targets</button>
                         @elseif ($customer->connection_id || $customer->mikrotik_username)
                             <button class="btn secondary" type="submit" disabled>No router available</button>
                         @else

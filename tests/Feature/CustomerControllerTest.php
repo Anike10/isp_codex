@@ -992,6 +992,108 @@ class CustomerControllerTest extends TestCase
         }
     }
 
+    public function test_inline_connection_id_change_resyncs_mikrotik_and_clears_learned_ip(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        $customer = Customer::create([
+            'name' => 'Inline Conn Party',
+            'phone' => '01733333333',
+            'connection_id' => 'OLD-CONN',
+            'mikrotik_username' => 'OLD-CONN',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'learned_ip_address' => '10.5.0.9',
+            'last_connected_ip' => '10.5.0.9',
+            'last_connected_at' => now(),
+        ]);
+
+        $syncService = \Mockery::mock(MikrotikCustomerSyncService::class);
+        $syncService->shouldReceive('sync')->once()->andReturn('updated');
+        $this->app->instance(MikrotikCustomerSyncService::class, $syncService);
+
+        $this->actingAs($user)->patchJson(route('customers.inline-update', $customer), [
+            'field' => 'connection_id',
+            'value' => 'NEW-CONN',
+        ])->assertOk()->assertJsonPath('value', 'NEW-CONN');
+
+        $customer->refresh();
+        $this->assertSame('NEW-CONN', $customer->mikrotik_username);
+        $this->assertNull($customer->learned_ip_address);
+        $this->assertNull($customer->last_connected_ip);
+    }
+
+    public function test_inline_package_change_resyncs_mikrotik(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        $packageOne = InternetPackage::create(['name' => 'P1', 'speed' => '10 Mbps', 'monthly_price' => 500, 'status' => 'active']);
+        $packageTwo = InternetPackage::create(['name' => 'P2', 'speed' => '20 Mbps', 'monthly_price' => 900, 'status' => 'active']);
+        $customer = Customer::create([
+            'name' => 'Inline Pkg Sync Party', 'phone' => '01744444444',
+            'connection_id' => 'INLINE-PKG-SYNC', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+        Subscription::create([
+            'customer_id' => $customer->id, 'internet_package_id' => $packageOne->id,
+            'start_date' => '2026-07-01', 'status' => 'active',
+        ]);
+
+        $syncService = \Mockery::mock(MikrotikCustomerSyncService::class);
+        $syncService->shouldReceive('sync')->once()->andReturn('updated');
+        $this->app->instance(MikrotikCustomerSyncService::class, $syncService);
+
+        $this->actingAs($user)->patchJson(route('customers.inline-update', $customer), [
+            'field' => 'package',
+            'value' => (string) $packageTwo->id,
+        ])->assertOk()->assertJsonPath('value', 'P2');
+    }
+
+    public function test_restoring_a_party_recreates_its_mikrotik_secret(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        $customer = Customer::create([
+            'name' => 'Restore Sync Party', 'phone' => '01755555555',
+            'connection_id' => 'RESTORE-SYNC', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+        $customer->delete();
+
+        $syncService = \Mockery::mock(MikrotikCustomerSyncService::class);
+        $syncService->shouldReceive('sync')->once()->andReturn('created');
+        $this->app->instance(MikrotikCustomerSyncService::class, $syncService);
+
+        $this->actingAs($user)->post(route('customers.restore', $customer->id))
+            ->assertRedirect(route('customers.index'))
+            ->assertSessionHas('success');
+
+        $this->assertFalse($customer->fresh()->trashed());
+    }
+
+    public function test_special_customer_cannot_be_force_inactivated(): void
+    {
+        $user = User::factory()->create();
+        foreach (['manage_customers', 'force_service_status'] as $name) {
+            $user->permissions()->attach(Permission::where('name', $name)->firstOrFail());
+        }
+
+        $customer = Customer::create([
+            'name' => 'No Suspend Party', 'phone' => '01766666666',
+            'connection_id' => 'NO-SUSPEND', 'address' => 'Kushtia',
+            'status' => 'active', 'is_customer' => true, 'never_suspend' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('customers.show', $customer))
+            ->post(route('customers.force-inactive', $customer), ['inactive_note' => 'trying to block'])
+            ->assertSessionHasErrors('inactive_note');
+
+        $this->assertSame('active', $customer->fresh()->status);
+    }
+
     private function makeImportedSecretForCustomer(Customer $customer, string $key): MikrotikImportedSecret
     {
         $router = MikrotikRouter::create([

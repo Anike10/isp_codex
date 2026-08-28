@@ -392,6 +392,7 @@ Current permission keys:
 
 ```text
 view_dashboard
+view_unmanaged_router_users
 manage_customers
 manage_packages
 manage_invoices
@@ -1350,6 +1351,7 @@ Important files:
 
 - `app/Models/MikrotikRouter.php`
 - `app/Http/Controllers/MikrotikRouterController.php`
+- `app/Http/Controllers/RouterUserController.php`
 - `app/Services/RouterOsClient.php`
 - `app/Services/RouterOsConnectionDiagnostic.php`
 - `app/Services/MikrotikCustomerSyncService.php`
@@ -1375,6 +1377,13 @@ PPPoE sync:
 
 - Command: `php artisan mikrotik:sync-router-users`
 - Force now: `php artisan mikrotik:sync-router-users --force`
+- Imported-secret refresh: `php artisan mikrotik:import-secrets`; the scheduler
+  runs it every three hours.
+- The permission-protected `/router-users` list and dashboard panel show
+  imported PPPoE secrets that are not linked to, and do not case-insensitively
+  match, an app party connection ID or MikroTik username. Selected rows can be
+  imported as parties through `RouterUserController` and
+  `MikrotikImportService::createPartiesFromSecrets()`.
 - Explicit customer targets are stored in `customer_mikrotik_router`; one PPPoE
   user can be assigned to multiple routers. `customers.mikrotik_router_id`
   remains as a compatibility/primary-target field. If a customer has no pivot
@@ -1392,6 +1401,9 @@ PPPoE sync:
 - Active customers use package `mikrotik_profile`.
 - Inactive/due/no-package customers are not disabled.
 - Inactive users are moved to the router's `inactive_pppoe_profile`.
+- Special ISP customers (`never_suspend`) are forced active, cannot be
+  temporarily forced inactive, and use their latest known service package
+  instead of the inactive profile.
 - If a profile/status changes, remove the active PPP session from `/ppp/active` so the new profile applies after reconnect.
 - When a customer's package changes, clear its learned/current dynamic IP before synchronization because the replacement package may use a different address pool.
 - When a package's `default_ip_pool` changes, clear the learned/current IP for every dynamic-IP subscriber on that package. Fixed IP assignments remain unchanged.

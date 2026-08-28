@@ -3,11 +3,17 @@
 namespace App\Services;
 
 use App\Models\AppIpPool;
+use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\MikrotikImportedIpPool;
 use App\Models\MikrotikImportedProfile;
 use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
+use App\Models\Subscription;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class MikrotikImportService
 {
@@ -163,6 +169,176 @@ class MikrotikImportService
         }
 
         return count($records);
+    }
+
+    /**
+     * Re-pull PPPoE secrets from every active router.
+     *
+     * @return array{results: array<int, array{router: string, count?: int, error?: string}>, imported: int, failed: int}
+     */
+    public function refreshActiveRouterSecrets(): array
+    {
+        $results = [];
+        $imported = 0;
+        $failed = 0;
+
+        MikrotikRouter::query()->where('status', 'active')->orderBy('id')->get()
+            ->each(function (MikrotikRouter $router) use (&$results, &$imported, &$failed): void {
+                try {
+                    $count = $this->importSecrets($router);
+                    $imported += $count;
+                    $results[] = ['router' => $router->name, 'count' => $count];
+                } catch (Throwable $exception) {
+                    $failed++;
+                    $results[] = ['router' => $router->name, 'error' => $exception->getMessage()];
+                }
+            });
+
+        return ['results' => $results, 'imported' => $imported, 'failed' => $failed];
+    }
+
+    /**
+     * Imported PPPoE secrets that are not linked to, and do not name-match, any
+     * app party — i.e. router users that exist only on the MikroTik.
+     */
+    public function unmanagedSecretsQuery(): Builder
+    {
+        return MikrotikImportedSecret::query()
+            ->whereNull('customer_id')
+            ->whereNotExists(function ($query): void {
+                $query->select(DB::raw(1))
+                    ->from('customers')
+                    ->whereNull('customers.deleted_at')
+                    ->whereRaw(
+                        '(lower(customers.connection_id) = lower(mikrotik_imported_secrets.name)'
+                        .' or lower(customers.mikrotik_username) = lower(mikrotik_imported_secrets.name))'
+                    );
+            });
+    }
+
+    /**
+     * @return Collection<int, MikrotikImportedSecret>
+     */
+    public function unmanagedSecrets(): Collection
+    {
+        return $this->unmanagedSecretsQuery()
+            ->with('router:id,name,ip_address')
+            ->orderBy('mikrotik_router_id')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * Create (or optionally update) app parties from imported PPPoE secrets.
+     * Extracted so both the router page and the dashboard can reuse it.
+     *
+     * @param  Collection<int, MikrotikImportedSecret>  $secrets
+     * @return array{created: int, updated: int, skipped: int}
+     */
+    public function createPartiesFromSecrets(Collection $secrets, bool $neverSuspend = false, bool $updateExisting = false): array
+    {
+        $created = $updated = $skipped = 0;
+
+        DB::transaction(function () use ($secrets, $neverSuspend, $updateExisting, &$created, &$updated, &$skipped): void {
+            foreach ($secrets as $secret) {
+                $router = $secret->router;
+                $customer = Customer::where('connection_id', $secret->name)->first();
+
+                if ($customer && ! $updateExisting) {
+                    $skipped++;
+                    $secret->update(['customer_id' => $customer->id]);
+
+                    continue;
+                }
+
+                $package = $this->packageForProfile($secret->profile, $router);
+                $note = $this->importSourceNote($router, $secret);
+                $customerData = [
+                    'name' => trim((string) $secret->name),
+                    'phone' => $customer?->phone ?: 'Not provided',
+                    'connection_id' => $secret->name,
+                    'mikrotik_username' => $secret->name,
+                    'mikrotik_password' => $secret->password,
+                    'mikrotik_router_id' => $router?->id,
+                    'address' => $customer?->address ?: 'Imported from MikroTik '.($router?->name ?? 'router'),
+                    'notes' => $this->appendImportNote($customer?->notes, $note),
+                    'status' => $secret->disabled ? 'inactive' : 'active',
+                    'is_customer' => true,
+                    'is_vendor' => $customer?->is_vendor ?? false,
+                    'never_suspend' => $neverSuspend,
+                ];
+
+                if ($neverSuspend) {
+                    $customerData['status'] = 'active';
+                }
+
+                if ($customer) {
+                    $customer->update($customerData);
+                    $updated++;
+                } else {
+                    $customer = Customer::create($customerData);
+                    $created++;
+                }
+
+                $this->attachSubscription($customer, $package, $secret->disabled && ! $neverSuspend);
+                $secret->update(['customer_id' => $customer->id]);
+            }
+        });
+
+        return ['created' => $created, 'updated' => $updated, 'skipped' => $skipped];
+    }
+
+    public function packageForProfile(?string $profile, ?MikrotikRouter $router): ?InternetPackage
+    {
+        if (blank($profile)) {
+            return null;
+        }
+
+        return InternetPackage::firstOrCreate(
+            ['mikrotik_profile' => $profile],
+            [
+                'name' => $profile,
+                'speed' => 'Imported profile',
+                'monthly_price' => 0,
+                'description' => 'Automatically imported from MikroTik '.($router?->name ?? 'router').'. Set the package price before billing.',
+                'status' => 'active',
+            ]
+        );
+    }
+
+    private function attachSubscription(Customer $customer, ?InternetPackage $package, bool $inactive): void
+    {
+        if (! $package) {
+            return;
+        }
+
+        $values = [
+            'internet_package_id' => $package->id,
+            'start_date' => now()->toDateString(),
+            'status' => $inactive ? 'inactive' : 'active',
+        ];
+
+        $subscription = $customer->subscriptions()->latest('id')->first();
+
+        if ($subscription) {
+            $subscription->update($values);
+        } else {
+            Subscription::create(['customer_id' => $customer->id, ...$values]);
+        }
+    }
+
+    private function importSourceNote(?MikrotikRouter $router, MikrotikImportedSecret $secret): string
+    {
+        return 'Imported from MikroTik: '.($router?->name ?? 'router')
+            .' ('.($router?->ip_address ?? '?').':'.($router?->api_port ?? '?').') at '.now()->format('d/m/Y H:i:s')
+            ."\nConnection ID: {$secret->name}\nProfile: ".($secret->profile ?: 'none')
+            ."\nService: ".($secret->service ?: 'none')
+            ."\nRouter comment: ".($secret->router_comment ?: 'none');
+    }
+
+    private function appendImportNote(?string $old, string $new): string
+    {
+        return trim(($old ? rtrim($old)."\n\n" : '').$new);
     }
 
     private function read(MikrotikRouter $router, string $command, array $attributes = []): array

@@ -17,6 +17,10 @@ return [
                     'label' => 'MikroTik & OLT Tools',
                     'menus' => ['MikroTik Routers', 'IP Pools', 'FTTX Network Map', 'OLT ONUs', 'ONU Deny List', 'Auto Discovery', 'OLT Protocols & Profiles'],
                 ],
+                'view_unmanaged_router_users' => [
+                    'label' => 'Unmanaged Router Users',
+                    'menus' => ['Router Users Not In App (dashboard + list)'],
+                ],
             ],
         ],
         'billing' => [
@@ -101,6 +105,7 @@ return [
                 'onu_deny_list' => ['label' => 'ONU Deny List', 'permission' => 'manage_mikrotik_routers', 'routes' => ['olt-onus.deny-list*']],
                 'onu_auto_discovery' => ['label' => 'Auto Discovery List', 'permission' => 'manage_mikrotik_routers', 'routes' => ['olt-onus.auto-discovery*']],
                 'olt_protocol_profiles' => ['label' => 'OLT Protocol/Profile', 'permission' => 'manage_mikrotik_routers', 'routes' => ['olt-onus.protocol-profiles.*']],
+                'unmanaged_router_users' => ['label' => 'Router Users Not In App', 'permission' => 'view_unmanaged_router_users', 'routes' => ['router-users.*']],
             ],
         ],
         'billing' => [

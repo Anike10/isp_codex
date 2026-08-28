@@ -32,6 +32,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseBillController;
 use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\ResellerController;
+use App\Http\Controllers\RouterUserController;
 use App\Http\Controllers\ResellerPortalController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SaleReturnController;
@@ -189,6 +190,12 @@ Route::middleware('auth')->group(function () {
         Route::patch('fleet/assignments/{assignment}/end', [FleetOperationController::class, 'endAssignment'])->name('fleet.assignments.end');
         Route::post('fleet/{vehicle}/expenses', [FleetOperationController::class, 'storeExpense'])->name('fleet.expenses.store');
         Route::resource('fleet', FleetController::class)->parameters(['fleet' => 'vehicle'])->only(['index', 'create', 'store', 'show', 'update']);
+    });
+
+    Route::middleware('permission:view_unmanaged_router_users')->group(function () {
+        Route::get('router-users', [RouterUserController::class, 'index'])->name('router-users.index');
+        Route::post('router-users/refresh', [RouterUserController::class, 'refresh'])->name('router-users.refresh');
+        Route::post('router-users/import', [RouterUserController::class, 'import'])->name('router-users.import');
     });
 
     Route::middleware('permission:manage_mikrotik_routers')->group(function () {

@@ -193,6 +193,80 @@ class MikrotikAddressSyncTest extends TestCase
         $this->assertSame('updated', $status);
     }
 
+    public function test_special_customer_is_reconnected_to_the_service_profile_even_when_inactive(): void
+    {
+        $router = $this->router();
+        $package = $this->package('Home 30', 'home-30', '30 Mbps');
+        $customer = $this->customer($router, 'party-special', [
+            'status' => 'inactive',
+            'never_suspend' => true,
+            'use_fixed_ip' => true,
+            'fixed_ip_address' => '10.30.0.9',
+        ]);
+        // Subscription left inactive on purpose: a suspended special customer.
+        Subscription::create([
+            'customer_id' => $customer->id,
+            'internet_package_id' => $package->id,
+            'start_date' => now()->toDateString(),
+            'status' => 'inactive',
+        ]);
+
+        $client = Mockery::mock(RouterOsClient::class);
+        $client->shouldReceive('command')->once()->with('/ppp/secret/print', [
+            '?name' => 'party-special', '.proplist' => '.id,name,password,profile,service,comment,disabled,remote-address',
+        ])->andReturn([['.id' => '*SS', 'name' => 'party-special', 'profile' => 'inactive', 'disabled' => 'false', 'remote-address' => '0.0.0.0']]);
+        $client->shouldReceive('command')->once()->with('/ppp/profile/print', [
+            '?name' => 'home-30', '.proplist' => '.id,name,remote-address,rate-limit',
+        ])->andReturn([['.id' => '*P30', 'name' => 'home-30', 'rate-limit' => '30M/30M']]);
+        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) =>
+            $payload['.id'] === '*SS'
+            && $payload['profile'] === 'home-30'
+            && $payload['remote-address'] === '10.30.0.9'
+        ))->andReturn([]);
+        $client->shouldReceive('command')->once()->with('/ppp/active/print', [
+            '?name' => 'party-special', '.proplist' => '.id',
+        ])->andReturn([]);
+
+        $method = new \ReflectionMethod(MikrotikCustomerSyncService::class, 'syncPppSecret');
+        $status = $method->invoke(app(MikrotikCustomerSyncService::class), $client, $customer->fresh(), $router);
+
+        $this->assertSame('updated', $status, 'Special customer should land on the service profile, not moved_inactive.');
+    }
+
+    public function test_marking_an_inactive_customer_special_reactivates_the_line(): void
+    {
+        $user = User::factory()->create();
+        foreach (['manage_customers', 'mark_special_customer'] as $name) {
+            $user->permissions()->attach(Permission::where('name', $name)->firstOrFail());
+        }
+
+        $router = $this->router();
+        $package = $this->package('Home 30', 'home-30', '30 Mbps');
+        $customer = $this->customer($router, 'party-reactivate', ['status' => 'inactive']);
+        Subscription::create([
+            'customer_id' => $customer->id,
+            'internet_package_id' => $package->id,
+            'start_date' => now()->toDateString(),
+            'status' => 'inactive',
+        ]);
+
+        $this->actingAs($user)->put(route('customers.update', $customer), [
+            'name' => $customer->name,
+            'phone' => $customer->phone,
+            'connection_id' => $customer->connection_id,
+            'address' => $customer->address,
+            'status' => 'inactive',
+            'never_suspend' => '1',
+            'mikrotik_router_ids' => [$router->id],
+            'internet_package_id' => $package->id,
+        ])->assertRedirect();
+
+        $customer->refresh();
+        $this->assertTrue((bool) $customer->never_suspend);
+        $this->assertSame('active', $customer->status);
+        $this->assertTrue($customer->subscriptions()->where('status', 'active')->exists());
+    }
+
     public function test_package_change_clears_dynamic_ip_until_the_new_profile_connects(): void
     {
         $user = User::factory()->create();

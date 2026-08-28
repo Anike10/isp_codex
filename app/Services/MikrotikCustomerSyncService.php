@@ -265,9 +265,17 @@ class MikrotikCustomerSyncService
         }
 
         $password = $customer->mikrotik_password ?: self::DEFAULT_PASSWORD;
-        $subscription = $customer->activeSubscription;
+        $subscription = $customer->activeSubscription
+            ?: ($customer->never_suspend ? $customer->latestSubscription()->with('package')->first() : null);
         $package = $subscription?->package;
-        $inactive = $customer->status !== 'active' || ! $subscription || $subscription->status !== 'active' || ! $package;
+
+        if ($customer->never_suspend) {
+            // Special ISP customers are never moved to the inactive profile;
+            // as long as a package is known, keep them on the service profile.
+            $inactive = ! $package;
+        } else {
+            $inactive = $customer->status !== 'active' || ! $subscription || $subscription->status !== 'active' || ! $package;
+        }
         $profile = $inactive ? $router->inactive_pppoe_profile : ($package?->mikrotik_profile ?: $package?->name);
         $learnedIpMatchesPackagePool = $this->ipMatchesConfiguredPackagePool(
             $package,

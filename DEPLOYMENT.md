@@ -156,6 +156,13 @@ php artisan migrate --force
 php artisan optimize:clear
 ```
 
+Migration `2026_08_28_000001_add_view_unmanaged_router_users_permission.php`
+adds the `view_unmanaged_router_users` permission and grants it to the admin
+role. The related `mikrotik:import-secrets` command refreshes imported PPPoE
+secrets from all active routers, and the Laravel scheduler runs it every three
+hours. Run `php artisan migrate --force` before verifying the dashboard or
+`/router-users`.
+
 The multi-router customer assignment feature requires migration
 `2026_08_12_000001_create_customer_mikrotik_router_table.php`. It creates the
 many-to-many target table and backfills every existing non-null

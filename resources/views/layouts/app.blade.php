@@ -219,7 +219,7 @@
             @php
                 $currentUser = auth()->user();
                 $canMenu = fn (string $key): bool => (bool) $currentUser?->canAccessMenu($key);
-                $canManageNetwork = collect(['packages', 'mikrotik_routers', 'ip_pools', 'network_map', 'olt_onus', 'onu_deny_list', 'onu_auto_discovery', 'olt_protocol_profiles'])->contains($canMenu);
+                $canManageNetwork = collect(['packages', 'mikrotik_routers', 'ip_pools', 'network_map', 'olt_onus', 'onu_deny_list', 'onu_auto_discovery', 'olt_protocol_profiles', 'unmanaged_router_users'])->contains($canMenu);
                 $canManageBilling = collect(['parties', 'resellers', 'invoices', 'create_invoice', 'sale_returns', 'quotations', 'create_quotation', 'payment_note_default', 'organizations', 'print_history', 'payments', 'bkash_sms', 'payment_accounts', 'accounting_ledger', 'concession_reports', 'employees', 'expenses'])->contains($canMenu);
                 $canManageWarranty = collect(['warranty_claims', 'new_warranty_claim'])->contains($canMenu);
                 $canManageAdmin = collect(['users', 'roles', 'database_backup'])->contains($canMenu);
@@ -261,6 +261,9 @@
                         @endif
                         @if ($canMenu('olt_protocol_profiles'))
                             <a href="{{ route('olt-onus.protocol-profiles.index') }}">OLT Protocol/Profile</a>
+                        @endif
+                        @if ($canMenu('unmanaged_router_users'))
+                            <a href="{{ route('router-users.index') }}">Router Users Not In App</a>
                         @endif
                     </div>
                 </details>

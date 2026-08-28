@@ -131,6 +131,10 @@ class CustomerController extends Controller
         if ($data['never_suspend'] && ! $request->user()?->hasPermission('mark_special_customer')) {
             $data['never_suspend'] = false;
         }
+        if ($data['never_suspend']) {
+            // A special ISP customer is never suspended, so the line stays active.
+            $data['status'] = 'active';
+        }
         $this->normalizeIpMode($data);
 
         $customer = Customer::create(Arr::except($data, ['mikrotik_router_ids']));
@@ -221,6 +225,11 @@ class CustomerController extends Controller
         if ($data['never_suspend'] !== $wasSpecial && ! $request->user()?->hasPermission('mark_special_customer')) {
             $data['never_suspend'] = $wasSpecial;
         }
+        if ($data['never_suspend']) {
+            // A special ISP customer is never suspended, so keep the line active
+            // and reconnect it to the service profile on the next sync.
+            $data['status'] = 'active';
+        }
         $this->normalizeIpMode($data);
 
         DB::transaction(function () use (&$customer, $data, $recordVersionService): void {
@@ -268,7 +277,7 @@ class CustomerController extends Controller
                         'status' => 'active',
                     ]);
                 }
-            } elseif ($activeSubscription) {
+            } elseif ($activeSubscription && ! $data['never_suspend']) {
                 $activeSubscription->update([
                     'status' => 'inactive',
                     'end_date' => now()->toDateString(),
@@ -294,11 +303,23 @@ class CustomerController extends Controller
             }
         });
 
+        if ($data['never_suspend']) {
+            // Ensure a special customer always has one live subscription so the
+            // MikroTik sync can put the PPPoE user back on the service profile.
+            $customer->refresh();
+            if (! $customer->activeSubscription()->exists()) {
+                Subscription::where('customer_id', $customer->id)
+                    ->orderByDesc('id')
+                    ->limit(1)
+                    ->update(['status' => 'active', 'end_date' => null]);
+            }
+        }
+
         if ($data['never_suspend'] !== $wasSpecial) {
             app(ConcessionLogService::class)->recordSpecialToggle($customer->refresh(), $data['never_suspend'], 'Changed from party edit.');
         }
 
-        $syncResult = $this->syncMikrotikCustomer($customer);
+        $syncResult = $this->syncMikrotikCustomer($customer->refresh());
 
         return redirect()
             ->route('customers.show', $customer)
@@ -363,11 +384,19 @@ class CustomerController extends Controller
             $customer->update([
                 'connection_id' => $normalizedValue === '' ? null : $normalizedValue,
                 'mikrotik_username' => $normalizedValue === '' ? null : $normalizedValue,
+                // The PPPoE username changed, so any learned dynamic IP is stale.
+                'learned_ip_address' => null,
+                'learned_ip_package_id' => null,
+                'last_connected_ip' => null,
+                'last_connected_at' => null,
             ]);
 
+            $sync = $this->syncMikrotikCustomer($customer);
+
             return response()->json([
-                'message' => 'Party updated.',
+                'message' => 'Party updated. MikroTik user '.$sync['status'].'.',
                 'value' => $customer->fresh()->connection_id,
+                'warning' => $sync['warning'],
             ]);
         }
 
@@ -426,10 +455,13 @@ class CustomerController extends Controller
             $freshCustomer = $customer->fresh(['activeSubscription.package']);
             $currentPackage = $freshCustomer->activeSubscription?->package;
 
+            $sync = $this->syncMikrotikCustomer($freshCustomer);
+
             return response()->json([
-                'message' => 'Party updated.',
+                'message' => 'Party updated. MikroTik user '.$sync['status'].'.',
                 'value' => $currentPackage?->name ?? 'No package',
                 'package_id' => $currentPackage?->id,
+                'warning' => $sync['warning'],
             ]);
         }
 
@@ -504,9 +536,14 @@ class CustomerController extends Controller
 
         $customer->restore();
 
+        // The PPPoE secret was removed when the party was deleted, so recreate
+        // it on the router now that the party is active again.
+        $sync = $this->syncMikrotikCustomer($customer);
+
         return redirect()
             ->route('customers.index')
-            ->with('success', "\"{$customer->name}\" restored successfully.");
+            ->with('success', "\"{$customer->name}\" restored successfully. MikroTik user {$sync['status']}.")
+            ->with('warning', $sync['warning']);
     }
 
     public function grantGracePeriod(Request $request, Customer $customer, ConcessionLogService $concessionLog)
@@ -687,6 +724,10 @@ class CustomerController extends Controller
 
     public function forceInactive(Request $request, Customer $customer, ConcessionLogService $concessionLog)
     {
+        if ($customer->never_suspend) {
+            return back()->withErrors(['inactive_note' => 'Remove the Special ISP flag before forcing this party inactive.']);
+        }
+
         $data = $request->validate([
             'inactive_note' => ['required', 'string', 'min:3', 'max:2000'],
         ]);

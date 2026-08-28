@@ -95,6 +95,22 @@ Artisan::command('mikrotik:sync-router-users {--force : Sync every active router
     return $failed === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Verify and sync PPPoE users on MikroTik routers by each router interval');
 
+Artisan::command('mikrotik:import-secrets', function (\App\Services\MikrotikImportService $importService) {
+    $summary = $importService->refreshActiveRouterSecrets();
+
+    foreach ($summary['results'] as $result) {
+        if (isset($result['error'])) {
+            $this->warn("{$result['router']}: import failed - {$result['error']}");
+        } else {
+            $this->line("{$result['router']}: {$result['count']} secret(s) read.");
+        }
+    }
+
+    $this->info("Router secret refresh finished. Read: {$summary['imported']}. Failed routers: {$summary['failed']}.");
+
+    return $summary['failed'] === 0 ? self::SUCCESS : self::FAILURE;
+})->purpose('Re-pull PPPoE secrets from active routers so the "router users not in app" list stays fresh');
+
 Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defaults to today}', function (MikrotikCustomerSyncService $syncService) {
     $date = $this->option('date') ? \Carbon\Carbon::parse($this->option('date'))->toDateString() : now()->toDateString();
     $disabled = 0;
@@ -178,4 +194,8 @@ Schedule::command('billing:disable-overdue-customers')
 
 Schedule::command('mikrotik:sync-router-users')
     ->hourly()
+    ->withoutOverlapping();
+
+Schedule::command('mikrotik:import-secrets')
+    ->everyThreeHours()
     ->withoutOverlapping();

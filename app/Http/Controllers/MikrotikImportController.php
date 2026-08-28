@@ -2,14 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Customer;
-use App\Models\InternetPackage;
 use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
-use App\Models\Subscription;
 use App\Services\MikrotikImportService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class MikrotikImportController extends Controller
 {
@@ -85,7 +81,7 @@ class MikrotikImportController extends Controller
         return back()->with('success', 'Imported secret note updated.');
     }
 
-    public function createParties(Request $request, MikrotikRouter $mikrotikRouter)
+    public function createParties(Request $request, MikrotikRouter $mikrotikRouter, MikrotikImportService $service)
     {
         $data = $request->validate([
             'secret_ids' => ['required', 'array', 'min:1'],
@@ -93,83 +89,15 @@ class MikrotikImportController extends Controller
             'never_suspend' => ['nullable', 'boolean'],
             'update_existing' => ['nullable', 'boolean'],
         ]);
-        $secrets = $mikrotikRouter->importedSecrets()->whereIn('id', $data['secret_ids'])->get();
-        $created = $updated = $skipped = 0;
 
-        DB::transaction(function () use ($secrets, $mikrotikRouter, $data, &$created, &$updated, &$skipped): void {
-            foreach ($secrets as $secret) {
-                $customer = Customer::where('connection_id', $secret->name)->first();
-                if ($customer && ! ($data['update_existing'] ?? false)) {
-                    $skipped++;
-                    continue;
-                }
+        $secrets = $mikrotikRouter->importedSecrets()->with('router')->whereIn('id', $data['secret_ids'])->get();
 
-                $package = $this->packageFor($secret->profile, $mikrotikRouter);
-                $note = $this->sourceNote($mikrotikRouter, $secret);
-                $customerData = [
-                    'name' => trim((string) $secret->name),
-                    'phone' => $customer?->phone ?: 'Not provided',
-                    'connection_id' => $secret->name,
-                    'mikrotik_username' => $secret->name,
-                    'mikrotik_password' => $secret->password,
-                    'mikrotik_router_id' => $mikrotikRouter->id,
-                    'address' => $customer?->address ?: 'Imported from MikroTik '.$mikrotikRouter->name,
-                    'notes' => $this->appendNote($customer?->notes, $note),
-                    'status' => $secret->disabled ? 'inactive' : 'active',
-                    'is_customer' => true,
-                    'is_vendor' => $customer?->is_vendor ?? false,
-                    'never_suspend' => (bool) ($data['never_suspend'] ?? false),
-                ];
-                if ($customer) {
-                    $customer->update($customerData);
-                    $updated++;
-                } else {
-                    $customer = Customer::create($customerData);
-                    $created++;
-                }
-
-                $this->syncSubscription($customer, $package, $secret->disabled);
-                $secret->update(['customer_id' => $customer->id]);
-            }
-        });
-
-        return back()->with('success', "Party import completed: {$created} created, {$updated} updated, {$skipped} skipped.");
-    }
-
-    private function packageFor(?string $profile, MikrotikRouter $router): ?InternetPackage
-    {
-        if (blank($profile)) {
-            return null;
-        }
-
-        return InternetPackage::firstOrCreate(
-            ['mikrotik_profile' => $profile],
-            ['name' => $profile, 'speed' => 'Imported profile', 'monthly_price' => 0, 'description' => 'Automatically imported from MikroTik '.$router->name.'. Set the package price before billing.', 'status' => 'active']
+        $result = $service->createPartiesFromSecrets(
+            $secrets,
+            (bool) ($data['never_suspend'] ?? false),
+            (bool) ($data['update_existing'] ?? false),
         );
-    }
 
-    private function syncSubscription(Customer $customer, ?InternetPackage $package, bool $disabled): void
-    {
-        if (! $package) {
-            return;
-        }
-
-        $subscription = $customer->subscriptions()->latest('id')->first();
-        $values = ['internet_package_id' => $package->id, 'start_date' => now()->toDateString(), 'status' => $disabled ? 'inactive' : 'active'];
-        if ($subscription) {
-            $subscription->update($values);
-        } else {
-            Subscription::create(['customer_id' => $customer->id, ...$values]);
-        }
-    }
-
-    private function sourceNote(MikrotikRouter $router, MikrotikImportedSecret $secret): string
-    {
-        return 'Imported from MikroTik: '.$router->name.' ('.$router->ip_address.':'.$router->api_port.') at '.now()->format('d/m/Y H:i:s')."\nConnection ID: {$secret->name}\nProfile: ".($secret->profile ?: 'none')."\nService: ".($secret->service ?: 'none')."\nRouter comment: ".($secret->router_comment ?: 'none');
-    }
-
-    private function appendNote(?string $old, string $new): string
-    {
-        return trim(($old ? rtrim($old)."\n\n" : '').$new);
+        return back()->with('success', "Party import completed: {$result['created']} created, {$result['updated']} updated, {$result['skipped']} skipped.");
     }
 }
