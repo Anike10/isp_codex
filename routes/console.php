@@ -3,6 +3,7 @@
 use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\MikrotikRouter;
+use App\Models\User;
 use App\Services\MikrotikCustomerSyncService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -11,6 +12,33 @@ use Illuminate\Support\Facades\Schedule;
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Artisan::command('user:super-admin {email} {--revoke : Remove super admin instead of granting it}', function () {
+    $email = (string) $this->argument('email');
+    $user = User::query()->where('email', $email)->first();
+
+    if (! $user) {
+        $this->error("No user found with email {$email}.");
+
+        return 1;
+    }
+
+    $grant = ! $this->option('revoke');
+
+    if (! $grant && User::query()->where('is_super_admin', true)->whereKeyNot($user->id)->count() === 0) {
+        $this->error('Refusing to revoke the last remaining super admin.');
+
+        return 1;
+    }
+
+    $user->forceFill(['is_super_admin' => $grant])->save();
+
+    $this->info($grant
+        ? "{$user->name} <{$email}> is now a super admin."
+        : "Super admin access removed from {$user->name} <{$email}>.");
+
+    return 0;
+})->purpose('Grant or revoke super admin access for a user by email');
 
 Artisan::command('mikrotik:sync-customers', function (MikrotikCustomerSyncService $syncService) {
     $createdOrUpdated = 0;

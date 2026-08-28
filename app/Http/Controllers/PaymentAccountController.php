@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AccountDeposit;
 use App\Models\CustomerBalanceTransaction;
 use App\Models\Expense;
 use App\Models\Payment;
 use App\Models\PaymentAccount;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
@@ -24,11 +27,13 @@ class PaymentAccountController extends Controller
                     ->whereNull('payment_id'),
             ], 'amount')
             ->withSum('expenses as spent_amount', 'amount')
+            ->withSum('deposits as deposited_amount', 'amount')
             ->orderBy('payment_method')
             ->orderBy('account_name')
             ->get();
 
         $accounts = PaymentAccount::query()
+            ->with('owner:id,name')
             ->withSum('payments as collected_amount', 'amount')
             ->withSum([
                 'balanceTransactions as advance_collected_amount' => fn ($query) => $query
@@ -36,6 +41,7 @@ class PaymentAccountController extends Controller
                     ->whereNull('payment_id'),
             ], 'amount')
             ->withSum('expenses as spent_amount', 'amount')
+            ->withSum('deposits as deposited_amount', 'amount')
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = trim((string) $request->query('search'));
                 $query->where(function ($query) use ($search) {
@@ -61,14 +67,20 @@ class PaymentAccountController extends Controller
         return view('payment_accounts.index', compact('accounts', 'allAccounts', 'cashCollected', 'cashSpent'));
     }
 
-    public function create()
+    public function create(Request $request)
     {
-        return view('payment_accounts.create', ['paymentAccount' => new PaymentAccount]);
+        return view('payment_accounts.create', [
+            'paymentAccount' => new PaymentAccount,
+            'assignableOwners' => $this->assignableOwners($request),
+        ]);
     }
 
-    public function edit(PaymentAccount $paymentAccount)
+    public function edit(Request $request, PaymentAccount $paymentAccount)
     {
-        return view('payment_accounts.create', compact('paymentAccount'));
+        return view('payment_accounts.create', [
+            'paymentAccount' => $paymentAccount,
+            'assignableOwners' => $this->assignableOwners($request),
+        ]);
     }
 
     public function show(Request $request, PaymentAccount $paymentAccount)
@@ -88,15 +100,21 @@ class PaymentAccountController extends Controller
                 ->whereNull('payment_id'),
             $request
         );
+        $depositQuery = $this->filteredDepositQuery(
+            AccountDeposit::query()->where('payment_account_id', $paymentAccount->id),
+            $request
+        );
 
         $perPage = $this->perPage($request);
         $filteredCollected = (float) (clone $paymentQuery)->sum('amount')
             + (float) (clone $advanceQuery)->sum('amount');
         $filteredSpent = (float) (clone $expenseQuery)->sum('amount');
+        $filteredDeposited = (float) (clone $depositQuery)->sum('amount');
         [$ledgerRows, $runningBalance] = $this->paginatedLedgerRows(
             $paymentQuery,
             $expenseQuery,
             $advanceQuery,
+            $depositQuery,
             $request,
             $perPage,
             (float) $paymentAccount->opening_balance,
@@ -105,6 +123,7 @@ class PaymentAccountController extends Controller
                     ->where('direction', 'credit')
                     ->whereNull('payment_id'), $request)
                 - $this->priorExpenseTotal($paymentAccount->expenses(), $request)
+                - $this->priorDepositTotal($paymentAccount->deposits(), $request)
         );
         $filteredTransactions = $ledgerRows->total();
 
@@ -114,8 +133,9 @@ class PaymentAccountController extends Controller
                 ->whereNull('payment_id')
                 ->sum('amount');
         $totalSpent = $paymentAccount->expenses()->sum('amount');
+        $totalDeposited = $paymentAccount->deposits()->sum('amount');
 
-        return view('payment_accounts.show', compact('paymentAccount', 'ledgerRows', 'totalCollected', 'totalSpent', 'filteredCollected', 'filteredSpent', 'filteredTransactions', 'runningBalance'));
+        return view('payment_accounts.show', compact('paymentAccount', 'ledgerRows', 'totalCollected', 'totalSpent', 'totalDeposited', 'filteredCollected', 'filteredSpent', 'filteredDeposited', 'filteredTransactions', 'runningBalance'));
     }
 
     public function cashLedger(Request $request)
@@ -146,6 +166,7 @@ class PaymentAccountController extends Controller
             $paymentQuery,
             $expenseQuery,
             $advanceQuery,
+            null,
             $request,
             $perPage,
             0,
@@ -171,7 +192,11 @@ class PaymentAccountController extends Controller
 
     public function store(Request $request)
     {
-        PaymentAccount::create($this->validatedAccount($request));
+        $data = $this->validatedAccount($request);
+        $data['owner_user_id'] = $this->resolveOwnerId($request, null);
+        $data['balance_limit'] = $this->resolveBalanceLimit($request, null);
+
+        PaymentAccount::create($data);
 
         return redirect()->route('payment-accounts.index')->with('success', 'Payment account created successfully.');
     }
@@ -179,6 +204,8 @@ class PaymentAccountController extends Controller
     public function update(Request $request, PaymentAccount $paymentAccount)
     {
         $data = $this->validatedAccount($request);
+        $data['owner_user_id'] = $this->resolveOwnerId($request, $paymentAccount);
+        $data['balance_limit'] = $this->resolveBalanceLimit($request, $paymentAccount);
 
         if ($this->hasTransactions($paymentAccount)
             && abs((float) $data['opening_balance'] - (float) $paymentAccount->opening_balance) >= 0.005) {
@@ -214,11 +241,56 @@ class PaymentAccountController extends Controller
         ]);
     }
 
+    /** Users a super admin may assign as the owner of an account. */
+    private function assignableOwners(Request $request): Collection
+    {
+        if (! $request->user()?->isSuperAdmin()) {
+            return new Collection;
+        }
+
+        return User::query()->orderBy('name')->get(['id', 'name', 'email']);
+    }
+
+    /**
+     * Only a super admin may set or move ownership. Everyone else keeps the
+     * existing owner (editing) or becomes the owner themselves (creating).
+     */
+    private function resolveOwnerId(Request $request, ?PaymentAccount $account): ?int
+    {
+        if ($request->user()?->isSuperAdmin() && $request->has('owner_user_id')) {
+            $ownerId = $request->validate([
+                'owner_user_id' => ['nullable', 'integer', 'exists:users,id'],
+            ])['owner_user_id'];
+
+            return $ownerId !== null ? (int) $ownerId : null;
+        }
+
+        return $account?->owner_user_id ?? $request->user()?->id;
+    }
+
+    /**
+     * Only a super admin may set an account's balance limit. Everyone else
+     * keeps whatever limit is already on the account.
+     */
+    private function resolveBalanceLimit(Request $request, ?PaymentAccount $account): ?float
+    {
+        if ($request->user()?->isSuperAdmin() && $request->has('balance_limit')) {
+            $limit = $request->validate([
+                'balance_limit' => ['nullable', 'numeric', 'min:0'],
+            ])['balance_limit'];
+
+            return $limit === null || $limit === '' ? null : (float) $limit;
+        }
+
+        return $account?->balance_limit !== null ? (float) $account->balance_limit : null;
+    }
+
     private function hasTransactions(PaymentAccount $paymentAccount): bool
     {
         return $paymentAccount->payments()->exists()
             || $paymentAccount->expenses()->exists()
-            || $paymentAccount->balanceTransactions()->exists();
+            || $paymentAccount->balanceTransactions()->exists()
+            || $paymentAccount->deposits()->exists();
     }
 
     private function filteredPaymentQuery($query, Request $request)
@@ -311,14 +383,40 @@ class PaymentAccountController extends Controller
             ->sum('amount');
     }
 
-    private function paginatedLedgerRows($paymentQuery, $expenseQuery, $advanceQuery, Request $request, int $perPage, float $openingBalance, float $priorDateBalance): array
+    private function filteredDepositQuery($query, Request $request)
+    {
+        return $query
+            ->when($request->filled('from'), fn ($query) => $query->where('account_deposits.deposited_at', '>=', $request->input('from')))
+            ->when($request->filled('to'), fn ($query) => $query->where('account_deposits.deposited_at', '<=', $request->input('to')))
+            ->when($request->filled('min_amount'), fn ($query) => $query->where('account_deposits.amount', '>=', (float) $request->input('min_amount')))
+            ->when($request->filled('max_amount'), fn ($query) => $query->where('account_deposits.amount', '<=', (float) $request->input('max_amount')))
+            ->when(trim((string) $request->input('search')) !== '', function ($query) use ($request) {
+                $search = trim((string) $request->input('search'));
+
+                $query->where(function ($query) use ($search) {
+                    $query->where('account_deposits.note', 'like', "%{$search}%")
+                        ->orWhere('account_deposits.reference', 'like', "%{$search}%");
+                });
+            });
+    }
+
+    private function priorDepositTotal($query, Request $request): float
+    {
+        if (! $request->filled('from')) {
+            return 0;
+        }
+
+        return (float) $query->where('account_deposits.deposited_at', '<', $request->input('from'))->sum('amount');
+    }
+
+    private function paginatedLedgerRows($paymentQuery, $expenseQuery, $advanceQuery, $depositQuery, Request $request, int $perPage, float $openingBalance, float $priorDateBalance): array
     {
         $page = max(1, (int) $request->query('page', 1));
         $offset = ($page - 1) * $perPage;
         $startingBalance = $openingBalance + $priorDateBalance;
 
         $orderedRows = DB::query()
-            ->fromSub($this->ledgerQuery($paymentQuery, $expenseQuery, $advanceQuery), 'ledger_rows')
+            ->fromSub($this->ledgerQuery($paymentQuery, $expenseQuery, $advanceQuery, $depositQuery), 'ledger_rows')
             ->orderBy('ledger_date')
             ->orderBy('row_id')
             ->orderBy('sort_type');
@@ -348,6 +446,7 @@ class PaymentAccountController extends Controller
                 $defaultNote = match ($type) {
                     'payment' => 'Payment received',
                     'advance' => 'Advance payment',
+                    'deposit' => 'Deposit to office',
                     default => $expenseLabel,
                 };
 
@@ -380,7 +479,7 @@ class PaymentAccountController extends Controller
         return [$paginator, $runningBalance];
     }
 
-    private function ledgerQuery($paymentQuery, $expenseQuery, $advanceQuery)
+    private function ledgerQuery($paymentQuery, $expenseQuery, $advanceQuery, $depositQuery = null)
     {
         $payments = (clone $paymentQuery)
             ->leftJoin('invoices', 'invoices.id', '=', 'payments.invoice_id')
@@ -433,6 +532,28 @@ class PaymentAccountController extends Controller
             ->selectRaw('customer_balance_transactions.amount as signed_amount')
             ->toBase();
 
-        return $payments->unionAll($expenses)->unionAll($advances);
+        $ledger = $payments->unionAll($expenses)->unionAll($advances);
+
+        if ($depositQuery !== null) {
+            $deposits = (clone $depositQuery)
+                ->selectRaw("'deposit' as row_type")
+                ->selectRaw('account_deposits.id as row_id')
+                ->selectRaw('account_deposits.deposited_at as ledger_date')
+                ->selectRaw('3 as sort_type')
+                ->selectRaw('NULL as invoice_id')
+                ->selectRaw('NULL as invoice_no')
+                ->selectRaw("'Office' as party")
+                ->selectRaw('account_deposits.note as note')
+                ->selectRaw('account_deposits.reference as reference')
+                ->selectRaw('NULL as category')
+                ->selectRaw('0 as credit')
+                ->selectRaw('account_deposits.amount as debit')
+                ->selectRaw('-account_deposits.amount as signed_amount')
+                ->toBase();
+
+            $ledger = $ledger->unionAll($deposits);
+        }
+
+        return $ledger;
     }
 }

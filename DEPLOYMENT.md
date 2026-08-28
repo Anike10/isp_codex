@@ -163,6 +163,16 @@ secrets from all active routers, and the Laravel scheduler runs it every three
 hours. Run `php artisan migrate --force` before verifying the dashboard or
 `/router-users`.
 
+Payment-account ownership and super-admin deployment requires migrations
+`2026_08_28_000003` through `2026_08_28_000006`. They add the protected
+`users.is_super_admin` flag, payment-account owners and delegated operators,
+optional balance limits, and auditable office deposits. Create and verify a
+database backup first, then run `php artisan migrate --force` before opening
+payment forms. Verify `/users`, `/payment-accounts`, `/payment-account-access`,
+and an owner deposit flow. The recovery command is `php artisan
+user:super-admin user@example.com`; use `--revoke` only when another super admin
+will remain.
+
 The multi-router customer assignment feature requires migration
 `2026_08_12_000001_create_customer_mikrotik_router_table.php`. It creates the
 many-to-many target table and backfills every existing non-null

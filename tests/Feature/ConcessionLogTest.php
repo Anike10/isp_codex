@@ -162,6 +162,55 @@ class ConcessionLogTest extends TestCase
         $this->assertSame(1, ConcessionLog::where('action_type', 'mark_special')->count());
     }
 
+    public function test_paying_after_grace_credits_the_value_back_to_the_grace_admin(): void
+    {
+        Carbon::setTestNow('2026-08-01 10:00:00');
+
+        $actor = $this->userWith(['manage_customers', 'grant_grace_period']);
+        $customer = $this->customerWithExpiredService(3000);
+
+        $this->actingAs($actor)
+            ->post(route('customers.grace-period', $customer), ['grace_days' => 6])
+            ->assertRedirect();
+
+        $grace = ConcessionLog::where('action_type', 'grace_period')->firstOrFail();
+        $graceValue = (float) $grace->estimated_value;
+        $this->assertGreaterThan(0, $graceValue);
+
+        $invoice = Invoice::create([
+            'customer_id' => $customer->id,
+            'invoice_no' => Invoice::generateInvoiceNo($customer->id, '2026-08'),
+            'billing_month' => '2026-08',
+            'invoice_type' => 'service',
+            'subtotal' => 3000, 'discount' => 0, 'vat' => 0, 'total' => 3000,
+            'paid_amount' => 0, 'due_amount' => 3000, 'status' => 'unpaid',
+            'due_date' => '2026-08-01',
+        ]);
+
+        Carbon::setTestNow('2026-08-10 09:00:00');
+        $this->paymentService()->recordPayment($invoice->refresh(), [
+            'amount' => 3000,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-08-10',
+            'note' => 'Recharge after grace.',
+        ]);
+
+        $recovery = ConcessionLog::where('action_type', 'grace_recovered')->firstOrFail();
+        $this->assertSame($actor->id, $recovery->user_id);
+        $this->assertSame(-6, (int) $recovery->free_days);
+        $this->assertSame(round(-$graceValue, 2), (float) $recovery->estimated_value);
+        $this->assertSame($grace->id, $recovery->meta['recovered_grace_log_id'] ?? null);
+
+        // The grace give-away for this party now nets to zero.
+        $net = round((float) ConcessionLog::where('customer_id', $customer->id)->sum('estimated_value'), 2);
+        $this->assertSame(0.0, $net);
+
+        // The original grace row is marked so a later payment cannot double-credit.
+        $grace->refresh();
+        $this->assertSame($recovery->id, $grace->meta['recovered_by_log_id'] ?? null);
+        $this->assertSame(1, ConcessionLog::where('action_type', 'grace_recovered')->count());
+    }
+
     public function test_reports_require_the_view_permission_and_show_totals(): void
     {
         $viewer = $this->userWith(['view_concession_reports']);

@@ -45,11 +45,17 @@ class BulkCustomerPaymentService
         $paymentDate = Carbon::parse($data['payment_date'])->startOfDay();
         $reference = trim((string) ($data['reference'] ?? '')) ?: 'BULK-'.strtoupper(substr($batchToken, 0, 12));
 
+        $account = ! empty($data['payment_account_id'])
+            ? \App\Models\PaymentAccount::find($data['payment_account_id'])
+            : null;
+        $accountBaseBalance = $account?->liveBalance() ?? 0.0;
+        $accountAdded = 0.0;
+
         $processingParty = null;
         $processingStep = 'loading selected parties';
 
         try {
-            $result = DB::transaction(function () use ($customerIds, $data, $duration, $paymentDate, $reference, $entryBy, &$processingParty, &$processingStep): array {
+            $result = DB::transaction(function () use ($customerIds, $data, $duration, $paymentDate, $reference, $entryBy, $account, $accountBaseBalance, &$accountAdded, &$processingParty, &$processingStep): array {
                 $customers = Customer::query()
                     ->whereKey($customerIds)
                     ->lockForUpdate()
@@ -77,6 +83,18 @@ class BulkCustomerPaymentService
                     $amount = $this->amountForPrice((float) $package->monthly_price, $duration);
                     if ($amount <= 0) {
                         throw new InvalidArgumentException('The assigned package has a zero price.');
+                    }
+
+                    if ($account && $account->balance_limit !== null) {
+                        $accountAdded += $amount;
+                        if (round($accountBaseBalance + $accountAdded, 2) > (float) $account->balance_limit + 0.001) {
+                            $processingStep = 'checking the account balance limit';
+                            throw new InvalidArgumentException(sprintf(
+                                'The "%s" account would pass its balance limit of BDT %s during this batch. Deposit its balance to the office first.',
+                                $account->account_name,
+                                number_format((float) $account->balance_limit, 2),
+                            ));
+                        }
                     }
 
                     $note = trim((string) ($data['note'] ?? ''));

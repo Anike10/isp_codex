@@ -49,7 +49,17 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_super_admin' => 'boolean',
         ];
+    }
+
+    /**
+     * A super admin sits above the permission/menu system entirely and is the
+     * only account allowed to grant or revoke super admin on other users.
+     */
+    public function isSuperAdmin(): bool
+    {
+        return (bool) $this->is_super_admin;
     }
 
     public function roles(): BelongsToMany
@@ -82,8 +92,17 @@ class User extends Authenticatable
         return $this->belongsTo(PaymentAccount::class, 'default_payment_account_id');
     }
 
+    public function ownedPaymentAccounts(): HasMany
+    {
+        return $this->hasMany(PaymentAccount::class, 'owner_user_id');
+    }
+
     public function hasPermission(string $permission): bool
     {
+        if ($this->is_super_admin) {
+            return true;
+        }
+
         if (! $this->relationLoaded('deniedPermissions')) {
             $this->load('deniedPermissions');
         }
@@ -111,6 +130,10 @@ class User extends Authenticatable
 
     public function canAccessMenu(string $menuKey): bool
     {
+        if ($this->is_super_admin) {
+            return true;
+        }
+
         $definition = collect(config('user_access.menu_groups', []))
             ->pluck('items')
             ->collapse()

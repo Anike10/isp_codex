@@ -42,4 +42,14 @@ class UserFactory extends Factory
             'email_verified_at' => null,
         ]);
     }
+
+    /**
+     * Indicate that the user is a super admin. `is_super_admin` is guarded, so
+     * it is force-filled rather than mass assigned.
+     */
+    public function superAdmin(): static
+    {
+        return $this->afterMaking(fn (User $user) => $user->forceFill(['is_super_admin' => true]))
+            ->afterCreating(fn (User $user) => $user->forceFill(['is_super_admin' => true])->save());
+    }
 }

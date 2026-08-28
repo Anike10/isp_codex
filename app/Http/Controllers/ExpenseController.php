@@ -67,7 +67,7 @@ class ExpenseController extends Controller
             'types' => Expense::TYPES,
             'categories' => Expense::CATEGORIES,
             'employees' => Employee::where('status', 'active')->orderBy('name')->get(),
-            'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
+            'paymentAccounts' => PaymentAccount::where('status', 'active')->usableBy($request->user())->orderBy('payment_method')->orderBy('account_name')->get(),
             'paymentDefault' => $preferenceService->forUser($request->user()),
         ]);
     }
@@ -98,6 +98,7 @@ class ExpenseController extends Controller
             $account = PaymentAccount::where('id', $data['payment_account_id'] ?? null)
                 ->where('payment_method', $data['payment_method'])
                 ->where('status', 'active')
+                ->usableBy($request->user())
                 ->first();
 
             if (! $account) {

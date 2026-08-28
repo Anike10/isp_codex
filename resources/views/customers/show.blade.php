@@ -246,7 +246,7 @@
             'action' => $log->actionLabel(),
             'tone' => match ($log->action_type) {
                 'force_active', 'mark_special' => 'activation',
-                'grace_period', 'quick_activate', 'validity_override' => 'change',
+                'grace_recovered' => 'payment',
                 default => 'change',
             },
             'detail' => $log->reason ?: null,

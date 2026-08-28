@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\AccountDeposit;
 use App\Models\AppSetting;
 use App\Models\BkashSmsPayment;
 use App\Models\Customer;
@@ -67,6 +68,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         foreach ([
+            AccountDeposit::class,
             BkashSmsPayment::class,
             Customer::class,
             CustomerBalanceTransaction::class,

@@ -31,6 +31,7 @@ class PaymentAccountPreferenceService
             ->whereKey($user->default_payment_account_id)
             ->where('payment_method', $user->default_payment_method)
             ->where('status', 'active')
+            ->usableBy($user)
             ->first();
 
         if (! $account) {
@@ -56,6 +57,7 @@ class PaymentAccountPreferenceService
                 ->whereKey($paymentAccountId)
                 ->where('payment_method', $paymentMethod)
                 ->where('status', 'active')
+                ->usableBy($user)
                 ->exists();
 
             if (! $accountExists) {

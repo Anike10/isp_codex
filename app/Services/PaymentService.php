@@ -557,6 +557,7 @@ class PaymentService
         $firstPeriodStart = $periodStart->copy();
         $periodEnd = $periodStart->copy();
         $graceDays = max(0, (int) ($customer->grace_days ?? 0));
+        $recoveredGraceDays = 0;
 
         for ($month = 1; $month <= $monthsToAdd; $month++) {
             $periodDays = max(1, $periodStart->copy()->diffInDays($periodStart->copy()->addMonthNoOverflow()));
@@ -564,6 +565,7 @@ class PaymentService
 
             if ($month === 1 && $graceDays > 0) {
                 $usedGraceDays = min($graceDays, max(0, $periodDays - 1));
+                $recoveredGraceDays = $usedGraceDays;
             }
 
             $periodEnd = $periodStart->copy()->addDays($periodDays - $usedGraceDays - 1);
@@ -589,6 +591,12 @@ class PaymentService
             'grace_used_at' => null,
             'notes' => trim(implode("\n", array_filter([$customer->notes, $detail]))),
         ]);
+
+        // The first paid month lost the consumed grace days, so the party has
+        // repaid the grace concession; credit that value back to its admin.
+        if ($recoveredGraceDays > 0) {
+            $this->concessionLog->recordGraceRecovered($customer, $recoveredGraceDays, Carbon::parse($paymentDate));
+        }
     }
 
     public function addAdvanceCreditAndApplyToInvoices(Customer $customer, array $data, array $invoiceAmounts): CustomerBalanceTransaction
@@ -650,6 +658,12 @@ class PaymentService
         // A payment that brings the party current ends any open force-active
         // concession, so its running give-away value is settled here.
         $this->concessionLog->closeOpenForceActive($customer, Carbon::parse($paymentDate), 'payment');
+
+        // The paid month above already lost $graceDays days, so the party has
+        // repaid the grace concession; credit that value back to its admin.
+        if ($graceDays > 0) {
+            $this->concessionLog->recordGraceRecovered($customer, $graceDays, Carbon::parse($paymentDate));
+        }
     }
 
     private function money(mixed $amount): float

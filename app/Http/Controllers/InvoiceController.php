@@ -102,6 +102,7 @@ class InvoiceController extends Controller
             ->paginate($this->perPage($request))
             ->appends($request->query());
         $paymentAccounts = PaymentAccount::where('status', 'active')
+            ->usableBy($request->user())
             ->orderBy('payment_method')
             ->orderBy('account_name')
             ->get();
@@ -463,11 +464,14 @@ class InvoiceController extends Controller
             $account = PaymentAccount::where('id', $data['payment_account_id'] ?? null)
                 ->where('payment_method', $data['payment_method'])
                 ->where('status', 'active')
+                ->usableBy($request->user())
                 ->first();
 
             if (! $account) {
                 return back()->withInput()->withErrors(['payment_account_id' => 'Please select a valid account for this payment method.']);
             }
+
+            $this->assertAccountCanReceive($account, (float) $data['amount']);
 
             $data['payment_account_id'] = $account->id;
         }
@@ -984,6 +988,7 @@ class InvoiceController extends Controller
 
         if (auth()->user()?->hasPermission('manage_payments')) {
             $paymentAccounts = PaymentAccount::where('status', 'active')
+                ->usableBy(auth()->user())
                 ->orderBy('payment_method')
                 ->orderBy('account_name')
                 ->get();

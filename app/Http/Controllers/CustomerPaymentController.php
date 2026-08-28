@@ -30,7 +30,7 @@ class CustomerPaymentController extends Controller
                 ->orderByDesc('id')
                 ->limit(20)
                 ->get(),
-            'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
+            'paymentAccounts' => PaymentAccount::where('status', 'active')->usableBy($request->user())->orderBy('payment_method')->orderBy('account_name')->get(),
             'paymentDefault' => $preferenceService->forUser($request->user()),
         ]);
     }
@@ -75,11 +75,14 @@ class CustomerPaymentController extends Controller
             $account = PaymentAccount::where('id', $data['payment_account_id'])
                 ->where('payment_method', $data['payment_method'])
                 ->where('status', 'active')
+                ->usableBy($request->user())
                 ->first();
 
             if (! $account) {
                 return back()->withInput()->withErrors(['payment_account_id' => 'Please select a valid account for this payment method.']);
             }
+
+            $this->assertAccountCanReceive($account, (float) $data['amount']);
         }
 
         $billingService->generateCurrentServiceBillForCustomer($customer);
@@ -187,11 +190,14 @@ class CustomerPaymentController extends Controller
             $account = PaymentAccount::where('id', $data['payment_account_id'])
                 ->where('payment_method', $data['payment_method'])
                 ->where('status', 'active')
+                ->usableBy($request->user())
                 ->first();
 
             if (! $account) {
                 return back()->withInput()->withErrors(['payment_account_id' => 'Please select a valid account for this payment method.']);
             }
+
+            $this->assertAccountCanReceive($account, (float) $data['amount']);
         }
 
         try {

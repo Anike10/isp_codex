@@ -12,6 +12,7 @@ class ConcessionLog extends Model
 {
     public const ACTION_LABELS = [
         'grace_period' => 'Grace period',
+        'grace_recovered' => 'Grace paid back',
         'validity_override' => 'Validity date override',
         'quick_activate' => 'Quick-activate to next date',
         'force_active' => 'Force service active',

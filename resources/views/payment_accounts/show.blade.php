@@ -31,6 +31,9 @@
         @if ($canRecordPayments)
             <a class="btn secondary" href="{{ route('payments.create') }}">Record Payment</a>
         @endif
+        @if (auth()->user()?->isSuperAdmin() || (int) $paymentAccount->owner_user_id === (int) auth()->id())
+            <a class="btn secondary" href="{{ route('account-deposits.create', $paymentAccount) }}">Deposit to Office</a>
+        @endif
         <a class="btn secondary" href="{{ route('payment-accounts.edit', $paymentAccount) }}">Edit Account</a>
         <form method="post" action="{{ route('payment-accounts.destroy', $paymentAccount) }}" onsubmit="return confirm('Delete this payment account? Accounts with transaction history cannot be deleted.')">
             @csrf @method('DELETE')
@@ -51,11 +54,19 @@
     </div>
     <div class="card stat">
         <span class="muted">Current Balance</span>
-        <strong>{{ number_format((float) $paymentAccount->opening_balance + $totalCollected - $totalSpent, 2) }}</strong>
+        <strong>{{ number_format((float) $paymentAccount->opening_balance + $totalCollected - $totalSpent - $totalDeposited, 2) }}</strong>
     </div>
     <div class="card stat">
         <span class="muted">Total Expense</span>
         <strong>{{ number_format($totalSpent, 2) }}</strong>
+    </div>
+    <div class="card stat">
+        <span class="muted">Deposited to Office</span>
+        <strong>{{ number_format($totalDeposited, 2) }}</strong>
+    </div>
+    <div class="card stat">
+        <span class="muted">Balance Limit</span>
+        <strong>{{ $paymentAccount->balance_limit === null ? 'None' : number_format((float) $paymentAccount->balance_limit, 2) }}</strong>
     </div>
     <div class="card stat">
         <span class="muted">Transactions</span>
@@ -140,6 +151,8 @@
                         @endif
                     @elseif ($row['type'] === 'advance')
                         Advance
+                    @elseif ($row['type'] === 'deposit')
+                        Office deposit
                     @else
                         Expense
                     @endif

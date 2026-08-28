@@ -76,8 +76,9 @@ class UserController extends Controller
         return redirect()->route('users.index')->with('success', 'User created successfully.');
     }
 
-    public function edit(User $user)
+    public function edit(Request $request, User $user)
     {
+        $this->authorizeSuperAdminTarget($request, $user);
         $user->load(['roles.permissions', 'permissions', 'deniedPermissions', 'menuAccesses']);
 
         return view('users.edit', [
@@ -92,6 +93,8 @@ class UserController extends Controller
 
     public function update(Request $request, User $user, RecordVersionService $recordVersionService)
     {
+        $this->authorizeSuperAdminTarget($request, $user);
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email,'.$user->id],
@@ -157,10 +160,46 @@ class UserController extends Controller
         return redirect()->route('users.index')->with('success', 'User updated successfully.');
     }
 
+    /**
+     * Grant or revoke super admin. Only an existing super admin may call this,
+     * and the last remaining super admin cannot be demoted.
+     */
+    public function updateSuperAdmin(Request $request, User $user)
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403, 'Only a super admin can change super admin access.');
+
+        $makeSuper = $request->validate([
+            'is_super_admin' => ['required', 'boolean'],
+        ])['is_super_admin'];
+
+        if (! $makeSuper && $user->is_super_admin) {
+            $otherSuperAdmins = User::query()
+                ->where('is_super_admin', true)
+                ->whereKeyNot($user->id)
+                ->count();
+
+            if ($otherSuperAdmins === 0) {
+                return back()->withErrors(['is_super_admin' => 'At least one super admin must remain.']);
+            }
+        }
+
+        $user->forceFill(['is_super_admin' => (bool) $makeSuper])->save();
+
+        return back()->with('success', $makeSuper
+            ? "\"{$user->name}\" is now a super admin."
+            : "Super admin access removed from \"{$user->name}\".");
+    }
+
     public function destroy(Request $request, User $user)
     {
         if ($request->user()?->is($user)) {
             return back()->withErrors(['user' => 'You cannot delete your own logged-in account.']);
+        }
+
+        $this->authorizeSuperAdminTarget($request, $user);
+
+        if ($user->isSuperAdmin() && User::query()->where('is_super_admin', true)->whereKeyNot($user->id)->doesntExist()) {
+            return back()->withErrors(['user' => 'The last remaining super admin cannot be deleted.']);
         }
 
         $anotherManagerExists = User::query()
@@ -179,6 +218,16 @@ class UserController extends Controller
         });
 
         return redirect()->route('users.index')->with('success', 'User deleted successfully.');
+    }
+
+    /** Standard user managers may not alter or delete a super-admin login. */
+    private function authorizeSuperAdminTarget(Request $request, User $user): void
+    {
+        abort_if(
+            $user->isSuperAdmin() && ! $request->user()?->isSuperAdmin(),
+            403,
+            'Only a super admin can manage another super-admin account.',
+        );
     }
 
     /**

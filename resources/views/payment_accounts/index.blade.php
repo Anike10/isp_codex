@@ -29,10 +29,11 @@
             $opening = $methodAccounts->sum(fn ($account) => (float) $account->opening_balance);
             $collected = $methodAccounts->sum(fn ($account) => (float) ($account->collected_amount ?? 0) + (float) ($account->advance_collected_amount ?? 0));
             $spent = $methodAccounts->sum(fn ($account) => (float) ($account->spent_amount ?? 0));
+            $deposited = $methodAccounts->sum(fn ($account) => (float) ($account->deposited_amount ?? 0));
         @endphp
         <div class="card stat">
             <span class="muted">{{ $methodLabels[$method] }} Balance</span>
-            <strong>{{ number_format($opening + $collected - $spent, 2) }}</strong>
+            <strong>{{ number_format($opening + $collected - $spent - $deposited, 2) }}</strong>
         </div>
     @endforeach
 </div>
@@ -52,10 +53,13 @@
             <th>Method</th>
             <th>Account Name</th>
             <th>Account Number</th>
+            <th>Owner</th>
             <th>Opening Balance</th>
             <th>Collected</th>
             <th>Spent</th>
+            <th>To office</th>
             <th>Current Balance</th>
+            <th>Limit / Left</th>
             <th>Status</th>
             <th></th>
         </tr>
@@ -65,31 +69,53 @@
             <td>Cash</td>
             <td>Cash Collection</td>
             <td>N/A</td>
+            <td><span class="muted">Shared</span></td>
             <td>{{ number_format(0, 2) }}</td>
             <td>{{ number_format($cashCollected, 2) }}</td>
             <td>{{ number_format($cashSpent, 2) }}</td>
+            <td><span class="muted">—</span></td>
             <td>{{ number_format($cashCollected - $cashSpent, 2) }}</td>
+            <td><span class="muted">—</span></td>
             <td><span class="badge active">active</span></td>
             <td><a class="btn light" href="{{ route('payment-accounts.cash-ledger') }}">Ledger</a></td>
         </tr>
+        @php
+            $viewer = auth()->user();
+        @endphp
         @forelse ($accounts as $account)
             @php
                 $collected = (float) ($account->collected_amount ?? 0) + (float) ($account->advance_collected_amount ?? 0);
                 $spent = (float) ($account->spent_amount ?? 0);
-                $currentBalance = (float) $account->opening_balance + $collected - $spent;
+                $deposited = (float) ($account->deposited_amount ?? 0);
+                $currentBalance = (float) $account->opening_balance + $collected - $spent - $deposited;
+                $limit = $account->balance_limit === null ? null : (float) $account->balance_limit;
+                $canDeposit = $viewer?->isSuperAdmin() || ($account->owner_user_id && (int) $account->owner_user_id === (int) $viewer?->id);
             @endphp
             <tr data-href="{{ route('payment-accounts.show', $account) }}">
                 <td>{{ $methodLabels[$account->payment_method] ?? ucfirst($account->payment_method) }}</td>
                 <td>{{ $account->account_name }}</td>
                 <td>{{ $account->account_number }}</td>
+                <td>{{ $account->owner?->name ?? 'Unassigned' }}</td>
                 <td>{{ number_format($account->opening_balance, 2) }}</td>
                 <td>{{ number_format($collected, 2) }}</td>
                 <td>{{ number_format($spent, 2) }}</td>
+                <td>{{ number_format($deposited, 2) }}</td>
                 <td>{{ number_format($currentBalance, 2) }}</td>
+                <td>
+                    @if ($limit === null)
+                        <span class="muted">No limit</span>
+                    @else
+                        {{ number_format($limit, 2) }}
+                        <span class="muted">({{ number_format(max(0, $limit - $currentBalance), 2) }} left)</span>
+                    @endif
+                </td>
                 <td><span class="badge {{ $account->status }}">{{ $account->status }}</span></td>
                 <td>
                     <div class="actions">
                         <a class="btn light" href="{{ route('payment-accounts.show', $account) }}">Ledger</a>
+                        @if ($canDeposit)
+                            <a class="btn secondary" href="{{ route('account-deposits.create', $account) }}">Deposit</a>
+                        @endif
                         <a class="btn secondary" href="{{ route('payment-accounts.edit', $account) }}">Edit</a>
                         <form method="post" action="{{ route('payment-accounts.destroy', $account) }}" onsubmit="return confirm('Delete this payment account? Accounts with transaction history cannot be deleted.')">
                             @csrf @method('DELETE')
@@ -100,7 +126,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="9">No bKash, Nagad, or bank accounts added yet.</td>
+                <td colspan="12">No bKash, Nagad, or bank accounts added yet.</td>
             </tr>
         @endforelse
     </tbody>

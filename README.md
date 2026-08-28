@@ -25,7 +25,7 @@ A Laravel 12 application for an ISP and computer service business.
 - Advance balance and payment allocation ledger
 - Payments page includes invoice payments and direct advance collections, with
   entry operator/time and a clear invoice-versus-advance breakdown.
-- Payment account and cash ledgers use database-level merged pagination and include payment credits, direct advance receipts, and expense debits without double-counting payment remainders
+- Payment account and cash ledgers use database-level merged pagination and include payment credits, direct advance receipts, expense debits, and auditable deposits to the office without double-counting payment remainders. Non-cash accounts support an owner, delegated operators, and an optional live-balance collection limit.
 - Party/accounting ledger rows show a serial number and business date without a repeated Reference column. Internal ordering still uses the full date/time so serial numbers and running balances remain deterministic. A selected party's name stays in the report header instead of repeating in every row. The ledger supports pagination with visible row counts and a route-specific default rows-per-page setting. Its separate A4 portrait print report supports organization selection, Black & white or Color output, zebra-striped rows, an inclusive date range, all filtered rows, and automatic multi-page table printing.
 - Edit history/audit snapshots for invoices, quotations, parties, payments, roles, permissions, and other tracked operator-editable records through the shared `record_versions` table, including invoice finalization changes
 - Payment accounts for cash, bKash, Nagad, and bank
@@ -34,7 +34,7 @@ A Laravel 12 application for an ISP and computer service business.
 - Purchase bills support a private vendor bill/invoice image or PDF; draft edits can preserve the current copy or securely replace it
 - Sale-return credit respects invoice-level discount/VAT, settles the source invoice due first, and only the excess becomes customer advance; all later cash/advance settlement keeps that return credit in the due calculation, and a fully returned unpaid invoice is marked `returned`
 - Vehicle & Fleet Management with vehicle status/mileage, Driver/Helper/Supervisor duty history, date/mileage maintenance schedules, itemized trip expenses, and filtered fleet reports (see `FLEET_MANAGEMENT.md`)
-- Role and permission based admin access
+- Role and permission based admin access, with a protected super-admin tier for global access and payment-account ownership/delegation management
 
 ## Local Setup
 

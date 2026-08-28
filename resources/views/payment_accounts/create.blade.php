@@ -29,6 +29,25 @@
         @if ($editing)<span class="muted">Opening balance cannot be changed after transactions exist.</span>@endif
     </div>
     <div><label>Status</label><select name="status" required><option value="active" @selected(old('status', $paymentAccount->status ?? 'active') === 'active')>Active</option><option value="inactive" @selected(old('status', $paymentAccount->status) === 'inactive')>Inactive</option></select></div>
+    @if ($assignableOwners->isNotEmpty())
+        <div>
+            <label>Owner (may transact through this account)</label>
+            <select name="owner_user_id">
+                <option value="">Unassigned — super admin only</option>
+                @foreach ($assignableOwners as $owner)
+                    <option value="{{ $owner->id }}" @selected((int) old('owner_user_id', $paymentAccount->owner_user_id) === (int) $owner->id)>
+                        {{ $owner->name }} ({{ $owner->email }})
+                    </option>
+                @endforeach
+            </select>
+            <span class="muted">Only this user (and any super admin) can record money through this account.</span>
+        </div>
+        <div>
+            <label>Balance limit (optional)</label>
+            <input type="number" step="0.01" min="0" name="balance_limit" value="{{ old('balance_limit', $paymentAccount->balance_limit) }}" placeholder="No limit">
+            <span class="muted">When set, the owner must deposit collected money to the office before the balance can go above this.</span>
+        </div>
+    @endif
     <div class="full"><button class="btn" type="submit">{{ $editing ? 'Update Account' : 'Save Account' }}</button></div>
 </form>
 @endsection

@@ -32,6 +32,66 @@ class ConcessionLogService
     }
 
     /**
+     * When a later payment deducts the consumed grace days from the fresh paid
+     * month the party has effectively paid the grace back, so credit that value
+     * to the admin who granted it with a matching negative "grace_recovered"
+     * row. Returns null when there is no un-recovered grace on record.
+     */
+    public function recordGraceRecovered(Customer $customer, int $recoveredDays, ?CarbonInterface $paidAt = null): ?ConcessionLog
+    {
+        $recoveredDays = max(0, $recoveredDays);
+        if ($recoveredDays === 0) {
+            return null;
+        }
+
+        $grace = ConcessionLog::query()
+            ->where('customer_id', $customer->id)
+            ->where('action_type', 'grace_period')
+            ->whereNull('meta->recovered_by_log_id')
+            ->latest('id')
+            ->first();
+
+        if (! $grace) {
+            return null;
+        }
+
+        $creditedDays = min($recoveredDays, (int) $grace->free_days);
+        if ($creditedDays <= 0) {
+            return null;
+        }
+
+        $paidAt = $paidAt ? Carbon::parse($paidAt) : Carbon::now();
+        $daily = (float) $grace->daily_rate;
+
+        $recovery = ConcessionLog::create([
+            'customer_id' => $customer->id,
+            'subscription_id' => $grace->subscription_id,
+            'internet_package_id' => $grace->internet_package_id,
+            'user_id' => $grace->user_id,
+            'user_name' => $grace->user_name,
+            'action_type' => 'grace_recovered',
+            'reason' => 'Grace days repaid on recharge.',
+            'free_days' => -$creditedDays,
+            'package_monthly_price' => $grace->package_monthly_price,
+            'daily_rate' => $grace->daily_rate,
+            'estimated_value' => $this->money(-1 * $creditedDays * $daily),
+            'value_status' => 'final',
+            'closed_at' => $paidAt,
+            'meta' => ['recovered_grace_log_id' => $grace->id],
+        ]);
+
+        $grace->forceFill([
+            'meta' => array_merge($grace->meta ?? [], [
+                'recovered_by_log_id' => $recovery->id,
+                'recovered_days' => $creditedDays,
+                'recovered_at' => $paidAt->toDateTimeString(),
+            ]),
+        ])->save();
+
+        return $recovery;
+    }
+
+    /**
      * @param  'validity_override'|'quick_activate'  $actionType
      */
     public function recordValidityChange(

@@ -422,12 +422,17 @@ Tables:
 - `role_user`
 - `permission_role`
 - `permission_user`
+- `users.is_super_admin`
 
 Permission behavior:
 
 - A user can get permissions from roles.
 - A user can also get direct permissions.
 - `User::hasPermission($permission)` checks direct permissions first, then role permissions.
+- A super admin bypasses permission, denial, and menu-access checks. Only another
+  super admin may grant/revoke that flag or edit/delete a super-admin login, and
+  the last super admin cannot be demoted. Use `php artisan user:super-admin
+  user@example.com` (or `--revoke`) for CLI recovery.
 
 User management screens:
 
@@ -623,6 +628,8 @@ Payment accounts exist for bKash, Nagad, and Bank.
 Tables:
 
 - `payment_accounts`
+- `payment_account_user` (delegated operators)
+- `account_deposits` (money handed from an account to the office)
 - `payments.payment_account_id`
 - `payment_allocations`
 - `customer_balance_transactions`
@@ -633,6 +640,8 @@ Important fields:
 - `account_name`
 - `account_number`
 - `opening_balance`
+- `owner_user_id`
+- `balance_limit` (nullable means uncapped)
 - `status`
 
 Screens:
@@ -640,12 +649,15 @@ Screens:
 - `/payment-accounts`: all payment methods, account details, balances
 - `/payment-accounts/create`: add account
 - `/payment-accounts/{payment_account}`: detailed ledger
+- `/payment-accounts/{payment_account}/deposits/create`: owner/super-admin office deposit
+- `/payment-account-access`: super-admin delegation console
 
 Balance formula:
 
 ```text
 Current Balance = Opening Balance + payments collected in this account
                 + direct advance receipts - expenses paid from this account
+                - deposits handed to the office
 ```
 
 Cash balance is calculated from all cash payments:
@@ -663,6 +675,7 @@ Ledger page shows:
 - Transaction rows with invoice, customer, note, credit, and running balance
 - Direct advance rows from `customer_balance_transactions` where `direction = credit` and `payment_id IS NULL`
 - Expense debit rows
+- Office-deposit debit rows
 - Payment allocation summary, so one payment can be audited across multiple invoices.
 - Advance balance credits and advance-used memo rows.
 - Accounting/party ledger rows display `SL` and the business date only; do not show time or a Reference column in the row table. Internally, date-only business fields (`payment_date`, `transaction_date`, and `expense_date`) still use their business date plus the record creation time for deterministic chronological ordering and running balances.
@@ -677,6 +690,18 @@ Important accounting rule:
 - `payment_allocations` records exactly which invoice received how much.
 - `customer_balance_transactions` records advance balance increase/decrease.
 - Do not update `customers.account_balance` directly for payment/bKash flows; use `PaymentService`.
+- Non-cash collection forms and writes must scope accounts through
+  `PaymentAccount::usableBy($user)`. A super admin can use every account; an
+  ordinary user can use owned and explicitly delegated accounts.
+- Only the account owner or a super admin may record a deposit to the office;
+  delegated collection access does not grant deposit authority.
+- Before accepting a non-cash collection, enforce `balance_limit` against the
+  live balance. A verified office deposit reduces that balance and restores
+  collection capacity.
+- When a paid renewal deducts previously consumed grace days from the new paid
+  period, `ConcessionLogService` creates one negative `grace_recovered` entry
+  for the admin who originally granted the grace and marks the source grace row
+  to prevent double recovery.
 
 ## Database Backup
 

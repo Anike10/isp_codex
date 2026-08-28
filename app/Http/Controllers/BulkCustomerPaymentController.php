@@ -63,6 +63,7 @@ class BulkCustomerPaymentController extends Controller
             'durationOptions' => $durationOptions,
             'paymentAccounts' => PaymentAccount::query()
                 ->where('status', 'active')
+                ->usableBy($request->user())
                 ->orderBy('payment_method')
                 ->orderBy('account_name')
                 ->get(),
@@ -96,6 +97,7 @@ class BulkCustomerPaymentController extends Controller
                 ->whereKey($data['payment_account_id'] ?? null)
                 ->where('payment_method', $data['payment_method'])
                 ->where('status', 'active')
+                ->usableBy($request->user())
                 ->first();
 
             if (! $account) {

@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\AccountDepositController;
 use App\Http\Controllers\AccountingLedgerController;
+use App\Http\Controllers\PaymentAccountAccessController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BkashSmsPaymentController;
 use App\Http\Controllers\BulkCustomerPaymentController;
@@ -153,6 +155,13 @@ Route::middleware('auth')->group(function () {
     Route::middleware('permission:manage_payment_accounts')->group(function () {
         Route::get('payment-accounts/cash/ledger', [PaymentAccountController::class, 'cashLedger'])->name('payment-accounts.cash-ledger');
         Route::resource('payment-accounts', PaymentAccountController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update', 'destroy']);
+    });
+
+    // An account owner handing their collection to the office only needs to be
+    // able to take money in; the controller limits this to their own accounts.
+    Route::middleware('permission:manage_customers,manage_payments,manage_payment_accounts')->group(function () {
+        Route::get('payment-accounts/{paymentAccount}/deposits/create', [AccountDepositController::class, 'create'])->name('account-deposits.create');
+        Route::post('payment-accounts/{paymentAccount}/deposits', [AccountDepositController::class, 'store'])->name('account-deposits.store');
     });
 
     Route::middleware('permission:manage_expenses')->group(function () {
@@ -312,8 +321,14 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('permission:manage_users')->group(function () {
         Route::resource('users', UserController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
+        Route::patch('users/{user}/super-admin', [UserController::class, 'updateSuperAdmin'])->name('users.super-admin.update');
         Route::resource('roles', RoleController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     });
+
+    // Super-admin only; the controller enforces it. Kept out of a permission
+    // group so no ordinary permission can unlock it.
+    Route::get('payment-account-access', [PaymentAccountAccessController::class, 'index'])->name('payment-account-access.index');
+    Route::put('payment-account-access/{paymentAccount}', [PaymentAccountAccessController::class, 'update'])->name('payment-account-access.update');
 
     Route::middleware('permission:manage_resellers')->group(function () {
         Route::get('resellers', [ResellerController::class, 'index'])->name('resellers.index');

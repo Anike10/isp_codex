@@ -70,7 +70,7 @@ class PaymentController extends Controller
                 ->latest()
                 ->paginate($this->perPage($request), ['*'], 'advance_page')
                 ->appends($request->query()),
-            'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
+            'paymentAccounts' => PaymentAccount::where('status', 'active')->usableBy($request->user())->orderBy('payment_method')->orderBy('account_name')->get(),
         ]);
     }
 
@@ -82,7 +82,7 @@ class PaymentController extends Controller
                 ->orderBy('name')
                 ->orderBy('id')
                 ->get(['id', 'name', 'phone', 'connection_id', 'account_balance']),
-            'paymentAccounts' => PaymentAccount::where('status', 'active')->orderBy('payment_method')->orderBy('account_name')->get(),
+            'paymentAccounts' => PaymentAccount::where('status', 'active')->usableBy($request->user())->orderBy('payment_method')->orderBy('account_name')->get(),
             'paymentDefault' => $preferenceService->forUser($request->user()),
         ]);
     }
@@ -148,6 +148,7 @@ class PaymentController extends Controller
                     'account_name' => $data['new_account_name'],
                     'opening_balance' => 0,
                     'status' => 'active',
+                    'owner_user_id' => $request->user()?->id,
                 ]
             );
 
@@ -156,6 +157,7 @@ class PaymentController extends Controller
             $account = PaymentAccount::where('id', $data['payment_account_id'] ?? null)
                 ->where('payment_method', $data['payment_method'])
                 ->where('status', 'active')
+                ->usableBy($request->user())
                 ->first();
 
             if (! $account) {
@@ -163,6 +165,8 @@ class PaymentController extends Controller
                     'payment_account_id' => 'Please select a valid account for this payment method or add a new account.',
                 ]);
             }
+
+            $this->assertAccountCanReceive($account, (float) $data['amount']);
 
             $data['payment_account_id'] = $account->id;
         }
