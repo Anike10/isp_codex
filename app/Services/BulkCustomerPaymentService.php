@@ -80,7 +80,7 @@ class BulkCustomerPaymentService
                         throw new InvalidArgumentException('No assigned package was found.');
                     }
 
-                    $amount = $this->amountForPrice((float) $package->monthly_price, $duration);
+                    $amount = $this->amountForPrice($subscription->effectivePrice(), $duration);
                     if ($amount <= 0) {
                         throw new InvalidArgumentException('The assigned package has a zero price.');
                     }

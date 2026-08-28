@@ -7,6 +7,7 @@
     $mayGrantGrace = (bool) auth()->user()?->hasPermission('grant_grace_period');
     $mayQuickActivate = (bool) auth()->user()?->hasPermission('quick_activate_service');
     $maySpecial = (bool) auth()->user()?->hasPermission('mark_special_customer');
+    $maySetSpecialPrice = (bool) auth()->user()?->hasPermission('set_special_package_price');
 @endphp
 <style>
     .customer-filter-form {
@@ -135,6 +136,30 @@
         background: #fff4e2;
         color: #92561a;
     }
+    .special-price-form {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+    }
+    .special-price-input {
+        width: 84px;
+        padding: 3px 6px;
+        font-size: 12px;
+        text-align: right;
+    }
+    .special-price-btn {
+        cursor: pointer;
+        border: 1px solid #cdd9e6;
+        background: #f4f7fb;
+        color: #33475f;
+        border-radius: 6px;
+        padding: 3px 8px;
+        font-size: 11px;
+        font-weight: 700;
+    }
+    .special-price-btn:hover { background: #e7eef7; }
     .customer-list-toolbar {
         display: flex;
         align-items: center;
@@ -270,7 +295,7 @@
 </div>
 
 <table class="customer-table">
-    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Package</th><th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
+    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Package</th>@if($maySetSpecialPrice && ! $showDeletedCustomers)<th class="col-center">Special Price</th>@endif<th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
         @php
@@ -324,13 +349,44 @@
                     <div class="muted">Last dial-up IP: {{ $customer->last_connected_ip ?: 'Not learned yet' }}</div>
                 @endif
             </td>
+            @php
+                $currentPackageName = $assignedSubscription?->package?->name ?: 'No package';
+                $listPrice = (float) ($assignedSubscription?->package?->monthly_price ?? 0);
+                $effectivePrice = $assignedSubscription ? $assignedSubscription->effectivePrice() : 0.0;
+                $hasSpecialPrice = (bool) $assignedSubscription?->hasCustomPrice();
+            @endphp
             <td class="col-center" @if(! $showDeletedCustomers) data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif data-package-id="{{ $assignedSubscription?->internet_package_id }}">
-                @php $currentPackageName = $assignedSubscription?->package?->name ?: 'No package'; @endphp
                 <span data-inline-value>{{ $currentPackageName }}</span>
-                @if ($activeUntil && $daysRemaining < 0)
-                    <div class="muted">Expired: {{ $activeUntil->format('d/m/Y') }}</div>
+                @if ($assignedSubscription?->package)
+                    <div class="muted">
+                        @if ($hasSpecialPrice)
+                            <s>৳ {{ number_format($listPrice, 2) }}</s>
+                            <strong>৳ {{ number_format($effectivePrice, 2) }}</strong>
+                        @else
+                            ৳ {{ number_format($listPrice, 2) }}
+                        @endif
+                    </div>
                 @endif
             </td>
+            @if ($maySetSpecialPrice && ! $showDeletedCustomers)
+                <td class="col-center">
+                    @if (! $assignedSubscription?->package)
+                        <span class="muted">—</span>
+                    @else
+                        <form method="post" action="{{ route('customers.special-price', $customer) }}" class="special-price-form">
+                            @csrf
+                            <input type="number" step="0.01" min="0" name="custom_price" class="special-price-input"
+                                   value="{{ $hasSpecialPrice ? number_format($effectivePrice, 2, '.', '') : '' }}"
+                                   placeholder="{{ number_format($listPrice, 2, '.', '') }}"
+                                   aria-label="Special price for {{ $customer->name }}">
+                            <button type="submit" class="special-price-btn">Save</button>
+                        </form>
+                        @if ($hasSpecialPrice)
+                            <div class="muted" style="font-size:11px">Empty + Save = remove</div>
+                        @endif
+                    @endif
+                </td>
+            @endif
             <td class="col-center">
                 <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span>
             </td>
@@ -439,7 +495,7 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="{{ $showDeletedCustomers ? 11 : 10 }}">No parties found.</td></tr>
+        <tr><td colspan="{{ $showDeletedCustomers ? 11 : 12 }}">No parties found.</td></tr>
     @endforelse
     </tbody>
 </table>

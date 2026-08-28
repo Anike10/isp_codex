@@ -105,7 +105,7 @@ class ResellerPortalController extends Controller
         $reseller = $this->authorizedResellerCustomer($request, $customer);
         $customer->load('activeSubscription.package');
         $dueTotal = round((float) $customer->invoices()->where('due_amount', '>', 0)->sum('due_amount'), 2);
-        $grossPackagePrice = (float) ($customer->activeSubscription?->package?->monthly_price ?? 0);
+        $grossPackagePrice = (float) ($customer->activeSubscription?->effectivePrice() ?? 0);
         $commissionAmount = round($grossPackagePrice * (float) $reseller->reseller_commission_percent / 100, 2);
         $suggestedAmount = $dueTotal > 0 ? $dueTotal : max(0, $grossPackagePrice - $commissionAmount);
         $spentToday = $this->spentOn($reseller, now()->toDateString());

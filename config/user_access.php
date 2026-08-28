@@ -46,6 +46,7 @@ return [
                 'quick_activate_service' => ['label' => 'Quick-Activate To Next Date', 'menus' => ['Party quick-activate action']],
                 'force_service_status' => ['label' => 'Force Service Active / Inactive', 'menus' => ['Party force active/inactive action']],
                 'mark_special_customer' => ['label' => 'Mark Party Special (Never Suspend)', 'menus' => ['Special party toggle']],
+                'set_special_package_price' => ['label' => 'Set Party Special Package Price', 'menus' => ['Party special price field']],
                 'view_concession_reports' => ['label' => 'View Concession Reports', 'menus' => ['Concession Reports']],
             ],
         ],

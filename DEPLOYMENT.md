@@ -163,6 +163,15 @@ secrets from all active routers, and the Laravel scheduler runs it every three
 hours. Run `php artisan migrate --force` before verifying the dashboard or
 `/router-users`.
 
+Party-specific package pricing requires migrations
+`2026_08_28_000007_add_custom_price_to_subscriptions.php` and
+`2026_08_28_000008_add_special_package_price_permission.php`. They add the
+nullable subscription price override and grant
+`set_special_package_price` to the admin role. Because this changes billing,
+create both code and database backups, run `php artisan migrate --force`, then
+verify the party-list price form, a service-bill amount, and `/router-users`
+batch import before completing deployment.
+
 Payment-account ownership and super-admin deployment requires migrations
 `2026_08_28_000003` through `2026_08_28_000006`. They add the protected
 `users.is_super_admin` flag, payment-account owners and delegated operators,

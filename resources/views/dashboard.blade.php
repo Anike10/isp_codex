@@ -63,9 +63,10 @@
                 <input type="hidden" name="redirect_to" value="dashboard">
                 <div class="actions" style="gap:14px;flex-wrap:wrap;margin:10px 0">
                     <label style="font-weight:400;display:flex;gap:6px;align-items:center"><input type="checkbox" name="never_suspend" value="1" style="width:auto"> Special ISP customer</label>
-                    <label style="font-weight:400;display:flex;gap:6px;align-items:center"><input type="checkbox" name="update_existing" value="1" style="width:auto"> Update existing party</label>
+                    <label style="font-weight:400;display:flex;gap:6px;align-items:center" title="If a selected router user's name already belongs to a party, overwrite that party with the router's data instead of skipping it. Deleted parties with the same name are always restored."><input type="checkbox" name="update_existing" value="1" style="width:auto"> Update existing party</label>
                     <button class="btn" type="submit">Add selected as parties</button>
                 </div>
+                <p class="muted" style="margin:0 0 8px">Tick <strong>Update existing party</strong> only when a router-user name clashes with a party already in the app (rare here). Off = skip &amp; link.</p>
 
                 @foreach ($unmanagedRouterUsers as $routerName => $secrets)
                     <h3 style="margin:14px 0 6px">{{ $routerName }} <span class="muted">({{ $secrets->count() }})</span></h3>

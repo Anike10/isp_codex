@@ -26,9 +26,10 @@
         <div class="card">
             <div class="actions" style="gap:14px;flex-wrap:wrap">
                 <label style="font-weight:400;display:flex;gap:6px;align-items:center"><input type="checkbox" name="never_suspend" value="1" style="width:auto"> Special ISP customer</label>
-                <label style="font-weight:400;display:flex;gap:6px;align-items:center"><input type="checkbox" name="update_existing" value="1" style="width:auto"> Update existing party</label>
+                <label style="font-weight:400;display:flex;gap:6px;align-items:center" title="If a selected router user's name already belongs to a party, overwrite that party with the router's data instead of skipping it. Deleted parties with the same name are always restored."><input type="checkbox" name="update_existing" value="1" style="width:auto"> Update existing party</label>
                 <button class="btn" type="submit">Add selected as parties</button>
             </div>
+            <p class="muted" style="margin:8px 0 0">Each selected router user becomes a party. <strong>Update existing party</strong> only matters when a name clashes with a party already in the app — tick it to overwrite that party, leave it off to skip and just link the secret.</p>
         </div>
 
         @foreach ($groups as $routerName => $secrets)

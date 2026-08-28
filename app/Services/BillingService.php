@@ -89,7 +89,7 @@ class BillingService
             if (! $existing) {
                 $commission = $this->resellerCommissionService->calculate(
                     $subscription->customer,
-                    (float) $subscription->package->monthly_price
+                    $subscription->effectivePrice()
                 );
                 $requiredAmount = round((float) $commission['net_total'], 2);
 
@@ -149,9 +149,10 @@ class BillingService
     {
         return DB::transaction(function () use ($subscription, $month, $commission) {
             $subscription->loadMissing(['customer', 'package']);
+            $effectivePrice = $subscription->effectivePrice();
             $commission ??= $this->resellerCommissionService->calculate(
                 $subscription->customer,
-                (float) $subscription->package->monthly_price
+                $effectivePrice
             );
 
             return Invoice::firstOrCreate(
@@ -162,7 +163,7 @@ class BillingService
                 ],
                 [
                     'invoice_no' => Invoice::generateInvoiceNo($subscription->customer_id, $month->format('Y-m')),
-                    'subtotal' => $subscription->package->monthly_price,
+                    'subtotal' => $effectivePrice,
                     'reseller_id' => $commission['reseller_id'],
                     'reseller_commission_percent' => $commission['percent'],
                     'reseller_commission_amount' => $commission['amount'],

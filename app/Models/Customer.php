@@ -162,6 +162,25 @@ class Customer extends Model
         return $this->hasOne(Subscription::class)->latestOfMany();
     }
 
+    /** The subscription that drives this party's billing (active, else most recent). */
+    public function billingSubscription(): ?Subscription
+    {
+        if ($this->relationLoaded('activeSubscription') || $this->relationLoaded('latestSubscription')) {
+            return $this->activeSubscription ?: $this->latestSubscription;
+        }
+
+        return $this->activeSubscription()->first() ?: $this->latestSubscription()->first();
+    }
+
+    /** Monthly price this party is billed at, honouring any special price. */
+    public function effectiveMonthlyPrice(): float
+    {
+        $subscription = $this->billingSubscription();
+        $subscription?->loadMissing('package');
+
+        return $subscription ? $subscription->effectivePrice() : 0.0;
+    }
+
     public function mikrotikRouter(): BelongsTo
     {
         return $this->belongsTo(MikrotikRouter::class);

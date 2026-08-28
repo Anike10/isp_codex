@@ -258,7 +258,9 @@ class ConcessionLogService
     private function rateFor(?Subscription $subscription, CarbonInterface $anchor): array
     {
         $package = $subscription?->package;
-        $monthly = (float) ($package->monthly_price ?? 0);
+        // Value the give-away at the price the party is actually billed, so a
+        // special package price flows into concession cost too.
+        $monthly = $subscription ? $subscription->effectivePrice() : 0.0;
 
         $start = Carbon::parse($anchor)->startOfDay();
         $monthDays = (int) max(1, $start->diffInDays($start->copy()->addMonthNoOverflow()));

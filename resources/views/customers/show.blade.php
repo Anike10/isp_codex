@@ -32,6 +32,9 @@
     }
 
     $servicePackage = $serviceSubscription?->package;
+    $serviceListPrice = (float) ($servicePackage?->monthly_price ?? 0);
+    $serviceEffectivePrice = $serviceSubscription ? $serviceSubscription->effectivePrice() : 0.0;
+    $serviceHasSpecialPrice = (bool) $serviceSubscription?->hasCustomPrice();
     $isActive = $customer->status === 'active';
 
     $routerTargetsExists = $customer->mikrotik_username || $customer->connection_id;
@@ -953,7 +956,7 @@
                     {{ $servicePackage ? $servicePackage->name : 'Not assigned' }}
                 </div>
                 <div class="hero-kpi__meta">
-                    {{ $servicePackage ? '৳ '.number_format((float) $servicePackage->monthly_price, 2) : 'Set package first' }}
+                    {{ $servicePackage ? '৳ '.number_format($serviceEffectivePrice, 2).($serviceHasSpecialPrice ? ' (special)' : '') : 'Set package first' }}
                 </div>
             </div>
         </div>
@@ -1027,7 +1030,13 @@
                 <dd class="kv-grid__value">
                     @if ($servicePackage)
                         <strong>{{ $servicePackage->name }}</strong><br>
-                        ৳ {{ number_format((float) $servicePackage->monthly_price, 2) }}
+                        @if ($serviceHasSpecialPrice)
+                            <s class="muted">৳ {{ number_format($serviceListPrice, 2) }}</s>
+                            <strong>৳ {{ number_format($serviceEffectivePrice, 2) }}</strong>
+                            <span class="badge special">Special price</span>
+                        @else
+                            ৳ {{ number_format($serviceEffectivePrice, 2) }}
+                        @endif
                         <div class="muted">Profile: {{ $servicePackage->mikrotik_profile ?: 'auto' }}</div>
                     @else
                         Not assigned
@@ -1077,7 +1086,7 @@
                 </div>
             @endif
 
-            @if ($servicePackage && (float) $customer->account_balance >= (float) ($servicePackage->monthly_price ?: 0))
+            @if ($servicePackage && (float) $customer->account_balance >= $serviceEffectivePrice && $serviceEffectivePrice > 0)
                 <div class="form-panel">
                     <h3 class="form-panel__title">Extend from advance balance</h3>
                     <form method="post" action="{{ route('customers.advance-renewal.store', $customer) }}">

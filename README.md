@@ -5,7 +5,9 @@ A Laravel 12 application for an ISP and computer service business.
 ## Features
 
 - Dashboard with customers, income, due, tickets, and stock summary
-- Customer and internet package management
+- Customer and internet package management, including permission-controlled
+  per-party special package prices used by billing, renewals, reseller
+  commission, bulk payments, and concession valuation
 - Product-only customers can be saved without an ISP Connection ID
 - MikroTik router management and PPPoE user sync, with visible credential/network/API-port diagnostics and autofill-safe RouterOS credential forms
 - OLT ONU/ONT live polling with status, optical power, profile-command mismatch repair, PON-wise cached counts, timestamped running-config backup downloads, non-destructive refresh-error clearing, and safe OLT deletion
@@ -263,6 +265,11 @@ Users with the `mark_special_customer` permission can toggle Special ISP
 active, restores its latest subscription when necessary, records the concession
 period, and immediately syncs the MikroTik user.
 
+Users with the `set_special_package_price` permission can set or clear a
+party-specific price from the party list. The value belongs to the current
+subscription/package, replaces the package list price in future billing, and is
+cleared automatically when that party is moved to another package.
+
 Users with the `view_unmanaged_router_users` permission can open
 `/router-users` or use the dashboard panel to review PPPoE secrets that exist on
 active routers but have no matching app party. `php artisan
@@ -270,7 +277,10 @@ mikrotik:import-secrets` refreshes the imported secret snapshot; the Laravel
 scheduler runs this refresh every three hours. Selected unmanaged users can be
 created as parties from either screen. A party marked as a special ISP customer
 is kept active and is synced to its service profile instead of the inactive
-profile.
+profile. During batch import, matching connection IDs and MikroTik usernames are
+resolved case-insensitively across live and soft-deleted parties. Duplicate
+router secrets link to the same live party, while a matching deleted party is
+restored, preventing unique-ID collisions from aborting the batch.
 
 Setup:
 

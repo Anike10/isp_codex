@@ -81,6 +81,7 @@ Route::middleware('auth')->group(function () {
         Route::post('customers/{customer}/force-inactive', [CustomerController::class, 'forceInactive'])->middleware('permission:force_service_status')->name('customers.force-inactive');
         Route::post('customers/{customer}/force-active', [CustomerController::class, 'forceActive'])->middleware('permission:force_service_status')->name('customers.force-active');
         Route::post('customers/{customer}/toggle-special', [CustomerController::class, 'toggleSpecial'])->middleware('permission:mark_special_customer')->name('customers.toggle-special');
+        Route::post('customers/{customer}/special-price', [CustomerController::class, 'updateSpecialPrice'])->middleware('permission:set_special_package_price')->name('customers.special-price');
         Route::get('customers/{customer}/history', [CustomerController::class, 'history'])->name('customers.history');
         Route::get('customers/deleted', [CustomerController::class, 'deleted'])->name('customers.deleted');
         Route::get('customers/deleted/{customer}/history', [CustomerController::class, 'deletedHistory'])->name('customers.deleted.history');

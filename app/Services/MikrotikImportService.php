@@ -242,9 +242,39 @@ class MikrotikImportService
         DB::transaction(function () use ($secrets, $neverSuspend, $updateExisting, &$created, &$updated, &$skipped): void {
             foreach ($secrets as $secret) {
                 $router = $secret->router;
-                $customer = Customer::where('connection_id', $secret->name)->first();
+                $name = trim((string) $secret->name);
 
-                if ($customer && ! $updateExisting) {
+                if ($name === '') {
+                    $skipped++;
+
+                    continue;
+                }
+
+                // Match any party that already holds this identifier on either
+                // column, case-insensitively, and including soft-deleted rows —
+                // the unique indexes on connection_id / mikrotik_username also
+                // cover trashed parties, so an unchecked collision would 500 the
+                // whole batch on insert. Prefer a live party over a trashed one.
+                $lowerName = mb_strtolower($name);
+                $customer = Customer::withTrashed()
+                    ->where(function ($query) use ($lowerName): void {
+                        $query->whereRaw('lower(connection_id) = ?', [$lowerName])
+                            ->orWhereRaw('lower(mikrotik_username) = ?', [$lowerName]);
+                    })
+                    ->orderByRaw('deleted_at is null desc')
+                    ->orderByDesc('id')
+                    ->first();
+
+                // A deleted party still owns the unique identifier, so we cannot
+                // insert a fresh one. The router user is live, so bring the party
+                // back and refresh it from the router.
+                $restored = false;
+                if ($customer && $customer->trashed()) {
+                    $customer->restore();
+                    $restored = true;
+                }
+
+                if ($customer && ! $restored && ! $updateExisting) {
                     $skipped++;
                     $secret->update(['customer_id' => $customer->id]);
 
@@ -254,10 +284,10 @@ class MikrotikImportService
                 $package = $this->packageForProfile($secret->profile, $router);
                 $note = $this->importSourceNote($router, $secret);
                 $customerData = [
-                    'name' => trim((string) $secret->name),
+                    'name' => $name,
                     'phone' => $customer?->phone ?: 'Not provided',
-                    'connection_id' => $secret->name,
-                    'mikrotik_username' => $secret->name,
+                    'connection_id' => $name,
+                    'mikrotik_username' => $name,
                     'mikrotik_password' => $secret->password,
                     'mikrotik_router_id' => $router?->id,
                     'address' => $customer?->address ?: 'Imported from MikroTik '.($router?->name ?? 'router'),

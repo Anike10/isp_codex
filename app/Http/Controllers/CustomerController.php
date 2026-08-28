@@ -266,6 +266,11 @@ class CustomerController extends Controller
                 if ($activeSubscription) {
                     $activeSubscription->update([
                         'internet_package_id' => $data['internet_package_id'],
+                        // A special price belongs to one package; drop it when the
+                        // party is moved to a different package.
+                        'custom_price' => (int) $data['internet_package_id'] === (int) $activeSubscription->internet_package_id
+                            ? $activeSubscription->custom_price
+                            : null,
                         'start_date' => $data['start_date'] ?? $activeSubscription->start_date ?? now()->toDateString(),
                         'end_date' => null,
                     ]);
@@ -438,6 +443,10 @@ class CustomerController extends Controller
                     if ($activeSubscription) {
                         $activeSubscription->update([
                             'internet_package_id' => $packageId,
+                            // Moving to another package drops any special price.
+                            'custom_price' => $packageId === (int) $activeSubscription->internet_package_id
+                                ? $activeSubscription->custom_price
+                                : null,
                             'start_date' => $activeSubscription->start_date ?: now()->toDateString(),
                             'end_date' => null,
                         ]);
@@ -847,6 +856,52 @@ class CustomerController extends Controller
                 : 'Special ISP flag removed from "'.$customer->name.'".')
                 .' MikroTik user '.$syncResult['status'].'.')
             ->with('warning', $syncResult['warning']);
+    }
+
+    /**
+     * Set (or clear, with a blank value) this party's special package price.
+     * It replaces the package list price in every future billing calculation,
+     * renewal, bulk payment, reseller commission and concession value.
+     */
+    public function updateSpecialPrice(Request $request, Customer $customer)
+    {
+        $data = $request->validate([
+            'custom_price' => ['nullable', 'numeric', 'min:0', 'max:9999999.99'],
+        ]);
+
+        $subscription = $customer->activeSubscription()->with('package')->first()
+            ?: $customer->subscriptions()->with('package')->latest('id')->first();
+
+        if (! $subscription) {
+            return back()->withErrors(['custom_price' => 'Assign a package to this party before setting a special price.']);
+        }
+
+        $raw = $data['custom_price'] ?? null;
+        $newPrice = ($raw === null || $raw === '') ? null : round((float) $raw, 2);
+        $listPrice = round((float) ($subscription->package->monthly_price ?? 0), 2);
+
+        $subscription->update(['custom_price' => $newPrice]);
+
+        $note = $newPrice === null
+            ? sprintf(
+                '[%s] Special package price cleared; list price BDT %s now applies.',
+                now()->format('d/m/Y H:i'),
+                number_format($listPrice, 2),
+            )
+            : sprintf(
+                '[%s] Special package price set to BDT %s (list BDT %s) for %s.',
+                now()->format('d/m/Y H:i'),
+                number_format($newPrice, 2),
+                number_format($listPrice, 2),
+                $subscription->package->name ?? 'the current package',
+            );
+        $customer->update([
+            'notes' => trim(implode("\n", array_filter([$customer->notes, $note]))),
+        ]);
+
+        return back()->with('success', $newPrice === null
+            ? 'Special price removed. Billing now uses the package list price.'
+            : 'Special price set to BDT '.number_format($newPrice, 2).'. It applies to all future billing for this party.');
     }
 
     private function syncMikrotikCustomer(Customer $customer): array

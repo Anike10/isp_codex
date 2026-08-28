@@ -43,9 +43,10 @@ class BulkCustomerPaymentController extends Controller
         $rows = $customers->map(function (Customer $customer) use ($bulkPaymentService, $durationOptions): array {
             $subscription = $customer->activeSubscription ?: $customer->latestSubscription;
             $package = $subscription?->package;
+            $effectivePrice = $subscription ? $subscription->effectivePrice() : 0.0;
             $amounts = collect(array_keys($durationOptions))->mapWithKeys(
                 fn (string $duration): array => [$duration => $package
-                    ? $bulkPaymentService->amountForPrice((float) $package->monthly_price, $duration)
+                    ? $bulkPaymentService->amountForPrice($effectivePrice, $duration)
                     : 0]
             )->all();
 
@@ -53,7 +54,7 @@ class BulkCustomerPaymentController extends Controller
                 'customer' => $customer,
                 'package' => $package,
                 'amounts' => $amounts,
-                'payable' => $package && (float) $package->monthly_price > 0,
+                'payable' => $package && $effectivePrice > 0,
             ];
         });
 
