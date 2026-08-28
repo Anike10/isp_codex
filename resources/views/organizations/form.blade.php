@@ -24,5 +24,24 @@
 <div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="show_bank_info_on_invoice" value="1" style="width:auto" @checked(old('show_bank_info_on_invoice', $organization->show_bank_info_on_invoice))> Default: Show bank information on Invoice print</label><span class="muted">Requires an Account Number. This option can be changed again on the Invoice print page.</span></div>
 <div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="is_default" value="1" style="width:auto" @checked(old('is_default', $organization->is_default))> Default organization</label></div>
 <div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="is_active" value="1" style="width:auto" @checked(old('is_active', $organization->exists ? $organization->is_active : true))> Active for printing</label></div>
+<div class="full"><h2 style="margin-top:8px">Overdue Auto-Disable Schedule</h2></div>
+<div class="full muted">Expired or overdue parties (except Special ISP) are set inactive by an hourly background job. It runs only inside this daily window &mdash; so parties are never cut off at night and support calls stay in office hours. Payments still reactivate a party instantly, any time.</div>
+<div>
+    <label>Window start hour</label>
+    <select name="billing_disable_start_hour">
+        @for ($h = 0; $h < 24; $h++)
+            <option value="{{ $h }}" @selected((int) old('billing_disable_start_hour', $billingWindow['start']) === $h)>{{ sprintf('%02d:00', $h) }}</option>
+        @endfor
+    </select>
+</div>
+<div>
+    <label>Window end hour</label>
+    <select name="billing_disable_end_hour">
+        @for ($h = 0; $h < 24; $h++)
+            <option value="{{ $h }}" @selected((int) old('billing_disable_end_hour', $billingWindow['end']) === $h)>{{ sprintf('%02d:00', $h) }}</option>
+        @endfor
+    </select>
+</div>
+<div class="full muted">The job fires on the hour at every step from start to end (default 12:00 &rarr; 17:00 runs the check at 12, 13, 14, 15, 16 and 17).</div>
 <div class="full"><button class="btn" type="submit">Save Organization</button></div></form>
 @endsection

@@ -5,6 +5,7 @@ use App\Models\Invoice;
 use App\Models\MikrotikRouter;
 use App\Models\User;
 use App\Services\MikrotikCustomerSyncService;
+use App\Support\BillingWindow;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -139,7 +140,13 @@ Artisan::command('mikrotik:import-secrets', function (\App\Services\MikrotikImpo
     return $summary['failed'] === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Re-pull PPPoE secrets from active routers so the "router users not in app" list stays fresh');
 
-Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defaults to today}', function (MikrotikCustomerSyncService $syncService) {
+Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defaults to today} {--force : Run even outside the configured daily window}', function (MikrotikCustomerSyncService $syncService) {
+    if (! $this->option('force') && ! BillingWindow::isOpenNow()) {
+        $this->info('Skipped billing/service expiry disable outside the configured '.BillingWindow::label().' window. Use --force for an intentional manual run.');
+
+        return self::SUCCESS;
+    }
+
     $date = $this->option('date') ? \Carbon\Carbon::parse($this->option('date'))->toDateString() : now()->toDateString();
     $disabled = 0;
 
@@ -216,8 +223,11 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
     return self::SUCCESS;
 })->purpose('Disable non-special customers after billing or service expiry and sync MikroTik inactive profile');
 
+// Runs every hour, but only inside the configurable daily window
+// (default 12:00–17:00) so parties are never cut off at night.
 Schedule::command('billing:disable-overdue-customers')
-    ->hourly()
+    ->hourlyAt(0)
+    ->when(fn (): bool => BillingWindow::isOpenNow())
     ->withoutOverlapping();
 
 Schedule::command('mikrotik:sync-router-users')

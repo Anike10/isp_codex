@@ -51,6 +51,12 @@
     .customer-table td {
         overflow: visible;
     }
+    .customer-table th.col-center,
+    .customer-table td.col-center {
+        text-align: center;
+        vertical-align: middle;
+    }
+    .customer-table td.col-center .special-toggle-form { display: inline-block; }
     .customer-action-menu > summary {
         min-width: 88px;
         cursor: pointer;
@@ -264,7 +270,7 @@
 </div>
 
 <table class="customer-table">
-    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th>Role</th><th>User ID</th><th>Package</th><th>Balance</th><th>Status</th><th>Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
+    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Package</th><th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
         @php
@@ -294,7 +300,7 @@
             <td @if(! $showDeletedCustomers) data-inline-field="phone" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif>
                 <span data-inline-value>{{ $customer->phone }}</span>
             </td>
-            <td>
+            <td class="col-center">
                 @if ($customer->never_suspend)
                     <span class="badge special">Special</span>
                 @else
@@ -307,7 +313,7 @@
                           onsubmit="return confirm('{{ $customer->never_suspend ? 'Remove the Special ISP flag from' : 'Make Special ISP (never suspend):' }} {{ addslashes($customer->name) }}?')">
                         @csrf
                         <button type="submit" class="special-toggle-btn {{ $customer->never_suspend ? 'is-on' : '' }}">
-                            {{ $customer->never_suspend ? 'Unset Special' : 'Set Special ISP' }}
+                            {{ $customer->never_suspend ? 'Unset' : 'Set Special' }}
                         </button>
                     </form>
                 @endif
@@ -318,17 +324,17 @@
                     <div class="muted">Last dial-up IP: {{ $customer->last_connected_ip ?: 'Not learned yet' }}</div>
                 @endif
             </td>
-            <td @if(! $showDeletedCustomers) data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif data-package-id="{{ $assignedSubscription?->internet_package_id }}">
+            <td class="col-center" @if(! $showDeletedCustomers) data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif data-package-id="{{ $assignedSubscription?->internet_package_id }}">
                 @php $currentPackageName = $assignedSubscription?->package?->name ?: 'No package'; @endphp
                 <span data-inline-value>{{ $currentPackageName }}</span>
                 @if ($activeUntil && $daysRemaining < 0)
                     <div class="muted">Expired: {{ $activeUntil->format('d/m/Y') }}</div>
                 @endif
             </td>
-            <td>
+            <td class="col-center">
                 <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span>
             </td>
-            <td>
+            <td class="col-center">
                 @if ($showDeletedCustomers)
                     <span class="muted">Deleted</span>
                 @else
@@ -341,7 +347,7 @@
                     @endif
                 @endif
             </td>
-            <td>
+            <td class="col-center">
                 @if ($showDeletedCustomers)
                     <span class="muted">Deleted</span>
                 @else

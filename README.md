@@ -315,11 +315,14 @@ Add arguments:
 cd /d D:\xampp\htdocs\isp_codex && php artisan billing:disable-overdue-customers
 ```
 
+Commandটি Organization settings-এর configurable daily auto-disable window
+(default `12:00-17:00`) মেনে চলে। Window-এর বাইরে ইচ্ছাকৃত manual run দরকার হলে
+`--force` ব্যবহার করুন।
+
 Task Scheduler setup:
 
 - Name: `ISP Billing Disable Overdue`
-- Trigger: Daily
-- Time: `12:05 AM` বা `01:00 AM`
+- Trigger: Daily, repeated every 1 minute indefinitely
 - Program/script:
 
 ```text
@@ -329,7 +332,7 @@ C:\Windows\System32\cmd.exe
 Add arguments:
 
 ```text
-/c "cd /d D:\xampp\htdocs\isp_codex && php artisan billing:disable-overdue-customers"
+/c "cd /d D:\xampp\htdocs\isp_codex && php artisan schedule:run"
 ```
 
 ### ৩. Future CWMP/TR-069 Task
@@ -370,16 +373,17 @@ Production path for isp.us.com.bd:
 * * * * * cd /home/isp.us.com.bd/isp_codex && php artisan mikrotik:sync-router-users >> /dev/null 2>&1
 ```
 
-Overdue/grace disable প্রতিদিন রাত ১২:০৫:
+Laravel scheduler প্রতি মিনিটে চালান; configured office-hour window-এর মধ্যে
+overdue/grace disable job ঘণ্টায় একবার নিজে চলবে:
 
 ```cron
-5 0 * * * cd /var/www/isp_codex && php artisan billing:disable-overdue-customers >> /dev/null 2>&1
+* * * * * cd /var/www/isp_codex && php artisan schedule:run >> /dev/null 2>&1
 ```
 
 Production path for isp.us.com.bd:
 
 ```cron
-5 0 * * * cd /home/isp.us.com.bd/isp_codex && php artisan billing:disable-overdue-customers >> /dev/null 2>&1
+* * * * * cd /home/isp.us.com.bd/isp_codex && php artisan schedule:run >> /dev/null 2>&1
 ```
 
 Future CWMP/TR-069 sync প্রতি ৫ মিনিটে:

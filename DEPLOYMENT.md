@@ -354,9 +354,13 @@ Recommended cron entries use this path:
 
 ```cron
 * * * * * cd /home/isp.us.com.bd/isp_codex && php artisan mikrotik:sync-router-users >> /dev/null 2>&1
-5 0 * * * cd /home/isp.us.com.bd/isp_codex && php artisan billing:disable-overdue-customers >> /dev/null 2>&1
 * * * * * cd /home/isp.us.com.bd/isp_codex && php artisan schedule:run >> /dev/null 2>&1
 ```
+
+The Laravel scheduler runs `billing:disable-overdue-customers` hourly only
+inside the configurable Organization auto-disable window (default
+`12:00-17:00`). The command also enforces the window for legacy direct cron
+calls; use `--force` only for an intentional manual run outside it.
 
 Confirm cron is installed for the correct user before changing it:
 

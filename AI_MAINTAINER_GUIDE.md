@@ -1293,6 +1293,10 @@ account_balance - total_due_amount
 - Normal customers do not get monthly bills from the bulk generate button.
 - For normal customers, current-month service bill is generated when bKash payment SMS is received and matched to that customer.
 - Previous due matters. Do not activate a customer line just because the current month bill is paid. Activate only when total remaining due across all invoices is zero.
+- Organization settings define the daily window in which the hourly
+  `billing:disable-overdue-customers` job may run (default `12:00-17:00`). Both
+  the scheduler and command guard the window; an intentional out-of-window
+  manual run requires `--force`.
 
 ### Payment Allocation
 

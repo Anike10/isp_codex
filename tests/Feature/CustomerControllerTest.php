@@ -1148,7 +1148,7 @@ class CustomerControllerTest extends TestCase
 
         $this->actingAs($user)->get(route('customers.index'))
             ->assertOk()
-            ->assertSee('Set Special ISP');
+            ->assertSee('Set Special');
 
         $this->actingAs($user)
             ->from(route('customers.index'))
@@ -1184,7 +1184,7 @@ class CustomerControllerTest extends TestCase
 
         $this->actingAs($user)->get(route('customers.index'))
             ->assertOk()
-            ->assertDontSee('Set Special ISP');
+            ->assertDontSee('Set Special');
 
         $this->actingAs($user)
             ->post(route('customers.toggle-special', $customer))
