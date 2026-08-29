@@ -416,7 +416,7 @@ class CustomerControllerTest extends TestCase
             $user = User::factory()->create();
             $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
             $user->permissions()->attach(
-                \App\Models\Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
+                Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
             );
             $package = InternetPackage::create([
                 'name' => 'Quick Activate',
@@ -471,7 +471,7 @@ class CustomerControllerTest extends TestCase
             $user = User::factory()->create();
             $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
             $user->permissions()->attach(
-                \App\Models\Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
+                Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
             );
             $package = InternetPackage::create([
                 'name' => 'Quick Activate Custom',
@@ -520,7 +520,7 @@ class CustomerControllerTest extends TestCase
             $user = User::factory()->create();
             $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
             $user->permissions()->attach(
-                \App\Models\Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
+                Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
             );
             $package = InternetPackage::create([
                 'name' => 'Inactive Activate',
@@ -648,7 +648,7 @@ class CustomerControllerTest extends TestCase
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
         $user->permissions()->attach(
-            \App\Models\Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
+            Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
         );
         $customer = Customer::create([
             'name' => 'No package customer',
@@ -672,7 +672,7 @@ class CustomerControllerTest extends TestCase
             $user = User::factory()->create();
             $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
             $user->permissions()->attach(
-                \App\Models\Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
+                Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
             );
             $customer = Customer::create([
                 'name' => 'Expired Customer',
@@ -719,7 +719,7 @@ class CustomerControllerTest extends TestCase
             $user = User::factory()->create();
             $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
             $user->permissions()->attach(
-                \App\Models\Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
+                Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
             );
             $package = InternetPackage::create([
                 'name' => 'Grace Package',
@@ -777,7 +777,7 @@ class CustomerControllerTest extends TestCase
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
         $user->permissions()->attach(
-            \App\Models\Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
+            Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
         );
         $customer = Customer::create([
             'name' => 'Validity Customer',
@@ -806,12 +806,42 @@ class CustomerControllerTest extends TestCase
         $this->assertStringContainsString('manager approved extension', $customer->notes);
     }
 
+    public function test_profile_shows_who_entered_the_party_and_who_took_each_note_action(): void
+    {
+        $admin = User::factory()->create(['name' => 'Rakib Admin']);
+        $admin->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $admin->permissions()->attach(
+            Permission::whereIn('name', ['override_service_validity', 'force_service_status'])->pluck('id')
+        );
+
+        $customer = $this->actingAs($admin)->post(route('customers.store'), [
+            'name' => 'Log Party', 'phone' => '01700000123', 'connection_id' => 'LOG-1',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => '1',
+            'service_valid_until' => '2026-06-30',
+        ])->isRedirect() ? Customer::where('connection_id', 'LOG-1')->firstOrFail() : null;
+        $this->assertNotNull($customer);
+        $this->assertSame((string) $admin->id, $customer->entry_by);
+
+        $this->actingAs($admin)->post(route('customers.service-validity.update', $customer), [
+            'service_valid_until' => '2026-07-15',
+            'validity_note' => 'Manager approved a late extension.',
+        ])->assertRedirect();
+
+        $this->assertStringContainsString('by Rakib Admin', $customer->refresh()->notes);
+
+        $this->actingAs($admin)
+            ->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Entered by')
+            ->assertSee('Rakib Admin');
+    }
+
     public function test_manual_past_validity_date_expires_subscription_for_mikrotik_sync(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
         $user->permissions()->attach(
-            \App\Models\Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
+            Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
         );
         $package = InternetPackage::create(['name' => 'Expired Plan', 'speed' => '10 Mbps', 'monthly_price' => 500, 'status' => 'active']);
         $customer = Customer::create(['name' => 'Expiry Customer', 'phone' => '01766666666', 'connection_id' => 'EXPIRE-001', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true]);
@@ -885,7 +915,7 @@ class CustomerControllerTest extends TestCase
             $user = User::factory()->create();
             $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
             $user->permissions()->attach(
-                \App\Models\Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
+                Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
             );
             $package = InternetPackage::create(['name' => 'Force Plan', 'speed' => '10 Mbps', 'monthly_price' => 500, 'status' => 'active']);
             $customer = Customer::create([
@@ -936,7 +966,7 @@ class CustomerControllerTest extends TestCase
             $user = User::factory()->create();
             $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
             $user->permissions()->attach(
-                \App\Models\Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
+                Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
             );
             $package = InternetPackage::create(['name' => 'Temporary Plan', 'speed' => '20 Mbps', 'monthly_price' => 700, 'status' => 'active']);
             $customer = Customer::create([
@@ -1018,7 +1048,7 @@ class CustomerControllerTest extends TestCase
             $user = User::factory()->create();
             $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
             $user->permissions()->attach(
-                \App\Models\Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
+                Permission::whereIn('name', ['grant_grace_period', 'override_service_validity', 'quick_activate_service', 'force_service_status', 'mark_special_customer'])->pluck('id')
             );
             $package = InternetPackage::create([
                 'name' => 'Activate after used grace',

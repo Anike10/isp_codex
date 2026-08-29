@@ -11,6 +11,7 @@ use App\Observers\RecordVersionObserver;
 use App\Services\ConcessionLogService;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\RecordVersionService;
+use App\Support\PartyNote;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -632,11 +633,10 @@ class CustomerController extends Controller
 
         $previousValidUntil = $customer->service_valid_until;
         $nextDate = $data['active_until'] ?? now()->addMonthNoOverflow()->toDateString();
-        $detail = sprintf(
-            '[%s] Activated package to %s via quick-activate action.',
-            now()->format('d/m/Y H:i'),
+        $detail = PartyNote::stamp(sprintf(
+            'Activated package to %s via quick-activate action.',
             Carbon::parse($nextDate)->format('d/m/Y')
-        );
+        ));
 
         DB::transaction(function () use ($customer, $subscription, $nextDate, $detail): void {
             $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
@@ -686,13 +686,12 @@ class CustomerController extends Controller
         $previousValidUntil = $customer->service_valid_until;
         $previous = $previousValidUntil?->format('d/m/Y') ?? 'not set';
         $newUntil = $data['service_valid_until'];
-        $detail = sprintf(
-            '[%s] Manual validity override: %s → %s. Reason: %s',
-            now()->format('d/m/Y H:i'),
+        $detail = PartyNote::stamp(sprintf(
+            'Manual validity override: %s → %s. Reason: %s',
             $previous,
             Carbon::parse($newUntil)->format('d/m/Y'),
             trim($data['validity_note'])
-        );
+        ));
 
         $expiresToday = Carbon::parse($newUntil)->lt(today());
         $subscription = $customer->activeSubscription ?: $customer->subscriptions()->latest()->first();
@@ -763,12 +762,11 @@ class CustomerController extends Controller
         $data = $request->validate([
             'inactive_note' => ['required', 'string', 'min:3', 'max:2000'],
         ]);
-        $detail = sprintf(
-            '[%s] Service temporarily force-inactivated while validity remained %s. Reason: %s',
-            now()->format('d/m/Y H:i'),
+        $detail = PartyNote::stamp(sprintf(
+            'Service temporarily force-inactivated while validity remained %s. Reason: %s',
             $customer->service_valid_until?->format('d/m/Y') ?? 'not set',
             trim($data['inactive_note'])
-        );
+        ));
 
         DB::transaction(function () use ($customer, $detail): void {
             $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
@@ -805,12 +803,11 @@ class CustomerController extends Controller
             return back()->withErrors(['active_note' => 'A package subscription is required before temporarily activating this service.']);
         }
 
-        $detail = sprintf(
-            '[%s] Service temporarily force-activated while validity remained %s. Reason: %s',
-            now()->format('d/m/Y H:i'),
+        $detail = PartyNote::stamp(sprintf(
+            'Service temporarily force-activated while validity remained %s. Reason: %s',
             $customer->service_valid_until?->format('d/m/Y') ?? 'not set',
             trim($data['active_note'])
-        );
+        ));
 
         DB::transaction(function () use ($customer, $subscriptionId, $detail): void {
             $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
@@ -906,18 +903,16 @@ class CustomerController extends Controller
         $subscription->update(['custom_price' => $newPrice]);
 
         $note = $newPrice === null
-            ? sprintf(
-                '[%s] Special package price cleared; list price BDT %s now applies.',
-                now()->format('d/m/Y H:i'),
+            ? PartyNote::stamp(sprintf(
+                'Special package price cleared; list price BDT %s now applies.',
                 number_format($listPrice, 2),
-            )
-            : sprintf(
-                '[%s] Special package price set to BDT %s (list BDT %s) for %s.',
-                now()->format('d/m/Y H:i'),
+            ))
+            : PartyNote::stamp(sprintf(
+                'Special package price set to BDT %s (list BDT %s) for %s.',
                 number_format($newPrice, 2),
                 number_format($listPrice, 2),
                 $subscription->package->name ?? 'the current package',
-            );
+            ));
         $customer->update([
             'notes' => trim(implode("\n", array_filter([$customer->notes, $note]))),
         ]);
@@ -1185,4 +1180,3 @@ class CustomerController extends Controller
         return $query;
     }
 }
-

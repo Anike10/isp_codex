@@ -2,16 +2,17 @@
 
 namespace App\Models;
 
+use App\Observers\EntryByObserver;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Customer extends Model
 {
@@ -184,6 +185,21 @@ class Customer extends Model
     public function mikrotikRouter(): BelongsTo
     {
         return $this->belongsTo(MikrotikRouter::class);
+    }
+
+    /** The admin who created / imported this party ({@see EntryByObserver}). */
+    public function entryByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'entry_by');
+    }
+
+    public function getEnteredByLabelAttribute(): string
+    {
+        if ($this->entry_by_type === 'user') {
+            return $this->entryByUser?->name ?? 'User #'.$this->entry_by;
+        }
+
+        return filled($this->entry_by) ? (string) $this->entry_by : 'system';
     }
 
     public function mikrotikRouters(): BelongsToMany

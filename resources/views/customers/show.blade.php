@@ -84,10 +84,12 @@
             $content = $segment;
             $recordedAt = null;
             $recordedText = null;
+            $noteAuthor = null;
 
-            if (preg_match('/^\[('.$timestampPattern.')\]\s*(.*)$/s', $segment, $timestampMatch)) {
+            if (preg_match('/^\[('.$timestampPattern.')(?:\s+by\s+(.+?))?\]\s*(.*)$/s', $segment, $timestampMatch)) {
                 $recordedText = $timestampMatch[1];
-                $content = trim($timestampMatch[2]);
+                $noteAuthor = trim($timestampMatch[2] ?? '') ?: null;
+                $content = trim($timestampMatch[3]);
             } elseif (preg_match('/\bat\s+('.$timestampPattern.')(?:\R|$)/i', $segment, $timestampMatch)) {
                 $recordedText = $timestampMatch[1];
             }
@@ -112,6 +114,7 @@
                 'message' => $content,
                 'facts' => [],
                 'recorded_at' => $recordedAt,
+                'admin' => $noteAuthor,
                 'sort_at' => (($recordedAt?->timestamp ?? 0) * 1000) + $segmentIndex,
             ];
 
@@ -119,6 +122,7 @@
                 $event['title'] = 'MikroTik import';
                 $event['tone'] = 'import';
                 $event['message'] = 'Party information was imported from the router.';
+                $event['admin'] = $customer->entered_by_label;
                 $importLines = preg_split('/\R+/', $content, -1, PREG_SPLIT_NO_EMPTY) ?: [];
                 $importHeader = trim((string) array_shift($importLines));
 
@@ -1053,6 +1057,15 @@
                 <dt class="kv-grid__label">MikroTik comment</dt>
                 <dd class="kv-grid__value kv-grid__note">
                     {{ $customer->importedSecret?->router_comment ?: 'No comment' }}
+                </dd>
+
+                <dt class="kv-grid__label">Entered by</dt>
+                <dd class="kv-grid__value">
+                    {{ $customer->entered_by_label }}
+                    <span class="muted">({{ $customer->entry_by_type ?: 'system' }})</span>
+                    @if ($customer->created_at)
+                        <div class="muted">Registered {{ $customer->created_at->format('d/m/Y H:i') }}</div>
+                    @endif
                 </dd>
             </dl>
         </article>
