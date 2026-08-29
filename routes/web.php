@@ -295,6 +295,7 @@ Route::middleware('auth')->group(function () {
         Route::get('frequent-disconnects', [ConnectionAnalyticsController::class, 'frequentDisconnects'])->name('frequent-disconnects');
         Route::get('mac-changes', [ConnectionAnalyticsController::class, 'macChanges'])->name('mac-changes');
         Route::get('connection-analytics', [ConnectionAnalyticsController::class, 'index'])->name('analytics');
+        Route::patch('retention', [ConnectionAnalyticsController::class, 'updateRetention'])->name('retention');
     });
 
     Route::middleware('permission:manage_tickets')->group(function () {

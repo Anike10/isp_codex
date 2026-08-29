@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\MikrotikRouter;
 use App\Models\PppUsageLog;
+use App\Services\PppWebhookService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -17,6 +18,33 @@ use Illuminate\Support\Facades\DB;
  */
 class ConnectionAnalyticsController extends Controller
 {
+    public function __construct(private readonly PppWebhookService $webhook) {}
+
+    /**
+     * Set (and optionally apply now) the `ppp_usage_logs` retention window that
+     * feeds all three Troubleshoot report pages. Shared by their inline control.
+     */
+    public function updateRetention(Request $request)
+    {
+        $days = (int) $request->validate([
+            'retention_days' => ['required', 'integer', 'min:0', 'max:3650'],
+        ])['retention_days'];
+
+        $this->webhook->setRetentionDays($days);
+
+        if ($request->input('action') === 'prune') {
+            $removed = $this->webhook->pruneUsageLogs();
+
+            return back()->with('success', $removed > 0
+                ? "Deleted {$removed} disconnect-log row(s) older than {$days} day(s)."
+                : 'Retention saved. No rows are older than the window.');
+        }
+
+        return back()->with('success', $days > 0
+            ? "Saved — disconnect-log rows older than {$days} day(s) are deleted every night."
+            : 'Saved — disconnect logs are now kept forever.');
+    }
+
     /** List users whose disconnect count crosses a threshold within a window. */
     public function frequentDisconnects(Request $request)
     {
@@ -59,6 +87,7 @@ class ConnectionAnalyticsController extends Controller
             'minCount' => $minCount,
             'routerId' => $routerId,
             'since' => $since,
+            'retentionDays' => $this->webhook->retentionDays(),
         ]);
     }
 
@@ -109,6 +138,7 @@ class ConnectionAnalyticsController extends Controller
             'minMacs' => $minMacs,
             'routerId' => $routerId,
             'since' => $since,
+            'retentionDays' => $this->webhook->retentionDays(),
         ]);
     }
 
@@ -161,6 +191,7 @@ class ConnectionAnalyticsController extends Controller
             'dir' => $dir,
             'search' => $search,
             'routerId' => $routerId,
+            'retentionDays' => $this->webhook->retentionDays(),
         ]);
     }
 

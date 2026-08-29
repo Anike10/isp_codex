@@ -7,6 +7,7 @@ use App\Models\MikrotikRouter;
 use App\Models\Permission;
 use App\Models\PppUsageLog;
 use App\Models\User;
+use App\Services\PppWebhookService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -73,6 +74,34 @@ class ConnectionAnalyticsTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->get(route('troubleshoot.mac-changes'))
             ->assertForbidden();
+
+        $this->actingAs(User::factory()->create())
+            ->patch(route('troubleshoot.retention'), ['retention_days' => 5])
+            ->assertForbidden();
+    }
+
+    public function test_retention_can_be_set_and_applied_from_a_report_page(): void
+    {
+        $seer = $this->seer();
+
+        PppUsageLog::create(['username' => 'old', 'download_bytes' => 0, 'upload_bytes' => 0, 'payload' => [], 'disconnected_at' => now()->subDays(40)]);
+        PppUsageLog::create(['username' => 'new', 'download_bytes' => 0, 'upload_bytes' => 0, 'payload' => [], 'disconnected_at' => now()->subDay()]);
+
+        // Save only.
+        $this->actingAs($seer)->patch(route('troubleshoot.retention'), ['retention_days' => 14])->assertRedirect();
+        $this->assertSame(14, app(PppWebhookService::class)->retentionDays());
+        $this->assertSame(2, PppUsageLog::count());
+
+        // The control shows the saved value on every report page.
+        $this->actingAs($seer)->get(route('troubleshoot.mac-changes'))
+            ->assertOk()->assertSee('name="retention_days" min="0" max="3650" value="14"', false);
+        $this->actingAs($seer)->get(route('troubleshoot.frequent-disconnects'))
+            ->assertOk()->assertSee('name="retention_days" min="0" max="3650" value="14"', false);
+
+        // Delete now.
+        $this->actingAs($seer)->patch(route('troubleshoot.retention'), ['retention_days' => 7, 'action' => 'prune'])
+            ->assertRedirect()->assertSessionHas('success', fn ($m) => str_contains($m, 'Deleted 1'));
+        $this->assertSame(['new'], PppUsageLog::pluck('username')->all());
     }
 
     public function test_frequent_mac_changes_make_default_persists_the_filters(): void

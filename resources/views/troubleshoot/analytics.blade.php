@@ -44,6 +44,8 @@
     @endif
 </form>
 
+@include('troubleshoot._retention')
+
 <div class="table-scroll">
     <table>
         <thead>

@@ -1525,10 +1525,13 @@ PPPoE sync:
   most recent captured ONU **Rx and Tx** optical power (partial
   `troubleshoot._rx_power`, column "ONU power (Rx / Tx)").
 - Disconnect-log retention: `AppSetting` key `ppp_usage_log_retention_days`
-  (field on the Webhook Settings page; `0` = keep forever). `ppp:prune-usage-logs`
-  runs nightly (03:30) and `PppWebhookService::pruneUsageLogs()` deletes
-  `ppp_usage_logs` rows older than the window; the settings page also has a
-  "Delete old rows now" button (`action=prune`).
+  (`0` = keep forever). Editable from an inline control (partial
+  `troubleshoot/_retention`) on **all three** report pages and on Webhook
+  Settings; both post to `troubleshoot.retention`
+  (`ConnectionAnalyticsController@updateRetention`) or the webhook update.
+  `ppp:prune-usage-logs` runs nightly (03:30) and
+  `PppWebhookService::pruneUsageLogs()` deletes `ppp_usage_logs` rows older than
+  the window; the control also has a "Delete now" button (`action=prune`).
 - `POST /api/ppp/usage` (`api.ppp-usage.store`, `PppUsageWebhookController`, no
   auth middleware — guarded by the `X-PPP-Webhook-Secret` header) records each
   disconnect in `ppp_usage_logs` (`disconnected_at` = receipt time, plus
