@@ -57,7 +57,7 @@
         text-align: center;
         vertical-align: middle;
     }
-    .customer-table td.col-center .special-toggle-form { display: inline-block; }
+    .customer-table td.col-center .special-toggle-form { display: block; margin: 4px auto 0; }
     .customer-action-menu > summary {
         min-width: 88px;
         cursor: pointer;
