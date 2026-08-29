@@ -55,7 +55,13 @@
                                     <td>{{ $secret->profile ?: '—' }}</td>
                                     <td>{{ $secret->service ?: '—' }}</td>
                                     <td>{{ $secret->remote_address ?: '—' }}</td>
-                                    <td><span class="badge {{ $secret->disabled ? 'inactive' : 'active' }}">{{ $secret->disabled ? 'disabled' : 'enabled' }}</span></td>
+                                    <td>
+                                        @if ($secret->router?->read_only)
+                                            <span class="badge">Read-only</span>
+                                        @else
+                                            <span class="badge {{ $secret->disabled ? 'inactive' : 'active' }}">{{ $secret->disabled ? 'disabled' : 'enabled' }}</span>
+                                        @endif
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>

@@ -44,10 +44,12 @@ class MikrotikRouterController extends Controller
             'router_api_username' => ['required', 'string', 'max:255'],
             'router_api_password' => ['required', 'string', 'max:255'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
+            'read_only' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string'],
         ]);
         $data['username'] = $data['router_api_username'];
         $data['password'] = $data['router_api_password'];
+        $data['read_only'] = $request->boolean('read_only');
         unset($data['router_api_username'], $data['router_api_password']);
 
         MikrotikRouter::create($data);
@@ -304,10 +306,12 @@ class MikrotikRouterController extends Controller
                 ? ['required', 'string', 'max:255']
                 : ['nullable', 'string', 'max:255'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
+            'read_only' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string'],
         ]);
 
         $data['username'] = $data['router_api_username'];
+        $data['read_only'] = $request->boolean('read_only');
         unset($data['router_api_username']);
 
         if (blank($data['router_api_password'])) {

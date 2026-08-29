@@ -59,7 +59,13 @@
                     <td><strong>{{ $secret->name }}</strong><div class="muted">Password imported securely</div></td>
                     <td>{{ $secret->profile ?: 'No profile' }}<div class="muted">{{ $secret->service ?: 'Unknown service' }}</div></td>
                     <td>{{ $secret->remote_address ?: '—' }}<div class="muted">{{ $secret->local_address ?: '' }}</div></td>
-                    <td><span class="badge {{ $secret->disabled ? 'inactive' : 'active' }}">{{ $secret->disabled ? 'Disabled' : 'Enabled' }}</span></td>
+                    <td>
+                        @if ($mikrotikRouter->read_only)
+                            <span class="badge">Read-only</span>
+                        @else
+                            <span class="badge {{ $secret->disabled ? 'inactive' : 'active' }}">{{ $secret->disabled ? 'Disabled' : 'Enabled' }}</span>
+                        @endif
+                    </td>
                     <td>{{ $mikrotikRouter->name }}<div class="muted">{{ $secret->router_comment ?: 'No router comment' }}</div></td>
                     <td>
                         @if ($secret->customer)
@@ -101,7 +107,7 @@
         <table>
             <thead><tr><th>#</th><th>Profile</th><th>Rate limit</th><th>Local address</th><th>Remote pool/address</th><th>Status</th></tr></thead>
             <tbody>@forelse ($profiles as $profile)
-                <tr><td>{{ $profiles->firstItem() + $loop->index }}</td><td><strong>{{ $profile->name }}</strong></td><td>{{ $profile->rate_limit ?: '—' }}</td><td>{{ $profile->local_address ?: '—' }}</td><td>{{ $profile->remote_address ?: '—' }}</td><td><span class="badge {{ $profile->disabled ? 'inactive' : 'active' }}">{{ $profile->disabled ? 'Disabled' : 'Enabled' }}</span></td></tr>
+                <tr><td>{{ $profiles->firstItem() + $loop->index }}</td><td><strong>{{ $profile->name }}</strong></td><td>{{ $profile->rate_limit ?: '—' }}</td><td>{{ $profile->local_address ?: '—' }}</td><td>{{ $profile->remote_address ?: '—' }}</td><td>@if ($mikrotikRouter->read_only)<span class="badge">Read-only</span>@else<span class="badge {{ $profile->disabled ? 'inactive' : 'active' }}">{{ $profile->disabled ? 'Disabled' : 'Enabled' }}</span>@endif</td></tr>
             @empty<tr><td colspan="6">No profiles imported yet.</td></tr>@endforelse</tbody>
         </table>
         <div style="margin-top:12px">{{ $profiles->links() }}</div>

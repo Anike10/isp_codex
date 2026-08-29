@@ -157,6 +157,45 @@ class MikrotikImportTest extends TestCase
         ]);
     }
 
+    public function test_read_only_router_still_imports_and_shows_read_only_status(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $router = MikrotikRouter::create([
+            'name' => 'RO Router', 'ip_address' => '10.0.0.55', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 60, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'reader', 'password' => 'secret', 'status' => 'active',
+        ]);
+
+        // Mark it read-only through the edit form.
+        $this->actingAs($user)->put(route('mikrotik-routers.update', $router), [
+            'name' => 'RO Router', 'ip_address' => '10.0.0.55', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 60, 'inactive_pppoe_profile' => 'inactive',
+            'router_api_username' => 'reader', 'router_api_password' => '',
+            'status' => 'active', 'read_only' => '1', 'notes' => null,
+        ])->assertRedirect(route('mikrotik-routers.show', $router));
+        $this->assertTrue((bool) $router->refresh()->read_only);
+
+        MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $router->id, 'routeros_id' => '*R1', 'name' => 'ro-user-1',
+            'password' => 'x', 'service' => 'pppoe', 'profile' => '10M', 'disabled' => false, 'imported_at' => now(),
+        ]);
+
+        // The imported-secrets page: import controls present, status reads "Read-only".
+        $this->actingAs($user)->get(route('mikrotik-routers.imported-secrets.index', $router))
+            ->assertOk()
+            ->assertSee('Refresh Secrets')
+            ->assertSee('Create Selected Parties')
+            ->assertSee('Read-only')
+            ->assertDontSee('>Enabled<', false);
+
+        // The router list flags it too.
+        $this->actingAs($user)->get(route('mikrotik-routers.index'))
+            ->assertOk()
+            ->assertSee('Read-only');
+    }
+
     public function test_router_edit_ignores_browser_login_autofill_fields(): void
     {
         $user = User::factory()->create();

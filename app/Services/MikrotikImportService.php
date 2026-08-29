@@ -222,7 +222,7 @@ class MikrotikImportService
     public function unmanagedSecrets(): Collection
     {
         return $this->unmanagedSecretsQuery()
-            ->with('router:id,name,ip_address')
+            ->with('router:id,name,ip_address,read_only')
             ->orderBy('mikrotik_router_id')
             ->orderBy('name')
             ->get();

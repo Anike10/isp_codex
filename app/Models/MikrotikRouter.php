@@ -24,6 +24,7 @@ class MikrotikRouter extends Model
         'username',
         'password',
         'status',
+        'read_only',
         'last_api_status',
         'last_ping_status',
         'last_api_latency_ms',
@@ -49,6 +50,7 @@ class MikrotikRouter extends Model
     {
         return [
             'api_port' => 'integer',
+            'read_only' => 'boolean',
             'pppoe_sync_interval_minutes' => 'integer',
             'password' => 'encrypted',
             'last_api_latency_ms' => 'integer',

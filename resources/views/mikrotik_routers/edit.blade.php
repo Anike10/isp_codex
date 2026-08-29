@@ -67,6 +67,13 @@
         </select>
     </div>
     <div class="full">
+        <label style="display:flex;gap:8px;align-items:center;font-weight:400">
+            <input type="checkbox" name="read_only" value="1" style="width:auto" @checked(old('read_only', $mikrotikRouter->read_only))>
+            API user is read-only (import only)
+        </label>
+        <span class="muted">Tick when the RouterOS API login can only read. Importing every secret and profile still works; the app will not push changes to this router, and its users/profiles show as &ldquo;Read-only&rdquo;.</span>
+    </div>
+    <div class="full">
         <label>Notes</label>
         <textarea name="notes">{{ old('notes', $mikrotikRouter->notes) }}</textarea>
     </div>

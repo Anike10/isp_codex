@@ -31,7 +31,7 @@
     <tbody>
         @forelse ($routers as $router)
             <tr data-href="{{ route('mikrotik-routers.show', $router) }}">
-                <td>{{ $router->name }}</td>
+                <td>{{ $router->name }}@if ($router->read_only) <span class="badge" title="API user is read-only — import only">Read-only</span>@endif</td>
                 <td>{{ $router->ip_address }}</td>
                 <td>{{ $router->api_port }}</td>
                 <td>{{ $router->username }}</td>
