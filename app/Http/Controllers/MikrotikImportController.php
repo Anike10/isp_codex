@@ -51,14 +51,22 @@ class MikrotikImportController extends Controller
             'active_password' => ['required', 'string', 'min:1', 'max:255'],
         ]);
 
-        $count = $service->importActiveUsers($mikrotikRouter, $data['active_password']);
+        $breakdown = $service->importActiveUsers($mikrotikRouter, $data['active_password']);
+
+        $message = "Active connections on {$mikrotikRouter->name}: {$breakdown['stored']} stored from {$breakdown['seen']} live session(s).";
+        if ($breakdown['skipped_no_name'] > 0) {
+            $message .= " {$breakdown['skipped_no_name']} had no username yet.";
+        }
+        if ($breakdown['duplicate_names'] > 0) {
+            $message .= " {$breakdown['duplicate_names']} extra session(s) for a name already listed.";
+        }
 
         if ($request->boolean('return_to_compare')) {
-            return back()->with('success', "Imported {$count} active PPPoE connections from {$mikrotikRouter->name}.");
+            return back()->with('success', $message);
         }
 
         return redirect()->route('mikrotik-routers.imported-secrets.index', $mikrotikRouter)
-            ->with('success', "Imported {$count} active PPPoE connections from {$mikrotikRouter->name}. Users without a real secret got the shared password.");
+            ->with('success', $message.' Users without a real secret got the shared password.');
     }
 
     public function secrets(Request $request, MikrotikRouter $mikrotikRouter)

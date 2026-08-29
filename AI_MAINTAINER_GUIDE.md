@@ -1441,6 +1441,12 @@ PPPoE sync:
   also appear in the unmanaged list, stored with the one shared password the
   operator typed. Both loops try every active router in turn, so an unreachable
   binary-API router costs one connect timeout and is reported in the warning.
+- `importActiveUsers()` returns `{seen, stored, skipped_no_name,
+  duplicate_names}` so the flash message can explain any gap between RouterOS's
+  "PPP > Active Connections" count and the rows stored: `skipped_no_name` is
+  half-open sessions with no username yet (or no `.id`), `duplicate_names` is a
+  second live session for a username already handled this run (one row per
+  username — the older session is normally a stale reconnect).
 - `MikrotikImportService::importActiveUsers($router, $password)` (route
   `mikrotik-routers.import.active-users`, "Import Active Users" on the router and
   imported-secrets pages) pulls every user from `/ppp/active` into

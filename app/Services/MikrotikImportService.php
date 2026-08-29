@@ -184,8 +184,16 @@ class MikrotikImportService
      * password that is applied to every active user that does not already have
      * an imported secret. A real secret is never overwritten — for those we
      * only refresh the live remote address.
+     *
+     * The return breakdown explains any gap between what RouterOS shows under
+     * PPP > Active Connections and what lands in the list: `seen` is every raw
+     * `/ppp/active` row, `skipped_no_name` counts half-open sessions with no
+     * username yet (or no `.id`), and `duplicate_names` counts extra sessions
+     * for a name already handled this run (two rows can't share one username).
+     *
+     * @return array{seen: int, stored: int, skipped_no_name: int, duplicate_names: int}
      */
-    public function importActiveUsers(MikrotikRouter $router, string $password): int
+    public function importActiveUsers(MikrotikRouter $router, string $password): array
     {
         $password = trim($password);
         if ($password === '') {
@@ -195,17 +203,32 @@ class MikrotikImportService
         // Active sessions map onto the same profile/package list as secrets do.
         $this->importProfiles($router);
         $records = $this->read($router, '/ppp/active/print');
-        $imported = 0;
+
+        $seen = count($records);
+        $stored = 0;
+        $skippedNoName = 0;
+        $duplicateNames = 0;
+        $handled = [];
 
         foreach ($records as $record) {
             $name = trim((string) ($record['name'] ?? ''));
             if ($name === '' || empty($record['.id'])) {
+                $skippedNoName++;
+
                 continue;
             }
 
+            $key = mb_strtolower($name);
+            if (isset($handled[$key])) {
+                $duplicateNames++;
+
+                continue;
+            }
+            $handled[$key] = true;
+
             $existing = MikrotikImportedSecret::query()
                 ->where('mikrotik_router_id', $router->id)
-                ->whereRaw('lower(name) = ?', [mb_strtolower($name)])
+                ->whereRaw('lower(name) = ?', [$key])
                 ->first();
 
             // A real /ppp/secret row already carries the correct password and
@@ -217,7 +240,7 @@ class MikrotikImportService
                     'password' => $existing->password ?: $password,
                     'imported_at' => now(),
                 ]);
-                $imported++;
+                $stored++;
 
                 continue;
             }
@@ -237,10 +260,15 @@ class MikrotikImportService
                 'disabled' => false,
                 'imported_at' => now(),
             ]);
-            $imported++;
+            $stored++;
         }
 
-        return $imported;
+        return [
+            'seen' => $seen,
+            'stored' => $stored,
+            'skipped_no_name' => $skippedNoName,
+            'duplicate_names' => $duplicateNames,
+        ];
     }
 
     /**
@@ -273,27 +301,37 @@ class MikrotikImportService
      * Pull every `/ppp/active` connection from every active router, applying the
      * one shared password to users that have no imported `/ppp/secret`.
      *
-     * @return array{results: array<int, array{router: string, count?: int, error?: string}>, imported: int, failed: int}
+     * @return array{results: array<int, array{router: string, count?: int, seen?: int, skipped?: int, error?: string}>, imported: int, seen: int, skipped: int, failed: int}
      */
     public function refreshActiveRouterConnections(string $password): array
     {
         $results = [];
         $imported = 0;
+        $seen = 0;
+        $skipped = 0;
         $failed = 0;
 
         MikrotikRouter::query()->where('status', 'active')->orderBy('id')->get()
-            ->each(function (MikrotikRouter $router) use ($password, &$results, &$imported, &$failed): void {
+            ->each(function (MikrotikRouter $router) use ($password, &$results, &$imported, &$seen, &$skipped, &$failed): void {
                 try {
-                    $count = $this->importActiveUsers($router, $password);
-                    $imported += $count;
-                    $results[] = ['router' => $router->name, 'count' => $count];
+                    $breakdown = $this->importActiveUsers($router, $password);
+                    $routerSkipped = $breakdown['skipped_no_name'] + $breakdown['duplicate_names'];
+                    $imported += $breakdown['stored'];
+                    $seen += $breakdown['seen'];
+                    $skipped += $routerSkipped;
+                    $results[] = [
+                        'router' => $router->name,
+                        'count' => $breakdown['stored'],
+                        'seen' => $breakdown['seen'],
+                        'skipped' => $routerSkipped,
+                    ];
                 } catch (Throwable $exception) {
                     $failed++;
                     $results[] = ['router' => $router->name, 'error' => $exception->getMessage()];
                 }
             });
 
-        return ['results' => $results, 'imported' => $imported, 'failed' => $failed];
+        return ['results' => $results, 'imported' => $imported, 'seen' => $seen, 'skipped' => $skipped, 'failed' => $failed];
     }
 
     /**

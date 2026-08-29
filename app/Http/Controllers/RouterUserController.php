@@ -68,8 +68,12 @@ class RouterUserController extends Controller
 
         $summary = $this->importService->refreshActiveRouterConnections($data['active_password']);
 
-        $message = "Pulled active connections: {$summary['imported']} user(s) read from ".count($summary['results']).' router(s). '
-            .'Users without a real secret got the shared password.';
+        $message = "Pulled active connections: {$summary['imported']} stored from {$summary['seen']} live session(s) across "
+            .count($summary['results']).' router(s).';
+        if ($summary['skipped'] > 0) {
+            $message .= " {$summary['skipped']} skipped (no username yet, or an extra session for a name already listed).";
+        }
+        $message .= ' Users without a real secret got the shared password.';
         $errors = collect($summary['results'])->filter(fn ($r) => isset($r['error']));
 
         $redirect = $request->input('redirect_to') === 'dashboard'

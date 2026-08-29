@@ -305,7 +305,10 @@ class MikrotikImportTest extends TestCase
 
         $imported = app(MikrotikImportService::class)->importActiveUsers($router, 'shared123');
 
-        $this->assertSame(2, $imported);
+        $this->assertSame(
+            ['seen' => 2, 'stored' => 2, 'skipped_no_name' => 0, 'duplicate_names' => 0],
+            $imported
+        );
 
         $noc = MikrotikImportedSecret::where('mikrotik_router_id', $router->id)->where('name', 'noc')->firstOrFail();
         $this->assertSame('realpass', $noc->password, 'A real secret password must never be overwritten.');
@@ -316,6 +319,35 @@ class MikrotikImportTest extends TestCase
         $this->assertSame('shared123', $walkin->password);
         $this->assertSame('active-*A2', $walkin->routeros_id);
         $this->assertFalse((bool) $walkin->disabled);
+    }
+
+    public function test_import_active_users_reports_sessions_it_could_not_store(): void
+    {
+        Http::fake([
+            '10.0.0.92:8181/rest/ppp/profile' => Http::response([], 200),
+            '10.0.0.92:8181/rest/ppp/active' => Http::response([
+                ['.id' => '*A1', 'name' => 'real-one', 'service' => 'pppoe', 'address' => '10.9.0.1'],
+                ['.id' => '*A2', 'name' => '', 'address' => '10.9.0.2'],
+                ['.id' => '', 'name' => 'no-id', 'address' => '10.9.0.3'],
+                ['.id' => '*A4', 'name' => 'dup', 'address' => '10.9.0.4'],
+                ['.id' => '*A5', 'name' => 'DUP', 'address' => '10.9.0.5'],
+            ], 200),
+        ]);
+
+        $router = MikrotikRouter::create([
+            'name' => 'Half Open Router', 'ip_address' => '10.0.0.92', 'api_port' => 8181,
+            'transport' => 'rest', 'pppoe_sync_interval_minutes' => 60,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'anike', 'password' => 'reader-pass',
+            'status' => 'active', 'read_only' => true,
+        ]);
+
+        $breakdown = app(MikrotikImportService::class)->importActiveUsers($router, 'shared123');
+
+        $this->assertSame(
+            ['seen' => 5, 'stored' => 2, 'skipped_no_name' => 2, 'duplicate_names' => 1],
+            $breakdown
+        );
+        $this->assertSame(2, MikrotikImportedSecret::where('mikrotik_router_id', $router->id)->count());
     }
 
     public function test_import_active_users_endpoint_requires_a_shared_password(): void
