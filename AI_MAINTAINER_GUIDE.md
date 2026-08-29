@@ -1469,7 +1469,8 @@ PPPoE sync:
      error) go in the warning flash. One script for all profiles/users; RouterOS
      session vars (`$user`, `$uptime`, `$"bytes-in"`, `$"bytes-out"`) + the
      baked-in router id carry the values, sent as JSON strings so an empty
-     counter can't break the JSON.
+     counter can't break the JSON. The body also carries `caller_id` — the
+     PPPoE client MAC from `$"caller-id"`.
   2. **Frequent Disconnects** (`troubleshoot.frequent-disconnects`,
      `ConnectionAnalyticsController@frequentDisconnects`). Groups `ppp_usage_logs`
      by `username`, `having count(*) >= min_count` within the last `hours`
@@ -1480,14 +1481,19 @@ PPPoE sync:
      server-side sort via `sort` (`username|d24h|d7d|d30d|dall|last_at`) + `dir`,
      plus `search` and `router` filters.
   Both reports resolve `username` → party (case-insensitive `connection_id` /
-  `mikrotik_username`) for a link.
+  `mikrotik_username`) for a link, and `attachOnuReadings()` shows each user's
+  most recent captured ONU Rx power (partial `troubleshoot._rx_power`).
 - `POST /api/ppp/usage` (`api.ppp-usage.store`, `PppUsageWebhookController`, no
   auth middleware — guarded by the `X-PPP-Webhook-Secret` header) records each
   disconnect in `ppp_usage_logs` (`disconnected_at` = receipt time, plus
   `created_at`): resolves `mikrotik_router_id` from the posted `router_id`, links
-  a `customer_id` by case-insensitive `connection_id` / `mikrotik_username`,
-  parses the RouterOS uptime string to `uptime_seconds`, and stores the raw
-  payload.
+  a `customer_id` by case-insensitive `connection_id` / `mikrotik_username`
+  (falling back to `customers.last_connected_mac` = `caller_id`), matches an
+  `olt_onu_id` by `caller_id` against `olt_onus.mac_address` or a `learned_macs`
+  entry (MAC compare via `App\Support\Mac`), snapshots that ONU's
+  `rx_power_dbm`, parses the RouterOS uptime string to `uptime_seconds`, and
+  stores the raw payload. Migration `2026_08_29_000004` adds `caller_id`,
+  `olt_onu_id`, `rx_power_dbm`.
 - Party creation from imported secrets matches both `connection_id` and
   `mikrotik_username` case-insensitively, including soft-deleted rows. Repeated
   names from multiple routers link to the first live party instead of creating

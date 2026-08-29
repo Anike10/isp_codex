@@ -22,16 +22,34 @@ class ConnectionAnalyticsTest extends TestCase
         return $user;
     }
 
-    private function logDisconnect(string $username, string $when, ?int $routerId = null): void
+    private function logDisconnect(string $username, string $when, ?int $routerId = null, ?float $rxPower = null): void
     {
         PppUsageLog::create([
             'mikrotik_router_id' => $routerId,
             'username' => $username,
             'download_bytes' => 0,
             'upload_bytes' => 0,
+            'rx_power_dbm' => $rxPower,
             'payload' => [],
             'disconnected_at' => $when,
         ]);
+    }
+
+    public function test_both_reports_show_the_latest_onu_receiving_power_for_a_user(): void
+    {
+        $this->logDisconnect('fiber-1', now()->subDays(2)->toDateString(), null, -19.00);
+        $this->logDisconnect('fiber-1', now()->subHour()->toDateString(), null, -27.40);
+
+        $seer = $this->seer();
+
+        $this->actingAs($seer)->get(route('troubleshoot.analytics'))
+            ->assertOk()
+            ->assertSee('ONU Rx power')
+            ->assertSee('-27.40 dBm');
+
+        $this->actingAs($seer)->get(route('troubleshoot.frequent-disconnects', ['min_count' => 1]))
+            ->assertOk()
+            ->assertSee('-27.40 dBm');
     }
 
     public function test_frequent_disconnects_lists_only_users_over_the_threshold_in_the_window(): void

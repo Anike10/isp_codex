@@ -41,6 +41,7 @@
                 <th>Party</th>
                 <th class="col-center">Disconnects</th>
                 <th class="col-center">Routers</th>
+                <th class="col-center">ONU Rx power</th>
                 <th>Last disconnect</th>
             </tr>
         </thead>
@@ -58,10 +59,11 @@
                     </td>
                     <td class="col-center"><strong>{{ (int) $row->disconnects }}</strong></td>
                     <td class="col-center">{{ (int) $row->routers }}</td>
+                    <td class="col-center">@include('troubleshoot._rx_power', ['row' => $row])</td>
                     <td>{{ \Illuminate\Support\Carbon::parse($row->last_at)->format('d/m/Y H:i:s') }}</td>
                 </tr>
             @empty
-                <tr><td colspan="5" class="muted">No user crossed the threshold in this window.</td></tr>
+                <tr><td colspan="6" class="muted">No user crossed the threshold in this window.</td></tr>
             @endforelse
         </tbody>
     </table>

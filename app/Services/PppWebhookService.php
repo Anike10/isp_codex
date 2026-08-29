@@ -155,6 +155,7 @@ class PppWebhookService
             .'\\"uptime\\":\\"$uptime\\",'
             .'\\"download\\":\\"$\\"bytes-in\\"\\",'
             .'\\"upload\\":\\"$\\"bytes-out\\"\\",'
+            .'\\"caller_id\\":\\"$\\"caller-id\\"\\",'
             .'\\"router_id\\":\\"'.$router->id.'\\"'
             .'}';
 

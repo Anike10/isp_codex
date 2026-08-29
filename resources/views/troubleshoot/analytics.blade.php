@@ -56,6 +56,7 @@
                 <th class="col-center"><a href="{{ $s7 }}">Last 7d{{ $s7a }}</a></th>
                 <th class="col-center"><a href="{{ $s30 }}">Last 30d{{ $s30a }}</a></th>
                 <th class="col-center"><a href="{{ $sall }}">All time{{ $salla }}</a></th>
+                <th class="col-center">ONU Rx power</th>
                 <th><a href="{{ $sl }}">Last disconnect{{ $sla }}</a></th>
             </tr>
         </thead>
@@ -74,10 +75,11 @@
                     <td class="col-center">{{ (int) $row->d7d }}</td>
                     <td class="col-center">{{ (int) $row->d30d }}</td>
                     <td class="col-center"><strong>{{ (int) $row->dall }}</strong></td>
+                    <td class="col-center">@include('troubleshoot._rx_power', ['row' => $row])</td>
                     <td>{{ $row->last_at ? \Illuminate\Support\Carbon::parse($row->last_at)->format('d/m/Y H:i:s') : '—' }}</td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="muted">No disconnect events logged yet.</td></tr>
+                <tr><td colspan="8" class="muted">No disconnect events logged yet.</td></tr>
             @endforelse
         </tbody>
     </table>

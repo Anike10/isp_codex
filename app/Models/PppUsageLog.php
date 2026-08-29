@@ -10,12 +10,15 @@ class PppUsageLog extends Model
     protected $fillable = [
         'mikrotik_router_id',
         'customer_id',
+        'olt_onu_id',
         'username',
+        'caller_id',
         'reported_router_id',
         'uptime',
         'uptime_seconds',
         'download_bytes',
         'upload_bytes',
+        'rx_power_dbm',
         'payload',
         'disconnected_at',
     ];
@@ -27,6 +30,7 @@ class PppUsageLog extends Model
             'uptime_seconds' => 'integer',
             'download_bytes' => 'integer',
             'upload_bytes' => 'integer',
+            'rx_power_dbm' => 'decimal:2',
             'disconnected_at' => 'datetime',
         ];
     }
@@ -34,6 +38,11 @@ class PppUsageLog extends Model
     public function router(): BelongsTo
     {
         return $this->belongsTo(MikrotikRouter::class, 'mikrotik_router_id');
+    }
+
+    public function oltOnu(): BelongsTo
+    {
+        return $this->belongsTo(OltOnu::class);
     }
 
     public function customer(): BelongsTo

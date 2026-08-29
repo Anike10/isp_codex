@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AppSetting;
 use App\Models\Customer;
 use App\Models\MikrotikRouter;
+use App\Models\OltOnu;
 use App\Models\Permission;
 use App\Models\PppUsageLog;
 use App\Models\User;
@@ -71,6 +72,7 @@ class PppWebhookTest extends TestCase
                 return str_contains($onDown, '/tool fetch')
                     && str_contains($onDown, 'https://billing.example.com/api/ppp/usage')
                     && str_contains($onDown, '\"router_id\":\"'.$router->id.'\"')
+                    && str_contains($onDown, '\"caller_id\":\"$\"caller-id\"\"')
                     && str_contains($onDown, PppWebhookService::SECRET_HEADER);
             });
         }
@@ -164,6 +166,64 @@ class PppWebhookTest extends TestCase
         $this->assertSame(3723, $log->uptime_seconds);
         $this->assertSame(10485760, $log->download_bytes);
         $this->assertSame(2097152, $log->upload_bytes);
+    }
+
+    public function test_webhook_matches_the_onu_by_serial_mac_and_records_its_receiving_power(): void
+    {
+        $onu = OltOnu::create([
+            'pon_port' => 1, 'onu_id' => 5, 'mac_address' => '00:8d:ff:02:2a:17',
+            'rx_power_dbm' => -21.50, 'status' => 'online', 'name' => 'ONU-5',
+        ]);
+        $secret = app(PppWebhookService::class)->secret();
+
+        $response = $this->withHeader(PppWebhookService::SECRET_HEADER, $secret)
+            ->postJson('/api/ppp/usage', [
+                'user' => 'pppoe-9', 'uptime' => '30m',
+                'caller_id' => '00:8D:FF:02:2A:17', 'router_id' => '1',
+            ])
+            ->assertCreated();
+
+        $response->assertJsonPath('onu_id', $onu->id);
+
+        $log = PppUsageLog::firstOrFail();
+        $this->assertSame($onu->id, $log->olt_onu_id);
+        $this->assertSame('-21.50', (string) $log->rx_power_dbm);
+        $this->assertSame('00:8D:FF:02:2A:17', $log->caller_id);
+    }
+
+    public function test_webhook_matches_the_onu_by_a_learned_device_mac(): void
+    {
+        $onu = OltOnu::create([
+            'pon_port' => 2, 'onu_id' => 7, 'mac_address' => 'aa:aa:aa:aa:aa:aa',
+            'learned_macs' => [['mac' => '00:8d:ff:02:2a:17', 'vlan' => 100]],
+            'rx_power_dbm' => -30.00, 'status' => 'online',
+        ]);
+        $secret = app(PppWebhookService::class)->secret();
+
+        $this->withHeader(PppWebhookService::SECRET_HEADER, $secret)
+            ->postJson('/api/ppp/usage', ['user' => 'pppoe-x', 'caller_id' => '008dff022a17'])
+            ->assertCreated();
+
+        $this->assertSame($onu->id, PppUsageLog::firstOrFail()->olt_onu_id);
+    }
+
+    public function test_webhook_falls_back_to_last_connected_mac_to_find_the_customer(): void
+    {
+        $customer = Customer::create([
+            'name' => 'Mac Party', 'phone' => '01700000001', 'connection_id' => 'mac-1',
+            'mikrotik_username' => 'mac-1', 'last_connected_mac' => '00:8d:ff:02:2a:17',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+        $secret = app(PppWebhookService::class)->secret();
+
+        $this->withHeader(PppWebhookService::SECRET_HEADER, $secret)
+            ->postJson('/api/ppp/usage', [
+                'user' => 'not-a-known-username',
+                'caller_id' => '00:8d:ff:02:2a:17',
+            ])
+            ->assertCreated();
+
+        $this->assertSame($customer->id, PppUsageLog::firstOrFail()->customer_id);
     }
 
     public function test_webhook_endpoint_rejects_a_missing_or_wrong_secret(): void

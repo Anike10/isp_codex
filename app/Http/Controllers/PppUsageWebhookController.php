@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\MikrotikRouter;
+use App\Models\OltOnu;
 use App\Models\PppUsageLog;
 use App\Services\PppWebhookService;
+use App\Support\Mac;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -29,15 +31,28 @@ class PppUsageWebhookController extends Controller
             'uptime' => ['nullable', 'string', 'max:64'],
             'download' => ['nullable', 'numeric'],
             'upload' => ['nullable', 'numeric'],
+            'caller_id' => ['nullable', 'string', 'max:64'],
             'router_id' => ['nullable', 'string', 'max:64'],
         ]);
 
         $username = trim($data['user']);
+        $callerId = trim((string) ($data['caller_id'] ?? ''));
+        $callerMac = Mac::colon($callerId);
         $reportedRouterId = isset($data['router_id']) ? trim((string) $data['router_id']) : null;
 
         $router = $reportedRouterId !== null && $reportedRouterId !== ''
             ? MikrotikRouter::find((int) $reportedRouterId)
             : null;
+
+        // Match the OLT ONU by the client MAC — against its serial ("Serial /
+        // MAC") or any address it has learned ("Device MACs").
+        $onu = $callerMac === null ? null : OltOnu::query()
+            ->where(function ($query) use ($callerMac): void {
+                $query->whereRaw('lower(mac_address) = ?', [$callerMac])
+                    ->orWhere('learned_macs', 'like', '%"'.$callerMac.'"%');
+            })
+            ->orderByDesc('last_live_polled_at')
+            ->first();
 
         $customer = Customer::query()
             ->when($router, fn ($query) => $query->where(function ($q) use ($router): void {
@@ -50,20 +65,36 @@ class PppUsageWebhookController extends Controller
             ->orderByRaw('mikrotik_router_id is null')
             ->first();
 
+        // Fall back to the last MAC we saw this party connect from.
+        if (! $customer && $callerMac !== null) {
+            $customer = Customer::query()
+                ->whereRaw('lower(last_connected_mac) = ?', [$callerMac])
+                ->orWhere('last_connected_mac', $callerId)
+                ->first();
+        }
+
         $log = PppUsageLog::create([
             'mikrotik_router_id' => $router?->id,
             'customer_id' => $customer?->id,
+            'olt_onu_id' => $onu?->id,
             'username' => $username,
+            'caller_id' => $callerId ?: null,
             'reported_router_id' => $reportedRouterId,
             'uptime' => $data['uptime'] ?? null,
             'uptime_seconds' => isset($data['uptime']) ? $this->uptimeToSeconds($data['uptime']) : null,
             'download_bytes' => (int) round((float) ($data['download'] ?? 0)),
             'upload_bytes' => (int) round((float) ($data['upload'] ?? 0)),
+            'rx_power_dbm' => $onu?->rx_power_dbm,
             'payload' => $request->all(),
             'disconnected_at' => now(),
         ]);
 
-        return response()->json(['stored' => true, 'id' => $log->id], 201);
+        return response()->json([
+            'stored' => true,
+            'id' => $log->id,
+            'onu_id' => $onu?->id,
+            'rx_power_dbm' => $onu?->rx_power_dbm,
+        ], 201);
     }
 
     /**

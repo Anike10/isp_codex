@@ -42,6 +42,7 @@ class ConnectionAnalyticsController extends Controller
             ->withQueryString();
 
         $this->attachCustomers($rows->getCollection());
+        $this->attachOnuReadings($rows->getCollection());
 
         return view('troubleshoot.frequent_disconnects', [
             'rows' => $rows,
@@ -83,6 +84,7 @@ class ConnectionAnalyticsController extends Controller
             ->withQueryString();
 
         $this->attachCustomers($rows->getCollection());
+        $this->attachOnuReadings($rows->getCollection());
 
         return view('troubleshoot.analytics', [
             'rows' => $rows,
@@ -138,6 +140,40 @@ class ConnectionAnalyticsController extends Controller
 
         $rows->each(function ($row) use ($byName): void {
             $row->matched_customer = $byName[mb_strtolower(trim((string) $row->username))] ?? null;
+        });
+    }
+
+    /**
+     * Attach the most recent ONU receiving-power reading captured with a
+     * disconnect for each username (see {@see PppUsageWebhookController}).
+     *
+     * @param  Collection<int, Model>  $rows
+     */
+    private function attachOnuReadings(Collection $rows): void
+    {
+        $names = $rows->pluck('username')
+            ->map(fn ($name) => mb_strtolower(trim((string) $name)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($names->isEmpty()) {
+            return;
+        }
+
+        $latest = PppUsageLog::query()
+            ->whereIn(DB::raw('lower(username)'), $names)
+            ->whereNotNull('rx_power_dbm')
+            ->orderByDesc('disconnected_at')
+            ->get(['username', 'rx_power_dbm', 'olt_onu_id', 'caller_id', 'disconnected_at'])
+            ->groupBy(fn (PppUsageLog $log) => mb_strtolower(trim((string) $log->username)));
+
+        $rows->each(function ($row) use ($latest): void {
+            $reading = $latest->get(mb_strtolower(trim((string) $row->username)))?->first();
+            $row->onu_rx_power = $reading?->rx_power_dbm;
+            $row->onu_rx_at = $reading?->disconnected_at;
+            $row->onu_id = $reading?->olt_onu_id;
+            $row->last_caller_id = $reading?->caller_id;
         });
     }
 }
