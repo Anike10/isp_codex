@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class MikrotikImportedSecret extends Model
 {
-    protected $fillable = ['mikrotik_router_id', 'customer_id', 'routeros_id', 'name', 'password', 'service', 'profile', 'local_address', 'remote_address', 'disabled', 'router_comment', 'notes', 'imported_at'];
+    protected $fillable = ['mikrotik_router_id', 'customer_id', 'routeros_id', 'name', 'password', 'service', 'profile', 'local_address', 'remote_address', 'device_mac', 'disabled', 'router_comment', 'notes', 'imported_at'];
 
     protected $hidden = ['password'];
 

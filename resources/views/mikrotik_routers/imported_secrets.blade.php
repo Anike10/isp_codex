@@ -52,6 +52,7 @@
                 <th>Connection ID</th>
                 <th>Profile / Service</th>
                 <th>Address</th>
+                <th>Device MAC</th>
                 <th>Status</th>
                 <th>Router source / note</th>
                 <th>Party</th>
@@ -65,6 +66,7 @@
                     <td><strong>{{ $secret->name }}</strong><div class="muted">Password imported securely</div></td>
                     <td>{{ $secret->profile ?: 'No profile' }}<div class="muted">{{ $secret->service ?: 'Unknown service' }}</div></td>
                     <td>{{ $secret->remote_address ?: '—' }}<div class="muted">{{ $secret->local_address ?: '' }}</div></td>
+                    <td>@if ($secret->device_mac)<code>{{ $secret->device_mac }}</code>@else<span class="muted">—</span>@endif</td>
                     <td>
                         @if ($mikrotikRouter->read_only)
                             <span class="badge">Read-only</span>
@@ -95,7 +97,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="8">No PPPoE secrets imported yet. Use Import PPPoE Users / Secrets from the router page.</td></tr>
+                <tr><td colspan="9">No PPPoE secrets imported yet. Use Import PPPoE Users / Secrets from the router page.</td></tr>
             @endforelse
         </tbody>
     </table>

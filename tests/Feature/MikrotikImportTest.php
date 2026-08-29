@@ -248,6 +248,9 @@ class MikrotikImportTest extends TestCase
                 ['.id' => '*2', 'name' => 'shop', 'password' => 'abcd', 'service' => 'pppoe',
                     'profile' => 'P1', 'disabled' => 'true'],
             ], 200),
+            '10.0.0.77:8181/rest/ppp/active' => Http::response([
+                ['.id' => '*1', 'name' => 'noc', 'caller-id' => '00:11:22:33:44:55', 'address' => '10.0.0.9'],
+            ], 200),
         ]);
 
         $router = MikrotikRouter::create([
@@ -269,6 +272,7 @@ class MikrotikImportTest extends TestCase
         $noc = MikrotikImportedSecret::where('mikrotik_router_id', $router->id)->where('name', 'noc')->firstOrFail();
         $this->assertSame('1234', $noc->password);
         $this->assertSame('core user', $noc->router_comment);
+        $this->assertSame('00:11:22:33:44:55', $noc->device_mac, 'device MAC is enriched from /ppp/active');
         $this->assertDatabaseHas('mikrotik_imported_profiles', [
             'mikrotik_router_id' => $router->id, 'name' => 'P1', 'rate_limit' => '10M/10M',
         ]);
@@ -284,8 +288,8 @@ class MikrotikImportTest extends TestCase
                 ['.id' => '*1', 'name' => 'P1', 'rate-limit' => '10M/10M', 'disabled' => 'false'],
             ], 200),
             '10.0.0.90:8181/rest/ppp/active' => Http::response([
-                ['.id' => '*A1', 'name' => 'noc', 'service' => 'pppoe', 'profile' => 'P1', 'address' => '10.9.0.5'],
-                ['.id' => '*A2', 'name' => 'walkin', 'service' => 'pppoe', 'profile' => 'P1', 'address' => '10.9.0.6'],
+                ['.id' => '*A1', 'name' => 'noc', 'service' => 'pppoe', 'profile' => 'P1', 'address' => '10.9.0.5', 'caller-id' => 'AA:BB:CC:00:00:01'],
+                ['.id' => '*A2', 'name' => 'walkin', 'service' => 'pppoe', 'profile' => 'P1', 'address' => '10.9.0.6', 'caller-id' => 'aa:bb:cc:00:00:02'],
             ], 200),
         ]);
 
@@ -313,11 +317,13 @@ class MikrotikImportTest extends TestCase
         $noc = MikrotikImportedSecret::where('mikrotik_router_id', $router->id)->where('name', 'noc')->firstOrFail();
         $this->assertSame('realpass', $noc->password, 'A real secret password must never be overwritten.');
         $this->assertSame('10.9.0.5', $noc->remote_address);
+        $this->assertSame('AA:BB:CC:00:00:01', $noc->device_mac);
         $this->assertSame(1, MikrotikImportedSecret::where('mikrotik_router_id', $router->id)->where('name', 'noc')->count());
 
         $walkin = MikrotikImportedSecret::where('mikrotik_router_id', $router->id)->where('name', 'walkin')->firstOrFail();
         $this->assertSame('shared123', $walkin->password);
         $this->assertSame('active-*A2', $walkin->routeros_id);
+        $this->assertSame('AA:BB:CC:00:00:02', $walkin->device_mac, 'caller-id is normalised to uppercase colon form');
         $this->assertFalse((bool) $walkin->disabled);
     }
 

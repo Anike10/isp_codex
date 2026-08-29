@@ -189,7 +189,7 @@ class UnmanagedRouterUsersTest extends TestCase
             ], 200),
             '10.0.0.7:8181/rest/ppp/active' => Http::response([
                 ['.id' => '*A9', 'name' => 'connected-only', 'service' => 'pppoe',
-                    'profile' => 'home-10', 'address' => '10.7.0.9'],
+                    'profile' => 'home-10', 'address' => '10.7.0.9', 'caller-id' => '00:8d:ff:02:2a:17'],
             ], 200),
         ]);
 
@@ -213,11 +213,14 @@ class UnmanagedRouterUsersTest extends TestCase
         $secret = MikrotikImportedSecret::where('name', 'connected-only')->firstOrFail();
         $this->assertSame('shared-pw', $secret->password);
         $this->assertSame('active-*A9', $secret->routeros_id);
+        $this->assertSame('00:8D:FF:02:2A:17', $secret->device_mac);
 
+        // An unmanaged (no party) row still shows its live device MAC.
         $this->actingAs($seer)->get(route('router-users.index'))
             ->assertOk()
             ->assertSee('connected-only')
-            ->assertSee('10.7.0.9');
+            ->assertSee('10.7.0.9')
+            ->assertSee('00:8D:FF:02:2A:17');
     }
 
     public function test_refresh_active_requires_a_shared_password(): void

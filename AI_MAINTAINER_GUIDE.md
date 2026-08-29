@@ -1449,6 +1449,15 @@ PPPoE sync:
   column shows "✓ Linked", "✓ Name match", or "Not in app"; only unmanaged rows
   get an import checkbox. A `?router=<id>` select filters the list. The
   dashboard panel still shows only the unmanaged rows.
+- `mikrotik_imported_secrets.device_mac` holds the live `/ppp/active`
+  `caller-id` for that user (migration `2026_08_29_000008`, normalised to
+  uppercase colon). `importActiveUsers()` sets it inline; `importSecrets()`
+  (and so "Refresh secrets") calls `enrichSecretMacsFromActive()` afterwards to
+  fill it from `/ppp/active` since `/ppp/secret` carries no MAC — best-effort,
+  a failed `/ppp/active` read does not fail the import. Shown as the "Device
+  MAC" column on `/router-users` and the per-router imported-secrets page, and
+  carried onto the party's `last_connected_mac` by
+  `createPartiesFromSecrets()`.
 - Selected unmanaged rows can be imported as parties through
   `RouterUserController` and `MikrotikImportService::createPartiesFromSecrets()`.
 - "Refresh secrets" on those pages runs `refreshActiveRouterSecrets()`

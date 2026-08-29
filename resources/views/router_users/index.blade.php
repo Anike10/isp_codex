@@ -101,10 +101,13 @@
                                         @endif
                                     </td>
                                     <td>
-                                        @if ($secret->matched_customer?->last_connected_mac)
-                                            <code>{{ $secret->matched_customer->last_connected_mac }}</code>
-                                            @if ($secret->matched_customer->last_connected_at)
-                                                <div class="muted">{{ $secret->matched_customer->last_connected_at->diffForHumans() }}</div>
+                                        @php($deviceMac = $secret->device_mac ?: $secret->matched_customer?->last_connected_mac)
+                                        @if ($deviceMac)
+                                            <code>{{ $deviceMac }}</code>
+                                            @if ($secret->device_mac)
+                                                <div class="muted">from last /ppp/active poll</div>
+                                            @elseif ($secret->matched_customer?->last_connected_at)
+                                                <div class="muted">party, {{ $secret->matched_customer->last_connected_at->diffForHumans() }}</div>
                                             @endif
                                         @else
                                             <span class="muted">—</span>

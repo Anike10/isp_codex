@@ -10,6 +10,7 @@ use App\Models\MikrotikImportedProfile;
 use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
 use App\Models\Subscription;
+use App\Support\Mac;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -172,7 +173,48 @@ class MikrotikImportService
             );
         }
 
+        // /ppp/secret has no MAC — pull each connected user's caller-id from
+        // /ppp/active so the imported list can show a device MAC. Best effort:
+        // a router that will not return /ppp/active must not fail the import.
+        try {
+            $this->enrichSecretMacsFromActive($router);
+        } catch (Throwable) {
+            // ignore — the secret rows were already stored
+        }
+
         return count($records);
+    }
+
+    /**
+     * Copy each live `/ppp/active` session's `caller-id` (device MAC) onto the
+     * matching imported-secret row for this router.
+     */
+    public function enrichSecretMacsFromActive(MikrotikRouter $router, ?array $records = null): int
+    {
+        $records ??= $this->read($router, '/ppp/active/print');
+        $updated = 0;
+
+        foreach ($records as $record) {
+            $name = trim((string) ($record['name'] ?? ''));
+            $mac = $this->normalizeMac($record['caller-id'] ?? null);
+            if ($name === '' || $mac === null) {
+                continue;
+            }
+
+            $updated += MikrotikImportedSecret::query()
+                ->where('mikrotik_router_id', $router->id)
+                ->whereRaw('lower(name) = ?', [mb_strtolower($name)])
+                ->update(['device_mac' => $mac]);
+        }
+
+        return $updated;
+    }
+
+    private function normalizeMac(?string $callerId): ?string
+    {
+        $colon = Mac::colon($callerId);
+
+        return $colon === null ? null : strtoupper($colon);
     }
 
     /**
@@ -226,16 +268,19 @@ class MikrotikImportService
             }
             $handled[$key] = true;
 
+            $deviceMac = $this->normalizeMac($record['caller-id'] ?? null);
+
             $existing = MikrotikImportedSecret::query()
                 ->where('mikrotik_router_id', $router->id)
                 ->whereRaw('lower(name) = ?', [$key])
                 ->first();
 
             // A real /ppp/secret row already carries the correct password and
-            // disabled flag; only pull the live address onto it.
+            // disabled flag; only pull the live address / MAC onto it.
             if ($existing) {
                 $existing->update([
                     'remote_address' => $record['address'] ?? $existing->remote_address,
+                    'device_mac' => $deviceMac ?: $existing->device_mac,
                     'profile' => $existing->profile ?: ($record['profile'] ?? null),
                     'password' => $existing->password ?: $password,
                     'imported_at' => now(),
@@ -256,6 +301,7 @@ class MikrotikImportService
                 'service' => $record['service'] ?? 'pppoe',
                 'profile' => $record['profile'] ?? null,
                 'remote_address' => $record['address'] ?? null,
+                'device_mac' => $deviceMac,
                 'router_comment' => $record['comment'] ?? null,
                 'disabled' => false,
                 'imported_at' => now(),
@@ -483,6 +529,7 @@ class MikrotikImportService
                     'connection_id' => $name,
                     'mikrotik_username' => $name,
                     'mikrotik_password' => $secret->password,
+                    'last_connected_mac' => $secret->device_mac ?: $customer?->last_connected_mac,
                     'mikrotik_router_id' => $router?->id,
                     'address' => $customer?->address ?: 'Imported from MikroTik '.($router?->name ?? 'router'),
                     'notes' => $this->appendImportNote($customer?->notes, $note),
