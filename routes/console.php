@@ -134,10 +134,10 @@ Artisan::command('mikrotik:sync-active-macs {--force : Poll every active router 
         ->orderBy('id')
         ->get()
         ->each(function (MikrotikRouter $router) use ($syncService, &$synced, &$failed): void {
-            $interval = max(1, (int) $router->active_mac_sync_interval_minutes);
+            $interval = max(1, (int) $router->active_mac_sync_interval_days);
             $isDue = $this->option('force')
                 || ! $router->last_active_mac_sync_at
-                || $router->last_active_mac_sync_at->addMinutes($interval)->lte(now());
+                || $router->last_active_mac_sync_at->addDays($interval)->lte(now());
 
             if (! $isDue) {
                 $this->line("{$router->name} ({$router->ip_address}): active-MAC sync skipped until next interval.");
@@ -281,10 +281,10 @@ Schedule::command('mikrotik:sync-router-users')
     ->hourly()
     ->withoutOverlapping();
 
-// Dispatcher runs often; each router is still gated by its own
-// active_mac_sync_interval_minutes inside the command.
+// Hourly dispatcher; each router is still gated by its own
+// active_mac_sync_interval_days inside the command.
 Schedule::command('mikrotik:sync-active-macs')
-    ->everyFiveMinutes()
+    ->hourly()
     ->withoutOverlapping();
 
 Schedule::command('mikrotik:import-secrets')

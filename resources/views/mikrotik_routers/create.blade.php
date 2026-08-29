@@ -108,10 +108,10 @@
             <div class="rf-field">
                 <label for="rf-mac-interval">Active connection MAC sync interval</label>
                 <div class="rf-input-suffix">
-                    <input id="rf-mac-interval" type="number" min="5" max="1440" name="active_mac_sync_interval_minutes" value="{{ old('active_mac_sync_interval_minutes', 15) }}" required>
-                    <span>min</span>
+                    <input id="rf-mac-interval" type="number" min="1" max="365" name="active_mac_sync_interval_days" value="{{ old('active_mac_sync_interval_days', 1) }}" required>
+                    <span>days</span>
                 </div>
-                <small class="rf-hint">Polls <code>/ppp/active</code> and copies each session's device MAC onto the matching party. Default 15 minutes.</small>
+                <small class="rf-hint">Polls <code>/ppp/active</code> and copies each session's device MAC onto the matching party. Default 1 day.</small>
             </div>
             <div class="rf-field">
                 <label for="rf-inactive-profile">Inactive PPPoE profile</label>

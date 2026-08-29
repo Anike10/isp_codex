@@ -102,7 +102,7 @@
             <div><span class="muted">PPPoE sync interval</span><br><strong>Every {{ $mikrotikRouter->pppoe_sync_interval_days }} day(s)</strong></div>
             <div><span class="muted">Inactive profile</span><br><strong>{{ $mikrotikRouter->inactive_pppoe_profile }}</strong></div>
             <div><span class="muted">Last PPPoE sync</span><br><strong>{{ $mikrotikRouter->last_pppoe_sync_at?->format('d/m/Y H:i:s') ?? 'Never' }}</strong></div>
-            <div><span class="muted">Active MAC sync interval</span><br><strong>Every {{ $mikrotikRouter->active_mac_sync_interval_minutes }} minute(s)</strong></div>
+            <div><span class="muted">Active MAC sync interval</span><br><strong>Every {{ $mikrotikRouter->active_mac_sync_interval_days }} day(s)</strong></div>
             <div><span class="muted">Last active MAC sync</span><br><strong>{{ $mikrotikRouter->last_active_mac_sync_at?->format('d/m/Y H:i:s') ?? 'Never' }}</strong>@if ($mikrotikRouter->last_active_mac_sync_summary)<br><span class="muted">{{ $mikrotikRouter->last_active_mac_sync_summary }}</span>@endif</div>
             <div><span class="muted">Last online</span><br><strong>{{ $mikrotikRouter->last_online_at?->format('d/m/Y H:i:s') ?? 'Never' }}</strong></div>
         </div>

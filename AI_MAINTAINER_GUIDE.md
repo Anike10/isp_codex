@@ -1428,13 +1428,14 @@ PPPoE sync:
   `pppoe_sync_interval_minutes`). The hourly scheduler checks whether each
   router's `last_pppoe_sync_at + interval_days` is past. This is the slow full
   reconcile; per-party changes still sync immediately on edit/payment, and
-  `mikrotik:sync-active-macs` handles the frequent MAC capture.
+  `mikrotik:sync-active-macs` handles the periodic MAC capture.
 - Imported-secret refresh: `php artisan mikrotik:import-secrets`; the scheduler
   runs it every three hours.
 - Active-connection MAC sync: `php artisan mikrotik:sync-active-macs`
-  (`--force` ignores the interval). Scheduled every 5 minutes; each router is
-  gated by its own `mikrotik_routers.active_mac_sync_interval_minutes` (5–1440,
-  default 15, editable on the router form). `MikrotikCustomerSyncService::
+  (`--force` ignores the interval). Scheduled hourly; each router is gated by
+  its own `mikrotik_routers.active_mac_sync_interval_days` (1–365, default 1,
+  editable on the router form — migration `2026_08_29_000007` replaced the
+  earlier `_minutes` column). `MikrotikCustomerSyncService::
   syncActiveConnectionMacs()` reads `/ppp/active` (transport-agnostic, via
   `MikrotikImportService::liveRecords`) and, for every session whose name
   matches a party's `mikrotik_username` / `connection_id` on that router, writes
