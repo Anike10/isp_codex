@@ -67,7 +67,7 @@ class AccountingLedgerController extends Controller
         $canOpenCustomers = $request->user()?->hasPermission('manage_customers');
         $canOpenExpenses = $request->user()?->hasPermission('manage_expenses');
 
-        $invoices = Invoice::with('customer')
+        $invoices = Invoice::with(['customer' => fn ($query) => $query->withTrashed()])
             ->when($customerId, fn ($query) => $query->where('customer_id', $customerId))
             ->when($from, fn ($query) => $query->whereDate('created_at', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('created_at', '<=', $to))
@@ -77,7 +77,7 @@ class AccountingLedgerController extends Controller
                 'sort_order' => 10,
                 'source_id' => $invoice->id,
                 'type' => 'Invoice',
-                'customer' => $invoice->customer->name,
+                'customer' => $this->customerLabel($invoice->customer?->name, $invoice->customer_id),
                 'reference' => $invoice->invoice_no,
                 'debit' => (float) $invoice->total,
                 'credit' => 0,
@@ -85,14 +85,19 @@ class AccountingLedgerController extends Controller
                 'url' => $canOpenInvoices ? route('invoices.show', $invoice) : null,
             ]);
 
-        $payments = Payment::with(['customer', 'invoice', 'account', 'allocations.invoice'])
+        $payments = Payment::with([
+            'customer' => fn ($query) => $query->withTrashed(),
+            'invoice',
+            'account',
+            'allocations.invoice',
+        ])
             ->when($customerId, fn ($query) => $query->where('customer_id', $customerId))
             ->when($from, fn ($query) => $query->whereDate('payment_date', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('payment_date', '<=', $to))
             ->get()
             ->map(function (Payment $payment) use ($canOpenInvoices, $canOpenPayments) {
                 $allocationSummary = $payment->allocations
-                    ->map(fn ($allocation) => $allocation->invoice->invoice_no.' '.number_format((float) $allocation->amount, 2))
+                    ->map(fn ($allocation) => ($allocation->invoice?->invoice_no ?? 'Deleted invoice').' '.number_format((float) $allocation->amount, 2))
                     ->join(', ');
 
                 return [
@@ -100,7 +105,7 @@ class AccountingLedgerController extends Controller
                     'sort_order' => 20,
                     'source_id' => $payment->id,
                     'type' => 'Payment',
-                    'customer' => $payment->customer->name,
+                    'customer' => $this->customerLabel($payment->customer?->name, $payment->customer_id),
                     'reference' => 'Payment #'.$payment->id,
                     'debit' => 0,
                     'credit' => (float) $payment->amount,
@@ -109,11 +114,14 @@ class AccountingLedgerController extends Controller
                         .($allocationSummary ? ' | Allocated: '.$allocationSummary : ' | Added to advance'),
                     'url' => $canOpenPayments
                         ? route('payments.show', $payment)
-                        : ($canOpenInvoices ? route('invoices.show', $payment->invoice) : null),
+                        : ($canOpenInvoices && $payment->invoice ? route('invoices.show', $payment->invoice) : null),
                 ];
             });
 
-        $balanceEntries = CustomerBalanceTransaction::with(['customer', 'account'])
+        $balanceEntries = CustomerBalanceTransaction::with([
+            'customer' => fn ($query) => $query->withTrashed(),
+            'account',
+        ])
             ->when($customerId, fn ($query) => $query->where('customer_id', $customerId))
             ->where(function ($query) {
                 $query->where('direction', 'debit')
@@ -132,14 +140,16 @@ class AccountingLedgerController extends Controller
                     'sort_order' => 30,
                     'source_id' => $transaction->id,
                     'type' => $isCredit ? 'Advance' : 'Advance Used',
-                    'customer' => $transaction->customer->name,
+                    'customer' => $this->customerLabel($transaction->customer?->name, $transaction->customer_id),
                     'reference' => $transaction->reference ?: 'Advance #'.$transaction->id,
                     'debit' => 0,
                     'credit' => $isCredit ? (float) $transaction->amount : 0,
                     'note' => ($transaction->payment_method ?: 'advance')
                         .($transaction->account ? ' - '.$transaction->account->account_name : '')
                         .' | '.($isCredit ? 'Added to party balance' : 'Used from party balance: '.number_format((float) $transaction->amount, 2)),
-                    'url' => $canOpenCustomers ? route('customers.show', $transaction->customer) : null,
+                    'url' => $canOpenCustomers && $transaction->customer && ! $transaction->customer->trashed()
+                        ? route('customers.show', $transaction->customer)
+                        : null,
                 ];
             });
 
@@ -202,5 +212,10 @@ class AccountingLedgerController extends Controller
             $createdAt->second,
             $createdAt->micro,
         );
+    }
+
+    private function customerLabel(?string $name, int $customerId): string
+    {
+        return filled($name) ? $name : 'Deleted party #'.$customerId;
     }
 }

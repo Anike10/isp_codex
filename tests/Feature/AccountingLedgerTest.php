@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\CustomerBalanceTransaction;
 use App\Models\Invoice;
 use App\Models\Organization;
+use App\Models\Payment;
 use App\Models\Permission;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -159,6 +161,47 @@ class AccountingLedgerTest extends TestCase
             ->assertOk()
             ->assertSee('<body class="color-print">', false)
             ->assertSee('value="color" checked', false);
+    }
+
+    public function test_full_ledger_keeps_history_for_a_soft_deleted_party(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payment_accounts')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Deleted Ledger Party',
+            'phone' => '01700000003',
+            'connection_id' => 'LEDGER-DELETED-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+        ]);
+        $invoice = $this->createInvoice($customer, 'INV-DELETED-PARTY', '2026-07');
+        Payment::create([
+            'customer_id' => $customer->id,
+            'invoice_id' => $invoice->id,
+            'amount' => 200,
+            'payment_method' => 'cash',
+            'payment_date' => '2026-07-20',
+        ]);
+        CustomerBalanceTransaction::create([
+            'customer_id' => $customer->id,
+            'payment_method' => 'cash',
+            'direction' => 'credit',
+            'amount' => 50,
+            'balance_after' => 50,
+            'transaction_date' => '2026-07-20',
+            'reference' => 'Deleted party advance',
+            'operation_key' => 'ledger-deleted-party-test',
+        ]);
+
+        $customer->delete();
+
+        $this->actingAs($user)
+            ->get(route('accounting.ledger'))
+            ->assertOk()
+            ->assertSee('Deleted Ledger Party')
+            ->assertSee('<td>Invoice</td>', false)
+            ->assertSee('<td>Payment</td>', false)
+            ->assertSee('<td>Advance</td>', false);
     }
 
     private function createInvoice(Customer $customer, string $invoiceNo, string $billingMonth): Invoice
