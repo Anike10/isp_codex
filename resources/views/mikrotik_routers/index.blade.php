@@ -7,7 +7,10 @@
         <h1>MikroTik Routers</h1>
         <div class="muted">RouterOS API connection details</div>
     </div>
-    <a class="btn" href="{{ route('mikrotik-routers.create') }}">Add Router</a>
+    <div class="actions" style="gap:8px">
+        <a class="btn light" href="{{ route('mikrotik-routers.ppp-webhook.edit') }}">PPP Disconnect Webhook</a>
+        <a class="btn" href="{{ route('mikrotik-routers.create') }}">Add Router</a>
+    </div>
 </div>
 
 @include('partials.per_page')

@@ -28,6 +28,7 @@ use App\Http\Controllers\PackageController;
 use App\Http\Controllers\PaymentAccountAccessController;
 use App\Http\Controllers\PaymentAccountController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PppWebhookController;
 use App\Http\Controllers\PrintLogController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
@@ -263,6 +264,8 @@ Route::middleware('auth')->group(function () {
         Route::post('mikrotik-routers/{mikrotikRouter}/import/ip-pools', [MikrotikImportController::class, 'importIpPools'])->name('mikrotik-routers.import.ip-pools');
         Route::post('mikrotik-routers/{mikrotikRouter}/import/secrets', [MikrotikImportController::class, 'importSecrets'])->name('mikrotik-routers.import.secrets');
         Route::post('mikrotik-routers/{mikrotikRouter}/import/active-users', [MikrotikImportController::class, 'importActiveUsers'])->name('mikrotik-routers.import.active-users');
+        Route::get('mikrotik-routers/ppp-webhook', [PppWebhookController::class, 'edit'])->name('mikrotik-routers.ppp-webhook.edit');
+        Route::patch('mikrotik-routers/ppp-webhook', [PppWebhookController::class, 'update'])->name('mikrotik-routers.ppp-webhook.update');
         Route::post('mikrotik-routers/{mikrotikRouter}/inactive-profile/create', [MikrotikRouterController::class, 'ensureInactivePppProfile'])->name('mikrotik-routers.inactive-profile.create');
         Route::get('mikrotik-routers/{mikrotikRouter}/profiles', [MikrotikRouterDataController::class, 'profiles'])->name('mikrotik-routers.profiles.index');
         Route::get('mikrotik-routers/{mikrotikRouter}/pools', [MikrotikRouterDataController::class, 'pools'])->name('mikrotik-routers.pools.index');

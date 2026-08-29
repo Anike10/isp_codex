@@ -1456,6 +1456,24 @@ PPPoE sync:
   have an imported secret keep their real password and only get the live
   `remote_address` refreshed. Imported rows then flow through the normal
   unmanaged-secret / `createPartiesFromSecrets()` path.
+- PPP disconnect webhook (`Network > PPP Disconnect Webhook`, route
+  `mikrotik-routers.ppp-webhook.edit/update`, `PppWebhookController`,
+  `PppWebhookService`, permission `manage_mikrotik_routers`). Three `AppSetting`
+  keys: `ppp_webhook_enabled` (`1`/`0`), `ppp_webhook_url`, `ppp_webhook_secret`
+  (auto-generated once). Saving calls `syncAllRouters()`: for every **active,
+  non-read-only** router it writes the SAME `on-down` value onto every
+  `/ppp/profile` — the `/tool fetch` script when enabled, `""` when disabled.
+  Skipped routers (inactive / read-only / API error) are listed in the warning
+  flash. The one script is identical for all profiles and users; RouterOS
+  session variables (`$user`, `$uptime`, `$"bytes-in"`, `$"bytes-out"`) plus the
+  baked-in router id carry the per-session values, sent as JSON strings so an
+  empty counter can't break the JSON.
+- `POST /api/ppp/usage` (`api.ppp-usage.store`, `PppUsageWebhookController`, no
+  auth middleware — guarded by the `X-PPP-Webhook-Secret` header) records each
+  disconnect in `ppp_usage_logs`: resolves `mikrotik_router_id` from the posted
+  `router_id`, links a `customer_id` by case-insensitive `connection_id` /
+  `mikrotik_username`, parses the RouterOS uptime string to `uptime_seconds`,
+  and stores the raw payload.
 - Party creation from imported secrets matches both `connection_id` and
   `mikrotik_username` case-insensitively, including soft-deleted rows. Repeated
   names from multiple routers link to the first live party instead of creating

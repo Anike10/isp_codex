@@ -246,6 +246,7 @@
                         @endif
                         @if ($canMenu('mikrotik_routers'))
                             <a href="{{ route('mikrotik-routers.index') }}">MikroTik Routers</a>
+                            <a href="{{ route('mikrotik-routers.ppp-webhook.edit') }}">PPP Disconnect Webhook</a>
                         @endif
                         @if ($canMenu('ip_pools') && Route::has('ip-pools.index'))
                             <a href="{{ route('ip-pools.index') }}">IP Pools</a>
