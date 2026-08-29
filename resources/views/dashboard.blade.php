@@ -82,6 +82,7 @@
                                 <tr>
                                     <th><input type="checkbox" data-select-all-router style="width:auto" aria-label="Select all on {{ $routerName }}"></th>
                                     <th>Router username</th>
+                                    <th>Device MAC</th>
                                     <th>Profile</th>
                                     <th>Status on router</th>
                                 </tr>
@@ -91,6 +92,7 @@
                                     <tr>
                                         <td><input type="checkbox" name="secret_ids[]" value="{{ $secret->id }}" class="router-user-check" style="width:auto"></td>
                                         <td>{{ $secret->name }}</td>
+                                        <td>@if ($secret->device_mac)<code>{{ $secret->device_mac }}</code>@else<span class="muted">—</span>@endif</td>
                                         <td>{{ $secret->profile ?: '—' }}</td>
                                         <td><span class="badge {{ $secret->disabled ? 'inactive' : 'active' }}">{{ $secret->disabled ? 'disabled' : 'enabled' }}</span></td>
                                     </tr>

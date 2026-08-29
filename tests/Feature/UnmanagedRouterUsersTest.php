@@ -18,7 +18,7 @@ class UnmanagedRouterUsersTest extends TestCase
 
     public function test_dashboard_lists_router_secrets_missing_from_the_app_only_with_permission(): void
     {
-        $this->makeSecret('lonely-user', 'home-10');
+        $this->makeSecret('lonely-user', 'home-10', deviceMac: '00:8D:FF:02:2A:17');
 
         $plain = $this->user(['view_dashboard']);
         $this->actingAs($plain)->get(route('dashboard'))
@@ -30,7 +30,9 @@ class UnmanagedRouterUsersTest extends TestCase
         $this->actingAs($seer)->get(route('dashboard'))
             ->assertOk()
             ->assertSee('Router users not in the app')
-            ->assertSee('lonely-user');
+            ->assertSee('lonely-user')
+            ->assertSee('<th>Device MAC</th>', false)
+            ->assertSee('00:8D:FF:02:2A:17');
     }
 
     public function test_a_secret_that_matches_a_party_username_is_shown_but_not_selectable(): void
@@ -264,7 +266,7 @@ class UnmanagedRouterUsersTest extends TestCase
         return $user->fresh();
     }
 
-    private function makeSecret(string $name, string $profile, bool $disabled = false): MikrotikImportedSecret
+    private function makeSecret(string $name, string $profile, bool $disabled = false, ?string $deviceMac = null): MikrotikImportedSecret
     {
         static $routerOsSeq = 0;
         $routerOsSeq++;
@@ -284,6 +286,7 @@ class UnmanagedRouterUsersTest extends TestCase
             'password' => 'pw-'.$name,
             'service' => 'pppoe',
             'profile' => $profile,
+            'device_mac' => $deviceMac,
             'disabled' => $disabled,
             'imported_at' => now(),
         ]);
