@@ -1514,7 +1514,8 @@ PPPoE sync:
      plus `search` and `router` filters.
   Both reports resolve `username` → party (case-insensitive `connection_id` /
   `mikrotik_username`) for a link, and `attachOnuReadings()` shows each user's
-  most recent captured ONU Rx power (partial `troubleshoot._rx_power`).
+  most recent captured ONU **Rx and Tx** optical power (partial
+  `troubleshoot._rx_power`, column "ONU power (Rx / Tx)").
 - `POST /api/ppp/usage` (`api.ppp-usage.store`, `PppUsageWebhookController`, no
   auth middleware — guarded by the `X-PPP-Webhook-Secret` header) records each
   disconnect in `ppp_usage_logs` (`disconnected_at` = receipt time, plus
@@ -1711,7 +1712,13 @@ The live parser tries to extract:
 - PON port and ONU ID
 - MAC address
 - ONU online/offline status
-- RX optical power in dBm
+- RX optical power in dBm (`rx_power_dbm`)
+- TX optical power in dBm (`tx_power_dbm`) — from an explicit `tx`/`transmit`
+  label in loose output, or the first of the two dBm columns in the HSGQ
+  `show optical-info` line (`parseHsgqOpticalInfoLine`; flip the two if a
+  router prints them the other way). Migration `2026_08_29_000009` adds the
+  column to `olt_onus` and `ppp_usage_logs`; shown as "Rx / Tx" on the OLT
+  ONU list + detail and in the Troubleshoot reports.
 - distance if present
 - description/name if present
 

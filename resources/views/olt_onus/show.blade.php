@@ -52,13 +52,15 @@
                 <strong data-field="last_live_polled_at">{{ $oltOnu->last_live_polled_at?->format('d/m/Y H:i:s') ?? 'Never' }}</strong>
             </div>
             <div class="summary-item">
-                <span class="muted">Power</span>
+                <span class="muted">Power (Rx / Tx)</span>
                 <div data-field="power_cell">
-                    @if ($oltOnu->rx_power_dbm !== null)
-                        @php $powerClass = $oltOnu->rx_power_dbm <= -25 ? 'failed' : 'active'; @endphp
-                        <span class="badge {{ $powerClass }}" style="font-size:1rem; padding:10px 12px; display:inline-block; min-width:120px; text-align:center;">
-                            {{ number_format((float) $oltOnu->rx_power_dbm, 2) }} dBm
-                        </span>
+                    @if ($oltOnu->rx_power_dbm !== null || $oltOnu->tx_power_dbm !== null)
+                        @if ($oltOnu->rx_power_dbm !== null)
+                            <span class="badge {{ $oltOnu->rx_power_dbm <= -25 ? 'failed' : 'active' }}" style="font-size:1rem; padding:10px 12px; display:inline-block; min-width:110px; text-align:center;">Rx {{ number_format((float) $oltOnu->rx_power_dbm, 2) }} dBm</span>
+                        @endif
+                        @if ($oltOnu->tx_power_dbm !== null)
+                            <span class="badge {{ ((float) $oltOnu->tx_power_dbm <= 0.5 || (float) $oltOnu->tx_power_dbm >= 7) ? 'failed' : 'active' }}" style="font-size:1rem; padding:10px 12px; display:inline-block; min-width:110px; text-align:center;">Tx {{ number_format((float) $oltOnu->tx_power_dbm, 2) }} dBm</span>
+                        @endif
                     @else
                         <span class="muted">No live power</span>
                     @endif
@@ -225,9 +227,7 @@ function updateDetail(onu) {
     onuPanel.querySelector('[data-field="last_live_polled_at"]').textContent = onu.last_live_polled_at;
     onuPanel.querySelector('[data-field="note"]').value = onu.note || '';
 
-    onuPanel.querySelector('[data-field="power_cell"]').innerHTML = onu.power_badge_class
-        ? `<span class="badge ${onu.power_badge_class}" style="font-size:1rem; padding:10px 12px; display:inline-block; min-width:120px; text-align:center;">${onu.rx_power_dbm}</span>`
-        : '<span class="muted">No live power</span>';
+    onuPanel.querySelector('[data-field="power_cell"]').innerHTML = onu.power_html;
 
     document.querySelector('[data-field="vlans_html_detail"]').innerHTML = onu.vlans_html;
     document.querySelector('[data-field="learned_macs_html_detail"]').innerHTML = onu.learned_macs_html;

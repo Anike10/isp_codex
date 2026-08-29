@@ -90,6 +90,7 @@ class OltLiveOutputParser
 
                 if (! $this->isValidPonOnu($detailPonPort, $onuId)) {
                     $current = null;
+
                     continue;
                 }
 
@@ -118,6 +119,7 @@ class OltLiveOutputParser
 
                 if (! $this->isValidPonOnu($detailPonPort, $onuId)) {
                     $current = null;
+
                     continue;
                 }
 
@@ -160,6 +162,7 @@ class OltLiveOutputParser
 
                 if (! $this->isValidPonOnu($ponPort, $onuId)) {
                     $current = null;
+
                     continue;
                 }
 
@@ -174,6 +177,7 @@ class OltLiveOutputParser
 
                 if (! $this->isValidPonOnu($ponPort, $onuId)) {
                     $current = null;
+
                     continue;
                 }
 
@@ -204,6 +208,12 @@ class OltLiveOutputParser
                 $records[$current]['rx_power_dbm'] = (float) $match[1];
             } elseif (preg_match('/\b(?:online|offline|active|inactive|los)\b.*?\s(-\d{1,2}(?:\.\d+)?)\s/i', $line, $match)) {
                 $records[$current]['rx_power_dbm'] = (float) $match[1];
+            }
+
+            // ONU transmit power — only on an explicit tx/transmit label so it
+            // never steals the rx value from an rx-only line.
+            if (preg_match('/(?:\btx\b|transmit|onu tx|sfp tx|send power)[^-\d]*(-?\d+(?:\.\d+)?)\s*(?:dbm|dBm)?/i', $line, $match)) {
+                $records[$current]['tx_power_dbm'] = (float) $match[1];
             }
 
             if (preg_match('/(?:distance)\D*(\d+)/i', $line, $match)) {
@@ -317,6 +327,9 @@ class OltLiveOutputParser
             'onu_id' => (int) $match[2],
             'name' => trim($match[3]),
             'mac_address' => strtolower($match[4]),
+            // HSGQ optical-info prints two dBm columns. Order is verified against
+            // a real sample; flip these two if a router shows them swapped.
+            'tx_power_dbm' => (float) $match[5],
             'rx_power_dbm' => (float) $match[6],
         ];
     }

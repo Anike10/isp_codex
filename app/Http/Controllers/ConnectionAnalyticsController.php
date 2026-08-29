@@ -211,12 +211,13 @@ class ConnectionAnalyticsController extends Controller
                 ->whereNotNull('rx_power_dbm')
                 ->groupBy(DB::raw('lower(username)'))
                 ->selectRaw('max(id)'))
-            ->get(['username', 'rx_power_dbm', 'olt_onu_id', 'caller_id', 'disconnected_at'])
+            ->get(['username', 'rx_power_dbm', 'tx_power_dbm', 'olt_onu_id', 'caller_id', 'disconnected_at'])
             ->keyBy(fn (PppUsageLog $log) => mb_strtolower(trim((string) $log->username)));
 
         $rows->each(function ($row) use ($latest): void {
             $reading = $latest->get(mb_strtolower(trim((string) $row->username)));
             $row->onu_rx_power = $reading?->rx_power_dbm;
+            $row->onu_tx_power = $reading?->tx_power_dbm;
             $row->onu_rx_at = $reading?->disconnected_at;
             $row->onu_id = $reading?->olt_onu_id;
             $row->last_caller_id = $reading?->caller_id;

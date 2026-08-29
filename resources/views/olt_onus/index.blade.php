@@ -399,8 +399,13 @@
                 <td>
                     <div class="actions" style="gap:6px; align-items:center; flex-wrap:nowrap">
                         <div data-field="power_cell">
-                            @if ($onu->rx_power_dbm !== null)
-                                <span class="badge {{ $onu->rx_power_dbm <= -25 ? 'failed' : 'active' }}">{{ number_format((float) $onu->rx_power_dbm, 2) }} dBm</span>
+                            @if ($onu->rx_power_dbm !== null || $onu->tx_power_dbm !== null)
+                                @if ($onu->rx_power_dbm !== null)
+                                    <span class="badge {{ $onu->rx_power_dbm <= -25 ? 'failed' : 'active' }}">Rx {{ number_format((float) $onu->rx_power_dbm, 2) }} dBm</span>
+                                @endif
+                                @if ($onu->tx_power_dbm !== null)
+                                    <span class="badge {{ ((float) $onu->tx_power_dbm <= 0.5 || (float) $onu->tx_power_dbm >= 7) ? 'failed' : 'active' }}">Tx {{ number_format((float) $onu->tx_power_dbm, 2) }} dBm</span>
+                                @endif
                             @else
                                 <span class="muted">No live power</span>
                             @endif
@@ -652,10 +657,7 @@ function updateOnuRow(row, onu) {
     row.querySelector('[data-field="last_live_polled_at"]').textContent = onu.last_live_polled_at;
     row.querySelector('[data-field="note"]').value = onu.note || '';
 
-    const powerCell = row.querySelector('[data-field="power_cell"]');
-    powerCell.innerHTML = onu.power_badge_class
-        ? `<span class="badge ${onu.power_badge_class}">${onu.rx_power_dbm}</span>`
-        : '<span class="muted">No live power</span>';
+    row.querySelector('[data-field="power_cell"]').innerHTML = onu.power_html;
 
     setBadge(row.querySelector('[data-field="status_badge"]'), onu.status, onu.status_badge_class);
 }

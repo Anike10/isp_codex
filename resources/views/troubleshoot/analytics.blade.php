@@ -56,7 +56,7 @@
                 <th class="col-center"><a href="{{ $s7 }}">Last 7d{{ $s7a }}</a></th>
                 <th class="col-center"><a href="{{ $s30 }}">Last 30d{{ $s30a }}</a></th>
                 <th class="col-center"><a href="{{ $sall }}">All time{{ $salla }}</a></th>
-                <th class="col-center">ONU Rx power</th>
+                <th class="col-center">ONU power (Rx / Tx)</th>
                 <th><a href="{{ $sl }}">Last disconnect{{ $sla }}</a></th>
             </tr>
         </thead>

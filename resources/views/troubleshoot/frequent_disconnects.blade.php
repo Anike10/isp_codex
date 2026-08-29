@@ -41,7 +41,7 @@
                 <th>Party</th>
                 <th class="col-center">Disconnects</th>
                 <th class="col-center">Routers</th>
-                <th class="col-center">ONU Rx power</th>
+                <th class="col-center">ONU power (Rx / Tx)</th>
                 <th>Last disconnect</th>
             </tr>
         </thead>

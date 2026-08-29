@@ -88,6 +88,7 @@ class PppUsageWebhookController extends Controller
             'download_bytes' => (int) round((float) ($data['download'] ?? 0)),
             'upload_bytes' => (int) round((float) ($data['upload'] ?? 0)),
             'rx_power_dbm' => $onu?->rx_power_dbm,
+            'tx_power_dbm' => $onu?->tx_power_dbm,
             'payload' => $request->all(),
             'disconnected_at' => now(),
         ]);
@@ -97,6 +98,7 @@ class PppUsageWebhookController extends Controller
             'id' => $log->id,
             'onu_id' => $onu?->id,
             'rx_power_dbm' => $onu?->rx_power_dbm,
+            'tx_power_dbm' => $onu?->tx_power_dbm,
         ], 201);
     }
 

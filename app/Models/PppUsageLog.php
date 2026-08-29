@@ -19,6 +19,7 @@ class PppUsageLog extends Model
         'download_bytes',
         'upload_bytes',
         'rx_power_dbm',
+        'tx_power_dbm',
         'payload',
         'disconnected_at',
     ];
@@ -31,6 +32,7 @@ class PppUsageLog extends Model
             'download_bytes' => 'integer',
             'upload_bytes' => 'integer',
             'rx_power_dbm' => 'decimal:2',
+            'tx_power_dbm' => 'decimal:2',
             'disconnected_at' => 'datetime',
         ];
     }

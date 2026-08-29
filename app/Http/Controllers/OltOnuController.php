@@ -45,6 +45,7 @@ class OltOnuController extends Controller
                 'ethernet_port_count',
                 'learned_macs',
                 'rx_power_dbm',
+                'tx_power_dbm',
                 'last_live_polled_at',
                 'last_registered_at',
                 'last_deregistered_at',
@@ -1574,12 +1575,39 @@ class OltOnuController extends Controller
             'status' => $oltOnu->status ?: 'unknown',
             'status_badge_class' => in_array($oltOnu->status, ['online', 'active'], true) ? 'active' : ($oltOnu->status ? 'pending' : 'inactive'),
             'rx_power_dbm' => $oltOnu->rx_power_dbm !== null ? number_format((float) $oltOnu->rx_power_dbm, 2).' dBm' : 'No live power',
+            'tx_power_dbm' => $oltOnu->tx_power_dbm !== null ? number_format((float) $oltOnu->tx_power_dbm, 2).' dBm' : null,
             'power_badge_class' => $oltOnu->rx_power_dbm !== null ? ((float) $oltOnu->rx_power_dbm <= -25 ? 'failed' : 'active') : '',
+            'power_html' => $this->onuPowerHtml($oltOnu),
             'vlans_html' => $this->vlanBadgesHtml($oltOnu->port_vlans ?: []),
             'learned_macs_html' => $this->learnedMacsHtml($oltOnu->learned_macs ?: [], $oltOnu->port_vlans ?: []),
             'last_live_polled_at' => $oltOnu->last_live_polled_at?->format('d/m/Y H:i:s') ?? 'Never',
             'note' => $oltOnu->note ?? '',
         ];
+    }
+
+    /** Rx + Tx optical-power badges as one HTML string, shared by the list and detail refresh. */
+    private function onuPowerHtml(OltOnu $oltOnu): string
+    {
+        $rx = $oltOnu->rx_power_dbm;
+        $tx = $oltOnu->tx_power_dbm;
+
+        if ($rx === null && $tx === null) {
+            return '<span class="muted">No live power</span>';
+        }
+
+        $parts = [];
+
+        if ($rx !== null) {
+            $rxClass = (float) $rx <= -25 ? 'failed' : 'active';
+            $parts[] = '<span class="badge '.$rxClass.'">Rx '.number_format((float) $rx, 2).' dBm</span>';
+        }
+
+        if ($tx !== null) {
+            $txClass = ((float) $tx <= 0.5 || (float) $tx >= 7) ? 'failed' : 'active';
+            $parts[] = '<span class="badge '.$txClass.'">Tx '.number_format((float) $tx, 2).' dBm</span>';
+        }
+
+        return implode(' ', $parts);
     }
 
     private function vlanBadgesHtml(array $portVlans): string
@@ -2885,6 +2913,7 @@ class OltOnuController extends Controller
             'name',
             'description',
             'rx_power_dbm',
+            'tx_power_dbm',
             'distance_m',
             'raw_live_output',
             'raw_interface_config',

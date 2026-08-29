@@ -75,21 +75,26 @@ class ConnectionAnalyticsTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_both_reports_show_the_latest_onu_receiving_power_for_a_user(): void
+    public function test_both_reports_show_the_latest_onu_rx_and_tx_power_for_a_user(): void
     {
         $this->logDisconnect('fiber-1', now()->subDays(2)->toDateString(), null, -19.00);
-        $this->logDisconnect('fiber-1', now()->subHour()->toDateString(), null, -27.40);
+        PppUsageLog::create([
+            'username' => 'fiber-1', 'download_bytes' => 0, 'upload_bytes' => 0, 'payload' => [],
+            'rx_power_dbm' => -27.40, 'tx_power_dbm' => 2.15, 'disconnected_at' => now()->subHour(),
+        ]);
 
         $seer = $this->seer();
 
         $this->actingAs($seer)->get(route('troubleshoot.analytics'))
             ->assertOk()
-            ->assertSee('ONU Rx power')
-            ->assertSee('-27.40 dBm');
+            ->assertSee('ONU power (Rx / Tx)')
+            ->assertSee('Rx -27.40')
+            ->assertSee('Tx 2.15');
 
         $this->actingAs($seer)->get(route('troubleshoot.frequent-disconnects', ['min_count' => 1]))
             ->assertOk()
-            ->assertSee('-27.40 dBm');
+            ->assertSee('Rx -27.40')
+            ->assertSee('Tx 2.15');
     }
 
     public function test_frequent_disconnects_lists_only_users_over_the_threshold_in_the_window(): void
