@@ -25,4 +25,9 @@ class MikrotikImportedSecret extends Model
     {
         return $this->belongsTo(Customer::class);
     }
+
+    public function isActiveSessionOnly(): bool
+    {
+        return str_starts_with((string) $this->routeros_id, 'active-');
+    }
 }

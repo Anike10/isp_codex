@@ -151,27 +151,43 @@ class MikrotikImportService
         // profile, so keep the local profile/package list in sync first.
         $this->importProfiles($router);
         $records = $this->read($router, '/ppp/secret/print');
+        $liveRouterOsIds = [];
 
-        foreach ($records as $record) {
-            if (empty($record['.id']) || blank($record['name'] ?? null)) {
-                continue;
+        DB::transaction(function () use ($records, $router, &$liveRouterOsIds): void {
+            foreach ($records as $record) {
+                if (empty($record['.id']) || blank($record['name'] ?? null)) {
+                    continue;
+                }
+
+                $liveRouterOsIds[] = (string) $record['.id'];
+
+                MikrotikImportedSecret::updateOrCreate(
+                    ['mikrotik_router_id' => $router->id, 'routeros_id' => $record['.id']],
+                    [
+                        'name' => $record['name'],
+                        'password' => $record['password'] ?? null,
+                        'service' => $record['service'] ?? null,
+                        'profile' => $record['profile'] ?? null,
+                        'local_address' => $record['local-address'] ?? null,
+                        'remote_address' => $record['remote-address'] ?? null,
+                        'disabled' => ($record['disabled'] ?? 'false') === 'true',
+                        'router_comment' => $record['comment'] ?? null,
+                        'imported_at' => now(),
+                    ]
+                );
             }
 
-            MikrotikImportedSecret::updateOrCreate(
-                ['mikrotik_router_id' => $router->id, 'routeros_id' => $record['.id']],
-                [
-                    'name' => $record['name'],
-                    'password' => $record['password'] ?? null,
-                    'service' => $record['service'] ?? null,
-                    'profile' => $record['profile'] ?? null,
-                    'local_address' => $record['local-address'] ?? null,
-                    'remote_address' => $record['remote-address'] ?? null,
-                    'disabled' => ($record['disabled'] ?? 'false') === 'true',
-                    'router_comment' => $record['comment'] ?? null,
-                    'imported_at' => now(),
-                ]
-            );
-        }
+            // This table is a snapshot of the router, not an append-only log.
+            // Once /ppp/secret was read successfully, remove real-secret rows
+            // that RouterOS no longer returned. Keep `active-*` placeholders:
+            // those deliberately represent /ppp/active sessions whose secret
+            // may live in RADIUS or on another router.
+            MikrotikImportedSecret::query()
+                ->where('mikrotik_router_id', $router->id)
+                ->where('routeros_id', 'not like', 'active-%')
+                ->when($liveRouterOsIds !== [], fn (Builder $query) => $query->whereNotIn('routeros_id', array_unique($liveRouterOsIds)))
+                ->delete();
+        });
 
         // /ppp/secret has no MAC — pull each connected user's caller-id from
         // /ppp/active so the imported list can show a device MAC. Best effort:
@@ -307,6 +323,38 @@ class MikrotikImportService
                 'imported_at' => now(),
             ]);
             $stored++;
+        }
+
+        // A successful /ppp/active read is authoritative for active-session
+        // placeholders. Remove sessions that have ended, plus any placeholder
+        // superseded by a real /ppp/secret row with the same username.
+        $activeNames = array_keys($handled);
+        $realSecretNames = MikrotikImportedSecret::query()
+            ->where('mikrotik_router_id', $router->id)
+            ->where('routeros_id', 'not like', 'active-%')
+            ->pluck('name')
+            ->map(fn ($name) => mb_strtolower(trim((string) $name)))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $staleActiveRows = MikrotikImportedSecret::query()
+            ->where('mikrotik_router_id', $router->id)
+            ->where('routeros_id', 'like', 'active-%');
+
+        if ($activeNames === []) {
+            $staleActiveRows->delete();
+        } else {
+            $staleActiveRows
+                ->where(function (Builder $query) use ($activeNames, $realSecretNames): void {
+                    $query->whereNotIn(DB::raw('lower(name)'), $activeNames);
+
+                    if ($realSecretNames !== []) {
+                        $query->orWhereIn(DB::raw('lower(name)'), $realSecretNames);
+                    }
+                })
+                ->delete();
         }
 
         return [

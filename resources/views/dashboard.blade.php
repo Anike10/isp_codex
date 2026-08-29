@@ -84,7 +84,7 @@
                                     <th>Router username</th>
                                     <th>Device MAC</th>
                                     <th>Profile</th>
-                                    <th>Status on router</th>
+                                    <th>Status at last refresh</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -94,7 +94,13 @@
                                         <td>{{ $secret->name }}</td>
                                         <td>@if ($secret->device_mac)<code>{{ $secret->device_mac }}</code>@else<span class="muted">—</span>@endif</td>
                                         <td>{{ $secret->profile ?: '—' }}</td>
-                                        <td><span class="badge {{ $secret->disabled ? 'inactive' : 'active' }}">{{ $secret->disabled ? 'disabled' : 'enabled' }}</span></td>
+                                        <td>
+                                            @if ($secret->isActiveSessionOnly())
+                                                <span class="badge active">active session</span>
+                                            @else
+                                                <span class="badge {{ $secret->disabled ? 'inactive' : 'active' }}">{{ $secret->disabled ? 'disabled' : 'enabled' }}</span>
+                                            @endif
+                                        </td>
                                     </tr>
                                 @endforeach
                             </tbody>

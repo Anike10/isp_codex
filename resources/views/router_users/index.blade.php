@@ -80,7 +80,7 @@
                                 <th>Profile</th>
                                 <th>Service</th>
                                 <th>Remote address</th>
-                                <th>Status on router</th>
+                                <th>Status at last refresh</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -117,10 +117,13 @@
                                     <td>{{ $secret->service ?: '—' }}</td>
                                     <td>{{ $secret->remote_address ?: '—' }}</td>
                                     <td>
-                                        @if ($secret->router?->read_only)
-                                            <span class="badge">Read-only</span>
+                                        @if ($secret->isActiveSessionOnly())
+                                            <span class="badge active">active session</span>
                                         @else
                                             <span class="badge {{ $secret->disabled ? 'inactive' : 'active' }}">{{ $secret->disabled ? 'disabled' : 'enabled' }}</span>
+                                        @endif
+                                        @if ($secret->router?->read_only)
+                                            <div class="muted">read-only router</div>
                                         @endif
                                     </td>
                                 </tr>

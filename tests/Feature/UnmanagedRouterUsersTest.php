@@ -32,6 +32,7 @@ class UnmanagedRouterUsersTest extends TestCase
             ->assertSee('Router users not in the app')
             ->assertSee('lonely-user')
             ->assertSee('<th>Device MAC</th>', false)
+            ->assertSee('Status at last refresh')
             ->assertSee('00:8D:FF:02:2A:17');
     }
 
@@ -222,6 +223,7 @@ class UnmanagedRouterUsersTest extends TestCase
             ->assertOk()
             ->assertSee('connected-only')
             ->assertSee('10.7.0.9')
+            ->assertSee('active session')
             ->assertSee('00:8D:FF:02:2A:17');
     }
 

@@ -281,6 +281,60 @@ class MikrotikImportTest extends TestCase
             && $request->hasHeader('Authorization', 'Basic '.base64_encode('anike:reader-pass')));
     }
 
+    public function test_secret_refresh_removes_stale_real_secrets_but_keeps_active_session_rows(): void
+    {
+        Http::fake([
+            '10.0.0.79:8181/rest/ppp/profile' => Http::response([], 200),
+            '10.0.0.79:8181/rest/ppp/secret' => Http::response([
+                ['.id' => '*KEEP', 'name' => 'still-live', 'service' => 'pppoe',
+                    'profile' => '20M', 'disabled' => 'false'],
+            ], 200),
+            '10.0.0.79:8181/rest/ppp/active' => Http::response([], 200),
+        ]);
+
+        $router = MikrotikRouter::create([
+            'name' => 'Reconcile Router', 'ip_address' => '10.0.0.79', 'api_port' => 8181,
+            'transport' => 'rest', 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'reader', 'password' => 'reader-pass', 'status' => 'active', 'read_only' => true,
+        ]);
+        $otherRouter = MikrotikRouter::create([
+            'name' => 'Other Router', 'ip_address' => '10.0.0.80', 'api_port' => 8181,
+            'transport' => 'rest', 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'reader', 'password' => 'reader-pass', 'status' => 'inactive', 'read_only' => true,
+        ]);
+
+        foreach ([
+            [$router, '*KEEP', 'old-live'],
+            [$router, '*STALE', 'deleted-on-router'],
+            [$router, 'active-*A1', 'radius-session'],
+            [$otherRouter, '*OTHER', 'other-router-user'],
+        ] as [$owner, $routerOsId, $name]) {
+            MikrotikImportedSecret::create([
+                'mikrotik_router_id' => $owner->id,
+                'routeros_id' => $routerOsId,
+                'name' => $name,
+                'service' => 'pppoe',
+                'disabled' => false,
+                'imported_at' => now()->subDay(),
+            ]);
+        }
+
+        $this->assertSame(1, app(MikrotikImportService::class)->importSecrets($router));
+
+        $this->assertDatabaseHas('mikrotik_imported_secrets', [
+            'mikrotik_router_id' => $router->id, 'routeros_id' => '*KEEP', 'name' => 'still-live',
+        ]);
+        $this->assertDatabaseMissing('mikrotik_imported_secrets', [
+            'mikrotik_router_id' => $router->id, 'routeros_id' => '*STALE',
+        ]);
+        $this->assertDatabaseHas('mikrotik_imported_secrets', [
+            'mikrotik_router_id' => $router->id, 'routeros_id' => 'active-*A1',
+        ]);
+        $this->assertDatabaseHas('mikrotik_imported_secrets', [
+            'mikrotik_router_id' => $otherRouter->id, 'routeros_id' => '*OTHER',
+        ]);
+    }
+
     public function test_import_active_users_adds_connected_users_without_a_secret_and_keeps_real_secrets(): void
     {
         Http::fake([
@@ -306,6 +360,16 @@ class MikrotikImportTest extends TestCase
             'password' => 'realpass', 'service' => 'pppoe', 'profile' => 'P1',
             'disabled' => false, 'imported_at' => now(),
         ]);
+        MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $router->id, 'routeros_id' => 'active-*OLD', 'name' => 'disconnected',
+            'password' => 'shared123', 'service' => 'pppoe', 'profile' => 'P1',
+            'disabled' => false, 'imported_at' => now()->subDay(),
+        ]);
+        MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $router->id, 'routeros_id' => 'active-*DUP', 'name' => 'noc',
+            'password' => 'shared123', 'service' => 'pppoe', 'profile' => 'P1',
+            'disabled' => false, 'imported_at' => now()->subDay(),
+        ]);
 
         $imported = app(MikrotikImportService::class)->importActiveUsers($router, 'shared123');
 
@@ -319,6 +383,9 @@ class MikrotikImportTest extends TestCase
         $this->assertSame('10.9.0.5', $noc->remote_address);
         $this->assertSame('AA:BB:CC:00:00:01', $noc->device_mac);
         $this->assertSame(1, MikrotikImportedSecret::where('mikrotik_router_id', $router->id)->where('name', 'noc')->count());
+        $this->assertDatabaseMissing('mikrotik_imported_secrets', [
+            'mikrotik_router_id' => $router->id, 'name' => 'disconnected',
+        ]);
 
         $walkin = MikrotikImportedSecret::where('mikrotik_router_id', $router->id)->where('name', 'walkin')->firstOrFail();
         $this->assertSame('shared123', $walkin->password);
