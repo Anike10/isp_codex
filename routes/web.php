@@ -209,6 +209,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('permission:view_unmanaged_router_users')->group(function () {
         Route::get('router-users', [RouterUserController::class, 'index'])->name('router-users.index');
         Route::post('router-users/refresh', [RouterUserController::class, 'refresh'])->name('router-users.refresh');
+        Route::post('router-users/refresh-active', [RouterUserController::class, 'refreshActive'])->name('router-users.refresh-active');
         Route::post('router-users/import', [RouterUserController::class, 'import'])->name('router-users.import');
     });
 

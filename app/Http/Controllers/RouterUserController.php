@@ -45,6 +45,32 @@ class RouterUserController extends Controller
         return $redirect->with('success', $message);
     }
 
+    /** Pull /ppp/active connections from every active router, using one shared password. */
+    public function refreshActive(Request $request)
+    {
+        $data = $request->validate([
+            'active_password' => ['required', 'string', 'min:1', 'max:255'],
+        ]);
+
+        $summary = $this->importService->refreshActiveRouterConnections($data['active_password']);
+
+        $message = "Pulled active connections: {$summary['imported']} user(s) read from ".count($summary['results']).' router(s). '
+            .'Users without a real secret got the shared password.';
+        $errors = collect($summary['results'])->filter(fn ($r) => isset($r['error']));
+
+        $redirect = $request->input('redirect_to') === 'dashboard'
+            ? redirect()->route('dashboard')
+            : redirect()->route('router-users.index');
+
+        if ($errors->isNotEmpty()) {
+            return $redirect
+                ->with('success', $message)
+                ->with('warning', 'Some routers failed: '.$errors->map(fn ($r) => $r['router'].' — '.$r['error'])->implode(' | '));
+        }
+
+        return $redirect->with('success', $message);
+    }
+
     /** Create app parties from the selected unmanaged secrets (may span routers). */
     public function import(Request $request)
     {

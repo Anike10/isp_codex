@@ -7,7 +7,9 @@ use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
 use App\Models\Permission;
 use App\Models\User;
+use App\Services\MikrotikImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class UnmanagedRouterUsersTest extends TestCase
@@ -46,7 +48,7 @@ class UnmanagedRouterUsersTest extends TestCase
             ->assertDontSee('known-user')
             ->assertSee('Every router PPPoE user is linked to a party');
 
-        $this->assertSame(0, app(\App\Services\MikrotikImportService::class)->unmanagedSecrets()->count());
+        $this->assertSame(0, app(MikrotikImportService::class)->unmanagedSecrets()->count());
         $this->assertSame($secret->id, $secret->fresh()->id);
     }
 
@@ -74,7 +76,7 @@ class UnmanagedRouterUsersTest extends TestCase
         $this->assertSame('inactive', $b->status);
 
         // Both are now managed, so nothing remains unlisted.
-        $this->assertSame(0, app(\App\Services\MikrotikImportService::class)->unmanagedSecrets()->count());
+        $this->assertSame(0, app(MikrotikImportService::class)->unmanagedSecrets()->count());
     }
 
     public function test_import_as_special_customer_forces_active_status(): void
@@ -90,6 +92,65 @@ class UnmanagedRouterUsersTest extends TestCase
         $customer = Customer::where('connection_id', 'special-router-user')->firstOrFail();
         $this->assertTrue((bool) $customer->never_suspend);
         $this->assertSame('active', $customer->status);
+    }
+
+    public function test_pull_active_connections_lists_connected_users_missing_from_the_app(): void
+    {
+        Http::fake([
+            '10.0.0.7:8181/rest/ppp/profile' => Http::response([
+                ['.id' => '*1', 'name' => 'home-10', 'disabled' => 'false'],
+            ], 200),
+            '10.0.0.7:8181/rest/ppp/active' => Http::response([
+                ['.id' => '*A9', 'name' => 'connected-only', 'service' => 'pppoe',
+                    'profile' => 'home-10', 'address' => '10.7.0.9'],
+            ], 200),
+        ]);
+
+        // Only the REST fake router should be polled — otherwise the loop tries
+        // to open a real binary-API socket to any other seeded active router.
+        MikrotikRouter::query()->update(['status' => 'inactive']);
+
+        MikrotikRouter::create([
+            'name' => 'Edge Router', 'ip_address' => '10.0.0.7', 'api_port' => 8181,
+            'transport' => 'rest', 'pppoe_sync_interval_minutes' => 10,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'anike', 'password' => 'reader-pass',
+            'status' => 'active', 'read_only' => true,
+        ]);
+
+        $seer = $this->user(['view_dashboard', 'view_unmanaged_router_users']);
+
+        $this->actingAs($seer)->post(route('router-users.refresh-active'), [
+            'active_password' => 'shared-pw',
+        ])->assertRedirect(route('router-users.index'));
+
+        $secret = MikrotikImportedSecret::where('name', 'connected-only')->firstOrFail();
+        $this->assertSame('shared-pw', $secret->password);
+        $this->assertSame('active-*A9', $secret->routeros_id);
+
+        $this->actingAs($seer)->get(route('router-users.index'))
+            ->assertOk()
+            ->assertSee('connected-only')
+            ->assertSee('10.7.0.9');
+    }
+
+    public function test_refresh_active_requires_a_shared_password(): void
+    {
+        $seer = $this->user(['view_dashboard', 'view_unmanaged_router_users']);
+
+        $this->actingAs($seer)
+            ->from(route('router-users.index'))
+            ->post(route('router-users.refresh-active'), [])
+            ->assertRedirect(route('router-users.index'))
+            ->assertSessionHasErrors('active_password');
+    }
+
+    public function test_refresh_active_endpoint_requires_the_permission(): void
+    {
+        $plain = $this->user(['view_dashboard']);
+
+        $this->actingAs($plain)
+            ->post(route('router-users.refresh-active'), ['active_password' => 'x'])
+            ->assertForbidden();
     }
 
     public function test_import_endpoint_requires_the_permission(): void

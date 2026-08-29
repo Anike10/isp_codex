@@ -5,18 +5,24 @@
     <div>
         <h1>Router Users Not In App</h1>
         <div class="muted">
-            {{ $unmanagedCount }} PPPoE secret(s) exist on routers with no matching party.
+            {{ $unmanagedCount }} router user(s) with no matching party.
             Last checked: {{ $lastCheckedAt ? \Illuminate\Support\Carbon::parse($lastCheckedAt)->diffForHumans() : 'never' }}
         </div>
     </div>
-    <div class="actions" style="gap:8px">
+    <div class="actions" style="gap:8px;flex-wrap:wrap">
         <form method="post" action="{{ route('router-users.refresh') }}">
             @csrf
-            <button class="btn light" type="submit">Refresh from routers</button>
+            <button class="btn light" type="submit">Refresh secrets</button>
+        </form>
+        <form method="post" action="{{ route('router-users.refresh-active') }}" style="display:flex;gap:6px" title="Pull /ppp/active connections from every active router. Connected users without a real /ppp/secret are stored with this shared password so you can add them as parties below.">
+            @csrf
+            <input type="text" name="active_password" required placeholder="Shared password" autocomplete="off" style="width:150px">
+            <button class="btn light" type="submit">Pull active connections</button>
         </form>
         <a class="btn light" href="{{ route('dashboard') }}">Back to Dashboard</a>
     </div>
 </div>
+@error('active_password')<div class="card" style="border-color:#c0392b"><p class="muted" style="margin:0;color:#c0392b">{{ $message }}</p></div>@enderror
 
 @if ($unmanagedCount === 0)
     <div class="card"><p class="muted" style="margin:0">Every router PPPoE user is linked to a party. Press <strong>Refresh from routers</strong> to re-check.</p></div>

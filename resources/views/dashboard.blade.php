@@ -45,11 +45,17 @@
                     Last checked: {{ $unmanagedRouterUsersCheckedAt ? \Illuminate\Support\Carbon::parse($unmanagedRouterUsersCheckedAt)->diffForHumans() : 'never — press Refresh' }}
                 </div>
             </div>
-            <div class="actions" style="gap:8px">
+            <div class="actions" style="gap:8px;flex-wrap:wrap">
                 <form method="post" action="{{ route('router-users.refresh') }}">
                     @csrf
                     <input type="hidden" name="redirect_to" value="dashboard">
-                    <button class="btn light" type="submit">Refresh from routers</button>
+                    <button class="btn light" type="submit">Refresh secrets</button>
+                </form>
+                <form method="post" action="{{ route('router-users.refresh-active') }}" style="display:flex;gap:6px" title="Pull /ppp/active connections. Connected users without a real /ppp/secret get this shared password.">
+                    @csrf
+                    <input type="hidden" name="redirect_to" value="dashboard">
+                    <input type="text" name="active_password" required placeholder="Shared password" autocomplete="off" style="width:140px">
+                    <button class="btn light" type="submit">Pull active connections</button>
                 </form>
                 <a class="btn light" href="{{ route('router-users.index') }}">Open full list</a>
             </div>

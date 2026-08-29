@@ -270,6 +270,33 @@ class MikrotikImportService
     }
 
     /**
+     * Pull every `/ppp/active` connection from every active router, applying the
+     * one shared password to users that have no imported `/ppp/secret`.
+     *
+     * @return array{results: array<int, array{router: string, count?: int, error?: string}>, imported: int, failed: int}
+     */
+    public function refreshActiveRouterConnections(string $password): array
+    {
+        $results = [];
+        $imported = 0;
+        $failed = 0;
+
+        MikrotikRouter::query()->where('status', 'active')->orderBy('id')->get()
+            ->each(function (MikrotikRouter $router) use ($password, &$results, &$imported, &$failed): void {
+                try {
+                    $count = $this->importActiveUsers($router, $password);
+                    $imported += $count;
+                    $results[] = ['router' => $router->name, 'count' => $count];
+                } catch (Throwable $exception) {
+                    $failed++;
+                    $results[] = ['router' => $router->name, 'error' => $exception->getMessage()];
+                }
+            });
+
+        return ['results' => $results, 'imported' => $imported, 'failed' => $failed];
+    }
+
+    /**
      * Imported PPPoE secrets that are not linked to, and do not name-match, any
      * app party — i.e. router users that exist only on the MikroTik.
      */
