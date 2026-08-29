@@ -23,7 +23,7 @@ return [
                 ],
                 'view_network_diagnostics' => [
                     'label' => 'Troubleshoot / Network Diagnostics',
-                    'menus' => ['Webhook Settings', 'Frequent Disconnects', 'Connection Analytics'],
+                    'menus' => ['Webhook Settings', 'Frequent Disconnects', 'Frequent MAC Changes', 'Connection Analytics'],
                 ],
             ],
         ],
@@ -118,6 +118,7 @@ return [
             'items' => [
                 'troubleshoot_webhook' => ['label' => 'Webhook Settings', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.webhook.*']],
                 'troubleshoot_frequent_disconnects' => ['label' => 'Frequent Disconnects', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.frequent-disconnects']],
+                'troubleshoot_mac_changes' => ['label' => 'Frequent MAC Changes', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.mac-changes']],
                 'troubleshoot_analytics' => ['label' => 'Connection Analytics', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.analytics']],
             ],
         ],

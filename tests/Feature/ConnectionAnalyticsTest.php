@@ -22,17 +22,57 @@ class ConnectionAnalyticsTest extends TestCase
         return $user;
     }
 
-    private function logDisconnect(string $username, string $when, ?int $routerId = null, ?float $rxPower = null): void
+    private function logDisconnect(string $username, string $when, ?int $routerId = null, ?float $rxPower = null, ?string $callerId = null): void
     {
         PppUsageLog::create([
             'mikrotik_router_id' => $routerId,
             'username' => $username,
+            'caller_id' => $callerId,
             'download_bytes' => 0,
             'upload_bytes' => 0,
             'rx_power_dbm' => $rxPower,
             'payload' => [],
             'disconnected_at' => $when,
         ]);
+    }
+
+    public function test_frequent_mac_changes_lists_users_over_the_distinct_mac_threshold(): void
+    {
+        // roamer: 3 different MACs in the window
+        $this->logDisconnect('roamer', now()->subHours(1)->toDateTimeString(), null, null, '00:00:00:00:00:01');
+        $this->logDisconnect('roamer', now()->subHours(3)->toDateTimeString(), null, null, '00:00:00:00:00:02');
+        $this->logDisconnect('roamer', now()->subHours(5)->toDateTimeString(), null, null, '00:00:00:00:00:03');
+        $this->logDisconnect('roamer', now()->subHours(6)->toDateTimeString(), null, null, '00:00:00:00:00:03');
+
+        // steady: many disconnects but always the same MAC
+        for ($i = 0; $i < 6; $i++) {
+            $this->logDisconnect('steady', now()->subHours($i + 1)->toDateTimeString(), null, null, 'AA:AA:AA:AA:AA:AA');
+        }
+        // old: 4 MACs but 30h ago — outside a 24h window
+        for ($i = 1; $i <= 4; $i++) {
+            $this->logDisconnect('old', now()->subHours(30 + $i)->toDateTimeString(), null, null, "00:00:00:00:0F:0{$i}");
+        }
+
+        $seer = $this->seer();
+
+        $response = $this->actingAs($seer)->get(route('troubleshoot.mac-changes', ['hours' => 24, 'min_macs' => 3]))
+            ->assertOk()
+            ->assertSee('roamer')
+            ->assertSee('00:00:00:00:00:02')
+            ->assertDontSee('steady')
+            ->assertDontSee('>old<', false)
+            ->assertSee('1 user(s) over threshold');
+
+        // Newest MAC listed before the older one.
+        $html = $response->getContent();
+        $this->assertLessThan(strpos($html, '00:00:00:00:00:03'), strpos($html, '00:00:00:00:00:01'));
+    }
+
+    public function test_frequent_mac_changes_requires_the_permission(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->get(route('troubleshoot.mac-changes'))
+            ->assertForbidden();
     }
 
     public function test_both_reports_show_the_latest_onu_receiving_power_for_a_user(): void

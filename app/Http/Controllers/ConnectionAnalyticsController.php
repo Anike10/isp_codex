@@ -54,6 +54,48 @@ class ConnectionAnalyticsController extends Controller
         ]);
     }
 
+    /**
+     * List users whose device MAC (webhook `caller_id`) changed often within a
+     * window — i.e. connected from several different devices. A high count can
+     * mean a swapped router, a shared line, or MAC spoofing.
+     */
+    public function macChanges(Request $request)
+    {
+        $hours = max(1, min(8760, (int) $request->query('hours', 24)));
+        $minMacs = max(2, min(100, (int) $request->query('min_macs', 3)));
+        $routerId = $this->routerFilter($request);
+        $perPage = max(10, min(200, (int) $request->query('per_page', 50)));
+
+        $since = now()->subHours($hours);
+
+        $rows = PppUsageLog::query()
+            ->where('disconnected_at', '>=', $since)
+            ->whereNotNull('caller_id')
+            ->when($routerId, fn ($query) => $query->where('mikrotik_router_id', $routerId))
+            ->groupBy('username')
+            ->havingRaw('count(distinct caller_id) >= ?', [$minMacs])
+            ->select('username')
+            ->selectRaw('count(distinct caller_id) as mac_count')
+            ->selectRaw('count(*) as events')
+            ->selectRaw('max(disconnected_at) as last_at')
+            ->orderByDesc('mac_count')
+            ->orderBy('username')
+            ->paginate($perPage)
+            ->withQueryString();
+
+        $this->attachCustomers($rows->getCollection());
+        $this->attachRecentMacs($rows->getCollection(), $since, $routerId);
+
+        return view('troubleshoot.mac_changes', [
+            'rows' => $rows,
+            'routers' => MikrotikRouter::orderBy('name')->get(['id', 'name']),
+            'hours' => $hours,
+            'minMacs' => $minMacs,
+            'routerId' => $routerId,
+            'since' => $since,
+        ]);
+    }
+
     /** One row per user with disconnect counts across 24h / 7d / 30d / all time. */
     public function index(Request $request)
     {
@@ -178,6 +220,48 @@ class ConnectionAnalyticsController extends Controller
             $row->onu_rx_at = $reading?->disconnected_at;
             $row->onu_id = $reading?->olt_onu_id;
             $row->last_caller_id = $reading?->caller_id;
+        });
+    }
+
+    /**
+     * Attach every distinct device MAC each username connected from inside the
+     * window, newest first, with how many events used it.
+     *
+     * @param  Collection<int, Model>  $rows
+     */
+    private function attachRecentMacs(Collection $rows, \DateTimeInterface $since, ?int $routerId): void
+    {
+        $names = $rows->pluck('username')
+            ->map(fn ($name) => mb_strtolower(trim((string) $name)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($names->isEmpty()) {
+            return;
+        }
+
+        $byUser = PppUsageLog::query()
+            ->where('disconnected_at', '>=', $since)
+            ->whereNotNull('caller_id')
+            ->when($routerId, fn ($query) => $query->where('mikrotik_router_id', $routerId))
+            ->whereIn(DB::raw('lower(username)'), $names)
+            ->groupBy('username', 'caller_id')
+            ->select('username', 'caller_id')
+            ->selectRaw('max(disconnected_at) as seen_at')
+            ->selectRaw('count(*) as hits')
+            ->orderByDesc('seen_at')
+            ->get()
+            ->groupBy(fn ($row) => mb_strtolower(trim((string) $row->username)));
+
+        $rows->each(function ($row) use ($byUser): void {
+            $row->recent_macs = ($byUser->get(mb_strtolower(trim((string) $row->username))) ?? collect())
+                ->map(fn ($entry) => [
+                    'mac' => $entry->caller_id,
+                    'seen_at' => $entry->seen_at,
+                    'hits' => (int) $entry->hits,
+                ])
+                ->all();
         });
     }
 }

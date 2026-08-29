@@ -293,6 +293,7 @@ Route::middleware('auth')->group(function () {
         Route::get('webhook', [PppWebhookController::class, 'edit'])->name('webhook.edit');
         Route::patch('webhook', [PppWebhookController::class, 'update'])->name('webhook.update');
         Route::get('frequent-disconnects', [ConnectionAnalyticsController::class, 'frequentDisconnects'])->name('frequent-disconnects');
+        Route::get('mac-changes', [ConnectionAnalyticsController::class, 'macChanges'])->name('mac-changes');
         Route::get('connection-analytics', [ConnectionAnalyticsController::class, 'index'])->name('analytics');
     });
 

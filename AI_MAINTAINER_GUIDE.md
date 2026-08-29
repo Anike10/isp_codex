@@ -1485,7 +1485,7 @@ PPPoE sync:
 - **Troubleshoot menu** (`troubleshoot.*` routes, `permission:view_network_diagnostics`
   — migration `2026_08_29_000003`, granted to `admin`; menu wired in
   `config/user_access.php` group `troubleshoot` + `layouts/app.blade.php`
-  `$canManageTroubleshoot`). Three pages, shared tab bar `troubleshoot._tabs`:
+  `$canManageTroubleshoot`). Four pages, shared tab bar `troubleshoot._tabs`:
   1. **Webhook Settings** (`troubleshoot.webhook.edit/update`, `PppWebhookController`,
      `PppWebhookService`). `AppSetting` keys `ppp_webhook_enabled` (`1`/`0`),
      `ppp_webhook_url`, `ppp_webhook_secret` (auto-generated once). Saving calls
@@ -1501,7 +1501,13 @@ PPPoE sync:
      `ConnectionAnalyticsController@frequentDisconnects`). Groups `ppp_usage_logs`
      by `username`, `having count(*) >= min_count` within the last `hours`
      (defaults 10 / 24). Optional `router` filter.
-  3. **Connection Analytics** (`troubleshoot.analytics`,
+  3. **Frequent MAC Changes** (`troubleshoot.mac-changes`,
+     `ConnectionAnalyticsController@macChanges`). Groups by `username`,
+     `having count(distinct caller_id) >= min_macs` in the last `hours`
+     (defaults 3 / 24). `attachRecentMacs()` lists every distinct MAC in the
+     window newest-first with its hit count. Flags swapped routers / shared
+     lines / MAC spoofing.
+  4. **Connection Analytics** (`troubleshoot.analytics`,
      `ConnectionAnalyticsController@index`). One row per username seen in the log
      with conditional-sum counts for 24h / 7d / 30d / all-time + last disconnect;
      server-side sort via `sort` (`username|d24h|d7d|d30d|dall|last_at`) + `dir`,
