@@ -29,8 +29,12 @@
         </select>
     </div>
     <button class="btn" type="submit">Apply</button>
+    <button class="btn light" type="submit" name="make_default" value="1" title="Remember these filters as the default for this page">Make default</button>
     <a class="btn light" href="{{ route('troubleshoot.frequent-disconnects') }}">Reset</a>
     <span class="muted" style="margin-left:auto">{{ $rows->total() }} user(s) over threshold</span>
+    @if (request()->query('make_default') === '1')
+        <span class="muted" style="flex-basis:100%;color:var(--brand)">Saved &mdash; this page now opens with these filters.</span>
+    @endif
 </form>
 
 <div class="table-scroll">

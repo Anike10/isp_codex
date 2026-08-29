@@ -20,10 +20,18 @@ class ConnectionAnalyticsController extends Controller
     /** List users whose disconnect count crosses a threshold within a window. */
     public function frequentDisconnects(Request $request)
     {
-        $hours = max(1, min(8760, (int) $request->query('hours', 24)));
-        $minCount = max(1, min(10000, (int) $request->query('min_count', 10)));
-        $routerId = $this->routerFilter($request);
+        $saved = $request->session()->get('troubleshoot.frequent_disconnects_defaults', []);
+
+        $hours = max(1, min(8760, (int) $request->query('hours', $saved['hours'] ?? 24)));
+        $minCount = max(1, min(10000, (int) $request->query('min_count', $saved['min_count'] ?? 10)));
+        $routerId = $this->resolvedRouterId($request, $saved);
         $perPage = max(10, min(200, (int) $request->query('per_page', 50)));
+
+        $this->rememberDefaults($request, 'troubleshoot.frequent_disconnects_defaults', [
+            'hours' => $hours,
+            'min_count' => $minCount,
+            'router' => $routerId,
+        ]);
 
         $since = now()->subHours($hours);
 
@@ -61,24 +69,18 @@ class ConnectionAnalyticsController extends Controller
      */
     public function macChanges(Request $request)
     {
-        $defaultsKey = 'troubleshoot.mac_changes_defaults';
-        $saved = $request->session()->get($defaultsKey, []);
+        $saved = $request->session()->get('troubleshoot.mac_changes_defaults', []);
 
         $hours = max(1, min(8760, (int) $request->query('hours', $saved['hours'] ?? 24)));
         $minMacs = max(2, min(100, (int) $request->query('min_macs', $saved['min_macs'] ?? 3)));
-        $routerId = $this->routerFilter($request);
-        if (! $request->has('router') && ! empty($saved['router'])) {
-            $routerId = MikrotikRouter::whereKey($saved['router'])->exists() ? (int) $saved['router'] : null;
-        }
+        $routerId = $this->resolvedRouterId($request, $saved);
         $perPage = max(10, min(200, (int) $request->query('per_page', 50)));
 
-        if ($request->query('make_default') === '1') {
-            $request->session()->put($defaultsKey, [
-                'hours' => $hours,
-                'min_macs' => $minMacs,
-                'router' => $routerId,
-            ]);
-        }
+        $this->rememberDefaults($request, 'troubleshoot.mac_changes_defaults', [
+            'hours' => $hours,
+            'min_macs' => $minMacs,
+            'router' => $routerId,
+        ]);
 
         $since = now()->subHours($hours);
 
@@ -113,12 +115,22 @@ class ConnectionAnalyticsController extends Controller
     /** One row per user with disconnect counts across 24h / 7d / 30d / all time. */
     public function index(Request $request)
     {
+        $saved = $request->session()->get('troubleshoot.analytics_defaults', []);
         $sortable = ['username', 'd24h', 'd7d', 'd30d', 'dall', 'last_at'];
-        $sort = in_array($request->query('sort'), $sortable, true) ? $request->query('sort') : 'dall';
-        $dir = $request->query('dir') === 'asc' ? 'asc' : 'desc';
-        $search = trim((string) $request->query('search', ''));
-        $routerId = $this->routerFilter($request);
+
+        $requestedSort = $request->query('sort', $saved['sort'] ?? null);
+        $sort = in_array($requestedSort, $sortable, true) ? $requestedSort : 'dall';
+        $dir = ($request->query('dir', $saved['dir'] ?? null) === 'asc') ? 'asc' : 'desc';
+        $search = trim((string) $request->query('search', $request->has('search') ? '' : ($saved['search'] ?? '')));
+        $routerId = $this->resolvedRouterId($request, $saved);
         $perPage = max(10, min(200, (int) $request->query('per_page', 50)));
+
+        $this->rememberDefaults($request, 'troubleshoot.analytics_defaults', [
+            'sort' => $sort,
+            'dir' => $dir,
+            'search' => $search,
+            'router' => $routerId,
+        ]);
 
         $d1 = now()->subDay();
         $d7 = now()->subDays(7);
@@ -157,6 +169,26 @@ class ConnectionAnalyticsController extends Controller
         $id = (int) $request->query('router');
 
         return $id > 0 && MikrotikRouter::whereKey($id)->exists() ? $id : null;
+    }
+
+    /** Router id from the query, falling back to a saved default when `router` is absent. */
+    private function resolvedRouterId(Request $request, array $saved): ?int
+    {
+        $id = $this->routerFilter($request);
+
+        if ($id === null && ! $request->has('router') && ! empty($saved['router'])) {
+            $id = MikrotikRouter::whereKey($saved['router'])->exists() ? (int) $saved['router'] : null;
+        }
+
+        return $id;
+    }
+
+    /** Persist the current filter set as this page's default when `?make_default=1`. */
+    private function rememberDefaults(Request $request, string $key, array $values): void
+    {
+        if ($request->query('make_default') === '1') {
+            $request->session()->put($key, $values);
+        }
     }
 
     /**

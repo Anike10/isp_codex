@@ -93,6 +93,39 @@ class ConnectionAnalyticsTest extends TestCase
             ->assertDontSee('Saved &mdash; this page now opens', false);
     }
 
+    public function test_frequent_disconnects_make_default_persists_the_filters(): void
+    {
+        $seer = $this->seer();
+
+        $this->actingAs($seer)
+            ->get(route('troubleshoot.frequent-disconnects', ['hours' => 48, 'min_count' => 25, 'make_default' => 1]))
+            ->assertOk()
+            ->assertSee('Saved', false);
+
+        $this->actingAs($seer)
+            ->get(route('troubleshoot.frequent-disconnects'))
+            ->assertOk()
+            ->assertSee('name="hours" min="1" max="8760" value="48"', false)
+            ->assertSee('name="min_count" min="1" max="10000" value="25"', false);
+    }
+
+    public function test_connection_analytics_make_default_persists_sort_and_filters(): void
+    {
+        $seer = $this->seer();
+
+        $this->actingAs($seer)
+            ->get(route('troubleshoot.analytics', ['sort' => 'd24h', 'dir' => 'asc', 'search' => 'north', 'make_default' => 1]))
+            ->assertOk()
+            ->assertSee('Saved', false);
+
+        $this->actingAs($seer)
+            ->get(route('troubleshoot.analytics'))
+            ->assertOk()
+            ->assertSee('name="sort" value="d24h"', false)
+            ->assertSee('name="dir" value="asc"', false)
+            ->assertSee('name="search" value="north"', false);
+    }
+
     public function test_both_reports_show_the_latest_onu_rx_and_tx_power_for_a_user(): void
     {
         $this->logDisconnect('fiber-1', now()->subDays(2)->toDateString(), null, -19.00);
