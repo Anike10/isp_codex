@@ -1425,6 +1425,16 @@ PPPoE sync:
 - Force now: `php artisan mikrotik:sync-router-users --force`
 - Imported-secret refresh: `php artisan mikrotik:import-secrets`; the scheduler
   runs it every three hours.
+- Active-connection MAC sync: `php artisan mikrotik:sync-active-macs`
+  (`--force` ignores the interval). Scheduled every 5 minutes; each router is
+  gated by its own `mikrotik_routers.active_mac_sync_interval_minutes` (5–1440,
+  default 15, editable on the router form). `MikrotikCustomerSyncService::
+  syncActiveConnectionMacs()` reads `/ppp/active` (transport-agnostic, via
+  `MikrotikImportService::liveRecords`) and, for every session whose name
+  matches a party's `mikrotik_username` / `connection_id` on that router, writes
+  the session `caller-id` to `customers.last_connected_mac` (normalised
+  uppercase) plus `last_connected_at` / `last_connected_ip`. Shown as "Last
+  device MAC" in the party profile and "Last active MAC sync" on the router.
 - The permission-protected `/router-users` page lists **every** imported PPPoE
   secret via `MikrotikImportService::importedSecretsOverview(?routerId)`, which
   decorates each row with `is_unmanaged` and `matched_customer` (the linked

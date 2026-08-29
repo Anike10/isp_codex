@@ -43,6 +43,7 @@ class MikrotikRouterController extends Controller
             'transport' => ['nullable', Rule::in(['api', 'rest'])],
             'rest_secure' => ['nullable', 'boolean'],
             'pppoe_sync_interval_minutes' => ['required', 'integer', 'min:60', 'max:1440', 'multiple_of:60'],
+            'active_mac_sync_interval_minutes' => ['nullable', 'integer', 'min:5', 'max:1440'],
             'inactive_pppoe_profile' => ['required', 'string', 'max:255'],
             'router_api_username' => ['required', 'string', 'max:255'],
             'router_api_password' => ['required', 'string', 'max:255'],
@@ -52,6 +53,7 @@ class MikrotikRouterController extends Controller
         ]);
         $data['username'] = $data['router_api_username'];
         $data['password'] = $data['router_api_password'];
+        $data['active_mac_sync_interval_minutes'] = $data['active_mac_sync_interval_minutes'] ?? 15;
         $data['transport'] = $data['transport'] ?? 'api';
         $data['rest_secure'] = $data['transport'] === 'rest' && $request->boolean('rest_secure');
         $data['read_only'] = $request->boolean('read_only');
@@ -320,6 +322,7 @@ class MikrotikRouterController extends Controller
             'transport' => ['nullable', Rule::in(['api', 'rest'])],
             'rest_secure' => ['nullable', 'boolean'],
             'pppoe_sync_interval_minutes' => ['required', 'integer', 'min:60', 'max:1440', 'multiple_of:60'],
+            'active_mac_sync_interval_minutes' => ['nullable', 'integer', 'min:5', 'max:1440'],
             'inactive_pppoe_profile' => ['required', 'string', 'max:255'],
             'router_api_username' => ['required', 'string', 'max:255'],
             'router_api_password' => $passwordNeedsReentry
@@ -331,6 +334,9 @@ class MikrotikRouterController extends Controller
         ]);
 
         $data['username'] = $data['router_api_username'];
+        if (($data['active_mac_sync_interval_minutes'] ?? null) === null) {
+            unset($data['active_mac_sync_interval_minutes']);
+        }
         $data['transport'] = $data['transport'] ?? $mikrotikRouter->transport ?? 'api';
         $data['rest_secure'] = $data['transport'] === 'rest' && $request->boolean('rest_secure');
         $data['read_only'] = $request->boolean('read_only');

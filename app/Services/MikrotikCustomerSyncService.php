@@ -6,6 +6,7 @@ use App\Models\AppIpPool;
 use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\MikrotikRouter;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
 
@@ -161,6 +162,79 @@ class MikrotikCustomerSyncService
         }
 
         return $summary;
+    }
+
+    /**
+     * Poll `/ppp/active` and copy each session's device MAC (`caller-id`) onto
+     * the party it belongs to (`last_connected_mac` in the party info), plus
+     * the live IP / timestamp. Read-only, transport-agnostic, and far lighter
+     * than {@see syncRouter()} so it can run on a short interval.
+     *
+     * @return array{sessions: int, updated: int, unmatched: int}
+     */
+    public function syncActiveConnectionMacs(MikrotikRouter $router): array
+    {
+        $records = app(MikrotikImportService::class)->liveRecords($router, '/ppp/active/print');
+
+        $sessions = collect($records)
+            ->filter(fn ($session) => ! blank($session['name'] ?? null));
+
+        if ($sessions->isEmpty()) {
+            return ['sessions' => 0, 'updated' => 0, 'unmatched' => 0];
+        }
+
+        $names = $sessions->pluck('name')
+            ->map(fn ($name) => mb_strtolower(trim((string) $name)))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $byName = [];
+        Customer::query()
+            ->assignedToMikrotikRouter($router->id)
+            ->where(function ($query) use ($names): void {
+                $query->whereIn(DB::raw('lower(mikrotik_username)'), $names)
+                    ->orWhereIn(DB::raw('lower(connection_id)'), $names);
+            })
+            ->get()
+            ->each(function (Customer $customer) use (&$byName): void {
+                foreach (array_filter([$customer->mikrotik_username, $customer->connection_id]) as $identifier) {
+                    $byName[mb_strtolower(trim((string) $identifier))] = $customer;
+                }
+            });
+
+        $updated = 0;
+        $unmatched = 0;
+
+        foreach ($sessions as $session) {
+            $mac = $this->normalizeMacAddress(trim((string) ($session['caller-id'] ?? '')) ?: null);
+            if (! $mac) {
+                continue;
+            }
+
+            $customer = $byName[mb_strtolower(trim((string) $session['name']))] ?? null;
+            if (! $customer) {
+                $unmatched++;
+
+                continue;
+            }
+
+            $ipAddress = trim((string) ($session['address'] ?? '')) ?: null;
+            $macChanged = $customer->last_connected_mac !== $mac;
+
+            $customer->forceFill(array_filter([
+                'last_connected_mac' => $mac,
+                'last_connected_at' => now(),
+                'last_connected_ip' => (! $customer->use_fixed_ip && $ipAddress) ? $ipAddress : null,
+            ], fn ($value) => $value !== null))->save();
+
+            if ($macChanged) {
+                $updated++;
+            }
+        }
+
+        return ['sessions' => $sessions->count(), 'updated' => $updated, 'unmatched' => $unmatched];
     }
 
     public function captureActiveSessions(RouterOsClient $client, MikrotikRouter $router): int

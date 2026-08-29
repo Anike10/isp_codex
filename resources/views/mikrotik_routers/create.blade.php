@@ -48,6 +48,11 @@
         <span class="muted">Default 60 minutes. The hourly scheduler checks whether this router is due.</span>
     </div>
     <div>
+        <label>Active Connection MAC Sync Interval (minutes)</label>
+        <input type="number" min="5" max="1440" name="active_mac_sync_interval_minutes" value="{{ old('active_mac_sync_interval_minutes', 15) }}" required>
+        <span class="muted">How often to poll <code>/ppp/active</code> and copy each session's device MAC onto the matching party. Default 15 minutes.</span>
+    </div>
+    <div>
         <label>Inactive PPPoE Profile</label>
         <input name="inactive_pppoe_profile" value="{{ old('inactive_pppoe_profile', 'inactive') }}" required>
         <span class="muted">Inactive users will be moved to this profile, not disabled.</span>

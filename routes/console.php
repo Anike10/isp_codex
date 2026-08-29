@@ -5,7 +5,9 @@ use App\Models\Invoice;
 use App\Models\MikrotikRouter;
 use App\Models\User;
 use App\Services\MikrotikCustomerSyncService;
+use App\Services\MikrotikImportService;
 use App\Support\BillingWindow;
+use Carbon\Carbon;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -68,7 +70,7 @@ Artisan::command('mikrotik:sync-customers', function (MikrotikCustomerSyncServic
                     }
 
                     $this->line("{$customer->connection_id}: {$status}");
-                } catch (\Throwable $exception) {
+                } catch (Throwable $exception) {
                     $failed++;
                     $this->error("{$customer->connection_id}: failed - {$exception->getMessage()}");
                 }
@@ -109,7 +111,7 @@ Artisan::command('mikrotik:sync-router-users {--force : Sync every active router
 
                 $synced++;
                 $this->line("{$router->name} ({$router->ip_address}): {$summaryText}");
-            } catch (\Throwable $exception) {
+            } catch (Throwable $exception) {
                 $failed++;
                 $router->update([
                     'last_pppoe_sync_at' => now(),
@@ -124,7 +126,52 @@ Artisan::command('mikrotik:sync-router-users {--force : Sync every active router
     return $failed === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Verify and sync PPPoE users on MikroTik routers by each router interval');
 
-Artisan::command('mikrotik:import-secrets', function (\App\Services\MikrotikImportService $importService) {
+Artisan::command('mikrotik:sync-active-macs {--force : Poll every active router now, ignoring interval}', function (MikrotikCustomerSyncService $syncService) {
+    $synced = 0;
+    $failed = 0;
+
+    MikrotikRouter::where('status', 'active')
+        ->orderBy('id')
+        ->get()
+        ->each(function (MikrotikRouter $router) use ($syncService, &$synced, &$failed): void {
+            $interval = max(1, (int) $router->active_mac_sync_interval_minutes);
+            $isDue = $this->option('force')
+                || ! $router->last_active_mac_sync_at
+                || $router->last_active_mac_sync_at->addMinutes($interval)->lte(now());
+
+            if (! $isDue) {
+                $this->line("{$router->name} ({$router->ip_address}): active-MAC sync skipped until next interval.");
+
+                return;
+            }
+
+            try {
+                $summary = $syncService->syncActiveConnectionMacs($router);
+                $text = "sessions={$summary['sessions']}, macs_updated={$summary['updated']}, unmatched={$summary['unmatched']}";
+
+                $router->update([
+                    'last_active_mac_sync_at' => now(),
+                    'last_active_mac_sync_summary' => $text,
+                ]);
+
+                $synced++;
+                $this->line("{$router->name} ({$router->ip_address}): {$text}");
+            } catch (Throwable $exception) {
+                $failed++;
+                $router->update([
+                    'last_active_mac_sync_at' => now(),
+                    'last_active_mac_sync_summary' => 'failed: '.$exception->getMessage(),
+                ]);
+                $this->error("{$router->name} ({$router->ip_address}): failed - {$exception->getMessage()}");
+            }
+        });
+
+    $this->info("Active-MAC sync finished. Synced: {$synced}. Failed: {$failed}.");
+
+    return $failed === 0 ? self::SUCCESS : self::FAILURE;
+})->purpose('Copy live /ppp/active device MACs onto matching parties by each router interval');
+
+Artisan::command('mikrotik:import-secrets', function (MikrotikImportService $importService) {
     $summary = $importService->refreshActiveRouterSecrets();
 
     foreach ($summary['results'] as $result) {
@@ -147,7 +194,7 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
         return self::SUCCESS;
     }
 
-    $date = $this->option('date') ? \Carbon\Carbon::parse($this->option('date'))->toDateString() : now()->toDateString();
+    $date = $this->option('date') ? Carbon::parse($this->option('date'))->toDateString() : now()->toDateString();
     $disabled = 0;
 
     $overdueCustomerIds = Invoice::query()
@@ -209,7 +256,7 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
 
                 try {
                     $syncService->sync($customer->refresh());
-                } catch (\Throwable $exception) {
+                } catch (Throwable $exception) {
                     $this->warn("{$customer->connection_id}: disabled locally, MikroTik sync failed - {$exception->getMessage()}");
                 }
 
@@ -232,6 +279,12 @@ Schedule::command('billing:disable-overdue-customers')
 
 Schedule::command('mikrotik:sync-router-users')
     ->hourly()
+    ->withoutOverlapping();
+
+// Dispatcher runs often; each router is still gated by its own
+// active_mac_sync_interval_minutes inside the command.
+Schedule::command('mikrotik:sync-active-macs')
+    ->everyFiveMinutes()
     ->withoutOverlapping();
 
 Schedule::command('mikrotik:import-secrets')

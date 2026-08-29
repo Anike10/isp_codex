@@ -1035,6 +1035,14 @@
                 <dt class="kv-grid__label">MikroTik user</dt>
                 <dd class="kv-grid__value">{{ $customer->mikrotik_username ?: 'Not assigned' }}</dd>
 
+                <dt class="kv-grid__label">Last device MAC</dt>
+                <dd class="kv-grid__value">
+                    {{ $customer->last_connected_mac ?: 'Not seen yet' }}
+                    @if ($customer->last_connected_at)
+                        <div class="muted">from live PPPoE session {{ $customer->last_connected_at->diffForHumans() }}</div>
+                    @endif
+                </dd>
+
                 <dt class="kv-grid__label">Role</dt>
                 <dd class="kv-grid__value">
                     <div class="badge-row">
