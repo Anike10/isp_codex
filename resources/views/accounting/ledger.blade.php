@@ -18,6 +18,9 @@
         </div>
     </div>
     <div class="actions">
+        @if ($selectedCustomer && $canOpenCustomers)
+            <a class="btn secondary" href="{{ route('customers.show', $selectedCustomer) }}">Party Details</a>
+        @endif
         <a class="btn secondary" href="{{ $printUrl }}" target="_blank">Print</a>
         @if ($canOpenPaymentAccounts)
             <a class="btn light" href="{{ route('payment-accounts.index') }}">Back</a>
