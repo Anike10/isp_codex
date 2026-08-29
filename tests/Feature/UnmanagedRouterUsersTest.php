@@ -33,7 +33,7 @@ class UnmanagedRouterUsersTest extends TestCase
             ->assertSee('lonely-user');
     }
 
-    public function test_a_secret_that_matches_a_party_username_is_not_listed(): void
+    public function test_a_secret_that_matches_a_party_username_is_shown_but_not_selectable(): void
     {
         $secret = $this->makeSecret('known-user', 'home-10');
         Customer::create([
@@ -45,11 +45,75 @@ class UnmanagedRouterUsersTest extends TestCase
         $seer = $this->user(['view_dashboard', 'view_unmanaged_router_users']);
         $this->actingAs($seer)->get(route('router-users.index'))
             ->assertOk()
-            ->assertDontSee('known-user')
-            ->assertSee('Every router PPPoE user is linked to a party');
+            ->assertSee('known-user')
+            ->assertSee('Name match')
+            ->assertSee('Known')
+            ->assertDontSee('name="secret_ids[]" value="'.$secret->id.'"', false);
 
         $this->assertSame(0, app(MikrotikImportService::class)->unmanagedSecrets()->count());
-        $this->assertSame($secret->id, $secret->fresh()->id);
+
+        $overview = app(MikrotikImportService::class)->importedSecretsOverview();
+        $this->assertFalse($overview->firstWhere('id', $secret->id)->is_unmanaged);
+        $this->assertSame('Known', $overview->firstWhere('id', $secret->id)->matched_customer->name);
+    }
+
+    public function test_index_marks_linked_rows_and_filters_by_router(): void
+    {
+        $routerA = MikrotikRouter::create([
+            'name' => 'Router A', 'ip_address' => '10.1.0.1', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'inactive',
+        ]);
+        $routerB = MikrotikRouter::create([
+            'name' => 'Router B', 'ip_address' => '10.2.0.1', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 10, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'inactive',
+        ]);
+
+        $party = Customer::create([
+            'name' => 'Linked Party', 'phone' => '01700000001', 'connection_id' => 'a-linked',
+            'mikrotik_username' => 'a-linked', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $linked = MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $routerA->id, 'customer_id' => $party->id, 'routeros_id' => '*A1',
+            'name' => 'a-linked', 'password' => 'x', 'service' => 'pppoe', 'profile' => 'home-10',
+            'disabled' => false, 'imported_at' => now(),
+        ]);
+        $loose = MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $routerA->id, 'routeros_id' => '*A2',
+            'name' => 'a-loose', 'password' => 'x', 'service' => 'pppoe', 'profile' => 'home-10',
+            'disabled' => false, 'imported_at' => now(),
+        ]);
+        $other = MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $routerB->id, 'routeros_id' => '*B1',
+            'name' => 'b-user', 'password' => 'x', 'service' => 'pppoe', 'profile' => 'home-10',
+            'disabled' => false, 'imported_at' => now(),
+        ]);
+
+        $seer = $this->user(['view_dashboard', 'view_unmanaged_router_users']);
+
+        // No filter: every router user across both routers is shown.
+        $this->actingAs($seer)->get(route('router-users.index'))
+            ->assertOk()
+            ->assertSee('Linked')
+            ->assertSee('a-linked')
+            ->assertSee('a-loose')
+            ->assertSee('b-user')
+            ->assertSee('3 imported router user(s)');
+
+        // Filtered to Router A: Router B's user disappears.
+        $this->actingAs($seer)->get(route('router-users.index', ['router' => $routerA->id]))
+            ->assertOk()
+            ->assertSee('a-linked')
+            ->assertSee('a-loose')
+            ->assertDontSee('b-user')
+            ->assertSee('on Router A');
+
+        // Only the loose secret is selectable for import.
+        $this->actingAs($seer)->get(route('router-users.index', ['router' => $routerA->id]))
+            ->assertDontSee('name="secret_ids[]" value="'.$linked->id.'"', false)
+            ->assertSee('name="secret_ids[]" value="'.$loose->id.'"', false);
     }
 
     public function test_import_creates_parties_from_selected_unmanaged_secrets(): void

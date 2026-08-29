@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\MikrotikImportedSecret;
+use App\Models\MikrotikRouter;
 use App\Services\MikrotikImportService;
 use Illuminate\Http\Request;
 
@@ -10,16 +11,29 @@ class RouterUserController extends Controller
 {
     public function __construct(private readonly MikrotikImportService $importService) {}
 
-    /** Full-page list of PPPoE secrets found on routers but missing from the app. */
-    public function index()
+    /** Full-page list of every imported PPPoE secret, matched parties marked. */
+    public function index(Request $request)
     {
-        $groups = $this->importService->unmanagedSecrets()
+        $routers = MikrotikRouter::orderBy('name')->get(['id', 'name']);
+
+        $routerId = $request->integer('router') ?: null;
+        if ($routerId && ! $routers->contains('id', $routerId)) {
+            $routerId = null;
+        }
+
+        $secrets = $this->importService->importedSecretsOverview($routerId);
+
+        $groups = $secrets
             ->groupBy(fn (MikrotikImportedSecret $secret) => $secret->router?->name ?? 'Unassigned router')
-            ->map(fn ($secrets) => $secrets->values());
+            ->map(fn ($group) => $group->values());
 
         return view('router_users.index', [
             'groups' => $groups,
-            'unmanagedCount' => $groups->flatten()->count(),
+            'routers' => $routers,
+            'selectedRouterId' => $routerId,
+            'totalCount' => $secrets->count(),
+            'unmanagedCount' => $secrets->where('is_unmanaged', true)->count(),
+            'matchedCount' => $secrets->where('is_unmanaged', false)->count(),
             'lastCheckedAt' => MikrotikImportedSecret::max('imported_at'),
         ]);
     }

@@ -1425,11 +1425,15 @@ PPPoE sync:
 - Force now: `php artisan mikrotik:sync-router-users --force`
 - Imported-secret refresh: `php artisan mikrotik:import-secrets`; the scheduler
   runs it every three hours.
-- The permission-protected `/router-users` list and dashboard panel show
-  imported PPPoE secrets that are not linked to, and do not case-insensitively
-  match, an app party connection ID or MikroTik username. Selected rows can be
-  imported as parties through `RouterUserController` and
-  `MikrotikImportService::createPartiesFromSecrets()`.
+- The permission-protected `/router-users` page lists **every** imported PPPoE
+  secret via `MikrotikImportService::importedSecretsOverview(?routerId)`, which
+  decorates each row with `is_unmanaged` and `matched_customer` (the linked
+  party, or the live party its name case-insensitively matches). The Party
+  column shows "✓ Linked", "✓ Name match", or "Not in app"; only unmanaged rows
+  get an import checkbox. A `?router=<id>` select filters the list. The
+  dashboard panel still shows only the unmanaged rows.
+- Selected unmanaged rows can be imported as parties through
+  `RouterUserController` and `MikrotikImportService::createPartiesFromSecrets()`.
 - "Refresh secrets" on those pages runs `refreshActiveRouterSecrets()`
   (`/ppp/secret` from every active router). "Pull active connections" runs
   `refreshActiveRouterConnections($sharedPassword)` — same loop but

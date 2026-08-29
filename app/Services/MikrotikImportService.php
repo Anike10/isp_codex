@@ -328,6 +328,63 @@ class MikrotikImportService
     }
 
     /**
+     * Every imported secret — matched and unmatched — decorated for the
+     * router-users screen. Each row gets two transient attributes:
+     *   - `is_unmanaged`: true when it is not linked and does not name-match a party
+     *   - `matched_customer`: the linked party, or the live party its name matches
+     *
+     * @return Collection<int, MikrotikImportedSecret>
+     */
+    public function importedSecretsOverview(?int $routerId = null): Collection
+    {
+        $secrets = MikrotikImportedSecret::query()
+            ->with(['router:id,name,ip_address,read_only', 'customer:id,name'])
+            ->when($routerId, fn (Builder $query) => $query->where('mikrotik_router_id', $routerId))
+            ->orderBy('mikrotik_router_id')
+            ->orderBy('name')
+            ->get();
+
+        $unmanagedIds = $this->unmanagedSecretsQuery()
+            ->when($routerId, fn (Builder $query) => $query->where('mikrotik_router_id', $routerId))
+            ->pluck('id')
+            ->flip();
+
+        // Rows that are "managed" only through a case-insensitive name match
+        // (no customer_id) still need their party resolved for display.
+        $nameKeys = $secrets
+            ->reject(fn (MikrotikImportedSecret $secret) => $secret->customer_id || $unmanagedIds->has($secret->id))
+            ->map(fn (MikrotikImportedSecret $secret) => mb_strtolower(trim((string) $secret->name)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $byName = [];
+        if ($nameKeys->isNotEmpty()) {
+            Customer::query()
+                ->select('id', 'name', 'connection_id', 'mikrotik_username')
+                ->where(function ($query) use ($nameKeys): void {
+                    $query->whereIn(DB::raw('lower(connection_id)'), $nameKeys)
+                        ->orWhereIn(DB::raw('lower(mikrotik_username)'), $nameKeys);
+                })
+                ->get()
+                ->each(function (Customer $customer) use (&$byName): void {
+                    foreach ([$customer->connection_id, $customer->mikrotik_username] as $identifier) {
+                        $key = mb_strtolower(trim((string) $identifier));
+                        if ($key !== '' && ! isset($byName[$key])) {
+                            $byName[$key] = $customer;
+                        }
+                    }
+                });
+        }
+
+        return $secrets->each(function (MikrotikImportedSecret $secret) use ($unmanagedIds, $byName): void {
+            $secret->is_unmanaged = $unmanagedIds->has($secret->id);
+            $secret->matched_customer = $secret->customer
+                ?: ($secret->is_unmanaged ? null : ($byName[mb_strtolower(trim((string) $secret->name))] ?? null));
+        });
+    }
+
+    /**
      * Create (or optionally update) app parties from imported PPPoE secrets.
      * Extracted so both the router page and the dashboard can reuse it.
      *

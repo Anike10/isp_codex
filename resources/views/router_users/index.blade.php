@@ -1,11 +1,17 @@
 @extends('layouts.app')
 
+@php
+    $selectedRouterName = $selectedRouterId ? optional($routers->firstWhere('id', $selectedRouterId))->name : null;
+@endphp
+
 @section('content')
 <div class="topbar">
     <div>
-        <h1>Router Users Not In App</h1>
+        <h1>Router Users</h1>
         <div class="muted">
-            {{ $unmanagedCount }} router user(s) with no matching party.
+            {{ $totalCount }} imported router user(s){{ $selectedRouterName ? ' on '.$selectedRouterName : '' }} —
+            <strong>{{ $matchedCount }}</strong> linked to a party,
+            <strong>{{ $unmanagedCount }}</strong> with no matching party.
             Last checked: {{ $lastCheckedAt ? \Illuminate\Support\Carbon::parse($lastCheckedAt)->diffForHumans() : 'never' }}
         </div>
     </div>
@@ -24,29 +30,52 @@
 </div>
 @error('active_password')<div class="card" style="border-color:#c0392b"><p class="muted" style="margin:0;color:#c0392b">{{ $message }}</p></div>@enderror
 
-@if ($unmanagedCount === 0)
-    <div class="card"><p class="muted" style="margin:0">Every router PPPoE user is linked to a party. Press <strong>Refresh from routers</strong> to re-check.</p></div>
+<form method="get" class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <label class="muted" for="router-filter" style="font-weight:600">Router</label>
+    <select id="router-filter" name="router" onchange="this.form.submit()">
+        <option value="">All routers</option>
+        @foreach ($routers as $r)
+            <option value="{{ $r->id }}" @selected($selectedRouterId === $r->id)>{{ $r->name }}</option>
+        @endforeach
+    </select>
+    <noscript><button class="btn light" type="submit">Filter</button></noscript>
+    @if ($selectedRouterId)
+        <a class="btn light" href="{{ route('router-users.index') }}">Clear</a>
+    @endif
+</form>
+
+@if ($totalCount === 0)
+    <div class="card"><p class="muted" style="margin:0">No router users imported{{ $selectedRouterName ? ' for '.$selectedRouterName : '' }} yet. Press <strong>Refresh secrets</strong> or <strong>Pull active connections</strong> to load them.</p></div>
 @else
     <form method="post" action="{{ route('router-users.import') }}" id="router-users-form">
         @csrf
-        <div class="card">
-            <div class="actions" style="gap:14px;flex-wrap:wrap">
-                <label style="font-weight:400;display:flex;gap:6px;align-items:center"><input type="checkbox" name="never_suspend" value="1" style="width:auto"> Special ISP customer</label>
-                <label style="font-weight:400;display:flex;gap:6px;align-items:center" title="If a selected router user's name already belongs to a party, overwrite that party with the router's data instead of skipping it. Deleted parties with the same name are always restored."><input type="checkbox" name="update_existing" value="1" style="width:auto"> Update existing party</label>
-                <button class="btn" type="submit">Add selected as parties</button>
+        @if ($unmanagedCount > 0)
+            <div class="card">
+                <div class="actions" style="gap:14px;flex-wrap:wrap">
+                    <label style="font-weight:400;display:flex;gap:6px;align-items:center"><input type="checkbox" name="never_suspend" value="1" style="width:auto"> Special ISP customer</label>
+                    <label style="font-weight:400;display:flex;gap:6px;align-items:center" title="If a selected router user's name already belongs to a party, overwrite that party with the router's data instead of skipping it. Deleted parties with the same name are always restored."><input type="checkbox" name="update_existing" value="1" style="width:auto"> Update existing party</label>
+                    <button class="btn" type="submit">Add selected as parties</button>
+                </div>
+                <p class="muted" style="margin:8px 0 0">Only router users <strong>with no matching party</strong> can be selected. <strong>Update existing party</strong> only matters when a name clashes with a party already in the app — tick it to overwrite that party, leave it off to skip and just link the secret.</p>
             </div>
-            <p class="muted" style="margin:8px 0 0">Each selected router user becomes a party. <strong>Update existing party</strong> only matters when a name clashes with a party already in the app — tick it to overwrite that party, leave it off to skip and just link the secret.</p>
-        </div>
+        @endif
 
         @foreach ($groups as $routerName => $secrets)
+            @php
+                $groupUnmatched = $secrets->where('is_unmanaged', true)->count();
+                $groupMatched = $secrets->count() - $groupUnmatched;
+            @endphp
             <section class="card" style="margin-top:14px">
-                <h2 style="margin-bottom:8px">{{ $routerName }} <span class="muted">({{ $secrets->count() }})</span></h2>
+                <h2 style="margin-bottom:8px">{{ $routerName }}
+                    <span class="muted">({{ $secrets->count() }} — {{ $groupMatched }} linked, {{ $groupUnmatched }} not in app)</span>
+                </h2>
                 <div class="table-scroll">
                     <table>
                         <thead>
                             <tr>
-                                <th><input type="checkbox" data-select-all-router style="width:auto" aria-label="Select all on {{ $routerName }}"></th>
+                                <th><input type="checkbox" data-select-all-router style="width:auto" aria-label="Select all unmatched on {{ $routerName }}"></th>
                                 <th>Router username</th>
+                                <th>Party</th>
                                 <th>Profile</th>
                                 <th>Service</th>
                                 <th>Remote address</th>
@@ -56,8 +85,20 @@
                         <tbody>
                             @foreach ($secrets as $secret)
                                 <tr>
-                                    <td><input type="checkbox" name="secret_ids[]" value="{{ $secret->id }}" class="router-user-check" style="width:auto"></td>
+                                    <td>
+                                        @if ($secret->is_unmanaged)
+                                            <input type="checkbox" name="secret_ids[]" value="{{ $secret->id }}" class="router-user-check" style="width:auto">
+                                        @endif
+                                    </td>
                                     <td>{{ $secret->name }}</td>
+                                    <td>
+                                        @if ($secret->matched_customer)
+                                            <span class="badge active">{{ $secret->customer_id ? '✓ Linked' : '✓ Name match' }}</span>
+                                            <a href="{{ route('customers.show', $secret->matched_customer) }}">{{ $secret->matched_customer->name }}</a>
+                                        @else
+                                            <span class="badge overdue">Not in app</span>
+                                        @endif
+                                    </td>
                                     <td>{{ $secret->profile ?: '—' }}</td>
                                     <td>{{ $secret->service ?: '—' }}</td>
                                     <td>{{ $secret->remote_address ?: '—' }}</td>
