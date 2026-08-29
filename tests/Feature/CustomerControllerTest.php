@@ -191,7 +191,7 @@ class CustomerControllerTest extends TestCase
         $this->assertNull($customer->last_connected_at);
     }
 
-    public function test_parties_list_shows_last_dial_up_ip_only_for_dynamic_ip_users(): void
+    public function test_parties_list_shows_the_current_ip_with_auto_marker_for_dynamic_users(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
@@ -221,9 +221,11 @@ class CustomerControllerTest extends TestCase
             ->get(route('customers.index'))
             ->assertOk()
             ->assertSee('DYNAMIC-IP-USER')
-            ->assertSee('Last dial-up IP: 10.55.0.25')
+            ->assertSee('10.55.0.25')
+            ->assertSee('(Auto)')
             ->assertSee('FIXED-IP-USER')
-            ->assertDontSee('Last dial-up IP: 10.66.0.99');
+            ->assertSee('10.66.0.10')
+            ->assertDontSee('10.66.0.99');
     }
 
     public function test_customer_show_activity_table_lists_the_admin_who_took_a_payment(): void
@@ -635,7 +637,7 @@ class CustomerControllerTest extends TestCase
             $this->assertSame(-20, $customer->activeDaysRemaining());
             $this->actingAs($user)->get(route('customers.index'))
                 ->assertOk()
-                ->assertSee('Expired 20 days ago')
+                ->assertSee('expired 20d')
                 ->assertSee('Assign package for grace');
 
             Artisan::call('billing:disable-overdue-customers', ['--date' => '2026-06-20']);
@@ -1025,7 +1027,7 @@ class CustomerControllerTest extends TestCase
                 ->assertViewHas('expirySummary', fn (array $summary) => $summary['today'] === 1)
                 ->assertSee($normalCustomer->name)
                 ->assertSee($specialCustomer->name)
-                ->assertSee('No validity limit')
+                ->assertSee('no limit')
                 ->assertDontSee('31/12/2035');
 
             $this->actingAs($user)
@@ -1037,7 +1039,7 @@ class CustomerControllerTest extends TestCase
             $this->actingAs($user)
                 ->get(route('customers.show', $specialCustomer))
                 ->assertOk()
-                ->assertSee('No validity limit')
+                ->assertSee('no limit')
                 ->assertDontSee('31/12/2035')
                 ->assertDontSee('Force validity date');
         } finally {
@@ -1191,6 +1193,101 @@ class CustomerControllerTest extends TestCase
             ->assertForbidden();
 
         $this->assertFalse($customer->fresh()->never_suspend);
+    }
+
+    public function test_an_expired_but_still_active_party_is_flagged_on_the_list_and_profile(): void
+    {
+        Carbon::setTestNow('2026-08-29 10:00:00');
+
+        try {
+            $user = User::factory()->create();
+            $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+            $package = InternetPackage::create(['name' => 'Ovd', 'speed' => '10', 'monthly_price' => 500, 'status' => 'active']);
+            $customer = Customer::create([
+                'name' => 'Overdue Active Party', 'phone' => '01710000200',
+                'connection_id' => 'OVD-1', 'mikrotik_username' => 'OVD-1', 'address' => 'Kushtia',
+                'status' => 'active', 'is_customer' => true,
+                'service_valid_until' => '2026-08-27',
+            ]);
+            Subscription::create([
+                'customer_id' => $customer->id, 'internet_package_id' => $package->id,
+                'start_date' => '2026-07-27', 'status' => 'active',
+            ]);
+
+            $this->actingAs($user)->get(route('customers.index'))
+                ->assertOk()
+                ->assertSee('customer-row-overdue', false)
+                ->assertSee('overdue');
+
+            $this->actingAs($user)->get(route('customers.show', $customer))
+                ->assertOk()
+                ->assertSee('this party is still Active')
+                ->assertSee('auto-disable job runs daily');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_live_ip_can_be_pinned_and_released_from_the_party_list(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        $syncService = \Mockery::mock(MikrotikCustomerSyncService::class);
+        $syncService->shouldReceive('sync')->andReturn('updated');
+        $this->app->instance(MikrotikCustomerSyncService::class, $syncService);
+
+        $customer = Customer::create([
+            'name' => 'Auto IP Party', 'phone' => '01710000188',
+            'connection_id' => 'AUTO-IP-1', 'mikrotik_username' => 'AUTO-IP-1', 'address' => 'Kushtia',
+            'status' => 'active', 'is_customer' => true, 'use_fixed_ip' => false,
+            'last_connected_ip' => '10.77.0.42',
+        ]);
+
+        // Pin the live IP.
+        $this->actingAs($user)
+            ->postJson(route('customers.assign-live-ip', $customer))
+            ->assertOk()
+            ->assertJson(['is_fixed' => true, 'ip' => '10.77.0.42']);
+        $customer->refresh();
+        $this->assertTrue((bool) $customer->use_fixed_ip);
+        $this->assertSame('10.77.0.42', $customer->fixed_ip_address);
+
+        // Double-click again releases it back to Auto.
+        $this->actingAs($user)
+            ->postJson(route('customers.assign-live-ip', $customer))
+            ->assertOk()
+            ->assertJson(['is_fixed' => false]);
+        $customer->refresh();
+        $this->assertFalse((bool) $customer->use_fixed_ip);
+        $this->assertNull($customer->fixed_ip_address);
+    }
+
+    public function test_pinning_a_live_ip_needs_a_learned_ip_and_a_free_address(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        $noIp = Customer::create([
+            'name' => 'No IP Party', 'phone' => '01710000189', 'connection_id' => 'NOIP-1',
+            'mikrotik_username' => 'NOIP-1', 'address' => 'x', 'status' => 'active', 'is_customer' => true,
+            'use_fixed_ip' => false,
+        ]);
+        $this->actingAs($user)->postJson(route('customers.assign-live-ip', $noIp))->assertStatus(422);
+
+        Customer::create([
+            'name' => 'Holder', 'phone' => '01710000190', 'connection_id' => 'HOLD-1', 'address' => 'x',
+            'status' => 'active', 'is_customer' => true, 'use_fixed_ip' => true, 'fixed_ip_address' => '10.88.0.5',
+        ]);
+        $clash = Customer::create([
+            'name' => 'Clash Party', 'phone' => '01710000191', 'connection_id' => 'CLASH-1',
+            'mikrotik_username' => 'CLASH-1', 'address' => 'x', 'status' => 'active', 'is_customer' => true,
+            'use_fixed_ip' => false, 'last_connected_ip' => '10.88.0.5',
+        ]);
+        $this->actingAs($user)->postJson(route('customers.assign-live-ip', $clash))
+            ->assertStatus(422)
+            ->assertJson(['message' => 'The IP 10.88.0.5 is already pinned to another party.']);
     }
 
     public function test_special_customer_cannot_be_force_inactivated(): void

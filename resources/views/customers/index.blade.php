@@ -136,30 +136,31 @@
         background: #fff4e2;
         color: #92561a;
     }
-    .special-price-form {
-        display: inline-flex;
-        gap: 4px;
-        align-items: center;
-        justify-content: center;
-        margin: 0;
-    }
-    .special-price-input {
-        width: 84px;
-        padding: 3px 6px;
-        font-size: 12px;
-        text-align: right;
-    }
-    .special-price-btn {
+    .pkg-price { font-size: 12px; color: #667085; margin-top: 2px; }
+    .pkg-price-sp { display: none; }
+    .pkg-price.has-sp .pkg-price-list { text-decoration: line-through; opacity: .55; }
+    .pkg-price.has-sp .pkg-price-sp { display: inline; font-weight: 700; color: #1f2937; }
+    .sp-inline {
         cursor: pointer;
-        border: 1px solid #cdd9e6;
-        background: #f4f7fb;
-        color: #33475f;
-        border-radius: 6px;
-        padding: 3px 8px;
+        margin-left: 8px;
         font-size: 11px;
         font-weight: 700;
+        color: #5b6b7f;
+        white-space: nowrap;
+        user-select: none;
+        border-bottom: 1px dashed #b9c6d6;
     }
-    .special-price-btn:hover { background: #e7eef7; }
+    .sp-inline:hover { color: #1f2937; }
+    .sp-inline .sp-value { color: #1f2937; }
+    .sp-inline input {
+        width: 66px;
+        padding: 0 2px;
+        font-size: 11px;
+        text-align: right;
+    }
+    .userid-ip { cursor: pointer; }
+    .userid-ip .ip-auto { color: #98a2b3; font-weight: 600; margin-left: 3px; }
+    .userid-ip.is-busy { opacity: .5; }
     .customer-list-toolbar {
         display: flex;
         align-items: center;
@@ -295,7 +296,7 @@
 </div>
 
 <table class="customer-table">
-    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Package</th>@if($maySetSpecialPrice && ! $showDeletedCustomers)<th class="col-center">Special Price</th>@endif<th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
+    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Package</th><th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
         @php
@@ -311,8 +312,9 @@
                 : null;
             $nextActiveDate = now()->addMonthNoOverflow()->toDateString();
             $canQuickActivate = ($hasImportedSecretTable ?? false) && ($customer->imported_secret_exists ?? false) && ! ($customer->invoices_exists ?? false);
+            $overdueActive = ! $customer->never_suspend && $customer->status === 'active' && $daysRemaining !== null && $daysRemaining < 0;
         @endphp
-        <tr class="{{ $customer->never_suspend ? 'customer-row-special' : '' }}" @if(! $showDeletedCustomers) data-href="{{ route('customers.show', $customer) }}" @endif>
+        <tr class="{{ $customer->never_suspend ? 'customer-row-special' : ($overdueActive ? 'customer-row-overdue' : '') }}" @if(! $showDeletedCustomers) data-href="{{ route('customers.show', $customer) }}" @endif>
             @if (! $showDeletedCustomers)
                 <td class="bulk-select-column">
                     <input class="bulk-row-checkbox" type="checkbox" name="customer_ids[]" value="{{ $customer->id }}" form="bulkPaymentSelectionForm" aria-label="Select {{ $customer->name }}">
@@ -343,10 +345,18 @@
                     </form>
                 @endif
             </td>
-            <td>
+            @php
+                $liveIp = $customer->last_connected_ip ?: $customer->learned_ip_address ?: null;
+                $shownIp = $customer->use_fixed_ip ? ($customer->fixed_ip_address ?: null) : $liveIp;
+                $hasConnection = $customer->mikrotik_username || $customer->connection_id;
+            @endphp
+            <td class="userid-cell"
+                @if(! $showDeletedCustomers) data-ip-url="{{ route('customers.assign-live-ip', $customer) }}" data-live-ip="{{ $customer->use_fixed_ip ? '' : $liveIp }}" data-is-fixed="{{ $customer->use_fixed_ip ? 1 : 0 }}" @endif>
                 {{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}
-                @if (! $customer->use_fixed_ip && ($customer->mikrotik_username || $customer->connection_id))
-                    <div class="muted">Last dial-up IP: {{ $customer->last_connected_ip ?: 'Not learned yet' }}</div>
+                @if ($hasConnection)
+                    <div class="muted userid-ip" @if(! $showDeletedCustomers) title="Double-click to {{ $customer->use_fixed_ip ? 'release this IP back to Auto' : 'pin the current live IP as fixed' }}" @endif>
+                        <span data-ip-text>{{ $shownIp ?: 'No IP yet' }}</span><span data-ip-auto>@if (! $customer->use_fixed_ip && $shownIp) <span class="ip-auto">(Auto)</span>@endif</span>
+                    </div>
                 @endif
             </td>
             @php
@@ -354,39 +364,24 @@
                 $listPrice = (float) ($assignedSubscription?->package?->monthly_price ?? 0);
                 $effectivePrice = $assignedSubscription ? $assignedSubscription->effectivePrice() : 0.0;
                 $hasSpecialPrice = (bool) $assignedSubscription?->hasCustomPrice();
+                $fmtPrice = fn ($n) => rtrim(rtrim(number_format((float) $n, 2, '.', ''), '0'), '.');
             @endphp
             <td class="col-center" @if(! $showDeletedCustomers) data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif data-package-id="{{ $assignedSubscription?->internet_package_id }}">
                 <span data-inline-value>{{ $currentPackageName }}</span>
                 @if ($assignedSubscription?->package)
-                    <div class="muted">
-                        @if ($hasSpecialPrice)
-                            <s>৳ {{ number_format($listPrice, 2) }}</s>
-                            <strong>৳ {{ number_format($effectivePrice, 2) }}</strong>
-                        @else
-                            ৳ {{ number_format($listPrice, 2) }}
+                    <div class="pkg-price {{ $hasSpecialPrice ? 'has-sp' : '' }}">
+                        <span class="pkg-price-list">৳ {{ $fmtPrice($listPrice) }}</span>
+                        <span class="pkg-price-sp">৳ <span data-sp-effective>{{ $fmtPrice($effectivePrice) }}</span></span>
+                        @if ($maySetSpecialPrice && ! $showDeletedCustomers)
+                            <span class="sp-inline" data-sp-url="{{ route('customers.special-price', $customer) }}"
+                                  data-list-price="{{ $fmtPrice($listPrice) }}"
+                                  title="Double-click to set this party's special price. Clear the box to remove it.">
+                                SP <span class="sp-value" data-sp-value>{{ $hasSpecialPrice ? $fmtPrice($effectivePrice) : '—' }}</span>
+                            </span>
                         @endif
                     </div>
                 @endif
             </td>
-            @if ($maySetSpecialPrice && ! $showDeletedCustomers)
-                <td class="col-center">
-                    @if (! $assignedSubscription?->package)
-                        <span class="muted">—</span>
-                    @else
-                        <form method="post" action="{{ route('customers.special-price', $customer) }}" class="special-price-form">
-                            @csrf
-                            <input type="number" step="0.01" min="0" name="custom_price" class="special-price-input"
-                                   value="{{ $hasSpecialPrice ? number_format($effectivePrice, 2, '.', '') : '' }}"
-                                   placeholder="{{ number_format($listPrice, 2, '.', '') }}"
-                                   aria-label="Special price for {{ $customer->name }}">
-                            <button type="submit" class="special-price-btn">Save</button>
-                        </form>
-                        @if ($hasSpecialPrice)
-                            <div class="muted" style="font-size:11px">Empty + Save = remove</div>
-                        @endif
-                    @endif
-                </td>
-            @endif
             <td class="col-center">
                 <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span>
             </td>
@@ -395,6 +390,9 @@
                     <span class="muted">Deleted</span>
                 @else
                     <span class="badge {{ $customer->status }}">{{ $customer->status }}</span>
+                    @if ($overdueActive)
+                        <div><span class="badge overdue" title="Paid validity expired {{ abs($daysRemaining) }} day(s) ago — pending auto-disable / MikroTik sync">&#9888; overdue</span></div>
+                    @endif
                     @if ($customer->status === 'inactive' && $inactiveSince)
                         <div class="muted">{{ $inactiveDays }} days</div>
                     @endif
@@ -408,16 +406,15 @@
                     <span class="muted">Deleted</span>
                 @else
                 @if ($customer->never_suspend)
-                    <span class="badge special">Special ISP</span>
-                    <div class="muted">No validity limit</div>
+                    <span class="muted">no limit</span>
                 @elseif ($customer->status === 'active' && $activeUntil)
                     <strong>{{ $activeUntil->format('d/m/Y') }}</strong>
                     @if ($daysRemaining > 0)
-                        <div class="muted">{{ $daysRemaining }} days left</div>
+                        <div class="muted">{{ $daysRemaining }}d left</div>
                     @elseif ($daysRemaining === 0)
-                        <div class="muted">Last day</div>
+                        <div class="muted">last day</div>
                     @else
-                        <div><span class="badge overdue">Expired {{ abs($daysRemaining) }} days ago</span></div>
+                        <div><span class="badge overdue">expired {{ abs($daysRemaining) }}d</span></div>
                     @endif
                     @if ($daysRemaining < 0 && ! $customer->grace_used_at && $mayGrantGrace)
                         @if ($customer->subscriptions_exists)
@@ -495,7 +492,7 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="{{ $showDeletedCustomers ? 11 : 12 }}">No parties found.</td></tr>
+        <tr><td colspan="{{ $showDeletedCustomers ? 11 : 11 }}">No parties found.</td></tr>
     @endforelse
     </tbody>
 </table>
@@ -646,6 +643,136 @@ document.querySelectorAll('td[data-inline-field="package"]').forEach((cell) => {
         event.preventDefault();
         event.stopPropagation();
         editCustomerInlineCell(this);
+    });
+});
+
+// Inline "SP" special-price chip inside the Package cell: double-click to edit,
+// no button, saves on Enter/blur, clear the box to remove the special price.
+document.querySelectorAll('.sp-inline').forEach((chip) => {
+    chip.addEventListener('click', (event) => event.stopPropagation());
+
+    chip.addEventListener('dblclick', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (chip.querySelector('input')) return;
+
+        const valueNode = chip.querySelector('[data-sp-value]');
+        const current = valueNode ? valueNode.textContent.trim().replace(/,/g, '') : '';
+        const originalHtml = chip.innerHTML;
+        let finished = false;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.inputMode = 'numeric';
+        input.value = (current && current !== '—') ? current : '';
+        input.placeholder = chip.dataset.listPrice || '';
+
+        chip.textContent = 'SP ';
+        chip.appendChild(input);
+        input.focus();
+        input.select();
+
+        const cancel = () => { if (!finished) { finished = true; chip.innerHTML = originalHtml; } };
+
+        const applyResult = (data) => {
+            finished = true;
+            const hasSp = !!data.has_special;
+            chip.innerHTML = 'SP <span class="sp-value" data-sp-value>' + (hasSp ? data.special_price_formatted : '—') + '</span>';
+            const priceWrap = chip.closest('.pkg-price');
+            if (priceWrap) {
+                priceWrap.classList.toggle('has-sp', hasSp);
+                const eff = priceWrap.querySelector('[data-sp-effective]');
+                if (eff && hasSp) eff.textContent = data.special_price_formatted;
+            }
+        };
+
+        const save = async () => {
+            if (finished) return;
+            finished = true;
+            input.disabled = true;
+            const raw = input.value.trim();
+            try {
+                const response = await fetch(chip.dataset.spUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': customerCsrfToken,
+                    },
+                    body: JSON.stringify({ custom_price: raw === '' ? null : raw }),
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || 'Could not save the special price.');
+                applyResult(data);
+            } catch (error) {
+                alert(error.message);
+                chip.innerHTML = originalHtml;
+            }
+        };
+
+        input.addEventListener('blur', save);
+        input.addEventListener('keydown', function (keyEvent) {
+            if (keyEvent.key === 'Enter') { keyEvent.preventDefault(); save(); }
+            if (keyEvent.key === 'Escape') { keyEvent.preventDefault(); cancel(); }
+        });
+    });
+});
+
+// User ID cell: double-click the IP line to pin the live IP as fixed, or to
+// release a fixed IP back to Auto.
+document.querySelectorAll('.userid-cell[data-ip-url]').forEach((cell) => {
+    const ipLine = cell.querySelector('.userid-ip');
+    if (!ipLine) return;
+
+    cell.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    });
+
+    ipLine.addEventListener('dblclick', async function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (ipLine.classList.contains('is-busy')) return;
+
+        const isFixed = cell.dataset.isFixed === '1';
+        const liveIp = (cell.dataset.liveIp || '').trim();
+
+        if (!isFixed && !liveIp) {
+            alert('No learned IP for this party yet, so there is nothing to pin.');
+            return;
+        }
+        if (!window.confirm(isFixed
+            ? 'Release this fixed IP and put the party back on Auto (pool) addressing?'
+            : 'Pin the current live IP (' + liveIp + ') as this party’s fixed address?')) {
+            return;
+        }
+
+        ipLine.classList.add('is-busy');
+        try {
+            const response = await fetch(cell.dataset.ipUrl, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': customerCsrfToken,
+                },
+                body: '{}',
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Could not update the IP.');
+
+            cell.dataset.isFixed = data.is_fixed ? '1' : '0';
+            const textNode = ipLine.querySelector('[data-ip-text]');
+            const autoNode = ipLine.querySelector('[data-ip-auto]');
+            if (textNode) textNode.textContent = data.ip || 'No IP yet';
+            if (autoNode) autoNode.innerHTML = (!data.is_fixed && data.ip) ? ' <span class="ip-auto">(Auto)</span>' : '';
+            ipLine.title = data.is_fixed ? 'Double-click to release this IP back to Auto' : 'Double-click to pin the current live IP as fixed';
+            if (data.warning) alert(data.warning);
+        } catch (error) {
+            alert(error.message);
+        } finally {
+            ipLine.classList.remove('is-busy');
+        }
     });
 });
 

@@ -219,6 +219,16 @@
                     <span>Connection Start Date</span>
                     <input type="date" name="start_date" value="{{ old('start_date', $customer->activeSubscription?->start_date?->format('Y-m-d') ?? now()->toDateString()) }}">
                 </label>
+                @if (auth()->user()?->hasPermission('set_special_package_price'))
+                    @php($spCurrent = $customer->activeSubscription?->custom_price)
+                    <label class="edit-field">
+                        <span>Special Price (optional)</span>
+                        <input type="text" inputmode="numeric" name="custom_price"
+                               value="{{ old('custom_price', $spCurrent !== null ? rtrim(rtrim(number_format((float) $spCurrent, 2, '.', ''), '0'), '.') : '') }}"
+                               placeholder="Leave blank to use the package price">
+                        <small class="muted">Replaces the package price in all billing for this party. Blank = package price.</small>
+                    </label>
+                @endif
             </div>
         </section>
 

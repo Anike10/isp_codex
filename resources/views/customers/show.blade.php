@@ -43,11 +43,11 @@
     }
 
     $daysLeftLabel = match (true) {
-        $isSpecial => 'No auto suspension',
-        $daysRemaining === null => 'No active validity found',
-        $daysRemaining < 0 => 'Expired '.abs($daysRemaining).' day(s) ago',
-        $daysRemaining === 0 => 'Last day',
-        default => $daysRemaining.' day(s) remaining',
+        $isSpecial => 'no limit',
+        $daysRemaining === null => 'no validity',
+        $daysRemaining < 0 => 'expired '.abs($daysRemaining).'d ago',
+        $daysRemaining === 0 => 'last day',
+        default => $daysRemaining.'d left',
     };
     $validityTone = match (true) {
         $isSpecial => 'success',
@@ -300,6 +300,21 @@
         line-height: 1.12;
         letter-spacing: -0.02em;
     }
+    .customer-overdue-note {
+        margin-top: 14px;
+        padding: 11px 14px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, .14);
+        border: 1px solid rgba(255, 214, 165, .55);
+        color: #fff;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .customer-overdue-note.is-bad {
+        background: rgba(255, 122, 122, .22);
+        border-color: rgba(255, 150, 150, .7);
+    }
+    .customer-overdue-note strong { display: inline; }
     .customer-hero__meta {
         margin: 8px 0 0;
         color: #d7e8ff;
@@ -928,6 +943,29 @@
                 <a class="btn light" href="{{ route('customers.index') }}">All Parties</a>
             </div>
         </div>
+        @php
+            $overdueActive = $isActive && ! $isSpecial && $daysRemaining !== null && $daysRemaining < 0;
+            $syncRouter = $assignedRouters->first();
+            $syncSummary = (string) ($syncRouter->last_pppoe_sync_summary ?? '');
+            $syncFailing = $syncRouter && str_contains(strtolower($syncSummary), 'fail');
+        @endphp
+        @if ($overdueActive)
+            <div class="customer-overdue-note {{ $syncFailing ? 'is-bad' : '' }}">
+                <strong>&#9888; Paid validity ended {{ abs($daysRemaining) }} day(s) ago &mdash; this party is still Active.</strong>
+                <div>The auto-disable job runs daily {{ \App\Support\BillingWindow::label() }}; a payment reactivates instantly at any time.</div>
+                @if ($syncRouter)
+                    <div>
+                        Router &ldquo;{{ $syncRouter->name }}&rdquo; last synced
+                        {{ $syncRouter->last_pppoe_sync_at ? $syncRouter->last_pppoe_sync_at->diffForHumans() : 'never' }}@if ($syncSummary !== ''): {{ $syncSummary }}@endif.
+                        @if ($syncFailing)
+                            <strong>MikroTik sync is failing &mdash; this party may stay connected on the router until the router link is fixed.</strong>
+                        @endif
+                    </div>
+                @else
+                    <div>No MikroTik router is assigned, so the app cannot disable this party on a router.</div>
+                @endif
+            </div>
+        @endif
         <div class="customer-summary">
             <div class="hero-kpi">
                 <div class="hero-kpi__label">Service status</div>
@@ -938,7 +976,7 @@
                 @if ($isSpecial)
                     <div class="hero-kpi__label">Suspension rule</div>
                     <div class="hero-kpi__value">Special ISP</div>
-                    <div class="hero-kpi__meta">No validity limit</div>
+                    <div class="hero-kpi__meta">no limit</div>
                 @else
                     <div class="hero-kpi__label">Validity until</div>
                     <div class="hero-kpi__value">{{ $activeUntil?->format('d/m/Y') ?? 'Not set' }}</div>
@@ -1022,8 +1060,8 @@
         <article class="customer-card">
             <h2 class="customer-card__heading">Billing &amp; Package Info</h2>
             <div class="stat-pill {{ $validityTone }}">
-                <span>{{ $isSpecial ? 'Special ISP customer:' : 'Validity status:' }}</span>
-                <strong class="stat-pill__big" style="margin-left:6px;">{{ $isSpecial ? 'No validity limit' : $daysLeftLabel }}</strong>
+                <span>{{ $isSpecial ? 'Special ISP:' : 'Validity:' }}</span>
+                <strong class="stat-pill__big" style="margin-left:6px;">{{ $isSpecial ? 'no limit' : $daysLeftLabel }}</strong>
             </div>
             <dl class="kv-grid" style="margin-top:10px;">
                 <dt class="kv-grid__label">Current package</dt>

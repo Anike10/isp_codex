@@ -77,6 +77,9 @@
         tr.customer-row-special td { background:#eff8ff; }
         tr.customer-row-special:nth-child(even) td { background:#e2f0ff; }
         tr.customer-row-special:hover td { background:#d7eaff; }
+        tr.customer-row-overdue td { background:#fff3ec; }
+        tr.customer-row-overdue:nth-child(even) td { background:#ffe9dc; }
+        tr.customer-row-overdue:hover td { background:#ffdfcb; }
         .badge.special { background:#1d76c9; color:#ecfeff; }
         th, td { padding:12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
         th { background:#edf2f7; font-size:13px; text-transform:uppercase; color:#475467; }

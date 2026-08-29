@@ -40,7 +40,8 @@ class SpecialPackagePriceTest extends TestCase
             ->assertForbidden();
         $this->assertNull($customer->activeSubscription->fresh()->custom_price);
 
-        $this->actingAs($plain)->get(route('customers.index'))->assertOk()->assertDontSee('Special Price');
+        // The inline "SP" chip only renders for a user who may set the price.
+        $this->actingAs($plain)->get(route('customers.index'))->assertOk()->assertDontSee('data-sp-url', false);
 
         $allowed = $this->userWith('manage_customers', 'set_special_package_price');
         $this->actingAs($allowed)->post(route('customers.special-price', $customer), ['custom_price' => 800])
@@ -48,7 +49,25 @@ class SpecialPackagePriceTest extends TestCase
         $this->assertSame(800.0, (float) $customer->activeSubscription->fresh()->custom_price);
         $this->assertStringContainsString('Special package price set to BDT 800.00', $customer->fresh()->notes);
 
-        $this->actingAs($allowed)->get(route('customers.index'))->assertOk()->assertSee('Special Price');
+        $this->actingAs($allowed)->get(route('customers.index'))->assertOk()->assertSee('data-sp-url', false);
+    }
+
+    public function test_the_inline_chip_saves_and_clears_over_json(): void
+    {
+        [$customer, $subscription] = $this->party(1000);
+        $user = $this->userWith('manage_customers', 'set_special_package_price');
+
+        $this->actingAs($user)
+            ->postJson(route('customers.special-price', $customer), ['custom_price' => '640'])
+            ->assertOk()
+            ->assertJson(['has_special' => true, 'special_price' => 640, 'special_price_formatted' => '640']);
+        $this->assertSame(640.0, (float) $subscription->fresh()->custom_price);
+
+        $this->actingAs($user)
+            ->postJson(route('customers.special-price', $customer), ['custom_price' => null])
+            ->assertOk()
+            ->assertJson(['has_special' => false, 'special_price' => null]);
+        $this->assertNull($subscription->fresh()->custom_price);
     }
 
     public function test_a_blank_value_clears_the_special_price(): void
@@ -124,6 +143,46 @@ class SpecialPackagePriceTest extends TestCase
         // 10 free days valued at the special monthly rate, not the 3000 list rate.
         $monthDays = now()->diffInDays(now()->copy()->addMonthNoOverflow());
         $this->assertSame(round(10 * (1500 / $monthDays), 2), (float) $log->estimated_value);
+    }
+
+    public function test_the_edit_form_sets_and_clears_the_special_price_with_permission(): void
+    {
+        [$customer, $subscription] = $this->party(1000);
+
+        $syncService = \Mockery::mock(MikrotikCustomerSyncService::class);
+        $syncService->shouldReceive('sync')->andReturn('updated');
+        $this->app->instance(MikrotikCustomerSyncService::class, $syncService);
+
+        $router = \App\Models\MikrotikRouter::create([
+            'name' => 'R', 'ip_address' => '10.0.9.9', 'api_port' => 8728,
+            'username' => 'a', 'password' => 'b', 'status' => 'active',
+        ]);
+        $customer->update(['connection_id' => 'EDIT-SP-1', 'mikrotik_username' => 'EDIT-SP-1', 'mikrotik_router_id' => $router->id]);
+        $customer->mikrotikRouters()->attach($router);
+
+        $payload = fn (array $extra = []) => array_merge([
+            'name' => $customer->name, 'phone' => '01710000300', 'connection_id' => 'EDIT-SP-1',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => '1',
+            'mikrotik_router_ids' => [$router->id],
+            'internet_package_id' => $subscription->internet_package_id,
+            'start_date' => '2026-07-01',
+        ], $extra);
+
+        // Without the permission the field is ignored.
+        $plain = $this->userWith('manage_customers');
+        $this->actingAs($plain)->put(route('customers.update', $customer), $payload(['custom_price' => '850']))
+            ->assertRedirect();
+        $this->assertNull($subscription->fresh()->custom_price);
+
+        // With the permission it is applied, then cleared with a blank value.
+        $allowed = $this->userWith('manage_customers', 'set_special_package_price');
+        $this->actingAs($allowed)->put(route('customers.update', $customer), $payload(['custom_price' => '850']))
+            ->assertRedirect();
+        $this->assertSame(850.0, (float) $subscription->fresh()->custom_price);
+
+        $this->actingAs($allowed)->put(route('customers.update', $customer), $payload(['custom_price' => '']))
+            ->assertRedirect();
+        $this->assertNull($subscription->fresh()->custom_price);
     }
 
     public function test_changing_the_package_drops_the_special_price(): void

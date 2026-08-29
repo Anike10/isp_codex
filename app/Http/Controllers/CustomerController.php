@@ -210,7 +210,16 @@ class CustomerController extends Controller
             'fixed_ip_address' => ['nullable', 'required_if:use_fixed_ip,1', 'ip', 'max:45', Rule::unique('customers', 'fixed_ip_address')->ignore($customer->id)],
             'internet_package_id' => ['nullable', 'exists:internet_packages,id'],
             'start_date' => ['nullable', 'date'],
+            'custom_price' => ['nullable', 'numeric', 'min:0', 'max:9999999.99'],
         ]);
+
+        $maySetSpecialPrice = (bool) $request->user()?->hasPermission('set_special_package_price');
+        // false = not submitted / not allowed -> leave the subscription price alone.
+        $customPriceInput = false;
+        if ($maySetSpecialPrice && $request->has('custom_price')) {
+            $raw = $request->input('custom_price');
+            $customPriceInput = ($raw === null || $raw === '') ? null : round((float) $raw, 2);
+        }
 
         $data['phone'] = trim((string) ($data['phone'] ?? ''));
         $data['address'] = trim((string) ($data['address'] ?? ''));
@@ -232,7 +241,7 @@ class CustomerController extends Controller
         }
         $this->normalizeIpMode($data);
 
-        DB::transaction(function () use (&$customer, $data, $recordVersionService): void {
+        DB::transaction(function () use (&$customer, $data, $recordVersionService, $customPriceInput): void {
             $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
             $customer->load('mikrotikRouters');
             $oldCommissionPercent = (float) $customer->reseller_commission_percent;
@@ -250,7 +259,7 @@ class CustomerController extends Controller
             $connectionChanged = $customer->connection_id !== ($data['connection_id'] ?? null)
                 || $oldRouterIds !== $newRouterIds;
             $switchedFromFixedToDynamic = $customer->use_fixed_ip && ! $data['use_fixed_ip'];
-            $customerData = Arr::except($data, ['internet_package_id', 'start_date', 'mikrotik_router_ids']);
+            $customerData = Arr::except($data, ['internet_package_id', 'start_date', 'mikrotik_router_ids', 'custom_price']);
 
             if ($oldPackageId !== $newPackageId || $connectionChanged || $switchedFromFixedToDynamic) {
                 $customerData['learned_ip_address'] = null;
@@ -287,6 +296,15 @@ class CustomerController extends Controller
                     'status' => 'inactive',
                     'end_date' => now()->toDateString(),
                 ]);
+            }
+
+            // Apply the special price (or clear it) on whichever subscription now
+            // drives billing. Runs after the package block so it overrides the
+            // "drop the price on package change" default when the admin set one.
+            if ($customPriceInput !== false) {
+                $billingSubscription = $customer->activeSubscription()->latest('id')->first()
+                    ?: $customer->subscriptions()->latest('id')->first();
+                $billingSubscription?->update(['custom_price' => $customPriceInput]);
             }
 
             $newSnapshot = $recordVersionService->snapshot($customer->refresh(), ['activeSubscription.package']);
@@ -873,7 +891,11 @@ class CustomerController extends Controller
             ?: $customer->subscriptions()->with('package')->latest('id')->first();
 
         if (! $subscription) {
-            return back()->withErrors(['custom_price' => 'Assign a package to this party before setting a special price.']);
+            $message = 'Assign a package to this party before setting a special price.';
+
+            return $request->wantsJson()
+                ? response()->json(['message' => $message], 422)
+                : back()->withErrors(['custom_price' => $message]);
         }
 
         $raw = $data['custom_price'] ?? null;
@@ -899,9 +921,72 @@ class CustomerController extends Controller
             'notes' => trim(implode("\n", array_filter([$customer->notes, $note]))),
         ]);
 
-        return back()->with('success', $newPrice === null
+        $successMessage = $newPrice === null
             ? 'Special price removed. Billing now uses the package list price.'
-            : 'Special price set to BDT '.number_format($newPrice, 2).'. It applies to all future billing for this party.');
+            : 'Special price set to BDT '.number_format($newPrice, 2).'. It applies to all future billing for this party.';
+
+        $trim = fn (float $n) => rtrim(rtrim(number_format($n, 2, '.', ''), '0'), '.');
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => $successMessage,
+                'has_special' => $newPrice !== null,
+                'special_price' => $newPrice,
+                'special_price_formatted' => $trim($newPrice ?? $listPrice),
+                'list_price_formatted' => $trim($listPrice),
+            ]);
+        }
+
+        return back()->with('success', $successMessage);
+    }
+
+    /**
+     * One double-click IP control from the party list:
+     *  - Auto (dynamic) party with a learned IP  -> pin that live IP as fixed.
+     *  - Fixed party                             -> release it back to Auto.
+     */
+    public function assignLiveIp(Request $request, Customer $customer)
+    {
+        $wantsJson = $request->wantsJson();
+
+        if ($customer->use_fixed_ip) {
+            $customer->update(['use_fixed_ip' => false, 'fixed_ip_address' => null]);
+            $sync = $this->syncMikrotikCustomer($customer->refresh());
+            $liveIp = $customer->last_connected_ip ?: $customer->learned_ip_address;
+
+            $message = 'IP released. This party is back on Auto (pool) addressing. MikroTik user '.$sync['status'].'.';
+
+            return $wantsJson
+                ? response()->json(['message' => $message, 'is_fixed' => false, 'ip' => $liveIp, 'warning' => $sync['warning']])
+                : back()->with('success', $message)->with('warning', $sync['warning']);
+        }
+
+        $liveIp = $customer->last_connected_ip ?: $customer->learned_ip_address;
+
+        if (! $liveIp) {
+            $message = 'No learned IP for this party yet, so there is nothing to pin.';
+
+            return $wantsJson
+                ? response()->json(['message' => $message], 422)
+                : back()->withErrors(['fixed_ip_address' => $message]);
+        }
+
+        if (Customer::query()->where('fixed_ip_address', $liveIp)->whereKeyNot($customer->id)->exists()) {
+            $message = "The IP {$liveIp} is already pinned to another party.";
+
+            return $wantsJson
+                ? response()->json(['message' => $message], 422)
+                : back()->withErrors(['fixed_ip_address' => $message]);
+        }
+
+        $customer->update(['use_fixed_ip' => true, 'fixed_ip_address' => $liveIp]);
+        $sync = $this->syncMikrotikCustomer($customer->refresh());
+
+        $message = "IP {$liveIp} pinned as this party's fixed address. MikroTik user ".$sync['status'].'.';
+
+        return $wantsJson
+            ? response()->json(['message' => $message, 'is_fixed' => true, 'ip' => $liveIp, 'warning' => $sync['warning']])
+            : back()->with('success', $message)->with('warning', $sync['warning']);
     }
 
     private function syncMikrotikCustomer(Customer $customer): array
