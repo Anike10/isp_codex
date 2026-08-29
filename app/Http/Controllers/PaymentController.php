@@ -81,7 +81,7 @@ class PaymentController extends Controller
             'customers' => Customer::query()
                 ->orderBy('name')
                 ->orderBy('id')
-                ->get(['id', 'name', 'phone', 'connection_id', 'account_balance']),
+                ->get(['id', 'name', 'phone', 'connection_id', 'notes', 'account_balance']),
             'paymentAccounts' => PaymentAccount::where('status', 'active')->usableBy($request->user())->orderBy('payment_method')->orderBy('account_name')->get(),
             'paymentDefault' => $preferenceService->forUser($request->user()),
         ]);

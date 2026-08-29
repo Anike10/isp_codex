@@ -382,7 +382,7 @@ class CustomerController extends Controller
     public function inlineUpdate(Request $request, Customer $customer)
     {
         $field = $request->validate([
-            'field' => ['required', 'in:name,phone,package,connection_id,address,comment'],
+            'field' => ['required', 'in:name,phone,package,connection_id,address,comment,notes'],
             'value' => ['nullable'],
         ])['field'];
 
@@ -393,6 +393,7 @@ class CustomerController extends Controller
             'connection_id' => ['nullable', 'string', 'max:100', Rule::unique('customers', 'connection_id')->ignore($customer->id)],
             'address' => ['nullable', 'string', 'max:1000'],
             'comment' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string', 'max:2000'],
         ];
 
         $validationMessages = [];
@@ -991,6 +992,15 @@ class CustomerController extends Controller
 
     private function syncMikrotikCustomer(Customer $customer): array
     {
+        if (method_exists($customer, 'trashed') && $customer->trashed()) {
+            // A deleted party has no live MikroTik user to push to; allow the
+            // local edit but do not touch any router.
+            return [
+                'status' => 'skipped (deleted party)',
+                'warning' => null,
+            ];
+        }
+
         if (! $customer->mikrotik_username && ! $customer->connection_id) {
             return [
                 'status' => 'skipped (no connection ID)',
@@ -1129,7 +1139,8 @@ class CustomerController extends Controller
                     $query->where('name', 'like', "%{$search}%")
                         ->orWhere('phone', 'like', "%{$search}%")
                         ->orWhere('connection_id', 'like', "%{$search}%")
-                        ->orWhere('mikrotik_username', 'like', "%{$search}%");
+                        ->orWhere('mikrotik_username', 'like', "%{$search}%")
+                        ->orWhere('notes', 'like', "%{$search}%");
                 });
             })
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))

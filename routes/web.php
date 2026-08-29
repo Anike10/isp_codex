@@ -75,14 +75,15 @@ Route::middleware('auth')->group(function () {
         Route::post('customers/{customer}/advance-payments/renew', [CustomerPaymentController::class, 'renewFromAdvance'])->name('customers.advance-renewal.store');
         Route::post('customers/{customer}/grace-period', [CustomerController::class, 'grantGracePeriod'])->middleware('permission:grant_grace_period')->name('customers.grace-period');
         Route::post('customers/{customer}/activate-next-date', [CustomerController::class, 'activateUntilNextDate'])->middleware('permission:quick_activate_service')->name('customers.activate-next-date');
-        Route::patch('customers/{customer}/inline', [CustomerController::class, 'inlineUpdate'])->name('customers.inline-update');
+        // withTrashed: the Deleted Parties list reuses the same inline editors.
+        Route::patch('customers/{customer}/inline', [CustomerController::class, 'inlineUpdate'])->withTrashed()->name('customers.inline-update');
         Route::post('customers/{customer}/service-validity', [CustomerController::class, 'updateServiceValidity'])->middleware('permission:override_service_validity')->name('customers.service-validity.update');
         Route::post('customers/{customer}/mikrotik-targets', [CustomerController::class, 'updateMikrotikTargets'])->name('customers.mikrotik-targets.update');
         Route::post('customers/{customer}/force-inactive', [CustomerController::class, 'forceInactive'])->middleware('permission:force_service_status')->name('customers.force-inactive');
         Route::post('customers/{customer}/force-active', [CustomerController::class, 'forceActive'])->middleware('permission:force_service_status')->name('customers.force-active');
         Route::post('customers/{customer}/toggle-special', [CustomerController::class, 'toggleSpecial'])->middleware('permission:mark_special_customer')->name('customers.toggle-special');
-        Route::post('customers/{customer}/special-price', [CustomerController::class, 'updateSpecialPrice'])->middleware('permission:set_special_package_price')->name('customers.special-price');
-        Route::post('customers/{customer}/assign-live-ip', [CustomerController::class, 'assignLiveIp'])->name('customers.assign-live-ip');
+        Route::post('customers/{customer}/special-price', [CustomerController::class, 'updateSpecialPrice'])->withTrashed()->middleware('permission:set_special_package_price')->name('customers.special-price');
+        Route::post('customers/{customer}/assign-live-ip', [CustomerController::class, 'assignLiveIp'])->withTrashed()->name('customers.assign-live-ip');
         Route::get('customers/{customer}/history', [CustomerController::class, 'history'])->name('customers.history');
         Route::get('customers/deleted', [CustomerController::class, 'deleted'])->name('customers.deleted');
         Route::get('customers/deleted/{customer}/history', [CustomerController::class, 'deletedHistory'])->name('customers.deleted.history');

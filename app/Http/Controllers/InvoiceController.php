@@ -138,7 +138,8 @@ class InvoiceController extends Controller
                 $query->where(function ($query) use ($search) {
                     $query->where('name', 'like', "%{$search}%")
                         ->orWhere('phone', 'like', "%{$search}%")
-                        ->orWhere('connection_id', 'like', "%{$search}%");
+                        ->orWhere('connection_id', 'like', "%{$search}%")
+                        ->orWhere('notes', 'like', "%{$search}%");
                 });
             })
             ->orderBy('name')
@@ -148,6 +149,7 @@ class InvoiceController extends Controller
                 'name',
                 'phone',
                 'connection_id',
+                'notes',
                 'is_customer',
                 'is_vendor',
                 'account_balance',
@@ -158,6 +160,7 @@ class InvoiceController extends Controller
                 'name' => $customer->name,
                 'phone' => $customer->phone,
                 'connection_id' => $customer->connection_id,
+                'note' => $customer->notes,
                 'running_due' => round((float) $customer->running_due, 2),
                 'advance_balance' => round((float) $customer->account_balance, 2),
                 'reseller_commission_percent' => round((float) $customer->reseller_commission_percent, 2),

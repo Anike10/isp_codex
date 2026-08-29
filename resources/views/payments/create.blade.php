@@ -88,6 +88,7 @@
         'name' => $customer->name,
         'connection_id' => $customer->connection_id,
         'phone' => $customer->phone,
+        'note' => $customer->notes,
         'balance' => number_format($customer->account_balance, 2),
     ])->values();
     $unpaidInvoicesByParty = $invoices
@@ -227,7 +228,7 @@ function refreshPartySuggestions() {
     }
 
     parties
-        .filter(party => partyLabel(party).toLowerCase().includes(query))
+        .filter(party => (partyLabel(party) + ' ' + (party.note || '')).toLowerCase().includes(query))
         .slice(0, 30)
         .forEach(party => {
             const button = document.createElement('button');
@@ -246,6 +247,12 @@ function refreshPartySuggestions() {
             balance.textContent = `Advance Balance: BDT ${party.balance}`;
 
             button.append(name, connection, mobile, balance);
+            if (party.note) {
+                const note = document.createElement('span');
+                note.className = 'party-suggestion-detail';
+                note.textContent = `Note: ${party.note}`;
+                button.append(note);
+            }
             button.addEventListener('click', () => selectParty(party));
             partySuggestions.appendChild(button);
         });

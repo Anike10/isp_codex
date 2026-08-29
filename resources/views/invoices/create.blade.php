@@ -1191,7 +1191,7 @@
         matches.forEach((customer, index) => {
             const button = document.createElement('button');
             button.type = 'button';
-            button.innerHTML = `<strong>${escapeHtml(customer.name || '')}</strong><span>${escapeHtml(customer.phone || '')} - Due ${money(customer.running_due || 0)}</span>`;
+            button.innerHTML = `<strong>${escapeHtml(customer.name || '')}</strong><span>${escapeHtml(customer.phone || '')} - Due ${money(customer.running_due || 0)}</span>${customer.note ? `<span class="muted" style="display:block;font-size:11px">${escapeHtml(customer.note)}</span>` : ''}`;
             button.className = index === 0 ? 'is-active' : '';
             button.addEventListener('click', () => {
                 applyCustomerSelection(customer);

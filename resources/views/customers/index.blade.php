@@ -232,6 +232,26 @@
     .customer-bulk-selection-active .bulk-select-column { display: table-cell; }
     .customer-bulk-selection-active tr.is-bulk-selected > td { background: #e7f7ef; }
     .bulk-row-checkbox { width: 17px; height: 17px; margin: 0; accent-color: #116149; }
+    td.note-cell {
+        max-width: 240px;
+        min-width: 120px;
+        white-space: normal;
+        vertical-align: top;
+    }
+    td.note-cell [data-inline-value] {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        font-size: 12px;
+        color: #475467;
+        cursor: text;
+    }
+    td.note-cell [data-inline-value]:empty::before {
+        content: 'Add note';
+        color: #98a2b3;
+    }
+    td.note-cell textarea { width: 100%; font: inherit; font-size: 12px; }
     @media (max-width: 1500px) {
         .customer-filter-form {
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -296,7 +316,7 @@
 </div>
 
 <table class="customer-table">
-    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Package</th><th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
+    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Package</th><th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th><th>Note</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
         @php
@@ -321,10 +341,10 @@
                 </td>
             @endif
             <td>{{ $customers->firstItem() + $loop->index }}</td>
-            <td @if(! $showDeletedCustomers) data-inline-field="name" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif>
+            <td data-inline-field="name" data-inline-url="{{ route('customers.inline-update', $customer) }}">
                 <span data-inline-value>{{ $customer->name }}</span>
             </td>
-            <td @if(! $showDeletedCustomers) data-inline-field="phone" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif>
+            <td data-inline-field="phone" data-inline-url="{{ route('customers.inline-update', $customer) }}">
                 <span data-inline-value>{{ $customer->phone }}</span>
             </td>
             <td class="col-center">
@@ -351,10 +371,10 @@
                 $hasConnection = $customer->mikrotik_username || $customer->connection_id;
             @endphp
             <td class="userid-cell"
-                @if(! $showDeletedCustomers) data-ip-url="{{ route('customers.assign-live-ip', $customer) }}" data-live-ip="{{ $customer->use_fixed_ip ? '' : $liveIp }}" data-is-fixed="{{ $customer->use_fixed_ip ? 1 : 0 }}" @endif>
+                data-ip-url="{{ route('customers.assign-live-ip', $customer) }}" data-live-ip="{{ $customer->use_fixed_ip ? '' : $liveIp }}" data-is-fixed="{{ $customer->use_fixed_ip ? 1 : 0 }}">
                 {{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}
                 @if ($hasConnection)
-                    <div class="muted userid-ip" @if(! $showDeletedCustomers) title="Double-click to {{ $customer->use_fixed_ip ? 'release this IP back to Auto' : 'pin the current live IP as fixed' }}" @endif>
+                    <div class="muted userid-ip" title="Double-click to {{ $customer->use_fixed_ip ? 'release this IP back to Auto' : 'pin the current live IP as fixed' }}">
                         <span data-ip-text>{{ $shownIp ?: 'No IP yet' }}</span><span data-ip-auto>@if (! $customer->use_fixed_ip && $shownIp) <span class="ip-auto">(Auto)</span>@endif</span>
                     </div>
                 @endif
@@ -366,13 +386,13 @@
                 $hasSpecialPrice = (bool) $assignedSubscription?->hasCustomPrice();
                 $fmtPrice = fn ($n) => rtrim(rtrim(number_format((float) $n, 2, '.', ''), '0'), '.');
             @endphp
-            <td class="col-center" @if(! $showDeletedCustomers) data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" @endif data-package-id="{{ $assignedSubscription?->internet_package_id }}">
+            <td class="col-center" data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" data-package-id="{{ $assignedSubscription?->internet_package_id }}">
                 <span data-inline-value>{{ $currentPackageName }}</span>
                 @if ($assignedSubscription?->package)
                     <div class="pkg-price {{ $hasSpecialPrice ? 'has-sp' : '' }}">
                         <span class="pkg-price-list">৳ {{ $fmtPrice($listPrice) }}</span>
                         <span class="pkg-price-sp">৳ <span data-sp-effective>{{ $fmtPrice($effectivePrice) }}</span></span>
-                        @if ($maySetSpecialPrice && ! $showDeletedCustomers)
+                        @if ($maySetSpecialPrice)
                             <span class="sp-inline" data-sp-url="{{ route('customers.special-price', $customer) }}"
                                   data-list-price="{{ $fmtPrice($listPrice) }}"
                                   title="Double-click to set this party's special price. Clear the box to remove it.">
@@ -463,6 +483,9 @@
                 @endif
                 @endif
             </td>
+            <td class="note-cell" data-inline-field="notes" data-inline-url="{{ route('customers.inline-update', $customer) }}" title="Double-click to edit this note">
+                <span data-inline-value>{{ $customer->notes }}</span>
+            </td>
             @if ($showDeletedCustomers)
                 <td>{{ optional($customer->deleted_at)->format('d/m/Y H:i') }}</td>
             @endif
@@ -492,20 +515,19 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="{{ $showDeletedCustomers ? 11 : 11 }}">No parties found.</td></tr>
+        <tr><td colspan="12">No parties found.</td></tr>
     @endforelse
     </tbody>
 </table>
 
 <div style="margin-top:16px">{{ $customers->links() }}</div>
 
-@if (! $showDeletedCustomers)
 <script>
 const customerCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
-const customerPackages = @json($packages->mapWithKeys(fn ($package) => [$package->id => $package->name])->toArray());
+const customerPackages = @json(($packages ?? collect())->mapWithKeys(fn ($package) => [$package->id => $package->name])->toArray());
 
 function editCustomerInlineCell(cell, event) {
-    if (cell.querySelector('input, select')) return;
+    if (cell.querySelector('input, select, textarea')) return;
     const valueNode = cell.querySelector('[data-inline-value]');
     const field = cell.dataset.inlineField;
     const originalValue = valueNode ? valueNode.textContent.trim() : '';
@@ -571,14 +593,16 @@ function editCustomerInlineCell(cell, event) {
         return;
     }
 
-    const input = document.createElement('input');
-    input.type = 'text';
+    const isNote = field === 'notes';
+    const input = document.createElement(isNote ? 'textarea' : 'input');
+    if (!isNote) input.type = 'text';
+    if (isNote) input.rows = 3;
     input.value = originalValue;
     input.style.width = '100%';
 
     cell.replaceChildren(input);
     input.focus();
-    input.select();
+    if (!isNote) input.select();
 
     let saving = false;
     const restoreCell = () => {
@@ -612,7 +636,9 @@ function editCustomerInlineCell(cell, event) {
 
     input.addEventListener('blur', saveField);
     input.addEventListener('keydown', function (keyEvent) {
-        if (keyEvent.key === 'Enter') {
+        // Plain Enter saves a single-line field; in the note textarea it adds a
+        // newline and Ctrl+Enter (or blur) saves instead.
+        if (keyEvent.key === 'Enter' && (!isNote || keyEvent.ctrlKey)) {
             keyEvent.preventDefault();
             saveField();
         }
@@ -622,7 +648,7 @@ function editCustomerInlineCell(cell, event) {
     });
 }
 
-document.querySelectorAll('[data-inline-field="name"], [data-inline-field="phone"]').forEach((cell) => {
+document.querySelectorAll('[data-inline-field="name"], [data-inline-field="phone"], [data-inline-field="notes"]').forEach((cell) => {
     cell.addEventListener('click', function (event) {
         event.preventDefault();
         event.stopPropagation();
@@ -847,5 +873,4 @@ bulkRowCheckboxes.forEach((checkbox) => {
     checkbox.addEventListener('change', updateBulkSelectionUi);
 });
 </script>
-@endif
 @endsection

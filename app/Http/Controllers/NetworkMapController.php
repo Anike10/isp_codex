@@ -63,6 +63,7 @@ class NetworkMapController extends Controller
                         ->orWhere('phone', 'like', "%{$search}%")
                         ->orWhere('connection_id', 'like', "%{$search}%")
                         ->orWhere('mikrotik_username', 'like', "%{$search}%")
+                        ->orWhere('notes', 'like', "%{$search}%")
                         ->orWhereHas('importedSecret', fn ($query) => $query->where('router_comment', 'like', "%{$search}%"))
                         ->orWhere('address', 'like', "%{$search}%");
 
@@ -80,6 +81,7 @@ class NetworkMapController extends Controller
                 'mikrotik_username',
                 'address',
                 'status',
+                'notes',
                 'map_latitude',
                 'map_longitude',
             ])
@@ -333,7 +335,8 @@ class NetworkMapController extends Controller
     private function customerToFeature(Customer $customer): array
     {
         $customer->loadMissing('importedSecret');
-        $comment = trim((string) ($customer->importedSecret?->router_comment ?: ''));
+        // Prefer the party's own note; fall back to the MikroTik router comment.
+        $comment = trim((string) ($customer->notes ?: ($customer->importedSecret?->router_comment ?: '')));
         $hasLocation = ! is_null($customer->map_latitude) && ! is_null($customer->map_longitude);
 
         return [

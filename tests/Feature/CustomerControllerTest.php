@@ -138,6 +138,69 @@ class CustomerControllerTest extends TestCase
         $this->assertSame('01820202020', $customer->phone);
     }
 
+    public function test_party_note_is_inline_editable_and_shown_on_both_party_lists(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Noted Party',
+            'phone' => '01710101011',
+            'connection_id' => 'NOTE-001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+
+        $this->actingAs($user)->patchJson(route('customers.inline-update', $customer), [
+            'field' => 'notes',
+            'value' => 'Called about relocation on 12 Aug',
+        ])->assertOk()->assertJsonPath('value', 'Called about relocation on 12 Aug');
+
+        $this->assertSame('Called about relocation on 12 Aug', $customer->refresh()->notes);
+
+        $this->actingAs($user)->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee('<th>Note</th>', false)
+            ->assertSee('Called about relocation on 12 Aug');
+    }
+
+    public function test_deleted_party_note_and_name_are_inline_editable(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Trashed Party',
+            'phone' => '01710101012',
+            'connection_id' => 'NOTE-DEL',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+        $customer->delete();
+        $this->assertTrue($customer->fresh()->trashed());
+
+        // The Deleted Parties list reuses the same inline editors.
+        $this->actingAs($user)->get(route('customers.deleted'))
+            ->assertOk()
+            ->assertSee('<th>Note</th>', false)
+            ->assertSee('data-inline-field="notes"', false)
+            ->assertSee('data-inline-field="name"', false);
+
+        $this->actingAs($user)->patchJson(route('customers.inline-update', $customer->id), [
+            'field' => 'notes',
+            'value' => 'Do not restore - duplicate',
+        ])->assertOk()->assertJsonPath('value', 'Do not restore - duplicate');
+
+        $this->actingAs($user)->patchJson(route('customers.inline-update', $customer->id), [
+            'field' => 'name',
+            'value' => 'Trashed Party (dupe)',
+        ])->assertOk();
+
+        $fresh = Customer::withTrashed()->find($customer->id);
+        $this->assertSame('Do not restore - duplicate', $fresh->notes);
+        $this->assertSame('Trashed Party (dupe)', $fresh->name);
+    }
+
     public function test_party_inline_update_changes_active_package(): void
     {
         $user = User::factory()->create();
