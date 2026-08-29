@@ -24,12 +24,14 @@ class NetworkMapControllerTest extends TestCase
             ->assertOk()
             ->assertSee(asset('css/maplibre-gl.css'), false)
             ->assertSee(asset('js/maplibre-gl.js'), false)
+            ->assertSee('id="unmappedPartySummary"', false)
             ->assertDontSee('unpkg.com/maplibre-gl', false);
 
         $this->assertFileExists(public_path('css/maplibre-gl.css'));
         $this->assertFileExists(public_path('js/maplibre-gl.js'));
 
         $script = File::get(public_path('js/network-map.js'));
+        $this->assertStringContainsString('parties mapped', $script);
         $this->assertStringContainsString('setupSearchableDropdown', $script);
         $this->assertStringContainsString('appendSplitterPortLinks', $script);
         $this->assertStringContainsString('network-map-endpoint-options-', $script);

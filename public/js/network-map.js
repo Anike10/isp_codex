@@ -1510,6 +1510,16 @@
             : unmappedParties;
 
         count.textContent = query ? `${matches.length}/${unmappedParties.length}` : String(unmappedParties.length);
+
+        const summary = document.getElementById('unmappedPartySummary');
+        if (summary) {
+            const total = state.customerFeatures.size;
+            const mapped = total - unmappedParties.length;
+            summary.textContent = total
+                ? `${mapped} of ${total} parties mapped · ${unmappedParties.length} unmapped`
+                : 'No parties loaded yet.';
+        }
+
         if (!matches.length) {
             list.innerHTML = `<div class="unmapped-party-empty">${unmappedParties.length ? 'No matching unmapped party.' : 'All parties have map locations.'}</div>`;
             return;

@@ -19,6 +19,7 @@
                     <h2 id="unmappedPartyHeading">Unmapped Parties</h2>
                     <span id="unmappedPartyCount">0</span>
                 </div>
+                <p class="unmapped-party-summary" id="unmappedPartySummary">Loading parties&hellip;</p>
                 <input type="search" id="unmappedPartyFilter" placeholder="Filter by ID, name, user or mobile">
                 <div class="unmapped-party-list" id="unmappedPartyList">
                     <div class="unmapped-party-empty">Loading parties...</div>
