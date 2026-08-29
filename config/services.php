@@ -39,4 +39,17 @@ return [
         'token' => env('BKASH_SMS_WEBHOOK_TOKEN'),
     ],
 
+    // WhatsApp Cloud API (Meta) - used to send a payment-received reply
+    // after a bKash SMS is processed. See App\Services\WhatsAppService.
+    'whatsapp' => [
+        'token' => env('WHATSAPP_TOKEN'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'api_version' => env('WHATSAPP_API_VERSION', 'v21.0'),
+        // Approved template used for the payment confirmation. Its body is
+        // expected to take 4 positional variables, in this order:
+        //   {{1}} party name   {{2}} amount   {{3}} TrxID   {{4}} date
+        'payment_template' => env('WHATSAPP_PAYMENT_TEMPLATE', 'payment_received'),
+        'payment_template_language' => env('WHATSAPP_PAYMENT_TEMPLATE_LANG', 'en'),
+    ],
+
 ];

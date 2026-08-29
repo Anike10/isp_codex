@@ -146,6 +146,8 @@ Route::middleware('auth')->group(function () {
         Route::get('bkash-sms-payments/create', [BkashSmsPaymentController::class, 'create'])->name('bkash-sms-payments.create');
         Route::post('bkash-sms-payments', [BkashSmsPaymentController::class, 'manualStore'])->name('bkash-sms-payments.store');
         Route::post('bkash-sms-payments/maintenance', [BkashSmsPaymentController::class, 'maintenance'])->name('bkash-sms-payments.maintenance');
+        Route::post('bkash-sms-payments/whatsapp', [BkashSmsPaymentController::class, 'whatsappSettings'])->name('bkash-sms-payments.whatsapp');
+        Route::post('bkash-sms-payments/{bkashSmsPayment}/whatsapp-resend', [BkashSmsPaymentController::class, 'whatsappResend'])->name('bkash-sms-payments.whatsapp-resend');
         Route::post('bkash-sms-payments/{bkashSmsPayment}/approve', [BkashSmsPaymentController::class, 'approve'])->name('bkash-sms-payments.approve');
         Route::get('bkash-sms-payments/{bkashSmsPayment}', [BkashSmsPaymentController::class, 'show'])->name('bkash-sms-payments.show');
     });

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Jobs\SendBkashWhatsAppReply;
+use App\Services\WhatsAppService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,6 +11,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class BkashSmsPayment extends Model
 {
     use HasFactory;
+
+    /** Statuses that make a payment "confirmed" enough to notify the payer. */
+    public const NOTIFIABLE_STATUSES = ['processed', 'balance'];
 
     protected $fillable = [
         'entry_by',
@@ -26,6 +31,11 @@ class BkashSmsPayment extends Model
         'invoice_id',
         'payment_id',
         'message',
+        'whatsapp_status',
+        'whatsapp_to',
+        'whatsapp_message_id',
+        'whatsapp_error',
+        'whatsapp_sent_at',
     ];
 
     protected function casts(): array
@@ -33,7 +43,32 @@ class BkashSmsPayment extends Model
         return [
             'amount' => 'decimal:2',
             'payment_date' => 'date',
+            'whatsapp_sent_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Fire the payer's WhatsApp confirmation the moment a row lands on
+        // (or moves into) a confirmed status and has not been notified yet.
+        // Runs for every intake path — webhook, manual entry, manual approve.
+        static::saved(function (BkashSmsPayment $sms): void {
+            if ($sms->whatsapp_status !== null) {
+                return;
+            }
+
+            if (! $sms->wasRecentlyCreated && ! $sms->wasChanged('status')) {
+                return;
+            }
+
+            if (! in_array($sms->status, self::NOTIFIABLE_STATUSES, true)) {
+                return;
+            }
+
+            if (app(WhatsAppService::class)->isEnabled()) {
+                SendBkashWhatsAppReply::dispatch($sms->id)->afterCommit();
+            }
+        });
     }
 
     /**

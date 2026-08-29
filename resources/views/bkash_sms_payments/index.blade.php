@@ -47,6 +47,32 @@
     <span class="muted" style="flex-basis:100%;font-size:12px"><strong>0 = keep forever.</strong> Retention and junk cleanup also run automatically every night. "Junk" = a failed SMS with no TrxID and no amount (OTP, promo, etc.).</span>
 </form>
 
+<form method="post" action="{{ route('bkash-sms-payments.whatsapp') }}" class="card" style="margin-bottom:16px;display:flex;gap:14px;align-items:end;flex-wrap:wrap">
+    @csrf
+    <span class="muted" style="font-weight:700">WhatsApp reply</span>
+    <label class="muted" style="display:flex;gap:6px;align-items:center;font-size:12px">
+        <input type="checkbox" name="enabled" value="1" @checked($whatsappEnabled)>
+        Send the payer a WhatsApp confirmation after a bKash SMS is processed
+    </label>
+    <span class="muted" style="display:flex;gap:10px;align-items:center;font-size:12px">
+        Trigger on:
+        <label style="display:flex;gap:4px;align-items:center"><input type="checkbox" name="statuses[]" value="processed" @checked(in_array('processed', $whatsappStatuses, true))> Processed</label>
+        <label style="display:flex;gap:4px;align-items:center"><input type="checkbox" name="statuses[]" value="balance" @checked(in_array('balance', $whatsappStatuses, true))> Balance</label>
+    </span>
+    <button class="btn secondary" type="submit" name="action" value="save">Save</button>
+    <span style="display:flex;gap:6px;align-items:center">
+        <input type="text" name="test_number" placeholder="01XXXXXXXXX" style="width:130px">
+        <button class="btn light" type="submit" name="action" value="test">Send test</button>
+    </span>
+    <span class="muted" style="flex-basis:100%;font-size:12px">
+        @if ($whatsappConfigured)
+            Cloud API credentials detected. Template: <code>{{ config('services.whatsapp.payment_template') }}</code> ({{ config('services.whatsapp.payment_template_language') }}) &mdash; body vars: name, amount, TrxID, date. Needs <code>php artisan queue:work</code> running.
+        @else
+            <strong>Not configured.</strong> Set <code>WHATSAPP_TOKEN</code>, <code>WHATSAPP_PHONE_NUMBER_ID</code> and <code>WHATSAPP_PAYMENT_TEMPLATE</code> in <code>.env</code> first.
+        @endif
+    </span>
+</form>
+
 <form method="get" class="card filter-form" style="margin-bottom:16px">
     <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="TrxID, ref, sender number, party, invoice no, or SMS text"></div>
     <div><label>Status</label><select name="status"><option value="">All statuses</option>@foreach(['auto' => 'Processed (auto)', 'manual' => 'Processed (manual)', 'pending' => 'Pending', 'balance' => 'Balance', 'duplicate' => 'Duplicate', 'failed' => 'Failed'] as $value => $label)<option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>@endforeach</select></div>
@@ -86,6 +112,7 @@
             <th>Device</th>
             <th>Paid by</th>
             <th>Updated</th>
+            <th>WhatsApp</th>
             <th>Message</th>
         </tr>
     </thead>
@@ -143,11 +170,29 @@
                 <td>{{ $smsPayment->entry_by ?: '—' }}</td>
                 <td>{{ $smsPayment->paid_by_name ?: '—' }}</td>
                 <td>{{ $smsPayment->updated_at->format('d/m/Y H:i') }}</td>
+                <td style="white-space:nowrap">
+                    @php $waStatus = $smsPayment->whatsapp_status; @endphp
+                    @if ($waStatus === 'sent')
+                        <span class="badge active" title="Sent to {{ $smsPayment->whatsapp_to }} at {{ $smsPayment->whatsapp_sent_at?->format('d/m/Y H:i') }}">sent</span>
+                    @elseif ($waStatus === 'failed')
+                        <span class="badge failed" title="{{ $smsPayment->whatsapp_error }}">failed</span>
+                    @elseif ($waStatus === 'skipped')
+                        <span class="badge" title="{{ $smsPayment->whatsapp_error }}">skipped</span>
+                    @else
+                        <span class="muted">—</span>
+                    @endif
+                    @if (in_array($smsPayment->status, ['processed', 'balance'], true) && $waStatus !== 'sent')
+                        <form method="post" action="{{ route('bkash-sms-payments.whatsapp-resend', $smsPayment) }}" style="display:inline">
+                            @csrf
+                            <button class="btn light" type="submit">{{ $waStatus ? 'Resend' : 'Send' }}</button>
+                        </form>
+                    @endif
+                </td>
                 <td>{{ $smsPayment->message ?? 'N/A' }}</td>
             </tr>
         @empty
             <tr>
-                <td colspan="13">No bKash SMS payments received yet.</td>
+                <td colspan="14">No bKash SMS payments received yet.</td>
             </tr>
         @endforelse
     </tbody>

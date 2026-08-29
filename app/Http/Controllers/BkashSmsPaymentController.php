@@ -10,6 +10,7 @@ use App\Services\BillingService;
 use App\Services\BkashSmsPaymentService;
 use App\Services\BkashSmsRetentionService;
 use App\Services\PaymentService;
+use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -18,12 +19,15 @@ use Throwable;
 
 class BkashSmsPaymentController extends Controller
 {
-    public function index(Request $request, BkashSmsRetentionService $retention)
+    public function index(Request $request, BkashSmsRetentionService $retention, WhatsAppService $whatsapp)
     {
         return view('bkash_sms_payments.index', [
             'customers' => Customer::orderBy('name')->get(['id', 'name', 'connection_id', 'mikrotik_username']),
             'retentionDays' => $retention->retentionDays(),
             'junkAutoDelete' => $retention->junkAutoDelete(),
+            'whatsappEnabled' => $whatsapp->isEnabled(),
+            'whatsappConfigured' => $whatsapp->isConfigured(),
+            'whatsappStatuses' => $whatsapp->notifyStatuses(),
             'failedCount' => BkashSmsPayment::where('status', 'failed')->count(),
             'junkFailedCount' => BkashSmsPayment::where('status', 'failed')->whereNull('trx_id')->whereNull('amount')->count(),
             'smsPayments' => BkashSmsPayment::with(['customer', 'invoice', 'payment'])
@@ -266,6 +270,49 @@ class BkashSmsPaymentController extends Controller
         };
 
         return redirect()->route('bkash-sms-payments.index')->with('success', $message);
+    }
+
+    public function whatsappSettings(Request $request, WhatsAppService $whatsapp)
+    {
+        $data = $request->validate([
+            'action' => ['required', 'in:save,test'],
+            'enabled' => ['nullable', 'boolean'],
+            'statuses' => ['nullable', 'array'],
+            'statuses.*' => ['in:processed,balance'],
+            'test_number' => ['nullable', 'string', 'max:20'],
+        ]);
+
+        $whatsapp->setEnabled((bool) ($data['enabled'] ?? false));
+        $whatsapp->setNotifyStatuses($data['statuses'] ?? []);
+
+        if ($data['action'] === 'test') {
+            $result = $whatsapp->sendTest((string) ($data['test_number'] ?? ''));
+
+            return redirect()->route('bkash-sms-payments.index')
+                ->with($result['ok'] ? 'success' : 'error', $result['message']);
+        }
+
+        return redirect()->route('bkash-sms-payments.index')->with('success', 'WhatsApp reply settings saved.');
+    }
+
+    public function whatsappResend(BkashSmsPayment $bkashSmsPayment, WhatsAppService $whatsapp)
+    {
+        if (! $whatsapp->isConfigured()) {
+            return back()->with('error', 'WhatsApp Cloud API credentials are not set in the environment.');
+        }
+
+        if (! in_array($bkashSmsPayment->status, BkashSmsPayment::NOTIFIABLE_STATUSES, true)) {
+            return back()->with('error', 'Only processed or balance rows can send a WhatsApp confirmation.');
+        }
+
+        $bkashSmsPayment->forceFill(['whatsapp_status' => null, 'whatsapp_error' => null])->save();
+        $whatsapp->sendPaymentConfirmation($bkashSmsPayment->fresh('customer'));
+
+        $sent = $bkashSmsPayment->fresh()->whatsapp_status === 'sent';
+
+        return back()->with($sent ? 'success' : 'error', $sent
+            ? 'WhatsApp confirmation sent.'
+            : 'WhatsApp send failed: '.($bkashSmsPayment->fresh()->whatsapp_error ?: 'unknown error'));
     }
 
     public function store(Request $request, BkashSmsPaymentService $smsPaymentService)
