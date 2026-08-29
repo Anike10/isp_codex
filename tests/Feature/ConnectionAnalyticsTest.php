@@ -75,6 +75,24 @@ class ConnectionAnalyticsTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_frequent_mac_changes_make_default_persists_the_filters(): void
+    {
+        $seer = $this->seer();
+
+        $this->actingAs($seer)
+            ->get(route('troubleshoot.mac-changes', ['hours' => 72, 'min_macs' => 5, 'make_default' => 1]))
+            ->assertOk()
+            ->assertSee('Saved &mdash; this page now opens with these filters.', false);
+
+        // A later bare visit opens with the saved filters.
+        $this->actingAs($seer)
+            ->get(route('troubleshoot.mac-changes'))
+            ->assertOk()
+            ->assertSee('name="hours" min="1" max="8760" value="72"', false)
+            ->assertSee('name="min_macs" min="2" max="100" value="5"', false)
+            ->assertDontSee('Saved &mdash; this page now opens', false);
+    }
+
     public function test_both_reports_show_the_latest_onu_rx_and_tx_power_for_a_user(): void
     {
         $this->logDisconnect('fiber-1', now()->subDays(2)->toDateString(), null, -19.00);

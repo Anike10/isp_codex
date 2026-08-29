@@ -61,10 +61,24 @@ class ConnectionAnalyticsController extends Controller
      */
     public function macChanges(Request $request)
     {
-        $hours = max(1, min(8760, (int) $request->query('hours', 24)));
-        $minMacs = max(2, min(100, (int) $request->query('min_macs', 3)));
+        $defaultsKey = 'troubleshoot.mac_changes_defaults';
+        $saved = $request->session()->get($defaultsKey, []);
+
+        $hours = max(1, min(8760, (int) $request->query('hours', $saved['hours'] ?? 24)));
+        $minMacs = max(2, min(100, (int) $request->query('min_macs', $saved['min_macs'] ?? 3)));
         $routerId = $this->routerFilter($request);
+        if (! $request->has('router') && ! empty($saved['router'])) {
+            $routerId = MikrotikRouter::whereKey($saved['router'])->exists() ? (int) $saved['router'] : null;
+        }
         $perPage = max(10, min(200, (int) $request->query('per_page', 50)));
+
+        if ($request->query('make_default') === '1') {
+            $request->session()->put($defaultsKey, [
+                'hours' => $hours,
+                'min_macs' => $minMacs,
+                'router' => $routerId,
+            ]);
+        }
 
         $since = now()->subHours($hours);
 
