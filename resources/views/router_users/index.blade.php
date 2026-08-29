@@ -76,6 +76,7 @@
                                 <th><input type="checkbox" data-select-all-router style="width:auto" aria-label="Select all unmatched on {{ $routerName }}"></th>
                                 <th>Router username</th>
                                 <th>Party</th>
+                                <th>Device MAC</th>
                                 <th>Profile</th>
                                 <th>Service</th>
                                 <th>Remote address</th>
@@ -97,6 +98,16 @@
                                             <a href="{{ route('customers.show', $secret->matched_customer) }}">{{ $secret->matched_customer->name }}</a>
                                         @else
                                             <span class="badge overdue">Not in app</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if ($secret->matched_customer?->last_connected_mac)
+                                            <code>{{ $secret->matched_customer->last_connected_mac }}</code>
+                                            @if ($secret->matched_customer->last_connected_at)
+                                                <div class="muted">{{ $secret->matched_customer->last_connected_at->diffForHumans() }}</div>
+                                            @endif
+                                        @else
+                                            <span class="muted">—</span>
                                         @endif
                                     </td>
                                     <td>{{ $secret->profile ?: '—' }}</td>

@@ -79,6 +79,30 @@ class MikrotikActiveMacSyncTest extends TestCase
         $this->assertSame(0, $summary['updated']);
     }
 
+    public function test_active_mac_sync_skips_a_non_mac_caller_id(): void
+    {
+        MikrotikRouter::query()->update(['status' => 'inactive']);
+        $router = $this->restRouter('10.0.0.44');
+
+        Http::fake([
+            '10.0.0.44:8181/rest/ppp/active' => Http::response([
+                ['.id' => '*1', 'name' => 'l2tp-1', 'caller-id' => '203.0.113.7', 'address' => '10.9.0.1'],
+            ], 200),
+        ]);
+
+        $customer = Customer::create([
+            'name' => 'Tunnel Party', 'phone' => '01700000003', 'connection_id' => 'l2tp-1',
+            'mikrotik_username' => 'l2tp-1', 'mikrotik_router_id' => $router->id,
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $summary = app(MikrotikCustomerSyncService::class)->syncActiveConnectionMacs($router);
+
+        $this->assertSame(0, $summary['updated']);
+        $this->assertNull($customer->refresh()->last_connected_mac);
+        $this->assertNull($customer->last_connected_ip, 'A non-MAC session must not touch the party at all.');
+    }
+
     public function test_router_edit_form_saves_the_active_mac_sync_interval(): void
     {
         $user = User::factory()->create();

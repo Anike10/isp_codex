@@ -116,6 +116,29 @@ class UnmanagedRouterUsersTest extends TestCase
             ->assertSee('name="secret_ids[]" value="'.$loose->id.'"', false);
     }
 
+    public function test_index_shows_the_linked_party_device_mac(): void
+    {
+        $router = MikrotikRouter::create([
+            'name' => 'Router M', 'ip_address' => '10.3.0.1', 'api_port' => 8728,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'api', 'password' => 'secret', 'status' => 'inactive',
+        ]);
+        $party = Customer::create([
+            'name' => 'MAC Party', 'phone' => '01700000002', 'connection_id' => 'm-user',
+            'mikrotik_username' => 'm-user', 'last_connected_mac' => '00:8D:FF:02:2A:17',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+        MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $router->id, 'customer_id' => $party->id, 'routeros_id' => '*M1',
+            'name' => 'm-user', 'password' => 'x', 'service' => 'pppoe', 'disabled' => false, 'imported_at' => now(),
+        ]);
+
+        $this->actingAs($this->user(['view_dashboard', 'view_unmanaged_router_users']))
+            ->get(route('router-users.index'))
+            ->assertOk()
+            ->assertSee('Device MAC')
+            ->assertSee('00:8D:FF:02:2A:17');
+    }
+
     public function test_import_creates_parties_from_selected_unmanaged_secrets(): void
     {
         $secretA = $this->makeSecret('router-user-a', 'home-10');

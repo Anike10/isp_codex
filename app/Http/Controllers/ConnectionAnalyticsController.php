@@ -161,15 +161,19 @@ class ConnectionAnalyticsController extends Controller
             return;
         }
 
+        // One row per username — the newest logged reading (id is monotonic
+        // with disconnected_at) — instead of loading every historical event.
         $latest = PppUsageLog::query()
-            ->whereIn(DB::raw('lower(username)'), $names)
-            ->whereNotNull('rx_power_dbm')
-            ->orderByDesc('disconnected_at')
+            ->whereIn('id', PppUsageLog::query()
+                ->whereIn(DB::raw('lower(username)'), $names)
+                ->whereNotNull('rx_power_dbm')
+                ->groupBy(DB::raw('lower(username)'))
+                ->selectRaw('max(id)'))
             ->get(['username', 'rx_power_dbm', 'olt_onu_id', 'caller_id', 'disconnected_at'])
-            ->groupBy(fn (PppUsageLog $log) => mb_strtolower(trim((string) $log->username)));
+            ->keyBy(fn (PppUsageLog $log) => mb_strtolower(trim((string) $log->username)));
 
         $rows->each(function ($row) use ($latest): void {
-            $reading = $latest->get(mb_strtolower(trim((string) $row->username)))?->first();
+            $reading = $latest->get(mb_strtolower(trim((string) $row->username)));
             $row->onu_rx_power = $reading?->rx_power_dbm;
             $row->onu_rx_at = $reading?->disconnected_at;
             $row->onu_id = $reading?->olt_onu_id;

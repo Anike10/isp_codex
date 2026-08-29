@@ -376,7 +376,7 @@ class MikrotikImportService
     public function importedSecretsOverview(?int $routerId = null): Collection
     {
         $secrets = MikrotikImportedSecret::query()
-            ->with(['router:id,name,ip_address,read_only', 'customer:id,name'])
+            ->with(['router:id,name,ip_address,read_only', 'customer:id,name,last_connected_mac,last_connected_at'])
             ->when($routerId, fn (Builder $query) => $query->where('mikrotik_router_id', $routerId))
             ->orderBy('mikrotik_router_id')
             ->orderBy('name')
@@ -399,7 +399,7 @@ class MikrotikImportService
         $byName = [];
         if ($nameKeys->isNotEmpty()) {
             Customer::query()
-                ->select('id', 'name', 'connection_id', 'mikrotik_username')
+                ->select('id', 'name', 'connection_id', 'mikrotik_username', 'last_connected_mac', 'last_connected_at')
                 ->where(function ($query) use ($nameKeys): void {
                     $query->whereIn(DB::raw('lower(connection_id)'), $nameKeys)
                         ->orWhereIn(DB::raw('lower(mikrotik_username)'), $nameKeys);

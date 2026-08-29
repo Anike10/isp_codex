@@ -226,6 +226,23 @@ class PppWebhookTest extends TestCase
         $this->assertSame($customer->id, PppUsageLog::firstOrFail()->customer_id);
     }
 
+    public function test_webhook_mac_fallback_ignores_a_soft_deleted_party(): void
+    {
+        $customer = Customer::create([
+            'name' => 'Gone Party', 'phone' => '01700000009', 'connection_id' => 'gone-1',
+            'mikrotik_username' => 'gone-1', 'last_connected_mac' => '00:8D:FF:02:2A:17',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+        $customer->delete();
+        $secret = app(PppWebhookService::class)->secret();
+
+        $this->withHeader(PppWebhookService::SECRET_HEADER, $secret)
+            ->postJson('/api/ppp/usage', ['user' => 'unknown', 'caller_id' => '00:8d:ff:02:2a:17'])
+            ->assertCreated();
+
+        $this->assertNull(PppUsageLog::firstOrFail()->customer_id);
+    }
+
     public function test_webhook_endpoint_rejects_a_missing_or_wrong_secret(): void
     {
         app(PppWebhookService::class)->secret();

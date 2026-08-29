@@ -65,11 +65,14 @@ class PppUsageWebhookController extends Controller
             ->orderByRaw('mikrotik_router_id is null')
             ->first();
 
-        // Fall back to the last MAC we saw this party connect from.
+        // Fall back to the last MAC we saw this party connect from. The OR pair
+        // is wrapped so the soft-delete scope still applies to both branches.
         if (! $customer && $callerMac !== null) {
             $customer = Customer::query()
-                ->whereRaw('lower(last_connected_mac) = ?', [$callerMac])
-                ->orWhere('last_connected_mac', $callerId)
+                ->where(function ($query) use ($callerMac, $callerId): void {
+                    $query->whereRaw('lower(last_connected_mac) = ?', [$callerMac])
+                        ->orWhere('last_connected_mac', $callerId);
+                })
                 ->first();
         }
 
@@ -115,8 +118,11 @@ class PppUsageWebhookController extends Controller
             foreach ($matches as $match) {
                 $seconds += (int) $match[1] * $units[$match[2]];
             }
+
+            return $seconds;
         }
 
+        // Fallback for the "1d02:03:04" / "02:03:04" clock forms only.
         if (preg_match('/(?:(\d+)d)?(\d{1,2}):(\d{2}):(\d{2})/', $uptime, $clock)) {
             $seconds += (int) ($clock[1] ?: 0) * 86400
                 + (int) $clock[2] * 3600

@@ -6,6 +6,7 @@ use App\Models\AppIpPool;
 use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\MikrotikRouter;
+use App\Observers\RecordVersionObserver;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
@@ -209,7 +210,9 @@ class MikrotikCustomerSyncService
 
         foreach ($sessions as $session) {
             $mac = $this->normalizeMacAddress(trim((string) ($session['caller-id'] ?? '')) ?: null);
-            if (! $mac) {
+            // Only real MACs — some PPP services put an IP or interface name in
+            // caller-id, and that must not land in last_connected_mac.
+            if (! $mac || ! preg_match('/^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/i', $mac)) {
                 continue;
             }
 
@@ -221,17 +224,18 @@ class MikrotikCustomerSyncService
             }
 
             $ipAddress = trim((string) ($session['address'] ?? '')) ?: null;
-            $macChanged = $customer->last_connected_mac !== $mac;
-
-            $customer->forceFill(array_filter([
-                'last_connected_mac' => $mac,
-                'last_connected_at' => now(),
-                'last_connected_ip' => (! $customer->use_fixed_ip && $ipAddress) ? $ipAddress : null,
-            ], fn ($value) => $value !== null))->save();
-
-            if ($macChanged) {
+            $updates = ['last_connected_at' => now()];
+            if ($customer->last_connected_mac !== $mac) {
+                $updates['last_connected_mac'] = $mac;
                 $updated++;
             }
+            if (! $customer->use_fixed_ip && $ipAddress !== null && $customer->last_connected_ip !== $ipAddress) {
+                $updates['last_connected_ip'] = $ipAddress;
+            }
+
+            // "Last seen" telemetry changes on every poll — not worth an audit
+            // row on every active party each run.
+            RecordVersionObserver::withoutRecording(fn () => $customer->forceFill($updates)->save());
         }
 
         return ['sessions' => $sessions->count(), 'updated' => $updated, 'unmatched' => $unmatched];
