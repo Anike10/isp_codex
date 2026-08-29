@@ -54,8 +54,7 @@ class MikrotikRouterController extends Controller
         $data['password'] = $data['router_api_password'];
         $data['transport'] = $data['transport'] ?? 'api';
         $data['rest_secure'] = $data['transport'] === 'rest' && $request->boolean('rest_secure');
-        // REST is an import-only transport, so it is always read-only.
-        $data['read_only'] = $data['transport'] === 'rest' || $request->boolean('read_only');
+        $data['read_only'] = $request->boolean('read_only');
         unset($data['router_api_username'], $data['router_api_password']);
 
         MikrotikRouter::create($data);
@@ -334,8 +333,7 @@ class MikrotikRouterController extends Controller
         $data['username'] = $data['router_api_username'];
         $data['transport'] = $data['transport'] ?? $mikrotikRouter->transport ?? 'api';
         $data['rest_secure'] = $data['transport'] === 'rest' && $request->boolean('rest_secure');
-        // REST is an import-only transport, so it is always read-only.
-        $data['read_only'] = $data['transport'] === 'rest' || $request->boolean('read_only');
+        $data['read_only'] = $request->boolean('read_only');
         unset($data['router_api_username']);
 
         if (blank($data['router_api_password'])) {

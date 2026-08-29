@@ -8,11 +8,13 @@ use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
- * Read-only client for the RouterOS v7 REST API (the "www" / "www-ssl"
- * service on a custom port). It returns the same shape the binary
- * {@see RouterOsClient} returns for `.../print` commands — a list of
- * associative string arrays — so {@see MikrotikImportService} can consume
- * either transport without caring which one produced the rows.
+ * Client for the RouterOS v7 REST API (the "www" / "www-ssl" service on a
+ * custom port). Reads return the same shape the binary {@see RouterOsClient}
+ * returns for `.../print` commands — a list of associative string arrays —
+ * and writes map RouterOS `add` / `set` / `remove` commands onto the REST
+ * verbs, so {@see MikrotikImportService} can drive either transport the same
+ * way. Whether writes are allowed at all is governed by the router's
+ * "read-only" flag in the app, exactly like the binary API.
  */
 class RouterOsRestClient
 {
@@ -50,6 +52,45 @@ class RouterOsRestClient
     }
 
     /**
+     * Run a RouterOS write command over REST. Mirrors the binary client's
+     * `write()`: `<menu>/add` -> PUT /rest/<menu>, `<menu>/set` (with `.id`)
+     * -> PATCH /rest/<menu>/<id>, `<menu>/remove` (with `.id`) -> DELETE
+     * /rest/<menu>/<id>, and any other trailing verb -> POST /rest/<menu>/<verb>.
+     *
+     * @param  array<string, string>  $attributes
+     * @return array<int, array<string, string>>
+     */
+    public function write(MikrotikRouter $router, string $command, array $attributes = []): array
+    {
+        $path = trim($command, '/');
+        $segments = explode('/', $path);
+        $verb = array_pop($segments);
+        $menu = implode('/', $segments);
+
+        $id = $attributes['.id'] ?? $attributes['numbers'] ?? null;
+        unset($attributes['.id'], $attributes['numbers']);
+
+        [$method, $target] = match ($verb) {
+            'add' => ['put', $menu],
+            'set', 'edit' => ['patch', $menu.'/'.$this->requireId($id, $command)],
+            'remove', 'delete' => ['delete', $menu.'/'.$this->requireId($id, $command)],
+            default => ['post', $path],
+        };
+
+        $payload = $this->request($router, $method, $target, $attributes);
+
+        if ($payload === []) {
+            return [];
+        }
+
+        if (array_is_list($payload) === false) {
+            $payload = [$payload];
+        }
+
+        return array_map(fn ($row) => $this->stringifyRow($row), $payload);
+    }
+
+    /**
      * Confirm the REST service answers and report the RouterOS version.
      *
      * @return array{version: string, board: string}
@@ -64,6 +105,17 @@ class RouterOsRestClient
         ];
     }
 
+    private function requireId(?string $id, string $command): string
+    {
+        $id = trim((string) $id);
+
+        if ($id === '') {
+            throw new RuntimeException("The REST command \"{$command}\" needs a RouterOS \".id\" to target a row.");
+        }
+
+        return $id;
+    }
+
     private function pathForCommand(string $command): string
     {
         $path = trim($command, '/');
@@ -76,10 +128,10 @@ class RouterOsRestClient
     }
 
     /**
-     * @param  array<string, mixed>  $query
+     * @param  array<string, mixed>  $data  Query string for GET, JSON body otherwise.
      * @return array<mixed>
      */
-    private function request(MikrotikRouter $router, string $method, string $path, array $query = []): array
+    private function request(MikrotikRouter $router, string $method, string $path, array $data = []): array
     {
         $url = $router->restBaseUrl().'/rest/'.ltrim($path, '/');
 
@@ -95,7 +147,7 @@ class RouterOsRestClient
         }
 
         try {
-            $response = $request->{$method}($url, $query);
+            $response = $request->{$method}($url, $data);
         } catch (ConnectionException $exception) {
             throw new RuntimeException(
                 "Cannot connect to the RouterOS REST service at {$url}. ".$exception->getMessage(),

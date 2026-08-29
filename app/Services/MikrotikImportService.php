@@ -13,7 +13,6 @@ use App\Models\Subscription;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 use Throwable;
 
 class MikrotikImportService
@@ -57,10 +56,7 @@ class MikrotikImportService
     public function write(MikrotikRouter $router, string $command, array $attributes): array
     {
         if ($router->usesRestTransport()) {
-            throw new RuntimeException(
-                'This MikroTik is configured for read-only REST import, so the app cannot push "'
-                .$command.'". Switch it to the binary API with a read-write user to enable pushes.'
-            );
+            return (new RouterOsRestClient)->write($router, $command, $attributes);
         }
 
         $client = new RouterOsClient;

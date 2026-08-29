@@ -198,7 +198,7 @@ class MikrotikImportTest extends TestCase
             ->assertSee('Read-only');
     }
 
-    public function test_router_form_saves_rest_transport_and_forces_read_only(): void
+    public function test_router_form_saves_rest_transport_without_forcing_read_only(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
@@ -214,10 +214,26 @@ class MikrotikImportTest extends TestCase
         $router = MikrotikRouter::where('ip_address', '103.133.200.177')->firstOrFail();
         $this->assertSame('rest', $router->transport);
         $this->assertTrue((bool) $router->rest_secure);
-        $this->assertTrue((bool) $router->read_only, 'A REST router is import-only and must be read-only.');
+        $this->assertFalse((bool) $router->read_only, 'REST no longer forces read-only; the checkbox governs it.');
         $this->assertSame('http://103.133.200.177:8181', (new MikrotikRouter([
             'ip_address' => '103.133.200.177', 'api_port' => 8181, 'rest_secure' => false,
         ]))->restBaseUrl());
+    }
+
+    public function test_rest_read_only_flag_is_still_honoured_when_ticked(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $this->actingAs($user)->post(route('mikrotik-routers.store'), [
+            'name' => 'RO REST Router', 'ip_address' => '103.133.200.178', 'api_port' => 8181,
+            'transport' => 'rest', 'read_only' => '1',
+            'pppoe_sync_interval_minutes' => 60, 'inactive_pppoe_profile' => 'inactive',
+            'router_api_username' => 'anike', 'router_api_password' => 'reader-pass',
+            'status' => 'active', 'notes' => null,
+        ])->assertRedirect(route('mikrotik-routers.index'));
+
+        $this->assertTrue((bool) MikrotikRouter::where('ip_address', '103.133.200.178')->firstOrFail()->read_only);
     }
 
     public function test_rest_transport_router_imports_secrets_over_the_www_service(): void
@@ -261,21 +277,34 @@ class MikrotikImportTest extends TestCase
             && $request->hasHeader('Authorization', 'Basic '.base64_encode('anike:reader-pass')));
     }
 
-    public function test_rest_transport_router_refuses_every_push(): void
+    public function test_rest_transport_router_pushes_writes_over_the_www_service(): void
     {
-        Http::fake();
+        Http::fake([
+            '10.0.0.78:8181/rest/ppp/profile/print' => Http::response([], 200),
+            '10.0.0.78:8181/rest/ppp/profile' => Http::response(['ret' => '*7', 'name' => 'inactive'], 200),
+            '10.0.0.78:8181/rest/ppp/profile/*7' => Http::response(['.id' => '*7', 'name' => 'inactive', 'rate-limit' => '1k/1k'], 200),
+        ]);
 
         $router = MikrotikRouter::create([
             'name' => 'REST Router', 'ip_address' => '10.0.0.78', 'api_port' => 8181,
             'transport' => 'rest', 'pppoe_sync_interval_minutes' => 60,
-            'inactive_pppoe_profile' => 'inactive', 'username' => 'anike', 'password' => 'reader-pass',
-            'status' => 'active', 'read_only' => true,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'anike', 'password' => 'rw-pass',
+            'status' => 'active', 'read_only' => false,
         ]);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('read-only REST import');
+        $service = app(MikrotikImportService::class);
 
-        app(MikrotikImportService::class)->write($router, '/ppp/profile/add', ['name' => 'inactive']);
+        // add -> PUT /rest/ppp/profile
+        $service->write($router, '/ppp/profile/add', ['name' => 'inactive']);
+        // set -> PATCH /rest/ppp/profile/<id>
+        $service->write($router, '/ppp/profile/set', ['.id' => '*7', 'rate-limit' => '1k/1k']);
+
+        Http::assertSent(fn ($request) => $request->method() === 'PUT'
+            && $request->url() === 'http://10.0.0.78:8181/rest/ppp/profile'
+            && ($request->data()['name'] ?? null) === 'inactive');
+        Http::assertSent(fn ($request) => $request->method() === 'PATCH'
+            && $request->url() === 'http://10.0.0.78:8181/rest/ppp/profile/*7'
+            && ! array_key_exists('.id', $request->data()));
     }
 
     public function test_rest_client_reports_a_clear_error_when_credentials_are_rejected(): void

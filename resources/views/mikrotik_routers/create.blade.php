@@ -32,9 +32,9 @@
         <label>Connection Type</label>
         <select name="transport" id="router-transport" required>
             <option value="api" @selected(old('transport', 'api') === 'api')>Binary RouterOS API</option>
-            <option value="rest" @selected(old('transport') === 'rest')>REST API (www service) — import only</option>
+            <option value="rest" @selected(old('transport') === 'rest')>REST API (www service)</option>
         </select>
-        <span class="muted">REST needs RouterOS v7 with the <code>www</code> (or <code>www-ssl</code>) service enabled. REST routers are always read-only.</span>
+        <span class="muted">REST needs RouterOS v7 with the <code>www</code> (or <code>www-ssl</code>) service enabled. Reads and writes both work; tick &ldquo;read-only&rdquo; below to make it import-only.</span>
     </div>
     <div id="router-rest-secure-row" style="{{ old('transport') === 'rest' ? '' : 'display:none' }}">
         <label style="display:flex;gap:8px;align-items:center;font-weight:400">
