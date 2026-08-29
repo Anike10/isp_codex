@@ -11,7 +11,7 @@
         <h1>{{ $selectedCustomer ? 'Party Ledger' : 'Accounting Ledger' }}</h1>
         <div class="muted">
             @if ($selectedCustomer)
-                @if ($canOpenCustomers)<a href="{{ route('customers.show', $selectedCustomer) }}">{{ $selectedCustomer->name }}</a>@else{{ $selectedCustomer->name }}@endif - invoices, payments, advance balance, and running totals
+                {{ $selectedCustomer->name }} - invoices, payments, advance balance, and running totals
             @else
                 Invoices, payments, salaries, expenses, and running totals
             @endif
@@ -44,7 +44,6 @@
                 <a class="btn light" href="{{ route('accounting.ledger') }}">All Ledger</a>
             @endif
             @if ($canOpenCustomers)
-                <a class="btn light" href="{{ route('customers.show', $selectedCustomer) }}">Party Details</a>
                 <a class="btn" href="{{ route('customers.payments.create', $selectedCustomer) }}">Record Payment</a>
             @endif
         @endif

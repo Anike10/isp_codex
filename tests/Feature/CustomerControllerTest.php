@@ -151,9 +151,16 @@ class CustomerControllerTest extends TestCase
             'is_customer' => true,
         ]);
 
+        $ledgerUrl = route('accounting.ledger', ['customer_id' => $customer->id]);
+
         $this->actingAs($user)->get(route('customers.index'))
             ->assertOk()
-            ->assertSee(route('accounting.ledger', ['customer_id' => $customer->id]), false);
+            ->assertSee($ledgerUrl, false);
+
+        // The party details page links back to that party's ledger.
+        $this->actingAs($user)->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee($ledgerUrl, false);
     }
 
     public function test_party_note_is_inline_editable_and_shown_on_both_party_lists(): void

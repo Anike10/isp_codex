@@ -939,6 +939,7 @@
             </div>
             <div class="hero-actions">
                 <a class="btn" href="{{ route('customers.payments.create', $customer) }}">Quick Recharge</a>
+                <a class="btn secondary" href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}">Party Ledger</a>
                 <a class="btn secondary" href="{{ route('customers.edit', $customer) }}">Edit Profile</a>
                 <button class="btn btn--ghost" type="button" id="mikrotik-quick-sync" {{ ! $routerTargetsExists ? 'disabled' : '' }}>
                     MikroTik Sync
