@@ -43,7 +43,15 @@ class BkashSmsPaymentController extends Controller
                             ->orWhereHas('invoice', fn ($query) => $query->where('invoice_no', 'like', "%{$search}%"));
                     });
                 })
-                ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))
+                ->when($request->filled('status'), function ($query) use ($request) {
+                    $status = $request->query('status');
+
+                    match ($status) {
+                        'auto' => $query->where('status', 'processed')->whereNull('paid_by_name'),
+                        'manual' => $query->where('status', 'processed')->whereNotNull('paid_by_name'),
+                        default => $query->where('status', $status),
+                    };
+                })
                 ->when($request->filled('from'), fn ($query) => $query->whereDate('created_at', '>=', $request->date('from')))
                 ->when($request->filled('to'), fn ($query) => $query->whereDate('created_at', '<=', $request->date('to')))
                 ->when($request->filled('min_amount'), fn ($query) => $query->where('amount', '>=', (float) $request->query('min_amount')))

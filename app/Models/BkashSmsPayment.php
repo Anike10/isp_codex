@@ -36,6 +36,21 @@ class BkashSmsPayment extends Model
         ];
     }
 
+    /**
+     * How the row reads in the Status column. A processed row is split
+     * into "auto" (matched and posted by the SMS webhook) vs "manual"
+     * (an admin approved it — paid_by_name is stamped). Every other
+     * status shows as-is (pending, failed, balance, duplicate).
+     */
+    public function getStatusLabelAttribute(): string
+    {
+        if ($this->status === 'processed') {
+            return $this->paid_by_name ? 'manual' : 'auto';
+        }
+
+        return (string) $this->status;
+    }
+
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);

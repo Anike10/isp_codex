@@ -49,7 +49,7 @@
 
 <form method="get" class="card filter-form" style="margin-bottom:16px">
     <div class="full"><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="TrxID, ref, sender number, party, invoice no, or SMS text"></div>
-    <div><label>Status</label><select name="status"><option value="">All statuses</option>@foreach(['pending','processed','balance','duplicate','failed'] as $status)<option value="{{ $status }}" @selected(request('status') === $status)>{{ ucfirst($status) }}</option>@endforeach</select></div>
+    <div><label>Status</label><select name="status"><option value="">All statuses</option>@foreach(['auto' => 'Processed (auto)', 'manual' => 'Processed (manual)', 'pending' => 'Pending', 'balance' => 'Balance', 'duplicate' => 'Duplicate', 'failed' => 'Failed'] as $value => $label)<option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>@endforeach</select></div>
     <div><label>From Date</label><input type="date" name="from" value="{{ request('from') }}"></div>
     <div><label>To Date</label><input type="date" name="to" value="{{ request('to') }}"></div>
     <div><label>Min Amount</label><input type="number" step="0.01" name="min_amount" value="{{ request('min_amount') }}"></div>
@@ -94,7 +94,7 @@
             @php $canPay = in_array($smsPayment->status, ['pending', 'failed'], true) && $smsPayment->amount !== null && $smsPayment->trx_id; @endphp
             <tr data-href="{{ route('bkash-sms-payments.show', $smsPayment) }}">
                 <td>{{ $smsPayment->created_at->format('d/m/Y H:i') }}</td>
-                <td><span class="badge {{ $smsPayment->status }}">{{ $smsPayment->status }}</span></td>
+                <td><span class="badge {{ $smsPayment->status }}">{{ $smsPayment->status_label }}</span></td>
                 <td style="white-space:nowrap">
                     <span style="display:inline-flex;gap:6px;align-items:center">
                         @if ($canPay)

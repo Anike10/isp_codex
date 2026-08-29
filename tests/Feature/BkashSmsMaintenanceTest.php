@@ -159,6 +159,23 @@ class BkashSmsMaintenanceTest extends TestCase
             ->assertSee(route('bkash-sms-payments.approve', 1), false);
     }
 
+    public function test_processed_rows_read_as_auto_or_manual_and_can_be_filtered(): void
+    {
+        $admin = $this->admin();
+
+        $auto = $this->sms(['trx_id' => 'AUTO1', 'ledger_trx_id' => 'AUTO1', 'status' => 'processed']);
+        $manual = $this->sms(['trx_id' => 'MAN1', 'ledger_trx_id' => 'MAN1', 'status' => 'processed', 'paid_by_name' => 'Nazmul Admin']);
+
+        $this->assertSame('auto', $auto->status_label);
+        $this->assertSame('manual', $manual->status_label);
+
+        $this->actingAs($admin)->get(route('bkash-sms-payments.index', ['status' => 'auto']))
+            ->assertOk()->assertSee('AUTO1')->assertDontSee('MAN1');
+
+        $this->actingAs($admin)->get(route('bkash-sms-payments.index', ['status' => 'manual']))
+            ->assertOk()->assertSee('MAN1')->assertDontSee('AUTO1');
+    }
+
     public function test_maintenance_requires_the_manage_payments_permission(): void
     {
         $this->actingAs(User::factory()->create())

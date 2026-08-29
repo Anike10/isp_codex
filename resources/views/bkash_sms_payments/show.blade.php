@@ -50,7 +50,7 @@
 <div class="grid two">
     <section class="card">
         <h2>Parsed SMS</h2>
-        <p><strong>Status:</strong> <span class="badge {{ $bkashSmsPayment->status }}">{{ $bkashSmsPayment->status }}</span></p>
+        <p><strong>Status:</strong> <span class="badge {{ $bkashSmsPayment->status }}">{{ $bkashSmsPayment->status_label }}</span></p>
         <p><strong>Amount:</strong> {{ $bkashSmsPayment->amount !== null ? number_format($bkashSmsPayment->amount, 2) : 'N/A' }}</p>
         <p><strong>From Number:</strong> {{ $bkashSmsPayment->customer_number ?? 'N/A' }}</p>
         <p><strong>Reference:</strong> {{ $bkashSmsPayment->reference ?? 'N/A' }}</p>
