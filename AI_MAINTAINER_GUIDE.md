@@ -1423,6 +1423,12 @@ PPPoE sync:
 
 - Command: `php artisan mikrotik:sync-router-users`
 - Force now: `php artisan mikrotik:sync-router-users --force`
+- Cadence is per-router `mikrotik_routers.pppoe_sync_interval_days` (1–365,
+  default 10; migration `2026_08_29_000006` replaced the old
+  `pppoe_sync_interval_minutes`). The hourly scheduler checks whether each
+  router's `last_pppoe_sync_at + interval_days` is past. This is the slow full
+  reconcile; per-party changes still sync immediately on edit/payment, and
+  `mikrotik:sync-active-macs` handles the frequent MAC capture.
 - Imported-secret refresh: `php artisan mikrotik:import-secrets`; the scheduler
   runs it every three hours.
 - Active-connection MAC sync: `php artisan mikrotik:sync-active-macs`

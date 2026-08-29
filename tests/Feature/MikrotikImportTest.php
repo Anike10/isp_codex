@@ -22,7 +22,7 @@ class MikrotikImportTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_new_router_form_and_database_default_to_sixty_minute_sync(): void
+    public function test_new_router_form_and_database_default_to_ten_day_sync(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
@@ -30,7 +30,7 @@ class MikrotikImportTest extends TestCase
         $this->actingAs($user)
             ->get(route('mikrotik-routers.create', absolute: false))
             ->assertOk()
-            ->assertSee('name="pppoe_sync_interval_minutes" value="60"', false);
+            ->assertSee('name="pppoe_sync_interval_days" value="10"', false);
 
         $router = MikrotikRouter::create([
             'name' => 'Default Interval Router', 'ip_address' => '10.0.0.60', 'api_port' => 8728,
@@ -38,7 +38,7 @@ class MikrotikImportTest extends TestCase
             'status' => 'active',
         ]);
 
-        $this->assertSame(60, $router->refresh()->pppoe_sync_interval_minutes);
+        $this->assertSame(10, $router->refresh()->pppoe_sync_interval_days);
     }
 
     public function test_selected_imported_secret_creates_a_party_with_router_source_and_special_selection(): void

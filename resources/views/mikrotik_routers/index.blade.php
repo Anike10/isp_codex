@@ -51,7 +51,7 @@
                     >{{ ucfirst($router->last_ping_status ?? 'Checking') }} {{ $router->ping_status_since ? $router->ping_status_since->diffForHumans(null, true) : '' }}</span>
                 </td>
                 <td>
-                    <div>Every {{ $router->pppoe_sync_interval_minutes }}m</div>
+                    <div>Every {{ $router->pppoe_sync_interval_days }}d</div>
                     <div class="muted">{{ $router->last_pppoe_sync_at?->format('d/m/Y H:i:s') ?? 'Never' }}</div>
                 </td>
                 <td class="router-last-online">{{ $router->last_online_at?->format('d/m/Y H:i:s') ?? 'Never' }}</td>

@@ -1,21 +1,27 @@
 @extends('layouts.app')
 
 @section('content')
+@include('mikrotik_routers._form_styles')
+
 <div class="topbar">
     <div>
         <h1>Edit MikroTik Router</h1>
-        <div class="muted">Update RouterOS API IP, username, password, and port</div>
+        <div class="muted">{{ $mikrotikRouter->name }} &middot; {{ $mikrotikRouter->ip_address }}:{{ $mikrotikRouter->api_port }}</div>
     </div>
-    <a class="btn light" href="{{ route('mikrotik-routers.show', $mikrotikRouter) }}">Back</a>
+    <a class="btn light" href="{{ route('mikrotik-routers.show', $mikrotikRouter) }}">Back to Router</a>
 </div>
 
-@if($passwordNeedsReentry)
-    <div class="alert error" style="margin-bottom:16px">
-        The saved RouterOS API password cannot be decrypted by this local app. Enter the router API password again to save it with the current app key.
+@if ($passwordNeedsReentry)
+    <div class="alert error">
+        The saved RouterOS API password cannot be decrypted by this local app. Enter the router API password again to store it with the current app key.
     </div>
 @endif
 
-<form method="post" action="{{ route('mikrotik-routers.update', $mikrotikRouter) }}" class="card form-grid" id="router-edit-form" autocomplete="off">
+@if ($errors->any())
+    <div class="alert error">Please fix the highlighted fields and save again.</div>
+@endif
+
+<form method="post" action="{{ route('mikrotik-routers.update', $mikrotikRouter) }}" class="router-form" id="router-edit-form" autocomplete="off">
     @csrf
     @method('PUT')
     <div aria-hidden="true" style="position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;overflow:hidden">
@@ -23,84 +29,125 @@
         <input type="password" name="browser_password_hint" autocomplete="current-password" tabindex="-1">
     </div>
 
-    <div>
-        <label>Router Name</label>
-        <input name="name" value="{{ old('name', $mikrotikRouter->name) }}" required>
-    </div>
-    <div>
-        <label>IP Address</label>
-        <input name="ip_address" value="{{ old('ip_address', $mikrotikRouter->ip_address) }}" required>
-    </div>
-    <div>
-        <label>Port</label>
-        <input type="number" min="1" max="65535" name="api_port" value="{{ old('api_port', $mikrotikRouter->api_port) }}" required>
-        <span class="muted">Binary API: usually 8728. REST (www): your custom www/www-ssl port.</span>
-    </div>
-    <div>
-        <label>Connection Type</label>
-        <select name="transport" id="router-transport" required>
-            <option value="api" @selected(old('transport', $mikrotikRouter->transport) === 'api')>Binary RouterOS API</option>
-            <option value="rest" @selected(old('transport', $mikrotikRouter->transport) === 'rest')>REST API (www service)</option>
-        </select>
-        <span class="muted">REST needs RouterOS v7 with the <code>www</code> (or <code>www-ssl</code>) service enabled. Reads and writes both work; tick &ldquo;read-only&rdquo; below to make it import-only.</span>
-    </div>
-    <div id="router-rest-secure-row" style="{{ old('transport', $mikrotikRouter->transport) === 'rest' ? '' : 'display:none' }}">
-        <label style="display:flex;gap:8px;align-items:center;font-weight:400">
-            <input type="checkbox" name="rest_secure" value="1" style="width:auto" @checked(old('rest_secure', $mikrotikRouter->rest_secure))>
-            REST uses HTTPS (www-ssl / self-signed)
-        </label>
-    </div>
-    <div>
-        <label>PPPoE Sync Interval Minutes</label>
-        <input type="number" min="60" max="1440" step="60" name="pppoe_sync_interval_minutes" value="{{ old('pppoe_sync_interval_minutes', $mikrotikRouter->pppoe_sync_interval_minutes) }}" required>
-        <span class="muted">Default 60 minutes. The hourly scheduler checks whether this router is due.</span>
-    </div>
-    <div>
-        <label>Active Connection MAC Sync Interval (minutes)</label>
-        <input type="number" min="5" max="1440" name="active_mac_sync_interval_minutes" value="{{ old('active_mac_sync_interval_minutes', $mikrotikRouter->active_mac_sync_interval_minutes ?? 15) }}" required>
-        <span class="muted">How often to poll <code>/ppp/active</code> and copy each session's device MAC onto the matching party (updates the party's MAC in party info). Default 15 minutes.</span>
-    </div>
-    <div>
-        <label>Inactive PPPoE Profile</label>
-        <input name="inactive_pppoe_profile" value="{{ old('inactive_pppoe_profile', $mikrotikRouter->inactive_pppoe_profile) }}" required>
-        <span class="muted">Inactive users will be moved to this profile, not disabled.</span>
-    </div>
-    <div>
-        <label>Username</label>
-        <div>
-            <input id="router-username" name="router_api_username" value="{{ old('router_api_username', old('username', $mikrotikRouter->username)) }}" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" required>
+    <section class="rf-card">
+        <div class="rf-card__head">
+            <h2>Identity &amp; reachability</h2>
+            <p class="rf-card__sub">How the app finds and talks to this RouterOS device.</p>
         </div>
-        <span class="muted">Update as needed; keep a valid username.</span>
-    </div>
-    <div>
-        <label>API Password</label>
-        <div>
-            <input id="router-password" type="password" name="router_api_password" autocomplete="new-password" @required($passwordNeedsReentry)>
+        <div class="rf-grid">
+            <div class="rf-field">
+                <label for="rf-name">Router name</label>
+                <input id="rf-name" name="name" value="{{ old('name', $mikrotikRouter->name) }}" required>
+            </div>
+            <div class="rf-field">
+                <label for="rf-ip">IP address</label>
+                <input id="rf-ip" name="ip_address" value="{{ old('ip_address', $mikrotikRouter->ip_address) }}" required>
+            </div>
+            <div class="rf-field">
+                <label for="rf-port">Port</label>
+                <input id="rf-port" type="number" min="1" max="65535" name="api_port" value="{{ old('api_port', $mikrotikRouter->api_port) }}" required>
+                <small class="rf-hint">Binary API is usually <code>8728</code>. REST uses your custom www / www-ssl port.</small>
+            </div>
+            <div class="rf-field">
+                <label for="router-transport">Connection type</label>
+                <select id="router-transport" name="transport" required>
+                    <option value="api" @selected(old('transport', $mikrotikRouter->transport) === 'api')>Binary RouterOS API</option>
+                    <option value="rest" @selected(old('transport', $mikrotikRouter->transport) === 'rest')>REST API (www service)</option>
+                </select>
+                <small class="rf-hint">REST needs RouterOS v7 with the <code>www</code> service enabled.</small>
+            </div>
+            <div class="rf-check" id="router-rest-secure-row" style="{{ old('transport', $mikrotikRouter->transport) === 'rest' ? '' : 'display:none' }}">
+                <input type="checkbox" id="rf-rest-secure" name="rest_secure" value="1" @checked(old('rest_secure', $mikrotikRouter->rest_secure))>
+                <div>
+                    <strong><label for="rf-rest-secure" style="font-weight:700">REST uses HTTPS (www-ssl / self-signed)</label></strong>
+                    <small class="rf-hint">Tick when the router serves the REST API over TLS.</small>
+                </div>
+            </div>
         </div>
-        <span class="muted">{{ $passwordNeedsReentry ? 'Required because the saved password cannot be decrypted.' : 'Leave blank to keep current password.' }}</span>
-    </div>
-    <div>
-        <label>Status</label>
-        <select name="status" required>
-            <option value="active" @selected(old('status', $mikrotikRouter->status) === 'active')>Active</option>
-            <option value="inactive" @selected(old('status', $mikrotikRouter->status) === 'inactive')>Inactive</option>
-        </select>
-    </div>
-    <div class="full">
-        <label style="display:flex;gap:8px;align-items:center;font-weight:400">
-            <input type="checkbox" name="read_only" value="1" style="width:auto" @checked(old('read_only', $mikrotikRouter->read_only))>
-            API user is read-only (import only)
-        </label>
-        <span class="muted">Tick when the RouterOS API login can only read. Importing every secret and profile still works; the app will not push changes to this router, and its users/profiles show as &ldquo;Read-only&rdquo;.</span>
-    </div>
-    <div class="full">
-        <label>Notes</label>
-        <textarea name="notes">{{ old('notes', $mikrotikRouter->notes) }}</textarea>
-    </div>
-    <div class="full">
-        <button class="btn" type="submit">Update Router</button>
+    </section>
+
+    <section class="rf-card">
+        <div class="rf-card__head">
+            <h2>API credentials &amp; state</h2>
+            <p class="rf-card__sub">The RouterOS login the app authenticates with, and whether it is used.</p>
+        </div>
+        <div class="rf-grid">
+            <div class="rf-field">
+                <label for="router-username">API username</label>
+                <input id="router-username" name="router_api_username" value="{{ old('router_api_username', old('username', $mikrotikRouter->username)) }}" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" required>
+            </div>
+            <div class="rf-field">
+                <label for="router-password">API password</label>
+                <input id="router-password" type="password" name="router_api_password" autocomplete="new-password" @required($passwordNeedsReentry)>
+                <small class="rf-hint">{{ $passwordNeedsReentry ? 'Required — the stored password cannot be decrypted.' : 'Leave blank to keep the current password.' }}</small>
+            </div>
+            <div class="rf-field">
+                <label for="rf-status">Status</label>
+                <select id="rf-status" name="status" required>
+                    <option value="active" @selected(old('status', $mikrotikRouter->status) === 'active')>Active</option>
+                    <option value="inactive" @selected(old('status', $mikrotikRouter->status) === 'inactive')>Inactive</option>
+                </select>
+                <small class="rf-hint">Inactive routers are skipped by every scheduled sync.</small>
+            </div>
+            <div class="rf-check">
+                <input type="checkbox" id="rf-read-only" name="read_only" value="1" @checked(old('read_only', $mikrotikRouter->read_only))>
+                <div>
+                    <strong><label for="rf-read-only" style="font-weight:700">API user is read-only (import only)</label></strong>
+                    <small class="rf-hint">Importing secrets, profiles and pools still works; the app never pushes changes, and this router's users/profiles show as &ldquo;Read-only&rdquo;.</small>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="rf-card">
+        <div class="rf-card__head">
+            <h2>Sync schedule</h2>
+            <p class="rf-card__sub">How often the background jobs reconcile this router.</p>
+        </div>
+        <div class="rf-grid">
+            <div class="rf-field">
+                <label for="rf-pppoe-interval">PPPoE sync interval</label>
+                <div class="rf-input-suffix">
+                    <input id="rf-pppoe-interval" type="number" min="1" max="365" name="pppoe_sync_interval_days" value="{{ old('pppoe_sync_interval_days', $mikrotikRouter->pppoe_sync_interval_days ?? 10) }}" required>
+                    <span>days</span>
+                </div>
+                <small class="rf-hint">Full reconcile of every party's PPPoE secret &amp; profile. Default 10 days; the scheduler checks hourly whether this router is due.</small>
+            </div>
+            <div class="rf-field">
+                <label for="rf-mac-interval">Active connection MAC sync interval</label>
+                <div class="rf-input-suffix">
+                    <input id="rf-mac-interval" type="number" min="5" max="1440" name="active_mac_sync_interval_minutes" value="{{ old('active_mac_sync_interval_minutes', $mikrotikRouter->active_mac_sync_interval_minutes ?? 15) }}" required>
+                    <span>min</span>
+                </div>
+                <small class="rf-hint">Polls <code>/ppp/active</code> and copies each session's device MAC onto the matching party. Default 15 minutes.</small>
+            </div>
+            <div class="rf-field">
+                <label for="rf-inactive-profile">Inactive PPPoE profile</label>
+                <input id="rf-inactive-profile" name="inactive_pppoe_profile" value="{{ old('inactive_pppoe_profile', $mikrotikRouter->inactive_pppoe_profile) }}" required>
+                <small class="rf-hint">Suspended users are moved to this profile, not disabled.</small>
+            </div>
+        </div>
+    </section>
+
+    <section class="rf-card">
+        <div class="rf-card__head">
+            <h2>Notes</h2>
+        </div>
+        <div class="rf-grid">
+            <div class="rf-field rf-field--full">
+                <label for="rf-notes">Internal notes</label>
+                <textarea id="rf-notes" name="notes">{{ old('notes', $mikrotikRouter->notes) }}</textarea>
+            </div>
+        </div>
+    </section>
+
+    <div class="rf-actions">
+        <span class="rf-spacer">Changes take effect on the next scheduled sync.</span>
+        <a class="btn light" href="{{ route('mikrotik-routers.show', $mikrotikRouter) }}">Cancel</a>
+        <button class="btn" type="submit">Save changes</button>
     </div>
 </form>
+
 <script>
     (function () {
         const transport = document.getElementById('router-transport');

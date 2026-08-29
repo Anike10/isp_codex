@@ -92,7 +92,7 @@ Artisan::command('mikrotik:sync-router-users {--force : Sync every active router
         ->each(function (MikrotikRouter $router) use ($syncService, &$synced, &$failed): void {
             $isDue = $this->option('force')
                 || ! $router->last_pppoe_sync_at
-                || $router->last_pppoe_sync_at->addMinutes($router->pppoe_sync_interval_minutes)->lte(now());
+                || $router->last_pppoe_sync_at->addDays($router->pppoe_sync_interval_days)->lte(now());
 
             if (! $isDue) {
                 $this->line("{$router->name} ({$router->ip_address}): skipped until next interval.");

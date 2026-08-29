@@ -99,7 +99,7 @@
         <div class="form-grid">
             <div><span class="muted">API username</span><br><strong>{{ $mikrotikRouter->username }}</strong></div>
             <div><span class="muted">Password</span><br><strong>********</strong></div>
-            <div><span class="muted">PPPoE sync interval</span><br><strong>Every {{ $mikrotikRouter->pppoe_sync_interval_minutes }} minute(s)</strong></div>
+            <div><span class="muted">PPPoE sync interval</span><br><strong>Every {{ $mikrotikRouter->pppoe_sync_interval_days }} day(s)</strong></div>
             <div><span class="muted">Inactive profile</span><br><strong>{{ $mikrotikRouter->inactive_pppoe_profile }}</strong></div>
             <div><span class="muted">Last PPPoE sync</span><br><strong>{{ $mikrotikRouter->last_pppoe_sync_at?->format('d/m/Y H:i:s') ?? 'Never' }}</strong></div>
             <div><span class="muted">Active MAC sync interval</span><br><strong>Every {{ $mikrotikRouter->active_mac_sync_interval_minutes }} minute(s)</strong></div>
