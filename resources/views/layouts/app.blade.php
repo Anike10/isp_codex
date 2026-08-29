@@ -225,6 +225,7 @@
                 $canManageNetwork = collect(['packages', 'mikrotik_routers', 'ip_pools', 'network_map', 'olt_onus', 'onu_deny_list', 'onu_auto_discovery', 'olt_protocol_profiles', 'unmanaged_router_users'])->contains($canMenu);
                 $canManageBilling = collect(['parties', 'resellers', 'invoices', 'create_invoice', 'sale_returns', 'quotations', 'create_quotation', 'payment_note_default', 'organizations', 'print_history', 'payments', 'bkash_sms', 'payment_accounts', 'accounting_ledger', 'concession_reports', 'employees', 'expenses'])->contains($canMenu);
                 $canManageWarranty = collect(['warranty_claims', 'new_warranty_claim'])->contains($canMenu);
+                $canManageTroubleshoot = collect(['troubleshoot_webhook', 'troubleshoot_frequent_disconnects', 'troubleshoot_analytics'])->contains($canMenu);
                 $canManageAdmin = collect(['users', 'roles', 'database_backup'])->contains($canMenu)
                     || (bool) $currentUser?->isSuperAdmin();
                 $canManageFleet = collect(['fleet_vehicles', 'fleet_add_vehicle', 'fleet_maintenance_schedules', 'fleet_log_maintenance', 'fleet_settings', 'fleet_reports', 'fleet_expense_report', 'fleet_maintenance_report', 'fleet_due_report', 'fleet_duty_history'])->contains($canMenu)
@@ -246,7 +247,6 @@
                         @endif
                         @if ($canMenu('mikrotik_routers'))
                             <a href="{{ route('mikrotik-routers.index') }}">MikroTik Routers</a>
-                            <a href="{{ route('mikrotik-routers.ppp-webhook.edit') }}">PPP Disconnect Webhook</a>
                         @endif
                         @if ($canMenu('ip_pools') && Route::has('ip-pools.index'))
                             <a href="{{ route('ip-pools.index') }}">IP Pools</a>
@@ -269,6 +269,23 @@
                         @endif
                         @if ($canMenu('unmanaged_router_users'))
                             <a href="{{ route('router-users.index') }}">Router Users Not In App</a>
+                        @endif
+                    </div>
+                </details>
+            @endif
+
+            @if ($canManageTroubleshoot)
+                <details class="nav-group">
+                    <summary>Troubleshoot</summary>
+                    <div class="nav-menu">
+                        @if ($canMenu('troubleshoot_webhook'))
+                            <a href="{{ route('troubleshoot.webhook.edit') }}">Webhook Settings</a>
+                        @endif
+                        @if ($canMenu('troubleshoot_frequent_disconnects'))
+                            <a href="{{ route('troubleshoot.frequent-disconnects') }}">Frequent Disconnects</a>
+                        @endif
+                        @if ($canMenu('troubleshoot_analytics'))
+                            <a href="{{ route('troubleshoot.analytics') }}">Connection Analytics</a>
                         @endif
                     </div>
                 </details>

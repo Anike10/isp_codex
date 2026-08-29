@@ -3,15 +3,16 @@
 @section('content')
 <div class="topbar">
     <div>
-        <h1>PPP Disconnect Webhook</h1>
+        <h1>Troubleshoot &mdash; Webhook Settings</h1>
         <div class="muted">One shared <code>on-down</code> script on every PPP profile of every managed router. RouterOS calls it when a PPP session drops and posts the session's usage back to this app.</div>
     </div>
-    <a class="btn light" href="{{ route('mikrotik-routers.index') }}">Back to Routers</a>
 </div>
+
+@include('troubleshoot._tabs', ['active' => 'webhook'])
 
 @error('url')<div class="alert error">{{ $message }}</div>@enderror
 
-<form method="post" action="{{ route('mikrotik-routers.ppp-webhook.update') }}" class="card form-grid">
+<form method="post" action="{{ route('troubleshoot.webhook.update') }}" class="card form-grid">
     @csrf
     @method('patch')
 

@@ -20,7 +20,7 @@ class PppWebhookTest extends TestCase
     private function admin(): User
     {
         $user = User::factory()->create();
-        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+        $user->permissions()->attach(Permission::where('name', 'view_network_diagnostics')->firstOrFail());
 
         return $user;
     }
@@ -50,7 +50,7 @@ class PppWebhookTest extends TestCase
         $router = $this->restRouter('10.0.0.20');
 
         $this->actingAs($this->admin())
-            ->patch(route('mikrotik-routers.ppp-webhook.update'), [
+            ->patch(route('troubleshoot.webhook.update'), [
                 'enabled' => '1',
                 'url' => 'https://billing.example.com/api/ppp/usage',
             ])
@@ -89,7 +89,7 @@ class PppWebhookTest extends TestCase
         AppSetting::setValue(PppWebhookService::URL_KEY, 'https://billing.example.com/api/ppp/usage');
 
         $this->actingAs($this->admin())
-            ->patch(route('mikrotik-routers.ppp-webhook.update'), ['url' => 'https://billing.example.com/api/ppp/usage'])
+            ->patch(route('troubleshoot.webhook.update'), ['url' => 'https://billing.example.com/api/ppp/usage'])
             ->assertRedirect();
 
         $this->assertSame('0', AppSetting::value(PppWebhookService::ENABLED_KEY));
@@ -108,7 +108,7 @@ class PppWebhookTest extends TestCase
         $this->restRouter('10.0.0.23', ['name' => 'Switched Off', 'status' => 'inactive']);
 
         $this->actingAs($this->admin())
-            ->patch(route('mikrotik-routers.ppp-webhook.update'), [
+            ->patch(route('troubleshoot.webhook.update'), [
                 'enabled' => '1',
                 'url' => 'https://billing.example.com/api/ppp/usage',
             ])
@@ -123,18 +123,18 @@ class PppWebhookTest extends TestCase
         MikrotikRouter::query()->update(['status' => 'inactive']);
 
         $this->actingAs($this->admin())
-            ->from(route('mikrotik-routers.ppp-webhook.edit'))
-            ->patch(route('mikrotik-routers.ppp-webhook.update'), ['enabled' => '1', 'url' => ''])
-            ->assertRedirect(route('mikrotik-routers.ppp-webhook.edit'))
+            ->from(route('troubleshoot.webhook.edit'))
+            ->patch(route('troubleshoot.webhook.update'), ['enabled' => '1', 'url' => ''])
+            ->assertRedirect(route('troubleshoot.webhook.edit'))
             ->assertSessionHasErrors('url');
     }
 
-    public function test_settings_page_requires_the_mikrotik_permission(): void
+    public function test_settings_page_requires_the_network_diagnostics_permission(): void
     {
         $plain = User::factory()->create();
 
-        $this->actingAs($plain)->get(route('mikrotik-routers.ppp-webhook.edit'))->assertForbidden();
-        $this->actingAs($plain)->patch(route('mikrotik-routers.ppp-webhook.update'), ['url' => ''])->assertForbidden();
+        $this->actingAs($plain)->get(route('troubleshoot.webhook.edit'))->assertForbidden();
+        $this->actingAs($plain)->patch(route('troubleshoot.webhook.update'), ['url' => ''])->assertForbidden();
     }
 
     public function test_webhook_endpoint_stores_usage_and_links_router_and_customer(): void

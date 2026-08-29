@@ -1456,24 +1456,38 @@ PPPoE sync:
   have an imported secret keep their real password and only get the live
   `remote_address` refreshed. Imported rows then flow through the normal
   unmanaged-secret / `createPartiesFromSecrets()` path.
-- PPP disconnect webhook (`Network > PPP Disconnect Webhook`, route
-  `mikrotik-routers.ppp-webhook.edit/update`, `PppWebhookController`,
-  `PppWebhookService`, permission `manage_mikrotik_routers`). Three `AppSetting`
-  keys: `ppp_webhook_enabled` (`1`/`0`), `ppp_webhook_url`, `ppp_webhook_secret`
-  (auto-generated once). Saving calls `syncAllRouters()`: for every **active,
-  non-read-only** router it writes the SAME `on-down` value onto every
-  `/ppp/profile` — the `/tool fetch` script when enabled, `""` when disabled.
-  Skipped routers (inactive / read-only / API error) are listed in the warning
-  flash. The one script is identical for all profiles and users; RouterOS
-  session variables (`$user`, `$uptime`, `$"bytes-in"`, `$"bytes-out"`) plus the
-  baked-in router id carry the per-session values, sent as JSON strings so an
-  empty counter can't break the JSON.
+- **Troubleshoot menu** (`troubleshoot.*` routes, `permission:view_network_diagnostics`
+  — migration `2026_08_29_000003`, granted to `admin`; menu wired in
+  `config/user_access.php` group `troubleshoot` + `layouts/app.blade.php`
+  `$canManageTroubleshoot`). Three pages, shared tab bar `troubleshoot._tabs`:
+  1. **Webhook Settings** (`troubleshoot.webhook.edit/update`, `PppWebhookController`,
+     `PppWebhookService`). `AppSetting` keys `ppp_webhook_enabled` (`1`/`0`),
+     `ppp_webhook_url`, `ppp_webhook_secret` (auto-generated once). Saving calls
+     `syncAllRouters()`: every **active, non-read-only** router gets the SAME
+     `on-down` value on every `/ppp/profile` — the `/tool fetch` script when
+     enabled, `""` when disabled. Skipped routers (inactive / read-only / API
+     error) go in the warning flash. One script for all profiles/users; RouterOS
+     session vars (`$user`, `$uptime`, `$"bytes-in"`, `$"bytes-out"`) + the
+     baked-in router id carry the values, sent as JSON strings so an empty
+     counter can't break the JSON.
+  2. **Frequent Disconnects** (`troubleshoot.frequent-disconnects`,
+     `ConnectionAnalyticsController@frequentDisconnects`). Groups `ppp_usage_logs`
+     by `username`, `having count(*) >= min_count` within the last `hours`
+     (defaults 10 / 24). Optional `router` filter.
+  3. **Connection Analytics** (`troubleshoot.analytics`,
+     `ConnectionAnalyticsController@index`). One row per username seen in the log
+     with conditional-sum counts for 24h / 7d / 30d / all-time + last disconnect;
+     server-side sort via `sort` (`username|d24h|d7d|d30d|dall|last_at`) + `dir`,
+     plus `search` and `router` filters.
+  Both reports resolve `username` → party (case-insensitive `connection_id` /
+  `mikrotik_username`) for a link.
 - `POST /api/ppp/usage` (`api.ppp-usage.store`, `PppUsageWebhookController`, no
   auth middleware — guarded by the `X-PPP-Webhook-Secret` header) records each
-  disconnect in `ppp_usage_logs`: resolves `mikrotik_router_id` from the posted
-  `router_id`, links a `customer_id` by case-insensitive `connection_id` /
-  `mikrotik_username`, parses the RouterOS uptime string to `uptime_seconds`,
-  and stores the raw payload.
+  disconnect in `ppp_usage_logs` (`disconnected_at` = receipt time, plus
+  `created_at`): resolves `mikrotik_router_id` from the posted `router_id`, links
+  a `customer_id` by case-insensitive `connection_id` / `mikrotik_username`,
+  parses the RouterOS uptime string to `uptime_seconds`, and stores the raw
+  payload.
 - Party creation from imported secrets matches both `connection_id` and
   `mikrotik_username` case-insensitively, including soft-deleted rows. Repeated
   names from multiple routers link to the first live party instead of creating

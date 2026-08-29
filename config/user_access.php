@@ -21,6 +21,10 @@ return [
                     'label' => 'Unmanaged Router Users',
                     'menus' => ['Router Users Not In App (dashboard + list)'],
                 ],
+                'view_network_diagnostics' => [
+                    'label' => 'Troubleshoot / Network Diagnostics',
+                    'menus' => ['Webhook Settings', 'Frequent Disconnects', 'Connection Analytics'],
+                ],
             ],
         ],
         'billing' => [
@@ -107,6 +111,14 @@ return [
                 'onu_auto_discovery' => ['label' => 'Auto Discovery List', 'permission' => 'manage_mikrotik_routers', 'routes' => ['olt-onus.auto-discovery*']],
                 'olt_protocol_profiles' => ['label' => 'OLT Protocol/Profile', 'permission' => 'manage_mikrotik_routers', 'routes' => ['olt-onus.protocol-profiles.*']],
                 'unmanaged_router_users' => ['label' => 'Router Users Not In App', 'permission' => 'view_unmanaged_router_users', 'routes' => ['router-users.*']],
+            ],
+        ],
+        'troubleshoot' => [
+            'label' => 'Troubleshoot',
+            'items' => [
+                'troubleshoot_webhook' => ['label' => 'Webhook Settings', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.webhook.*']],
+                'troubleshoot_frequent_disconnects' => ['label' => 'Frequent Disconnects', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.frequent-disconnects']],
+                'troubleshoot_analytics' => ['label' => 'Connection Analytics', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.analytics']],
             ],
         ],
         'billing' => [

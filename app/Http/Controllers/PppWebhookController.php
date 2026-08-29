@@ -11,7 +11,7 @@ class PppWebhookController extends Controller
 
     public function edit()
     {
-        return view('mikrotik_routers.ppp_webhook', [
+        return view('troubleshoot.webhook', [
             'enabled' => $this->webhook->isEnabled(),
             'url' => $this->webhook->url(),
             'secret' => $this->webhook->secret(),
