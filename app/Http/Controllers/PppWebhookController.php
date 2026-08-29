@@ -15,6 +15,7 @@ class PppWebhookController extends Controller
             'enabled' => $this->webhook->isEnabled(),
             'url' => $this->webhook->url(),
             'secret' => $this->webhook->secret(),
+            'retentionDays' => $this->webhook->retentionDays(),
             'header' => PppWebhookService::SECRET_HEADER,
             'endpoint' => url('/api/ppp/usage'),
         ]);
@@ -25,7 +26,20 @@ class PppWebhookController extends Controller
         $data = $request->validate([
             'enabled' => ['nullable', 'boolean'],
             'url' => ['required_if:enabled,1', 'nullable', 'url', 'max:2048'],
+            'retention_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
         ]);
+
+        // "Delete old rows now" — a separate submit that does not re-push scripts.
+        if ($request->input('action') === 'prune') {
+            $this->webhook->setRetentionDays((int) ($data['retention_days'] ?? 0));
+            $removed = $this->webhook->pruneUsageLogs();
+
+            return back()->with('success', $removed > 0
+                ? "Deleted {$removed} disconnect-log row(s) older than {$this->webhook->retentionDays()} day(s)."
+                : 'Nothing to delete — no rows are older than the retention window.');
+        }
+
+        $this->webhook->setRetentionDays((int) ($data['retention_days'] ?? 0));
 
         $enabled = (bool) ($data['enabled'] ?? false);
         $summary = $this->webhook->save($enabled, (string) ($data['url'] ?? ''));

@@ -6,6 +6,7 @@ use App\Models\BkashSmsPayment;
 use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\Invoice;
+use App\Models\MikrotikRouter;
 use App\Models\Payment;
 use App\Models\Permission;
 use App\Models\Product;
@@ -243,6 +244,29 @@ class RecordVersionTest extends TestCase
             'versionable_type' => BkashSmsPayment::class,
             'versionable_id' => $smsPayment->id,
         ]);
+    }
+
+    public function test_polling_telemetry_updates_do_not_create_record_versions(): void
+    {
+        $customer = Customer::create([
+            'name' => 'Telemetry Party', 'phone' => '01799999999', 'connection_id' => 'TEL-1',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+        $router = MikrotikRouter::create([
+            'name' => 'Poll Router', 'ip_address' => '10.9.9.9', 'api_port' => 8728,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+
+        // Pure background-poll writes — must not be audited.
+        $customer->update(['last_connected_mac' => '00:11:22:33:44:55', 'last_connected_at' => now(), 'last_connected_ip' => '10.0.0.5']);
+        $router->update(['last_api_status' => 'online', 'last_checked_at' => now(), 'last_pppoe_sync_at' => now(), 'last_pppoe_sync_summary' => 'ok']);
+
+        $this->assertDatabaseMissing('record_versions', ['versionable_type' => Customer::class, 'versionable_id' => $customer->id]);
+        $this->assertDatabaseMissing('record_versions', ['versionable_type' => MikrotikRouter::class, 'versionable_id' => $router->id]);
+
+        // A real edit still records.
+        $customer->update(['name' => 'Telemetry Party Renamed']);
+        $this->assertDatabaseHas('record_versions', ['versionable_type' => Customer::class, 'versionable_id' => $customer->id]);
     }
 
     public function test_direct_invoice_model_update_is_also_recorded(): void

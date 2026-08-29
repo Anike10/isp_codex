@@ -365,6 +365,14 @@ Never commit real secrets to Markdown. Use placeholders and tell maintainers to 
 - Simple operator-editable model edits use `RecordVersionObserver` for attribute-level old/new history. Sensitive fields containing password, token, secret, or key are masked.
 - Do not attach the generic observer to high-churn generated records such as live OLT polling rows, payment allocations, customer balance transactions, stock movements, or SMS status rows unless you also suppress system/background updates. Otherwise normal refresh/accounting work can create excessive history noise.
 - Product stock-only updates are represented by stock movements and are excluded from generic record versions. Initial purchase-bill subtotal calculation is also suppressed because it is creation, not an operator edit.
+- `RecordVersionObserver::IGNORED_FIELDS` is a per-model column ignore list for
+  background-poll telemetry (`Customer.last_connected_*` / `learned_ip_*`,
+  every `MikrotikRouter.last_*` / `*_status` / `*_since`, `OltOnu.rx/tx_power_dbm`
+  + `raw_*` + `last_*`, `OltDevice.last_polled_at` / `last_error` /
+  `last_raw_output`). An update touching ONLY ignored columns writes no
+  `record_versions` row — so status polling and the mikrotik/OLT sync commands
+  stop flooding the audit table (and DB backups). An update that also changes a
+  real field still records everything.
 - Operator pages should not show raw JSON as the primary history view. `resources/views/partials/record_versions.blade.php` renders invoice old versions in a full-width invoice-like preview with a distinct history background. Do not add fake action labels such as `History Copy`, and do not place the old-version preview inside a narrow table column; it must use the full content width so the historical invoice/record is readable. Keep future history UI readable first, with raw data only as a secondary/debug option if needed.
 - Keep the shared record-version partial included on invoice details even when the history collection is empty; it provides both the empty-state explanation and the old-version controls when edits exist.
 - Detail pages paginate edit history with the `history_page` query parameter and order by descending record-version ID so same-second edits remain deterministic.
@@ -1516,6 +1524,11 @@ PPPoE sync:
   `mikrotik_username`) for a link, and `attachOnuReadings()` shows each user's
   most recent captured ONU **Rx and Tx** optical power (partial
   `troubleshoot._rx_power`, column "ONU power (Rx / Tx)").
+- Disconnect-log retention: `AppSetting` key `ppp_usage_log_retention_days`
+  (field on the Webhook Settings page; `0` = keep forever). `ppp:prune-usage-logs`
+  runs nightly (03:30) and `PppWebhookService::pruneUsageLogs()` deletes
+  `ppp_usage_logs` rows older than the window; the settings page also has a
+  "Delete old rows now" button (`action=prune`).
 - `POST /api/ppp/usage` (`api.ppp-usage.store`, `PppUsageWebhookController`, no
   auth middleware — guarded by the `X-PPP-Webhook-Secret` header) records each
   disconnect in `ppp_usage_logs` (`disconnected_at` = receipt time, plus

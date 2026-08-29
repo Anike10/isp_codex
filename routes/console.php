@@ -6,6 +6,7 @@ use App\Models\MikrotikRouter;
 use App\Models\User;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\MikrotikImportService;
+use App\Services\PppWebhookService;
 use App\Support\BillingWindow;
 use Carbon\Carbon;
 use Illuminate\Foundation\Inspiring;
@@ -187,6 +188,21 @@ Artisan::command('mikrotik:import-secrets', function (MikrotikImportService $imp
     return $summary['failed'] === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Re-pull PPPoE secrets from active routers so the "router users not in app" list stays fresh');
 
+Artisan::command('ppp:prune-usage-logs', function (PppWebhookService $webhook) {
+    $days = $webhook->retentionDays();
+
+    if ($days <= 0) {
+        $this->info('PPP disconnect-log retention is off (0 days); nothing pruned.');
+
+        return self::SUCCESS;
+    }
+
+    $removed = $webhook->pruneUsageLogs();
+    $this->info("Pruned {$removed} ppp_usage_logs row(s) older than {$days} day(s).");
+
+    return self::SUCCESS;
+})->purpose('Delete PPP disconnect-log rows older than the configured retention window');
+
 Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defaults to today} {--force : Run even outside the configured daily window}', function (MikrotikCustomerSyncService $syncService) {
     if (! $this->option('force') && ! BillingWindow::isOpenNow()) {
         $this->info('Skipped billing/service expiry disable outside the configured '.BillingWindow::label().' window. Use --force for an intentional manual run.');
@@ -289,4 +305,8 @@ Schedule::command('mikrotik:sync-active-macs')
 
 Schedule::command('mikrotik:import-secrets')
     ->everyThreeHours()
+    ->withoutOverlapping();
+
+Schedule::command('ppp:prune-usage-logs')
+    ->dailyAt('03:30')
     ->withoutOverlapping();

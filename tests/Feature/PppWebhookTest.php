@@ -131,6 +131,52 @@ class PppWebhookTest extends TestCase
             ->assertSessionHasErrors('url');
     }
 
+    public function test_saving_settings_stores_the_disconnect_log_retention_days(): void
+    {
+        MikrotikRouter::query()->update(['status' => 'inactive']);
+
+        $this->actingAs($this->admin())
+            ->patch(route('troubleshoot.webhook.update'), ['retention_days' => 45])
+            ->assertRedirect();
+
+        $this->assertSame(45, app(PppWebhookService::class)->retentionDays());
+    }
+
+    public function test_delete_old_rows_now_prunes_beyond_the_retention_window(): void
+    {
+        MikrotikRouter::query()->update(['status' => 'inactive']);
+
+        PppUsageLog::create(['username' => 'old', 'download_bytes' => 0, 'upload_bytes' => 0, 'payload' => [], 'disconnected_at' => now()->subDays(40)]);
+        PppUsageLog::create(['username' => 'recent', 'download_bytes' => 0, 'upload_bytes' => 0, 'payload' => [], 'disconnected_at' => now()->subDays(3)]);
+
+        $this->actingAs($this->admin())
+            ->patch(route('troubleshoot.webhook.update'), ['retention_days' => 7, 'action' => 'prune'])
+            ->assertRedirect()
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'Deleted 1'));
+
+        $this->assertSame(['recent'], PppUsageLog::pluck('username')->all());
+    }
+
+    public function test_prune_command_deletes_old_rows_when_retention_is_set(): void
+    {
+        AppSetting::setValue(PppWebhookService::RETENTION_KEY, '10');
+        PppUsageLog::create(['username' => 'stale', 'download_bytes' => 0, 'upload_bytes' => 0, 'payload' => [], 'disconnected_at' => now()->subDays(20)]);
+        PppUsageLog::create(['username' => 'fresh', 'download_bytes' => 0, 'upload_bytes' => 0, 'payload' => [], 'disconnected_at' => now()->subDay()]);
+
+        $this->artisan('ppp:prune-usage-logs')->assertSuccessful();
+
+        $this->assertSame(['fresh'], PppUsageLog::pluck('username')->all());
+    }
+
+    public function test_prune_command_is_a_no_op_when_retention_is_off(): void
+    {
+        PppUsageLog::create(['username' => 'kept', 'download_bytes' => 0, 'upload_bytes' => 0, 'payload' => [], 'disconnected_at' => now()->subYears(3)]);
+
+        $this->artisan('ppp:prune-usage-logs')->assertSuccessful();
+
+        $this->assertSame(1, PppUsageLog::count());
+    }
+
     public function test_settings_page_requires_the_network_diagnostics_permission(): void
     {
         $plain = User::factory()->create();

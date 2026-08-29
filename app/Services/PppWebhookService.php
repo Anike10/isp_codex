@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AppSetting;
 use App\Models\MikrotikRouter;
+use App\Models\PppUsageLog;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -20,6 +21,9 @@ class PppWebhookService
     public const URL_KEY = 'ppp_webhook_url';
 
     public const SECRET_KEY = 'ppp_webhook_secret';
+
+    /** Days to keep `ppp_usage_logs` rows; 0 = keep forever. */
+    public const RETENTION_KEY = 'ppp_usage_log_retention_days';
 
     /** Header RouterOS sends and the receiver checks. */
     public const SECRET_HEADER = 'X-PPP-Webhook-Secret';
@@ -47,6 +51,34 @@ class PppWebhookService
         }
 
         return $secret;
+    }
+
+    /** Days to keep disconnect-log rows; 0 means keep everything. */
+    public function retentionDays(): int
+    {
+        return max(0, (int) AppSetting::value(self::RETENTION_KEY, '0'));
+    }
+
+    public function setRetentionDays(int $days): void
+    {
+        AppSetting::setValue(self::RETENTION_KEY, (string) max(0, $days));
+    }
+
+    /**
+     * Delete `ppp_usage_logs` rows older than the configured retention window.
+     * Returns the number of rows removed (0 when retention is off).
+     */
+    public function pruneUsageLogs(): int
+    {
+        $days = $this->retentionDays();
+
+        if ($days <= 0) {
+            return 0;
+        }
+
+        return PppUsageLog::query()
+            ->where('disconnected_at', '<', now()->subDays($days))
+            ->delete();
     }
 
     /**

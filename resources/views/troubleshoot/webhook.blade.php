@@ -31,6 +31,15 @@
     </div>
 
     <div class="full">
+        <label>Disconnect-log retention (days)</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="number" name="retention_days" min="0" max="3650" value="{{ old('retention_days', $retentionDays) }}" style="width:120px">
+            <button class="btn light" type="submit" name="action" value="prune">Delete old rows now</button>
+        </div>
+        <span class="muted">Rows in <code>ppp_usage_logs</code> older than this are deleted automatically every night (and feed the Frequent Disconnects / MAC Changes / Connection Analytics pages). <strong>0 = keep forever.</strong></span>
+    </div>
+
+    <div class="full">
         <button class="btn" type="submit">Save &amp; push to all routers</button>
     </div>
 </form>
