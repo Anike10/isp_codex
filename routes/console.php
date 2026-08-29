@@ -4,6 +4,7 @@ use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\MikrotikRouter;
 use App\Models\User;
+use App\Services\BkashSmsRetentionService;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\MikrotikImportService;
 use App\Services\PppWebhookService;
@@ -203,6 +204,21 @@ Artisan::command('ppp:prune-usage-logs', function (PppWebhookService $webhook) {
     return self::SUCCESS;
 })->purpose('Delete PPP disconnect-log rows older than the configured retention window');
 
+Artisan::command('bkash:prune-sms', function (BkashSmsRetentionService $retention) {
+    $old = $retention->pruneOldRows();
+    $junk = $retention->junkAutoDelete() ? $retention->pruneJunkFailedRows() : 0;
+
+    if ($retention->retentionDays() <= 0 && ! $retention->junkAutoDelete()) {
+        $this->info('bKash SMS cleanup is off (retention 0 days, junk auto-delete disabled); nothing pruned.');
+
+        return self::SUCCESS;
+    }
+
+    $this->info("bKash SMS cleanup finished. Old rows removed: {$old}. Junk failed rows removed: {$junk}.");
+
+    return self::SUCCESS;
+})->purpose('Delete old bKash SMS rows and non-payment junk failed SMS per the configured settings');
+
 Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defaults to today} {--force : Run even outside the configured daily window}', function (MikrotikCustomerSyncService $syncService) {
     if (! $this->option('force') && ! BillingWindow::isOpenNow()) {
         $this->info('Skipped billing/service expiry disable outside the configured '.BillingWindow::label().' window. Use --force for an intentional manual run.');
@@ -309,4 +325,8 @@ Schedule::command('mikrotik:import-secrets')
 
 Schedule::command('ppp:prune-usage-logs')
     ->dailyAt('03:30')
+    ->withoutOverlapping();
+
+Schedule::command('bkash:prune-sms')
+    ->dailyAt('03:40')
     ->withoutOverlapping();

@@ -12,6 +12,7 @@ class BkashSmsPayment extends Model
 
     protected $fillable = [
         'entry_by',
+        'paid_by_name',
         'sms_sender',
         'raw_sms',
         'customer_number',

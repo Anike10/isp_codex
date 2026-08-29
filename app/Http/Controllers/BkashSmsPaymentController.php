@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Services\AdvanceRenewalService;
 use App\Services\BillingService;
 use App\Services\BkashSmsPaymentService;
+use App\Services\BkashSmsRetentionService;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,9 +18,14 @@ use Throwable;
 
 class BkashSmsPaymentController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, BkashSmsRetentionService $retention)
     {
         return view('bkash_sms_payments.index', [
+            'customers' => Customer::orderBy('name')->get(['id', 'name', 'connection_id', 'mikrotik_username']),
+            'retentionDays' => $retention->retentionDays(),
+            'junkAutoDelete' => $retention->junkAutoDelete(),
+            'failedCount' => BkashSmsPayment::where('status', 'failed')->count(),
+            'junkFailedCount' => BkashSmsPayment::where('status', 'failed')->whereNull('trx_id')->whereNull('amount')->count(),
             'smsPayments' => BkashSmsPayment::with(['customer', 'invoice', 'payment'])
                 ->when($request->filled('search'), function ($query) use ($request) {
                     $search = trim((string) $request->query('search'));
@@ -106,8 +112,12 @@ class BkashSmsPaymentController extends Controller
         ]);
 
         $deviceName = $this->deviceNameFrom($request->all());
+        $adminName = $request->user()?->name;
+        $redirect = fn () => $request->input('redirect_to') === 'index'
+            ? redirect()->route('bkash-sms-payments.index')
+            : redirect()->route('bkash-sms-payments.show', $bkashSmsPayment);
 
-        $prepared = DB::transaction(function () use ($bkashSmsPayment, $smsPaymentService, $data, $deviceName) {
+        $prepared = DB::transaction(function () use ($bkashSmsPayment, $smsPaymentService, $data, $deviceName, $adminName) {
             $smsPayment = BkashSmsPayment::whereKey($bkashSmsPayment->id)->lockForUpdate()->firstOrFail();
 
             if (! in_array($smsPayment->status, ['pending', 'failed'], true)) {
@@ -124,6 +134,7 @@ class BkashSmsPaymentController extends Controller
             $smsPayment->forceFill([
                 'status' => 'processing',
                 'entry_by' => $smsPayment->entry_by ?: $entryBy,
+                'paid_by_name' => $adminName ?: $smsPayment->paid_by_name,
                 'message' => 'Manual approval is processing.',
             ])->save();
 
@@ -185,7 +196,7 @@ class BkashSmsPaymentController extends Controller
                         'message' => "Manually approved and {$renewedMonths} package month(s) renewed automatically from advance balance.",
                     ]);
 
-                    return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)
+                    return $redirect()
                         ->with('success', "SMS approved and {$renewedMonths} package month(s) renewed.");
                 }
 
@@ -195,7 +206,7 @@ class BkashSmsPaymentController extends Controller
                     'message' => 'Manually approved. No due invoice found. Amount added to party balance ledger.',
                 ]);
 
-                return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)->with('success', 'SMS approved and amount added to party balance.');
+                return $redirect()->with('success', 'SMS approved and amount added to party balance.');
             }
 
             $payment = $paymentService->recordPayment($invoice, [
@@ -224,7 +235,29 @@ class BkashSmsPaymentController extends Controller
             return back()->withErrors(['sms' => 'Manual approval failed: '.$exception->getMessage()]);
         }
 
-        return redirect()->route('bkash-sms-payments.show', $bkashSmsPayment)->with('success', 'SMS approved and payment recorded.');
+        return $redirect()->with('success', 'SMS approved and payment recorded.');
+    }
+
+    public function maintenance(Request $request, BkashSmsRetentionService $retention)
+    {
+        $data = $request->validate([
+            'action' => ['required', 'in:save,prune_old,delete_failed,prune_junk'],
+            'retention_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'autodelete_junk' => ['nullable', 'boolean'],
+        ]);
+
+        // Every submit carries the current settings; persist them first.
+        $retention->setRetentionDays((int) ($data['retention_days'] ?? 0));
+        $retention->setJunkAutoDelete((bool) ($data['autodelete_junk'] ?? false));
+
+        $message = match ($data['action']) {
+            'prune_old' => 'Deleted '.$retention->pruneOldRows().' SMS row(s) older than the retention window.',
+            'delete_failed' => 'Deleted '.$retention->deleteFailedRows().' failed SMS row(s).',
+            'prune_junk' => 'Deleted '.$retention->pruneJunkFailedRows().' non-payment (junk) failed SMS row(s).',
+            default => 'Cleanup settings saved.',
+        };
+
+        return redirect()->route('bkash-sms-payments.index')->with('success', $message);
     }
 
     public function store(Request $request, BkashSmsPaymentService $smsPaymentService)
