@@ -20,6 +20,8 @@ class MikrotikRouter extends Model
         'name',
         'ip_address',
         'api_port',
+        'transport',
+        'rest_secure',
         'pppoe_sync_interval_minutes',
         'username',
         'password',
@@ -51,6 +53,7 @@ class MikrotikRouter extends Model
         return [
             'api_port' => 'integer',
             'read_only' => 'boolean',
+            'rest_secure' => 'boolean',
             'pppoe_sync_interval_minutes' => 'integer',
             'password' => 'encrypted',
             'last_api_latency_ms' => 'integer',
@@ -78,6 +81,31 @@ class MikrotikRouter extends Model
         }
 
         return $password;
+    }
+
+    /**
+     * True when this router is reached over the RouterOS v7 REST API
+     * (the "www" service) instead of the binary API. REST is import-only.
+     */
+    public function usesRestTransport(): bool
+    {
+        return $this->transport === 'rest';
+    }
+
+    /**
+     * Scheme + host + port for the REST service, e.g. "http://10.0.0.1:8181".
+     */
+    public function restBaseUrl(): string
+    {
+        return ($this->rest_secure ? 'https' : 'http').'://'.$this->ip_address.':'.$this->api_port;
+    }
+
+    /**
+     * The app must never push changes to a read-only or REST-import router.
+     */
+    public function pushDisabled(): bool
+    {
+        return (bool) $this->read_only || $this->usesRestTransport();
     }
 
     public function requiresApiPasswordReentry(): bool

@@ -6,6 +6,7 @@ use App\Models\MikrotikRouter;
 use App\Services\MikrotikImportService;
 use App\Services\RouterOsClient;
 use App\Services\RouterOsConnectionDiagnostic;
+use App\Services\RouterOsRestClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -39,6 +40,8 @@ class MikrotikRouterController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'ip_address' => ['required', 'ip', 'max:45', 'unique:mikrotik_routers,ip_address'],
             'api_port' => ['required', 'integer', 'min:1', 'max:65535'],
+            'transport' => ['nullable', Rule::in(['api', 'rest'])],
+            'rest_secure' => ['nullable', 'boolean'],
             'pppoe_sync_interval_minutes' => ['required', 'integer', 'min:60', 'max:1440', 'multiple_of:60'],
             'inactive_pppoe_profile' => ['required', 'string', 'max:255'],
             'router_api_username' => ['required', 'string', 'max:255'],
@@ -49,7 +52,10 @@ class MikrotikRouterController extends Controller
         ]);
         $data['username'] = $data['router_api_username'];
         $data['password'] = $data['router_api_password'];
-        $data['read_only'] = $request->boolean('read_only');
+        $data['transport'] = $data['transport'] ?? 'api';
+        $data['rest_secure'] = $data['transport'] === 'rest' && $request->boolean('rest_secure');
+        // REST is an import-only transport, so it is always read-only.
+        $data['read_only'] = $data['transport'] === 'rest' || $request->boolean('read_only');
         unset($data['router_api_username'], $data['router_api_password']);
 
         MikrotikRouter::create($data);
@@ -114,29 +120,42 @@ class MikrotikRouterController extends Controller
         }
 
         $startedAt = microtime(true);
-        $client = new RouterOsClient;
         $apiOnline = false;
         $apiMessage = null;
         $apiException = null;
         $apiLatency = null;
 
-        try {
-            $client->connect(
-                $mikrotikRouter->ip_address,
-                $mikrotikRouter->api_port,
-                $mikrotikRouter->username,
-                $mikrotikRouter->apiPassword(),
-                3
-            );
+        if ($mikrotikRouter->usesRestTransport()) {
+            try {
+                $probe = (new RouterOsRestClient)->probe($mikrotikRouter);
+                $apiOnline = true;
+                $apiMessage = "RouterOS REST service answered (v{$probe['version']}, {$probe['board']}).";
+            } catch (Throwable $exception) {
+                $apiException = $exception;
+            }
 
-            $apiOnline = true;
-            $apiMessage = "RouterOS accepted the saved username '{$mikrotikRouter->username}'.";
             $apiLatency = (int) round((microtime(true) - $startedAt) * 1000);
-        } catch (Throwable $exception) {
-            $apiException = $exception;
-            $apiLatency = (int) round((microtime(true) - $startedAt) * 1000);
-        } finally {
-            $client->close();
+        } else {
+            $client = new RouterOsClient;
+
+            try {
+                $client->connect(
+                    $mikrotikRouter->ip_address,
+                    $mikrotikRouter->api_port,
+                    $mikrotikRouter->username,
+                    $mikrotikRouter->apiPassword(),
+                    3
+                );
+
+                $apiOnline = true;
+                $apiMessage = "RouterOS accepted the saved username '{$mikrotikRouter->username}'.";
+                $apiLatency = (int) round((microtime(true) - $startedAt) * 1000);
+            } catch (Throwable $exception) {
+                $apiException = $exception;
+                $apiLatency = (int) round((microtime(true) - $startedAt) * 1000);
+            } finally {
+                $client->close();
+            }
         }
 
         $ping = $this->pingHost($mikrotikRouter->ip_address);
@@ -299,6 +318,8 @@ class MikrotikRouterController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'ip_address' => ['required', 'ip', 'max:45', Rule::unique('mikrotik_routers', 'ip_address')->ignore($mikrotikRouter->id)],
             'api_port' => ['required', 'integer', 'min:1', 'max:65535'],
+            'transport' => ['nullable', Rule::in(['api', 'rest'])],
+            'rest_secure' => ['nullable', 'boolean'],
             'pppoe_sync_interval_minutes' => ['required', 'integer', 'min:60', 'max:1440', 'multiple_of:60'],
             'inactive_pppoe_profile' => ['required', 'string', 'max:255'],
             'router_api_username' => ['required', 'string', 'max:255'],
@@ -311,7 +332,10 @@ class MikrotikRouterController extends Controller
         ]);
 
         $data['username'] = $data['router_api_username'];
-        $data['read_only'] = $request->boolean('read_only');
+        $data['transport'] = $data['transport'] ?? $mikrotikRouter->transport ?? 'api';
+        $data['rest_secure'] = $data['transport'] === 'rest' && $request->boolean('rest_secure');
+        // REST is an import-only transport, so it is always read-only.
+        $data['read_only'] = $data['transport'] === 'rest' || $request->boolean('read_only');
         unset($data['router_api_username']);
 
         if (blank($data['router_api_password'])) {

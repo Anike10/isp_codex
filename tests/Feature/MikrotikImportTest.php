@@ -11,8 +11,10 @@ use App\Models\Permission;
 use App\Models\User;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\MikrotikImportService;
+use App\Services\RouterOsRestClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -194,6 +196,103 @@ class MikrotikImportTest extends TestCase
         $this->actingAs($user)->get(route('mikrotik-routers.index'))
             ->assertOk()
             ->assertSee('Read-only');
+    }
+
+    public function test_router_form_saves_rest_transport_and_forces_read_only(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $this->actingAs($user)->post(route('mikrotik-routers.store'), [
+            'name' => 'REST Router', 'ip_address' => '103.133.200.177', 'api_port' => 8181,
+            'transport' => 'rest', 'rest_secure' => '1',
+            'pppoe_sync_interval_minutes' => 60, 'inactive_pppoe_profile' => 'inactive',
+            'router_api_username' => 'anike', 'router_api_password' => 'reader-pass',
+            'status' => 'active', 'notes' => null,
+        ])->assertRedirect(route('mikrotik-routers.index'));
+
+        $router = MikrotikRouter::where('ip_address', '103.133.200.177')->firstOrFail();
+        $this->assertSame('rest', $router->transport);
+        $this->assertTrue((bool) $router->rest_secure);
+        $this->assertTrue((bool) $router->read_only, 'A REST router is import-only and must be read-only.');
+        $this->assertSame('http://103.133.200.177:8181', (new MikrotikRouter([
+            'ip_address' => '103.133.200.177', 'api_port' => 8181, 'rest_secure' => false,
+        ]))->restBaseUrl());
+    }
+
+    public function test_rest_transport_router_imports_secrets_over_the_www_service(): void
+    {
+        Http::fake([
+            '10.0.0.77:8181/rest/ppp/profile' => Http::response([
+                ['.id' => '*1', 'name' => 'P1', 'rate-limit' => '10M/10M', 'disabled' => 'false'],
+            ], 200),
+            '10.0.0.77:8181/rest/ppp/secret' => Http::response([
+                ['.id' => '*1', 'name' => 'noc', 'password' => '1234', 'service' => 'any',
+                    'profile' => 'P1', 'disabled' => 'false', 'comment' => 'core user'],
+                ['.id' => '*2', 'name' => 'shop', 'password' => 'abcd', 'service' => 'pppoe',
+                    'profile' => 'P1', 'disabled' => 'true'],
+            ], 200),
+        ]);
+
+        $router = MikrotikRouter::create([
+            'name' => 'REST Router', 'ip_address' => '10.0.0.77', 'api_port' => 8181,
+            'transport' => 'rest', 'pppoe_sync_interval_minutes' => 60,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'anike', 'password' => 'reader-pass',
+            'status' => 'active', 'read_only' => true,
+        ]);
+
+        $imported = app(MikrotikImportService::class)->importSecrets($router);
+
+        $this->assertSame(2, $imported);
+        $this->assertDatabaseHas('mikrotik_imported_secrets', [
+            'mikrotik_router_id' => $router->id, 'name' => 'noc', 'profile' => 'P1', 'disabled' => false,
+        ]);
+        $this->assertDatabaseHas('mikrotik_imported_secrets', [
+            'mikrotik_router_id' => $router->id, 'name' => 'shop', 'disabled' => true,
+        ]);
+        $noc = MikrotikImportedSecret::where('mikrotik_router_id', $router->id)->where('name', 'noc')->firstOrFail();
+        $this->assertSame('1234', $noc->password);
+        $this->assertSame('core user', $noc->router_comment);
+        $this->assertDatabaseHas('mikrotik_imported_profiles', [
+            'mikrotik_router_id' => $router->id, 'name' => 'P1', 'rate_limit' => '10M/10M',
+        ]);
+
+        Http::assertSent(fn ($request) => $request->url() === 'http://10.0.0.77:8181/rest/ppp/secret'
+            && $request->hasHeader('Authorization', 'Basic '.base64_encode('anike:reader-pass')));
+    }
+
+    public function test_rest_transport_router_refuses_every_push(): void
+    {
+        Http::fake();
+
+        $router = MikrotikRouter::create([
+            'name' => 'REST Router', 'ip_address' => '10.0.0.78', 'api_port' => 8181,
+            'transport' => 'rest', 'pppoe_sync_interval_minutes' => 60,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'anike', 'password' => 'reader-pass',
+            'status' => 'active', 'read_only' => true,
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('read-only REST import');
+
+        app(MikrotikImportService::class)->write($router, '/ppp/profile/add', ['name' => 'inactive']);
+    }
+
+    public function test_rest_client_reports_a_clear_error_when_credentials_are_rejected(): void
+    {
+        Http::fake(['10.0.0.79:8181/rest/*' => Http::response('unauthorized', 401)]);
+
+        $router = MikrotikRouter::create([
+            'name' => 'REST Router', 'ip_address' => '10.0.0.79', 'api_port' => 8181,
+            'transport' => 'rest', 'pppoe_sync_interval_minutes' => 60,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'anike', 'password' => 'bad-pass',
+            'status' => 'active', 'read_only' => true,
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage("RouterOS rejected the REST user 'anike'");
+
+        (new RouterOsRestClient)->records($router, '/ppp/secret/print');
     }
 
     public function test_router_edit_ignores_browser_login_autofill_fields(): void

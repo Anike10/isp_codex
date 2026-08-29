@@ -5,7 +5,7 @@
 <div class="topbar">
     <div>
         <h1>{{ $mikrotikRouter->name }}</h1>
-        <div class="muted">{{ $mikrotikRouter->ip_address }}:{{ $mikrotikRouter->api_port }} · RouterOS API target</div>
+        <div class="muted">{{ $mikrotikRouter->ip_address }}:{{ $mikrotikRouter->api_port }} · {{ $mikrotikRouter->usesRestTransport() ? 'RouterOS REST (www) — import only' : 'RouterOS API target' }}</div>
     </div>
     <div class="actions">
         <a class="btn secondary" href="{{ route('mikrotik-routers.edit', $mikrotikRouter) }}">Edit Router</a>
@@ -16,7 +16,14 @@
 @if ($mikrotikRouter->read_only)
     <div class="alert" style="border:1px solid var(--line); background:#f4f7fb; margin-bottom:16px">
         <strong>Read-only router.</strong>
-        <div class="muted" style="margin-top:4px">The saved API user can only read this MikroTik. You can import every PPPoE user, profile and IP pool below, but push actions (create inactive profile, export profile, scheduled sync) will not take effect until a read-write API user is set.</div>
+        <div class="muted" style="margin-top:4px">
+            @if ($mikrotikRouter->usesRestTransport())
+                This MikroTik is reached over the RouterOS REST (<code>www</code>) service, which this app only reads.
+            @else
+                The saved API user can only read this MikroTik.
+            @endif
+            You can import every PPPoE user, profile and IP pool below, but push actions (create inactive profile, export profile, scheduled sync) will not take effect until a read-write binary-API user is set.
+        </div>
     </div>
 @endif
 

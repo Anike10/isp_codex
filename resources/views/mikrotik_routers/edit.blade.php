@@ -32,8 +32,23 @@
         <input name="ip_address" value="{{ old('ip_address', $mikrotikRouter->ip_address) }}" required>
     </div>
     <div>
-        <label>API Port</label>
+        <label>Port</label>
         <input type="number" min="1" max="65535" name="api_port" value="{{ old('api_port', $mikrotikRouter->api_port) }}" required>
+        <span class="muted">Binary API: usually 8728. REST (www): your custom www/www-ssl port.</span>
+    </div>
+    <div>
+        <label>Connection Type</label>
+        <select name="transport" id="router-transport" required>
+            <option value="api" @selected(old('transport', $mikrotikRouter->transport) === 'api')>Binary RouterOS API</option>
+            <option value="rest" @selected(old('transport', $mikrotikRouter->transport) === 'rest')>REST API (www service) — import only</option>
+        </select>
+        <span class="muted">REST needs RouterOS v7 with the <code>www</code> (or <code>www-ssl</code>) service enabled. REST routers are always read-only.</span>
+    </div>
+    <div id="router-rest-secure-row" style="{{ old('transport', $mikrotikRouter->transport) === 'rest' ? '' : 'display:none' }}">
+        <label style="display:flex;gap:8px;align-items:center;font-weight:400">
+            <input type="checkbox" name="rest_secure" value="1" style="width:auto" @checked(old('rest_secure', $mikrotikRouter->rest_secure))>
+            REST uses HTTPS (www-ssl / self-signed)
+        </label>
     </div>
     <div>
         <label>PPPoE Sync Interval Minutes</label>
@@ -81,4 +96,14 @@
         <button class="btn" type="submit">Update Router</button>
     </div>
 </form>
+<script>
+    (function () {
+        const transport = document.getElementById('router-transport');
+        const secureRow = document.getElementById('router-rest-secure-row');
+        if (!transport || !secureRow) return;
+        transport.addEventListener('change', function () {
+            secureRow.style.display = transport.value === 'rest' ? '' : 'none';
+        });
+    })();
+</script>
 @endsection
