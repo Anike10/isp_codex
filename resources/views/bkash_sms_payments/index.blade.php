@@ -59,12 +59,17 @@
 
 @include('partials.per_page')
 
+@php
+    $partyLabel = fn ($p) => trim($p->name
+        .($p->mikrotik_username ? ' · '.$p->mikrotik_username : '')
+        .($p->connection_id ? ' ('.$p->connection_id.')' : ''));
+@endphp
 <datalist id="bkashPartyList">
     @foreach ($customers as $party)
-        <option value="{{ $party->name }}@if ($party->connection_id) ({{ $party->connection_id }})@endif"></option>
+        <option value="{{ $partyLabel($party) }}"></option>
     @endforeach
 </datalist>
-<script>window.bkashParties = @json($customers->map(fn ($p) => ['id' => $p->id, 'label' => $p->name.($p->connection_id ? ' ('.$p->connection_id.')' : '')])->values());</script>
+<script>window.bkashParties = @json($customers->map(fn ($p) => ['id' => $p->id, 'label' => $partyLabel($p)])->values());</script>
 
 <table>
     <thead>
@@ -90,17 +95,19 @@
             <tr data-href="{{ route('bkash-sms-payments.show', $smsPayment) }}">
                 <td>{{ $smsPayment->created_at->format('d/m/Y H:i') }}</td>
                 <td><span class="badge {{ $smsPayment->status }}">{{ $smsPayment->status }}</span></td>
-                <td>
-                    @if ($canPay)
-                        <form method="post" action="{{ route('bkash-sms-payments.approve', $smsPayment) }}" class="bkash-pay-form" data-confirm="Record Tk {{ number_format($smsPayment->amount, 2) }} (TrxID {{ $smsPayment->trx_id }}) for the selected party?" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
-                            @csrf
-                            <input type="hidden" name="redirect_to" value="index">
-                            <input type="hidden" name="customer_id" class="bkash-party-id">
-                            <input type="search" list="bkashPartyList" class="bkash-party-search" placeholder="Search party&hellip;" autocomplete="off" required style="width:190px">
-                            <button class="btn secondary" type="submit">Pay</button>
-                        </form>
-                    @endif
-                    <a class="btn light" href="{{ route('bkash-sms-payments.show', $smsPayment) }}">Details</a>
+                <td style="white-space:nowrap">
+                    <span style="display:inline-flex;gap:6px;align-items:center">
+                        @if ($canPay)
+                            <form method="post" action="{{ route('bkash-sms-payments.approve', $smsPayment) }}" class="bkash-pay-form" data-confirm="Record Tk {{ number_format($smsPayment->amount, 2) }} (TrxID {{ $smsPayment->trx_id }}) for the selected party?" style="display:inline-flex;gap:6px;align-items:center">
+                                @csrf
+                                <input type="hidden" name="redirect_to" value="index">
+                                <input type="hidden" name="customer_id" class="bkash-party-id">
+                                <input type="search" list="bkashPartyList" class="bkash-party-search" placeholder="Search party&hellip;" autocomplete="off" required style="width:190px">
+                                <button class="btn secondary" type="submit">Pay</button>
+                            </form>
+                        @endif
+                        <a class="btn light" href="{{ route('bkash-sms-payments.show', $smsPayment) }}">Details</a>
+                    </span>
                 </td>
                 <td>{{ $smsPayment->trx_id ?? 'N/A' }}</td>
                 <td>{{ $smsPayment->reference ?? 'N/A' }}</td>
