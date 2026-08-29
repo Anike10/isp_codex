@@ -106,7 +106,10 @@
     <div class="full actions">
         <button class="btn secondary" type="submit">Search</button>
         <a class="btn light" href="{{ route('payment-accounts.show', $paymentAccount) }}">Reset</a>
-        @if ($hasFilters)
+        <a class="btn light" href="{{ route('payment-accounts.show', [$paymentAccount, 'from' => '2000-01-01']) }}">All time</a>
+        @if (! empty($defaultWindow))
+            <span class="muted">Showing the last month by default (since {{ \Illuminate\Support\Carbon::parse(request('from'))->format('d/m/Y') }}). Pick a From Date or use “All time” for the full history.</span>
+        @elseif ($hasFilters)
             <span class="muted">{{ $filteredTransactions }} matched, {{ number_format($filteredCollected, 2) }} collected, {{ number_format($filteredSpent, 2) }} spent.</span>
         @endif
     </div>
@@ -141,7 +144,12 @@
                 $runningBalance += (float) $row['signed_amount'];
             @endphp
             <tr>
-                <td>{{ $row['date']?->format('d/m/Y') }}</td>
+                <td>
+                    {{ $row['date']?->format('d/m/Y') }}
+                    @if ($row['entered_at'])
+                        <div class="muted">{{ $row['entered_at']->format('h:i A') }}</div>
+                    @endif
+                </td>
                 <td>
                     @if ($row['type'] === 'payment')
                         @if ($row['invoice_id'] && $canOpenInvoices)

@@ -85,6 +85,15 @@ class PaymentAccountController extends Controller
 
     public function show(Request $request, PaymentAccount $paymentAccount)
     {
+        // With no date filter the ledger defaults to the last month so the
+        // first page is recent activity rather than years of history. Merging
+        // it into the (GET) request makes every downstream filter, the prior-
+        // balance maths, and the pagination links pick it up unchanged.
+        $defaultWindow = ! $request->filled('from') && ! $request->filled('to');
+        if ($defaultWindow) {
+            $request->merge(['from' => now()->subMonthNoOverflow()->toDateString()]);
+        }
+
         $paymentQuery = $this->filteredPaymentQuery(
             Payment::query()->where('payment_account_id', $paymentAccount->id),
             $request
@@ -135,7 +144,7 @@ class PaymentAccountController extends Controller
         $totalSpent = $paymentAccount->expenses()->sum('amount');
         $totalDeposited = $paymentAccount->deposits()->sum('amount');
 
-        return view('payment_accounts.show', compact('paymentAccount', 'ledgerRows', 'totalCollected', 'totalSpent', 'totalDeposited', 'filteredCollected', 'filteredSpent', 'filteredDeposited', 'filteredTransactions', 'runningBalance'));
+        return view('payment_accounts.show', compact('paymentAccount', 'ledgerRows', 'totalCollected', 'totalSpent', 'totalDeposited', 'filteredCollected', 'filteredSpent', 'filteredDeposited', 'filteredTransactions', 'runningBalance', 'defaultWindow'));
     }
 
     public function cashLedger(Request $request)
@@ -418,8 +427,9 @@ class PaymentAccountController extends Controller
         $orderedRows = DB::query()
             ->fromSub($this->ledgerQuery($paymentQuery, $expenseQuery, $advanceQuery, $depositQuery), 'ledger_rows')
             ->orderBy('ledger_date')
-            ->orderBy('row_id')
-            ->orderBy('sort_type');
+            ->orderBy('ledger_created_at')
+            ->orderBy('sort_type')
+            ->orderBy('row_id');
 
         $total = (clone $orderedRows)->count();
         $priorPageBalance = 0.0;
@@ -453,6 +463,7 @@ class PaymentAccountController extends Controller
                 return [
                     'type' => $type,
                     'date' => $row->ledger_date ? Carbon::parse($row->ledger_date) : null,
+                    'entered_at' => $row->ledger_created_at ? Carbon::parse($row->ledger_created_at) : null,
                     'invoice_id' => $row->invoice_id ? (int) $row->invoice_id : null,
                     'invoice_no' => $row->invoice_no,
                     'party' => $type !== 'expense'
@@ -487,6 +498,7 @@ class PaymentAccountController extends Controller
             ->selectRaw("'payment' as row_type")
             ->selectRaw('payments.id as row_id')
             ->selectRaw('payments.payment_date as ledger_date')
+            ->selectRaw('payments.created_at as ledger_created_at')
             ->selectRaw('0 as sort_type')
             ->selectRaw('payments.invoice_id as invoice_id')
             ->selectRaw('invoices.invoice_no as invoice_no')
@@ -503,6 +515,7 @@ class PaymentAccountController extends Controller
             ->selectRaw("'expense' as row_type")
             ->selectRaw('expenses.id as row_id')
             ->selectRaw('expenses.expense_date as ledger_date')
+            ->selectRaw('expenses.created_at as ledger_created_at')
             ->selectRaw('1 as sort_type')
             ->selectRaw('NULL as invoice_id')
             ->selectRaw('NULL as invoice_no')
@@ -520,6 +533,7 @@ class PaymentAccountController extends Controller
             ->selectRaw("'advance' as row_type")
             ->selectRaw('customer_balance_transactions.id as row_id')
             ->selectRaw('customer_balance_transactions.transaction_date as ledger_date')
+            ->selectRaw('customer_balance_transactions.created_at as ledger_created_at')
             ->selectRaw('2 as sort_type')
             ->selectRaw('NULL as invoice_id')
             ->selectRaw('NULL as invoice_no')
@@ -539,6 +553,7 @@ class PaymentAccountController extends Controller
                 ->selectRaw("'deposit' as row_type")
                 ->selectRaw('account_deposits.id as row_id')
                 ->selectRaw('account_deposits.deposited_at as ledger_date')
+                ->selectRaw('account_deposits.created_at as ledger_created_at')
                 ->selectRaw('3 as sort_type')
                 ->selectRaw('NULL as invoice_id')
                 ->selectRaw('NULL as invoice_no')

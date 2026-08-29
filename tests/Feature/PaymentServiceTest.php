@@ -6,10 +6,12 @@ use App\Models\Customer;
 use App\Models\Expense;
 use App\Models\InternetPackage;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\PaymentAccount;
 use App\Models\Permission;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\ConcessionLogService;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -353,11 +355,12 @@ class PaymentServiceTest extends TestCase
         $this->actingAs($user)
             ->get(route('payment-accounts.show', [
                 'payment_account' => $account,
+                'from' => '2026-01-01',
                 'per_page' => 25,
                 'page' => 2,
             ]))
             ->assertOk()
-            ->assertSee('Before Page')
+            ->assertSee('Before Filter')
             ->assertSee('350.00')
             ->assertSee('360.00');
     }
@@ -399,11 +402,12 @@ class PaymentServiceTest extends TestCase
         $this->actingAs($user)
             ->get(route('payment-accounts.show', [
                 'payment_account' => $account,
+                'from' => '2026-01-01',
                 'per_page' => 25,
                 'page' => 2,
             ]))
             ->assertOk()
-            ->assertSee('Before Page')
+            ->assertSee('Before Filter')
             ->assertSee('182.00')
             ->assertSee('178.00')
             ->assertSee('Mixed ledger expense 13');
@@ -441,7 +445,7 @@ class PaymentServiceTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->get(route('payment-accounts.show', $account))
+            ->get(route('payment-accounts.show', ['payment_account' => $account, 'from' => '2026-01-01']))
             ->assertOk()
             ->assertSee('Debit')
             ->assertSee('Office rent paid.')
@@ -480,6 +484,50 @@ class PaymentServiceTest extends TestCase
             ->assertSee('375.00');
     }
 
+    public function test_payment_account_ledger_defaults_to_last_month_and_orders_same_day_rows_by_entry_time(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_payment_accounts')->firstOrFail());
+        $customer = $this->createCustomer();
+        $account = PaymentAccount::create([
+            'payment_method' => 'bkash', 'account_name' => 'Office bKash',
+            'account_number' => '01800000000', 'opening_balance' => 0, 'status' => 'active',
+        ]);
+
+        // Old row: 3 months back — outside the default 1-month window.
+        $old = $this->createInvoice($customer, '2026-05', 111, '2026-05-10');
+        $this->paymentService()->recordPaymentForInvoices($customer, [$old->id], [
+            'amount' => 111, 'payment_method' => 'bkash', 'payment_account_id' => $account->id,
+            'payment_date' => '2026-05-20', 'note' => 'OLD-WINDOW-ROW',
+        ]);
+
+        // Two payments on the SAME recent day, entered in a known order.
+        $today = now()->toDateString();
+        foreach (['ENTRY-ALPHA' => 5, 'ENTRY-BETA' => 6] as $note => $amount) {
+            $inv = $this->createInvoice($customer, '2026-08', $amount, '2026-08-10');
+            $this->paymentService()->recordPaymentForInvoices($customer, [$inv->id], [
+                'amount' => $amount, 'payment_method' => 'bkash', 'payment_account_id' => $account->id,
+                'payment_date' => $today, 'note' => $note,
+            ]);
+        }
+        Payment::where('note', 'ENTRY-ALPHA')->update(['created_at' => now()->subMinutes(10)]);
+        Payment::where('note', 'ENTRY-BETA')->update(['created_at' => now()->subMinutes(2)]);
+
+        // Default view: last month only, and ALPHA (entered first) is above BETA.
+        $default = $this->actingAs($user)->get(route('payment-accounts.show', $account))->assertOk();
+        $default->assertSee('last month by default');
+        $default->assertDontSee('OLD-WINDOW-ROW');
+        $default->assertSee('ENTRY-ALPHA');
+        $html = $default->getContent();
+        $this->assertLessThan(strpos($html, 'ENTRY-BETA'), strpos($html, 'ENTRY-ALPHA'));
+
+        // All-time link shows the older row.
+        $this->actingAs($user)
+            ->get(route('payment-accounts.show', ['payment_account' => $account, 'from' => '2000-01-01']))
+            ->assertOk()
+            ->assertSee('OLD-WINDOW-ROW');
+    }
+
     public function test_payment_account_ledger_and_index_include_direct_advance_receipts(): void
     {
         $user = User::factory()->create();
@@ -503,7 +551,7 @@ class PaymentServiceTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->get(route('payment-accounts.show', $account))
+            ->get(route('payment-accounts.show', ['payment_account' => $account, 'from' => '2026-01-01']))
             ->assertOk()
             ->assertSee('Advance')
             ->assertSee('Direct advance collection.')
@@ -520,6 +568,7 @@ class PaymentServiceTest extends TestCase
         $this->actingAs($user)
             ->get(route('payment-accounts.show', [
                 'payment_account' => $account,
+                'from' => '2026-01-01',
                 'search' => 'ADV-LEDGER-001',
             ]))
             ->assertOk()
@@ -951,7 +1000,7 @@ class PaymentServiceTest extends TestCase
     {
         return new PaymentService(
             $this->createMock(MikrotikCustomerSyncService::class),
-            app(\App\Services\ConcessionLogService::class),
+            app(ConcessionLogService::class),
         );
     }
 
