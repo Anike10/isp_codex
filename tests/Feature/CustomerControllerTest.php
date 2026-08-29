@@ -138,6 +138,24 @@ class CustomerControllerTest extends TestCase
         $this->assertSame('01820202020', $customer->phone);
     }
 
+    public function test_balance_cell_links_to_the_party_ledger(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Ledger Link Party',
+            'phone' => '01710101012',
+            'connection_id' => 'LEDGER-1',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+
+        $this->actingAs($user)->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee(route('accounting.ledger', ['customer_id' => $customer->id]), false);
+    }
+
     public function test_party_note_is_inline_editable_and_shown_on_both_party_lists(): void
     {
         $user = User::factory()->create();

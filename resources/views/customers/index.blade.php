@@ -403,7 +403,13 @@
                 @endif
             </td>
             <td class="col-center">
-                <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span>
+                @if ($showDeletedCustomers)
+                    <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span>
+                @else
+                    <a href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}" title="Open this party's ledger">
+                        <span class="badge {{ $netBalance < 0 ? 'due' : 'active' }}">{{ number_format($netBalance, 2) }}</span>
+                    </a>
+                @endif
             </td>
             <td class="col-center">
                 @if ($showDeletedCustomers)
