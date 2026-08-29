@@ -77,6 +77,7 @@
             <th>Number</th>
             <th>Party</th>
             <th>Invoice</th>
+            <th>Device</th>
             <th>Paid by</th>
             <th>Updated</th>
             <th>Message</th>
@@ -115,7 +116,8 @@
                         N/A
                     @endif
                 </td>
-                <td>{{ $smsPayment->paid_by_name ?? ($smsPayment->entry_by ?? '—') }}</td>
+                <td>{{ $smsPayment->entry_by ?: '—' }}</td>
+                <td>{{ $smsPayment->paid_by_name ?: '—' }}</td>
                 <td>{{ $smsPayment->updated_at->format('d/m/Y H:i') }}</td>
                 <td>{{ $smsPayment->message ?? 'N/A' }}</td>
                 <td>
@@ -133,7 +135,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="12">No bKash SMS payments received yet.</td>
+                <td colspan="13">No bKash SMS payments received yet.</td>
             </tr>
         @endforelse
     </tbody>

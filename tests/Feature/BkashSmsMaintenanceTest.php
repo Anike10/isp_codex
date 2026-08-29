@@ -145,13 +145,15 @@ class BkashSmsMaintenanceTest extends TestCase
             'name' => 'Some Party', 'phone' => '01711111111', 'connection_id' => 'KPS-9',
             'address' => 'Kushtia', 'status' => 'active',
         ]);
-        $this->sms(['trx_id' => 'PAY1', 'ledger_trx_id' => 'PAY1', 'status' => 'pending']);
+        $this->sms(['trx_id' => 'PAY1', 'ledger_trx_id' => 'PAY1', 'status' => 'pending', 'entry_by' => 'Counter Redmi Phone']);
         $this->sms(['trx_id' => 'DONE1', 'ledger_trx_id' => 'DONE1', 'status' => 'processed', 'paid_by_name' => 'Karim Operator']);
 
         $this->actingAs($admin)->get(route('bkash-sms-payments.index'))
             ->assertOk()
             ->assertSee('bkash-party-select', false)
             ->assertSee('Auto-delete junk failed SMS', false)
+            ->assertSee('<th>Device</th>', false)
+            ->assertSee('Counter Redmi Phone')
             ->assertSee('Karim Operator')
             ->assertSee(route('bkash-sms-payments.approve', 1), false);
     }
