@@ -95,19 +95,24 @@
             <tr data-href="{{ route('bkash-sms-payments.show', $smsPayment) }}">
                 <td>{{ $smsPayment->created_at->format('d/m/Y H:i') }}</td>
                 <td><span class="badge {{ $smsPayment->status }}">{{ $smsPayment->status_label }}</span></td>
-                <td style="white-space:nowrap">
-                    <span style="display:inline-flex;gap:6px;align-items:center">
-                        @if ($canPay)
-                            <form method="post" action="{{ route('bkash-sms-payments.approve', $smsPayment) }}" class="bkash-pay-form" data-confirm="Record Tk {{ number_format($smsPayment->amount, 2) }} (TrxID {{ $smsPayment->trx_id }}) for the selected party?" style="display:inline-flex;gap:6px;align-items:center">
-                                @csrf
-                                <input type="hidden" name="redirect_to" value="index">
-                                <input type="hidden" name="customer_id" class="bkash-party-id">
-                                <input type="search" list="bkashPartyList" class="bkash-party-search" placeholder="Search party&hellip;" autocomplete="off" required style="width:190px">
+                <td style="min-width:220px">
+                    @if ($canPay)
+                        <form method="post" action="{{ route('bkash-sms-payments.approve', $smsPayment) }}" class="bkash-pay-form" data-confirm="Record Tk {{ number_format($smsPayment->amount, 2) }} (TrxID {{ $smsPayment->trx_id }}) for the selected party?">
+                            @csrf
+                            <input type="hidden" name="redirect_to" value="index">
+                            <input type="hidden" name="customer_id" class="bkash-party-id" value="{{ $smsPayment->customer_id }}">
+                            <input type="search" list="bkashPartyList" class="bkash-party-search"
+                                value="{{ $smsPayment->customer ? $partyLabel($smsPayment->customer) : '' }}"
+                                placeholder="Search party&hellip;" autocomplete="off" required
+                                style="display:block;width:100%;margin-bottom:6px">
+                            <span style="display:inline-flex;gap:6px;align-items:center">
                                 <button class="btn secondary" type="submit">Pay</button>
-                            </form>
-                        @endif
+                                <a class="btn light" href="{{ route('bkash-sms-payments.show', $smsPayment) }}">Details</a>
+                            </span>
+                        </form>
+                    @else
                         <a class="btn light" href="{{ route('bkash-sms-payments.show', $smsPayment) }}">Details</a>
-                    </span>
+                    @endif
                 </td>
                 <td>{{ $smsPayment->trx_id ?? 'N/A' }}</td>
                 <td>{{ $smsPayment->reference ?? 'N/A' }}</td>

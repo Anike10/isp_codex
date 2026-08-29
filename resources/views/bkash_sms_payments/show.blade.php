@@ -17,34 +17,58 @@
 </div>
 
 @if (in_array($bkashSmsPayment->status, ['pending', 'failed'], true))
-    <form method="post" action="{{ route('bkash-sms-payments.approve', $bkashSmsPayment) }}" class="card form-grid" style="margin-bottom:16px">
+    @php
+        $approvalCandidates = $manualCandidates->isNotEmpty() ? $manualCandidates : $customers;
+        $partyLabel = fn ($p) => trim($p->name
+            .($p->mikrotik_username ? ' · '.$p->mikrotik_username : '')
+            .($p->connection_id ? ' ('.$p->connection_id.')' : '')
+            .' — '.$p->phone);
+    @endphp
+    <form method="post" action="{{ route('bkash-sms-payments.approve', $bkashSmsPayment) }}" class="card" style="margin-bottom:16px" id="approveForm">
         @csrf
-        @php
-            $approvalCandidates = $manualCandidates->isNotEmpty() ? $manualCandidates : $customers;
-        @endphp
-        <div class="full">
-            <label>Manual Match Party</label>
-            @if ($manualCandidates->isNotEmpty())
-                <p class="muted" style="margin:0 0 8px 2px;">{{ $matchMessageHint ?? 'Multiple parties match this sender number. Please choose one.' }}</p>
-            @else
-                <p class="muted" style="margin:0 0 8px 2px;">{{ $matchMessageHint ?? 'Select the correct party to map this SMS.' }}</p>
-            @endif
-            <select name="customer_id" required>
-                <option value="">{{ $manualCandidates->isNotEmpty() ? 'Choose party from matched numbers' : 'Select party' }}</option>
-                @foreach ($approvalCandidates as $customer)
-                    <option value="{{ $customer->id }}">
-                        {{ $customer->name }} - {{ $customer->phone }} - {{ $customer->mikrotik_username ?? $customer->connection_id }}
-                        @if ($customer->is_customer || $customer->is_vendor)
-                            - {{ collect([$customer->is_customer ? 'Customer' : null, $customer->is_vendor ? 'Vendor' : null])->filter()->implode(' + ') }}
-                        @endif
-                    </option>
-                @endforeach
-            </select>
-        </div>
-        <div class="full">
-            <button class="btn" type="submit">Approve and Record Payment</button>
-        </div>
+        <label>Manual Match Party</label>
+        <p class="muted" style="margin:0 0 8px 2px;">
+            {{ $matchMessageHint ?? ($manualCandidates->isNotEmpty() ? 'Multiple parties match this sender number. Please choose one.' : 'Select the correct party to map this SMS.') }}
+        </p>
+        <datalist id="approvePartyList">
+            @foreach ($approvalCandidates as $customer)
+                <option value="{{ $partyLabel($customer) }}"></option>
+            @endforeach
+        </datalist>
+        <input type="hidden" name="customer_id" id="approvePartyId" value="{{ $bkashSmsPayment->customer_id }}">
+        <input type="search" list="approvePartyList" id="approvePartySearch"
+            value="{{ $bkashSmsPayment->customer ? $partyLabel($bkashSmsPayment->customer) : '' }}"
+            placeholder="Search party by name, username, connection ID or phone&hellip;" autocomplete="off" required
+            style="display:block;width:100%;max-width:560px;margin:0 0 10px">
+        <button class="btn" type="submit">Approve and Record Payment</button>
     </form>
+    <script>
+    (function () {
+        var byLabel = @json($approvalCandidates->mapWithKeys(fn ($c) => [$partyLabel($c) => $c->id]));
+        var search = document.getElementById('approvePartySearch');
+        var hidden = document.getElementById('approvePartyId');
+
+        function resolve() {
+            var key = search.value.trim();
+            hidden.value = byLabel[key] || '';
+            if (! hidden.value && key) {
+                var hits = Object.keys(byLabel).filter(function (k) { return k.toLowerCase().indexOf(key.toLowerCase()) === 0; });
+                if (hits.length === 1) hidden.value = byLabel[hits[0]];
+            }
+        }
+
+        search.addEventListener('input', resolve);
+        search.addEventListener('change', resolve);
+        document.getElementById('approveForm').addEventListener('submit', function (event) {
+            resolve();
+            if (! hidden.value) {
+                event.preventDefault();
+                search.focus();
+                alert('Pick a party from the list first.');
+            }
+        });
+    })();
+    </script>
 @endif
 
 <div class="grid two">

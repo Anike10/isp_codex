@@ -176,6 +176,24 @@ class BkashSmsMaintenanceTest extends TestCase
             ->assertOk()->assertSee('MAN1')->assertDontSee('AUTO1');
     }
 
+    public function test_detail_page_uses_a_searchable_party_input_prefilled_when_linked(): void
+    {
+        $admin = $this->admin();
+        $party = Customer::create([
+            'name' => 'Linked Party', 'phone' => '01722222222', 'connection_id' => 'KPS-7',
+            'mikrotik_username' => 'kps7', 'address' => 'Kushtia', 'status' => 'active',
+        ]);
+        $sms = $this->sms(['trx_id' => 'LNK1', 'ledger_trx_id' => 'LNK1', 'status' => 'failed', 'customer_id' => $party->id]);
+
+        $this->actingAs($admin)->get(route('bkash-sms-payments.show', $sms))
+            ->assertOk()
+            ->assertSee('<datalist id="approvePartyList">', false)
+            ->assertSee('id="approvePartySearch"', false)
+            ->assertSee('value="Linked Party', false)
+            ->assertSee('kps7 (KPS-7)', false)
+            ->assertDontSee('<select name="customer_id"', false);
+    }
+
     public function test_maintenance_requires_the_manage_payments_permission(): void
     {
         $this->actingAs(User::factory()->create())
