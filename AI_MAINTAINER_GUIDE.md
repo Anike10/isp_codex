@@ -1430,6 +1430,15 @@ PPPoE sync:
   match, an app party connection ID or MikroTik username. Selected rows can be
   imported as parties through `RouterUserController` and
   `MikrotikImportService::createPartiesFromSecrets()`.
+- `MikrotikImportService::importActiveUsers($router, $password)` (route
+  `mikrotik-routers.import.active-users`, "Import Active Users" on the router and
+  imported-secrets pages) pulls every user from `/ppp/active` into
+  `mikrotik_imported_secrets`. Connected users that have no `/ppp/secret` row are
+  stored with the operator-supplied shared password and an `active-<id>`
+  `routeros_id` (a separate namespace from secret `.id`s); users that already
+  have an imported secret keep their real password and only get the live
+  `remote_address` refreshed. Imported rows then flow through the normal
+  unmanaged-secret / `createPartiesFromSecrets()` path.
 - Party creation from imported secrets matches both `connection_id` and
   `mikrotik_username` case-insensitively, including soft-deleted rows. Repeated
   names from multiple routers link to the first live party instead of creating

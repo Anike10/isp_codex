@@ -45,6 +45,22 @@ class MikrotikImportController extends Controller
             ->with('success', "Imported {$count} PPPoE secrets from {$mikrotikRouter->name}.");
     }
 
+    public function importActiveUsers(Request $request, MikrotikRouter $mikrotikRouter, MikrotikImportService $service)
+    {
+        $data = $request->validate([
+            'active_password' => ['required', 'string', 'min:1', 'max:255'],
+        ]);
+
+        $count = $service->importActiveUsers($mikrotikRouter, $data['active_password']);
+
+        if ($request->boolean('return_to_compare')) {
+            return back()->with('success', "Imported {$count} active PPPoE connections from {$mikrotikRouter->name}.");
+        }
+
+        return redirect()->route('mikrotik-routers.imported-secrets.index', $mikrotikRouter)
+            ->with('success', "Imported {$count} active PPPoE connections from {$mikrotikRouter->name}. Users without a real secret got the shared password.");
+    }
+
     public function secrets(Request $request, MikrotikRouter $mikrotikRouter)
     {
         $sessionKey = 'per_page_default.mikrotik-imported-secrets';

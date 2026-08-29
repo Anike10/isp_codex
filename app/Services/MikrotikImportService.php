@@ -176,6 +176,74 @@ class MikrotikImportService
     }
 
     /**
+     * Import every currently connected PPP user from `/ppp/active` and store it
+     * alongside the imported `/ppp/secret` rows.
+     *
+     * Active sessions carry no password (they may be RADIUS-authenticated, or
+     * the secret lives on another box), so the operator supplies one shared
+     * password that is applied to every active user that does not already have
+     * an imported secret. A real secret is never overwritten — for those we
+     * only refresh the live remote address.
+     */
+    public function importActiveUsers(MikrotikRouter $router, string $password): int
+    {
+        $password = trim($password);
+        if ($password === '') {
+            throw new \InvalidArgumentException('A shared password is required to import active connections.');
+        }
+
+        // Active sessions map onto the same profile/package list as secrets do.
+        $this->importProfiles($router);
+        $records = $this->read($router, '/ppp/active/print');
+        $imported = 0;
+
+        foreach ($records as $record) {
+            $name = trim((string) ($record['name'] ?? ''));
+            if ($name === '' || empty($record['.id'])) {
+                continue;
+            }
+
+            $existing = MikrotikImportedSecret::query()
+                ->where('mikrotik_router_id', $router->id)
+                ->whereRaw('lower(name) = ?', [mb_strtolower($name)])
+                ->first();
+
+            // A real /ppp/secret row already carries the correct password and
+            // disabled flag; only pull the live address onto it.
+            if ($existing) {
+                $existing->update([
+                    'remote_address' => $record['address'] ?? $existing->remote_address,
+                    'profile' => $existing->profile ?: ($record['profile'] ?? null),
+                    'password' => $existing->password ?: $password,
+                    'imported_at' => now(),
+                ]);
+                $imported++;
+
+                continue;
+            }
+
+            // Keep the active-session id in its own namespace so a later
+            // /ppp/secret import (whose .id counter is independent) cannot
+            // collide on the mikrotik_router_id + routeros_id unique index.
+            MikrotikImportedSecret::create([
+                'mikrotik_router_id' => $router->id,
+                'routeros_id' => 'active-'.$record['.id'],
+                'name' => $name,
+                'password' => $password,
+                'service' => $record['service'] ?? 'pppoe',
+                'profile' => $record['profile'] ?? null,
+                'remote_address' => $record['address'] ?? null,
+                'router_comment' => $record['comment'] ?? null,
+                'disabled' => false,
+                'imported_at' => now(),
+            ]);
+            $imported++;
+        }
+
+        return $imported;
+    }
+
+    /**
      * Re-pull PPPoE secrets from every active router.
      *
      * @return array{results: array<int, array{router: string, count?: int, error?: string}>, imported: int, failed: int}

@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\AccountDepositController;
 use App\Http\Controllers\AccountingLedgerController;
-use App\Http\Controllers\PaymentAccountAccessController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BkashSmsPaymentController;
 use App\Http\Controllers\BulkCustomerPaymentController;
@@ -19,13 +18,14 @@ use App\Http\Controllers\FleetOperationController;
 use App\Http\Controllers\FleetReportController;
 use App\Http\Controllers\InHouseUseController;
 use App\Http\Controllers\InvoiceController;
-use App\Http\Controllers\MikrotikRouterController;
 use App\Http\Controllers\MikrotikImportController;
+use App\Http\Controllers\MikrotikRouterController;
 use App\Http\Controllers\MikrotikRouterDataController;
 use App\Http\Controllers\NetworkMapController;
 use App\Http\Controllers\OltOnuController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\PackageController;
+use App\Http\Controllers\PaymentAccountAccessController;
 use App\Http\Controllers\PaymentAccountController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PrintLogController;
@@ -34,14 +34,15 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseBillController;
 use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\ResellerController;
-use App\Http\Controllers\RouterUserController;
 use App\Http\Controllers\ResellerPortalController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\RouterUserController;
 use App\Http\Controllers\SaleReturnController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WarehouseController;
 use App\Http\Controllers\WarrantyClaimController;
+use App\Models\MikrotikRouter;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -260,11 +261,12 @@ Route::middleware('auth')->group(function () {
         Route::post('mikrotik-routers/{mikrotikRouter}/import/profiles', [MikrotikImportController::class, 'importProfiles'])->name('mikrotik-routers.import.profiles');
         Route::post('mikrotik-routers/{mikrotikRouter}/import/ip-pools', [MikrotikImportController::class, 'importIpPools'])->name('mikrotik-routers.import.ip-pools');
         Route::post('mikrotik-routers/{mikrotikRouter}/import/secrets', [MikrotikImportController::class, 'importSecrets'])->name('mikrotik-routers.import.secrets');
+        Route::post('mikrotik-routers/{mikrotikRouter}/import/active-users', [MikrotikImportController::class, 'importActiveUsers'])->name('mikrotik-routers.import.active-users');
         Route::post('mikrotik-routers/{mikrotikRouter}/inactive-profile/create', [MikrotikRouterController::class, 'ensureInactivePppProfile'])->name('mikrotik-routers.inactive-profile.create');
         Route::get('mikrotik-routers/{mikrotikRouter}/profiles', [MikrotikRouterDataController::class, 'profiles'])->name('mikrotik-routers.profiles.index');
         Route::get('mikrotik-routers/{mikrotikRouter}/pools', [MikrotikRouterDataController::class, 'pools'])->name('mikrotik-routers.pools.index');
         Route::post('mikrotik-routers/{mikrotikRouter}/pools', [MikrotikRouterDataController::class, 'createPool'])->name('mikrotik-routers.pools.store');
-        Route::get('mikrotik-routers/{mikrotikRouter}/pools/import-live', fn (\App\Models\MikrotikRouter $mikrotikRouter) => redirect()->route('mikrotik-routers.pools.index', $mikrotikRouter)->with('warning', 'Use Import to App beside the required MikroTik pool.'))->name('mikrotik-routers.pools.import-live.help');
+        Route::get('mikrotik-routers/{mikrotikRouter}/pools/import-live', fn (MikrotikRouter $mikrotikRouter) => redirect()->route('mikrotik-routers.pools.index', $mikrotikRouter)->with('warning', 'Use Import to App beside the required MikroTik pool.'))->name('mikrotik-routers.pools.import-live.help');
         Route::post('mikrotik-routers/{mikrotikRouter}/pools/import-live', [MikrotikRouterDataController::class, 'importLivePool'])->name('mikrotik-routers.pools.import-live');
         Route::post('mikrotik-routers/{mikrotikRouter}/secrets/import-as-party', [MikrotikRouterDataController::class, 'importLiveSecretAsParty'])->name('mikrotik-routers.secrets.import-as-party');
         Route::patch('mikrotik-routers/{mikrotikRouter}/pools/{appIpPool}', [MikrotikRouterDataController::class, 'updatePool'])->name('mikrotik-routers.pools.update');
@@ -278,7 +280,7 @@ Route::middleware('auth')->group(function () {
         Route::post('mikrotik-routers/{mikrotikRouter}/customers/{customer}/export', [MikrotikRouterDataController::class, 'exportCustomer'])->name('mikrotik-routers.customers.export');
         Route::delete('mikrotik-routers/{mikrotikRouter}/router-extra', [MikrotikRouterDataController::class, 'deleteRouterExtra'])->name('mikrotik-routers.router-extra.destroy');
         Route::get('mikrotik-routers/{mikrotikRouter}/imported-secrets', [MikrotikImportController::class, 'secrets'])->name('mikrotik-routers.imported-secrets.index');
-        Route::get('mikrotik-routers/{mikrotikRouter}/imported-secrets/create-parties', fn (\App\Models\MikrotikRouter $mikrotikRouter) => redirect()->route('mikrotik-routers.imported-secrets.index', $mikrotikRouter)->with('warning', 'Select PPPoE secrets from the list, then use Create Selected Parties.'))->name('mikrotik-routers.imported-secrets.create-parties.help');
+        Route::get('mikrotik-routers/{mikrotikRouter}/imported-secrets/create-parties', fn (MikrotikRouter $mikrotikRouter) => redirect()->route('mikrotik-routers.imported-secrets.index', $mikrotikRouter)->with('warning', 'Select PPPoE secrets from the list, then use Create Selected Parties.'))->name('mikrotik-routers.imported-secrets.create-parties.help');
         Route::patch('mikrotik-routers/{mikrotikRouter}/imported-secrets/{mikrotikImportedSecret}', [MikrotikImportController::class, 'updateSecret'])->name('mikrotik-routers.imported-secrets.update');
         Route::post('mikrotik-routers/{mikrotikRouter}/imported-secrets/create-parties', [MikrotikImportController::class, 'createParties'])->name('mikrotik-routers.imported-secrets.create-parties');
         Route::resource('mikrotik-routers', MikrotikRouterController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update', 'destroy']);

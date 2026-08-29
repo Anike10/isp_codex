@@ -81,6 +81,15 @@
             <div class="muted" style="min-height:42px; margin:6px 0 12px">Users আনুন, select করুন, তারপর Party ও Special ISP Customer হিসেবে তৈরি করুন।</div>
             <form method="post" action="{{ route('mikrotik-routers.import.secrets', $mikrotikRouter) }}">@csrf<button class="btn" type="submit">Import PPPoE Users</button></form>
         </div>
+        <div class="router-import-tile" style="border:1px solid var(--line); border-radius:8px; padding:14px">
+            <strong>4. Active Connections</strong>
+            <div class="muted" style="min-height:42px; margin:6px 0 12px">যাদের <code>/ppp/secret</code> নেই কিন্তু এখন কানেক্টেড, তাদেরও আনুন। নিচের shared password সবার জন্য বসবে (আসল secret অক্ষত থাকবে)।</div>
+            <form method="post" action="{{ route('mikrotik-routers.import.active-users', $mikrotikRouter) }}" style="display:flex; gap:8px; flex-wrap:wrap">
+                @csrf
+                <input type="text" name="active_password" required placeholder="Shared PPPoE password" autocomplete="off" style="flex:1; min-width:160px">
+                <button class="btn" type="submit">Import Active Users</button>
+            </form>
+        </div>
     </div>
 </div>
 

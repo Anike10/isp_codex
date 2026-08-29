@@ -12,9 +12,15 @@
             @csrf
             <button class="btn secondary" type="submit">Refresh Secrets</button>
         </form>
+        <form method="post" action="{{ route('mikrotik-routers.import.active-users', $mikrotikRouter) }}" style="display:flex; gap:6px">
+            @csrf
+            <input type="text" name="active_password" required placeholder="Shared password" autocomplete="off" style="width:150px">
+            <button class="btn secondary" type="submit">Import Active Users</button>
+        </form>
         <a class="btn light" href="{{ route('mikrotik-routers.show', $mikrotikRouter) }}">Back to Router</a>
     </div>
 </div>
+<div class="muted" style="margin:-4px 0 12px">“Import Active Users” pulls every user in <code>/ppp/active</code>. Anyone without a real <code>/ppp/secret</code> is stored with the shared password so you can create them as parties below; real secrets keep their own password.</div>
 
 <form method="get" class="actions per-page-form">
     <label class="per-page-label">Rows per page <input class="per-page-select" type="number" name="per_page" min="1" max="500" value="{{ $perPage }}"></label>
