@@ -59,12 +59,12 @@
 
 @include('partials.per_page')
 
-<template id="bkashPartyOptions">
-    <option value="">Select party&hellip;</option>
+<datalist id="bkashPartyList">
     @foreach ($customers as $party)
-        <option value="{{ $party->id }}">{{ $party->name }}@if ($party->connection_id) ({{ $party->connection_id }})@endif</option>
+        <option value="{{ $party->name }}@if ($party->connection_id) ({{ $party->connection_id }})@endif"></option>
     @endforeach
-</template>
+</datalist>
+<script>window.bkashParties = @json($customers->map(fn ($p) => ['id' => $p->id, 'label' => $p->name.($p->connection_id ? ' ('.$p->connection_id.')' : '')])->values());</script>
 
 <table>
     <thead>
@@ -122,11 +122,11 @@
                 <td>{{ $smsPayment->message ?? 'N/A' }}</td>
                 <td>
                     @if ($canPay)
-                        <form method="post" action="{{ route('bkash-sms-payments.approve', $smsPayment) }}" class="bkash-pay-form" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px"
-                            onsubmit="return this.customer_id.value ? confirm('Record Tk {{ number_format($smsPayment->amount, 2) }} (TrxID {{ $smsPayment->trx_id }}) for the selected party?') : (alert('Choose a party first.'), false)">
+                        <form method="post" action="{{ route('bkash-sms-payments.approve', $smsPayment) }}" class="bkash-pay-form" data-confirm="Record Tk {{ number_format($smsPayment->amount, 2) }} (TrxID {{ $smsPayment->trx_id }}) for the selected party?" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
                             @csrf
                             <input type="hidden" name="redirect_to" value="index">
-                            <select name="customer_id" class="bkash-party-select" required style="max-width:190px"><option value="">Select party&hellip;</option></select>
+                            <input type="hidden" name="customer_id" class="bkash-party-id">
+                            <input type="search" list="bkashPartyList" class="bkash-party-search" placeholder="Search party&hellip;" autocomplete="off" required style="width:190px">
                             <button class="btn secondary" type="submit">Pay</button>
                         </form>
                     @endif
@@ -144,21 +144,36 @@
 
 <script>
 (function () {
-    var tpl = document.getElementById('bkashPartyOptions');
-    if (! tpl) return;
+    var parties = window.bkashParties || [];
+    var byLabel = new Map(parties.map(function (p) { return [p.label.toLowerCase(), p.id]; }));
 
-    function fill(select) {
-        if (select.dataset.filled) return;
-        select.dataset.filled = '1';
-        var current = select.value;
-        select.innerHTML = '';
-        select.appendChild(tpl.content.cloneNode(true));
-        select.value = current;
+    function resolveId(text) {
+        var key = (text || '').trim().toLowerCase();
+        if (byLabel.has(key)) return byLabel.get(key);
+        // Fall back to a unique starts-with match so a half-typed name still resolves.
+        var hits = parties.filter(function (p) { return p.label.toLowerCase().indexOf(key) === 0; });
+        return (key && hits.length === 1) ? hits[0].id : '';
     }
 
-    document.querySelectorAll('.bkash-party-select').forEach(function (select) {
-        select.addEventListener('focus', function () { fill(select); }, { once: false });
-        select.addEventListener('mousedown', function () { fill(select); }, { once: false });
+    document.querySelectorAll('.bkash-pay-form').forEach(function (form) {
+        var search = form.querySelector('.bkash-party-search');
+        var hidden = form.querySelector('.bkash-party-id');
+
+        search.addEventListener('input', function () { hidden.value = resolveId(search.value); });
+        search.addEventListener('change', function () { hidden.value = resolveId(search.value); });
+
+        form.addEventListener('submit', function (event) {
+            hidden.value = resolveId(search.value);
+            if (! hidden.value) {
+                event.preventDefault();
+                search.focus();
+                alert('Pick a party from the list first.');
+                return;
+            }
+            if (! confirm(form.dataset.confirm)) {
+                event.preventDefault();
+            }
+        });
     });
 })();
 </script>

@@ -150,7 +150,8 @@ class BkashSmsMaintenanceTest extends TestCase
 
         $this->actingAs($admin)->get(route('bkash-sms-payments.index'))
             ->assertOk()
-            ->assertSee('bkash-party-select', false)
+            ->assertSee('bkash-party-search', false)
+            ->assertSee('<datalist id="bkashPartyList">', false)
             ->assertSee('Auto-delete junk failed SMS', false)
             ->assertSee('<th>Device</th>', false)
             ->assertSee('Counter Redmi Phone')
