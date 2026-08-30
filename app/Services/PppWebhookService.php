@@ -187,6 +187,7 @@ class PppWebhookService
             .'\\"download\\":\\"".$webhookBytesOut."\\",'
             .'\\"upload\\":\\"".$webhookBytesIn."\\",'
             .'\\"caller_id\\":\\"".$webhookCallerId."\\",'
+            .'\\"reason\\":\\"".$webhookReason."\\",'
             .'\\"router_id\\":\\"'.$router->id.'\\"}")';
 
         $header = 'Content-Type: application/json,'.self::SECRET_HEADER.': '.$secret;
@@ -196,6 +197,7 @@ class PppWebhookService
             .':local webhookBytesIn $"bytes-in";'
             .':local webhookBytesOut $"bytes-out";'
             .':local webhookCallerId $"caller-id";'
+            .':local webhookReason $"last-disconnect-reason";'
             .':local webhookPayload '.$body.';'
             .'/tool fetch url="'.$url.'"'
             .' http-method=post'

@@ -181,6 +181,36 @@ class ConnectionAnalyticsTest extends TestCase
         }
     }
 
+    public function test_all_three_reports_show_the_latest_disconnect_reason(): void
+    {
+        // older drop with one reason, newest drop with another; a second MAC so
+        // the same user also crosses the MAC-changes threshold.
+        PppUsageLog::create([
+            'username' => 'fiber-2', 'caller_id' => '00:00:00:00:00:01',
+            'download_bytes' => 0, 'upload_bytes' => 0, 'payload' => [],
+            'disconnect_reason' => 'peer-request', 'disconnected_at' => now()->subHours(4),
+        ]);
+        PppUsageLog::create([
+            'username' => 'fiber-2', 'caller_id' => '00:00:00:00:00:02',
+            'download_bytes' => 0, 'upload_bytes' => 0, 'payload' => [],
+            'disconnect_reason' => 'keepalive timeout', 'disconnected_at' => now()->subMinutes(10),
+        ]);
+
+        $seer = $this->seer();
+
+        foreach ([
+            route('troubleshoot.analytics'),
+            route('troubleshoot.frequent-disconnects', ['min_count' => 1]),
+            route('troubleshoot.mac-changes', ['min_macs' => 2]),
+        ] as $url) {
+            $this->actingAs($seer)->get($url)
+                ->assertOk()
+                ->assertSee('Disconnect reason')
+                ->assertSee('keepalive timeout')
+                ->assertDontSee('peer-request');
+        }
+    }
+
     public function test_frequent_disconnects_lists_only_users_over_the_threshold_in_the_window(): void
     {
         // flapping: 4 drops in the last hour

@@ -50,6 +50,7 @@
                 <th>Device MACs (newest first)</th>
                 <th class="col-center">ONU power (Rx / Tx)</th>
                 <th>Last change</th>
+                <th>Disconnect reason</th>
             </tr>
         </thead>
         <tbody>
@@ -76,9 +77,10 @@
                     </td>
                     <td class="col-center">@include('troubleshoot._rx_power', ['row' => $row])</td>
                     <td>{{ \Illuminate\Support\Carbon::parse($row->last_at)->format('d/m/Y H:i:s') }}</td>
+                    <td>@include('troubleshoot._disconnect_reason', ['row' => $row])</td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="muted">No user connected from that many different MACs in this window.</td></tr>
+                <tr><td colspan="8" class="muted">No user connected from that many different MACs in this window.</td></tr>
             @endforelse
         </tbody>
     </table>

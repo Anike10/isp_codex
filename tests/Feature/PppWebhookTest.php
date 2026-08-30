@@ -75,6 +75,8 @@ class PppWebhookTest extends TestCase
                     && str_contains($onDown, ':local webhookBytesIn $"bytes-in";')
                     && str_contains($onDown, ':local webhookBytesOut $"bytes-out";')
                     && str_contains($onDown, ':local webhookCallerId $"caller-id";')
+                    && str_contains($onDown, ':local webhookReason $"last-disconnect-reason";')
+                    && str_contains($onDown, '\"reason\":\"".$webhookReason."\"')
                     && str_contains($onDown, '\"download\":\"".$webhookBytesOut."\"')
                     && str_contains($onDown, '\"upload\":\"".$webhookBytesIn."\"')
                     && str_contains($onDown, 'http-data=$webhookPayload')
@@ -231,6 +233,7 @@ class PppWebhookTest extends TestCase
             ->postJson('/api/ppp/usage', [
                 'user' => 'pppoe-9', 'uptime' => '30m',
                 'caller_id' => '00:8D:FF:02:2A:17', 'router_id' => '1',
+                'reason' => 'peer-request',
             ])
             ->assertCreated();
 
@@ -240,6 +243,18 @@ class PppWebhookTest extends TestCase
         $this->assertSame($onu->id, $log->olt_onu_id);
         $this->assertSame('-21.50', (string) $log->rx_power_dbm);
         $this->assertSame('00:8D:FF:02:2A:17', $log->caller_id);
+        $this->assertSame('peer-request', $log->disconnect_reason);
+    }
+
+    public function test_webhook_stores_null_when_no_disconnect_reason_is_sent(): void
+    {
+        $secret = app(PppWebhookService::class)->secret();
+
+        $this->withHeader(PppWebhookService::SECRET_HEADER, $secret)
+            ->postJson('/api/ppp/usage', ['user' => 'pppoe-noreason', 'caller_id' => '00:00:00:00:00:09'])
+            ->assertCreated();
+
+        $this->assertNull(PppUsageLog::firstOrFail()->disconnect_reason);
     }
 
     public function test_webhook_matches_the_onu_by_a_learned_device_mac(): void

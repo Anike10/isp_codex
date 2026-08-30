@@ -79,6 +79,7 @@ class ConnectionAnalyticsController extends Controller
 
         $this->attachCustomers($rows->getCollection());
         $this->attachOnuReadings($rows->getCollection());
+        $this->attachDisconnectReasons($rows->getCollection());
 
         return view('troubleshoot.frequent_disconnects', [
             'rows' => $rows,
@@ -131,6 +132,7 @@ class ConnectionAnalyticsController extends Controller
         $this->attachCustomers($rows->getCollection());
         $this->attachRecentMacs($rows->getCollection(), $since, $routerId);
         $this->attachOnuReadings($rows->getCollection());
+        $this->attachDisconnectReasons($rows->getCollection());
 
         return view('troubleshoot.mac_changes', [
             'rows' => $rows,
@@ -184,6 +186,7 @@ class ConnectionAnalyticsController extends Controller
 
         $this->attachCustomers($rows->getCollection());
         $this->attachOnuReadings($rows->getCollection());
+        $this->attachDisconnectReasons($rows->getCollection());
 
         return view('troubleshoot.analytics', [
             'rows' => $rows,
@@ -260,6 +263,40 @@ class ConnectionAnalyticsController extends Controller
 
         $rows->each(function ($row) use ($byName): void {
             $row->matched_customer = $byName[mb_strtolower(trim((string) $row->username))] ?? null;
+        });
+    }
+
+    /**
+     * Attach each username's most recent disconnect reason (RouterOS PPP
+     * `$"last-disconnect-reason"`, stored per event) and when it was logged.
+     *
+     * @param  Collection<int, Model>  $rows
+     */
+    private function attachDisconnectReasons(Collection $rows): void
+    {
+        $names = $rows->pluck('username')
+            ->map(fn ($name) => mb_strtolower(trim((string) $name)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($names->isEmpty()) {
+            return;
+        }
+
+        // Newest row per username (id is monotonic with disconnected_at).
+        $latest = PppUsageLog::query()
+            ->whereIn('id', PppUsageLog::query()
+                ->whereIn(DB::raw('lower(username)'), $names)
+                ->groupBy(DB::raw('lower(username)'))
+                ->selectRaw('max(id)'))
+            ->get(['username', 'disconnect_reason', 'disconnected_at'])
+            ->keyBy(fn (PppUsageLog $log) => mb_strtolower(trim((string) $log->username)));
+
+        $rows->each(function ($row) use ($latest): void {
+            $reading = $latest->get(mb_strtolower(trim((string) $row->username)));
+            $row->disconnect_reason = $reading?->disconnect_reason;
+            $row->disconnect_reason_at = $reading?->disconnected_at;
         });
     }
 

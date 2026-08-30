@@ -33,6 +33,7 @@ class PppUsageWebhookController extends Controller
             'upload' => ['nullable', 'numeric'],
             'caller_id' => ['nullable', 'string', 'max:64'],
             'router_id' => ['nullable', 'string', 'max:64'],
+            'reason' => ['nullable', 'string', 'max:255'],
         ]);
 
         $username = trim($data['user']);
@@ -82,6 +83,7 @@ class PppUsageWebhookController extends Controller
             'olt_onu_id' => $onu?->id,
             'username' => $username,
             'caller_id' => $callerId ?: null,
+            'disconnect_reason' => $this->cleanReason($data['reason'] ?? null),
             'reported_router_id' => $reportedRouterId,
             'uptime' => $data['uptime'] ?? null,
             'uptime_seconds' => isset($data['uptime']) ? $this->uptimeToSeconds($data['uptime']) : null,
@@ -100,6 +102,18 @@ class PppUsageWebhookController extends Controller
             'rx_power_dbm' => $onu?->rx_power_dbm,
             'tx_power_dbm' => $onu?->tx_power_dbm,
         ], 201);
+    }
+
+    /**
+     * RouterOS PPP $"last-disconnect-reason" as a short, trimmed string.
+     * Empty / whitespace-only values (a session that ended with no reason)
+     * become null so the reports can show a clean dash.
+     */
+    private function cleanReason(mixed $reason): ?string
+    {
+        $reason = trim(preg_replace('/\s+/', ' ', (string) $reason));
+
+        return $reason === '' ? null : mb_substr($reason, 0, 250);
     }
 
     /**

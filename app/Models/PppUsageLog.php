@@ -13,6 +13,7 @@ class PppUsageLog extends Model
         'olt_onu_id',
         'username',
         'caller_id',
+        'disconnect_reason',
         'reported_router_id',
         'uptime',
         'uptime_seconds',
