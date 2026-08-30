@@ -1,4 +1,6 @@
 @php
+    use App\Support\RouterOsValue;
+
     $records = $records ?? [];
     $rowCap = $rowCap ?? 500;
     $tail = $tail ?? false;
@@ -22,32 +24,49 @@
             $columns = array_values($columns);
         }
     }
+
+    // Render one value: humanised text, wrapped in <code>/<span class="badge">
+    // where useful. Returns ready HTML; the raw value goes in the title.
+    $render = function (string $key, $value): string {
+        $raw = trim((string) $value);
+        $text = e(RouterOsValue::humanize($key, $raw));
+        $kind = RouterOsValue::kind($key, $raw);
+        $title = ($text !== e($raw) && $raw !== '') ? ' title="'.e($raw).'"' : '';
+
+        if ($kind === 'bool-on') {
+            return '<span class="badge active"'.$title.'>'.$text.'</span>';
+        }
+        if ($kind === 'bool-off') {
+            return '<span class="badge inactive"'.$title.'>'.$text.'</span>';
+        }
+        if ($text === '') {
+            return '<span class="muted">&mdash;</span>';
+        }
+        if ($kind === 'mono') {
+            return '<code'.$title.'>'.$text.'</code>';
+        }
+
+        return '<span'.$title.'>'.$text.'</span>';
+    };
 @endphp
 
 @if ($total === 0)
     <p class="muted" style="margin:8px 0 0">No rows.</p>
 @elseif ($single)
-    <div class="table-wrap" style="overflow:auto;margin-top:8px">
-        <table class="rd-kv">
-            <tbody>
-                @foreach ((array) $rows[0] as $key => $value)
-                    <tr>
-                        <th>{{ $key }}</th>
-                        <td>{{ $value }}</td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-    </div>
+    <dl class="rd-kv">
+        @foreach ((array) $rows[0] as $key => $value)
+            <div class="rd-kv__row"><dt>{{ $key }}</dt><dd>{!! $render($key, $value) !!}</dd></div>
+        @endforeach
+    </dl>
 @else
-    <div class="table-wrap" style="overflow:auto;max-height:540px;margin-top:8px">
+    <div class="rd-scroll">
         <table class="rd-rows">
             <thead>
                 <tr>@foreach ($columns as $column)<th>{{ $column }}</th>@endforeach</tr>
             </thead>
             <tbody>
                 @foreach ($rows as $row)
-                    <tr>@foreach ($columns as $column)<td>{{ ((array) $row)[$column] ?? '' }}</td>@endforeach</tr>
+                    <tr>@foreach ($columns as $column)<td>{!! $render($column, ((array) $row)[$column] ?? '') !!}</td>@endforeach</tr>
                 @endforeach
             </tbody>
         </table>
