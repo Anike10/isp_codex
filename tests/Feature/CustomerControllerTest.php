@@ -316,6 +316,52 @@ class CustomerControllerTest extends TestCase
             ->assertDontSee('10.66.0.99');
     }
 
+    public function test_parties_list_shows_the_olt_onu_and_optical_power_next_to_the_name(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        // matched on the ONU serial / MAC
+        \App\Models\OltOnu::create([
+            'olt_name' => 'Kushtia-OLT-1', 'pon_port' => 3, 'onu_id' => 12, 'status' => 'online',
+            'mac_address' => '00:8d:ff:02:2a:17', 'rx_power_dbm' => -21.40, 'tx_power_dbm' => 2.10,
+        ]);
+        Customer::create([
+            'name' => 'Serial Match Party', 'phone' => '01710000201', 'connection_id' => 'ONU-SERIAL',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+            'last_connected_mac' => '00:8D:FF:02:2A:17',
+        ]);
+
+        // matched on a learned MAC entry
+        \App\Models\OltOnu::create([
+            'olt_name' => 'Kushtia-OLT-2', 'pon_port' => 1, 'onu_id' => 4, 'status' => 'online',
+            'mac_address' => 'aa:bb:cc:dd:ee:ff', 'rx_power_dbm' => -27.90,
+            'learned_macs' => [['mac' => 'e4:8d:8c:11:22:33', 'vlan' => 100]],
+        ]);
+        Customer::create([
+            'name' => 'Learned Match Party', 'phone' => '01710000202', 'connection_id' => 'ONU-LEARNED',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+            'last_connected_mac' => 'E4:8D:8C:11:22:33',
+        ]);
+
+        Customer::create([
+            'name' => 'No ONU Party', 'phone' => '01710000203', 'connection_id' => 'NO-ONU',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee('OLT / ONU')
+            ->assertSee('Kushtia-OLT-1')
+            ->assertSee('3/12')
+            ->assertSee('Rx -21.40')
+            ->assertSee('Tx 2.10')
+            ->assertSee('Kushtia-OLT-2')
+            ->assertSee('1/4')
+            ->assertSee('Rx -27.90');
+    }
+
     public function test_customer_show_activity_table_lists_the_admin_who_took_a_payment(): void
     {
         $user = User::factory()->create();

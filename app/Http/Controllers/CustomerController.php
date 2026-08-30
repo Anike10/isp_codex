@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
+use App\Models\OltOnu;
 use App\Models\PaymentAccount;
 use App\Models\ResellerCommissionHistory;
 use App\Models\Subscription;
@@ -57,6 +58,8 @@ class CustomerController extends Controller
             ->latest()
             ->paginate($perPage)
             ->appends($request->query());
+
+        $this->attachOnuInfo($customers->getCollection());
 
         return view('customers.index', [
             'customers' => $customers,
@@ -1161,6 +1164,59 @@ class CustomerController extends Controller
         } catch (Throwable) {
             return false;
         }
+    }
+
+    /**
+     * Attach the OLT ONU that each listed party's last-seen device MAC belongs
+     * to — matched on the ONU serial or one of its learned MACs — so the list
+     * can show the OLT / port and the last optical power reading by the name.
+     *
+     * @param  \Illuminate\Support\Collection<int, Customer>  $customers
+     */
+    private function attachOnuInfo(\Illuminate\Support\Collection $customers): void
+    {
+        if (! Schema::hasTable('olt_onus')) {
+            return;
+        }
+
+        $macs = $customers
+            ->pluck('last_connected_mac')
+            ->map(fn ($mac) => mb_strtolower(trim((string) $mac)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($macs->isEmpty()) {
+            return;
+        }
+
+        $onus = OltOnu::query()
+            ->select('id', 'olt_name', 'pon_port', 'onu_id', 'onu_type', 'mac_address', 'learned_macs', 'rx_power_dbm', 'tx_power_dbm', 'status', 'name', 'last_live_polled_at')
+            ->where(function ($query) use ($macs): void {
+                $query->whereIn(DB::raw('lower(mac_address)'), $macs->all());
+                foreach ($macs as $mac) {
+                    $query->orWhere('learned_macs', 'like', '%"'.$mac.'"%');
+                }
+            })
+            ->orderByRaw('last_live_polled_at is null')
+            ->orderByDesc('last_live_polled_at')
+            ->get();
+
+        $byMac = [];
+        foreach ($onus as $onu) {
+            $keys = [mb_strtolower(trim((string) $onu->mac_address))];
+            foreach ((array) $onu->learned_macs as $entry) {
+                $mac = is_array($entry) ? ($entry['mac'] ?? null) : $entry;
+                $keys[] = mb_strtolower(trim((string) $mac));
+            }
+            foreach (array_filter($keys) as $key) {
+                $byMac[$key] ??= $onu;
+            }
+        }
+
+        $customers->each(function (Customer $customer) use ($byMac): void {
+            $customer->matched_onu = $byMac[mb_strtolower(trim((string) $customer->last_connected_mac))] ?? null;
+        });
     }
 
     private function customerQueryForIndex(Request $request, bool $hasImportedSecretTable, bool $onlyDeleted): Builder
