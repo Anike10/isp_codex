@@ -170,9 +170,9 @@ class PppWebhookService
     }
 
     /**
-     * The one reusable RouterOS `on-down` script. Session variables ($user,
-     * $uptime, $"bytes-in", $"bytes-out") make it identical for every profile
-     * and every user; only the URL, secret and router id are baked in.
+     * The one reusable RouterOS `on-down` script. Event variables are first
+     * copied to uniquely named locals so hyphenated names such as
+     * $"bytes-in" never break the quoting of the JSON payload.
      *
      * Values are sent as JSON strings so an empty counter never produces
      * malformed JSON; the receiver casts them back to integers.
@@ -182,21 +182,25 @@ class PppWebhookService
         $url = $this->url();
         $secret = $this->secret();
 
-        $body = '{'
-            .'\\"user\\":\\"$user\\",'
-            .'\\"uptime\\":\\"$uptime\\",'
-            .'\\"download\\":\\"$\\"bytes-in\\"\\",'
-            .'\\"upload\\":\\"$\\"bytes-out\\"\\",'
-            .'\\"caller_id\\":\\"$\\"caller-id\\"\\",'
-            .'\\"router_id\\":\\"'.$router->id.'\\"'
-            .'}';
+        $body = '("{\\"user\\":\\"".$webhookUser."\\",'
+            .'\\"uptime\\":\\"".$webhookUptime."\\",'
+            .'\\"download\\":\\"".$webhookBytesOut."\\",'
+            .'\\"upload\\":\\"".$webhookBytesIn."\\",'
+            .'\\"caller_id\\":\\"".$webhookCallerId."\\",'
+            .'\\"router_id\\":\\"'.$router->id.'\\"}")';
 
         $header = 'Content-Type: application/json,'.self::SECRET_HEADER.': '.$secret;
 
-        return '/tool fetch url="'.$url.'"'
+        return ':local webhookUser $user;'
+            .':local webhookUptime $uptime;'
+            .':local webhookBytesIn $"bytes-in";'
+            .':local webhookBytesOut $"bytes-out";'
+            .':local webhookCallerId $"caller-id";'
+            .':local webhookPayload '.$body.';'
+            .'/tool fetch url="'.$url.'"'
             .' http-method=post'
             .' http-header-field="'.$header.'"'
-            .' http-data="'.$body.'"'
+            .' http-data=$webhookPayload'
             .' output=none;';
     }
 }

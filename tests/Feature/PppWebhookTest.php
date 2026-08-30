@@ -72,7 +72,12 @@ class PppWebhookTest extends TestCase
                 return str_contains($onDown, '/tool fetch')
                     && str_contains($onDown, 'https://billing.example.com/api/ppp/usage')
                     && str_contains($onDown, '\"router_id\":\"'.$router->id.'\"')
-                    && str_contains($onDown, '\"caller_id\":\"$\"caller-id\"\"')
+                    && str_contains($onDown, ':local webhookBytesIn $"bytes-in";')
+                    && str_contains($onDown, ':local webhookBytesOut $"bytes-out";')
+                    && str_contains($onDown, ':local webhookCallerId $"caller-id";')
+                    && str_contains($onDown, '\"download\":\"".$webhookBytesOut."\"')
+                    && str_contains($onDown, '\"upload\":\"".$webhookBytesIn."\"')
+                    && str_contains($onDown, 'http-data=$webhookPayload')
                     && str_contains($onDown, PppWebhookService::SECRET_HEADER);
             });
         }
