@@ -119,9 +119,12 @@
         gap: 18px;
         align-items: start;
     }
+    .pp-grid > * { min-width: 0; }
     .pp-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+    .pp-col > * { min-width: 0; }
     .pp-col--side { position: sticky; top: 72px; }
     .pp-grid > .pp-history { grid-column: 1 / -1; }
+    .pp-card, .pp-card__body, .pp-fields, .pp-method { min-width: 0; }
 
     .pp-card {
         background: var(--pp-surface);
@@ -248,6 +251,8 @@
     .pp-f select,
     .pp-f textarea {
         width: 100%;
+        min-width: 0;
+        max-width: 100%;
         border: 1px solid var(--pp-border);
         border-radius: 10px;
         background: #fff;
@@ -257,6 +262,7 @@
         color: var(--pp-ink);
         transition: border-color .15s ease, box-shadow .15s ease;
     }
+    .pp-f select { text-overflow: ellipsis; }
     .pp-f input:focus,
     .pp-f select:focus,
     .pp-f textarea:focus {
@@ -436,8 +442,9 @@
     .pp-pill.debit { background: #fdecec; color: #b42318; }
 
     @media (max-width: 980px) {
-        .pp-grid { grid-template-columns: 1fr; }
+        .pp-grid { grid-template-columns: minmax(0, 1fr); }
         .pp-col--side { position: static; }
+        .pp-col--side .pp-amount { order: -1; }
         .pp-review { position: sticky; bottom: 8px; z-index: 5; box-shadow: var(--pp-shadow-float); }
         .pp-review .pp-card__head { display: none; }
         .pp-review .pp-card__body { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 12px 14px; }
@@ -502,32 +509,6 @@
 
         <div class="pp-grid">
             <div class="pp-col">
-                <section class="pp-amount">
-                    <div class="lead">Payment amount</div>
-                    <div class="pp-amount-field">
-                        <span class="cur">&#2547;</span>
-                        <input
-                            id="amountInput"
-                            name="amount"
-                            type="text" inputmode="decimal"
-                            autocomplete="off"
-                            value="{{ $amountDefault }}"
-                            placeholder="0.00"
-                            required
-                        >
-                    </div>
-                    <p class="sub">Applied to the ticked invoices first; the remainder is stored as advance.</p>
-
-                    <label class="pp-switch">
-                        <input type="checkbox" id="keepAsAdvance" name="keep_as_advance" value="1" @checked(old('keep_as_advance') === '1')>
-                        <span class="track"></span>
-                        <span class="txt">
-                            <strong>Keep the whole amount as advance</strong>
-                            <span>No invoice is reduced &mdash; the money sits on the party balance.</span>
-                        </span>
-                    </label>
-                </section>
-
                 <section class="pp-card">
                     <div class="pp-card__head"><h2>Method &amp; details</h2></div>
                     <div class="pp-card__body">
@@ -657,6 +638,32 @@
                         <button id="paymentSubmit" class="btn" type="submit">Submit Payment</button>
                         <p class="hint2">The party is not charged &mdash; you are recording money received.</p>
                     </div>
+                </section>
+
+                <section class="pp-amount">
+                    <div class="lead">Payment amount</div>
+                    <div class="pp-amount-field">
+                        <span class="cur">&#2547;</span>
+                        <input
+                            id="amountInput"
+                            name="amount"
+                            type="text" inputmode="decimal"
+                            autocomplete="off"
+                            value="{{ $amountDefault }}"
+                            placeholder="0.00"
+                            required
+                        >
+                    </div>
+                    <p class="sub">Applied to the ticked invoices first; the remainder is stored as advance.</p>
+
+                    <label class="pp-switch">
+                        <input type="checkbox" id="keepAsAdvance" name="keep_as_advance" value="1" @checked(old('keep_as_advance') === '1')>
+                        <span class="track"></span>
+                        <span class="txt">
+                            <strong>Keep the whole amount as advance</strong>
+                            <span>No invoice is reduced &mdash; the money sits on the party balance.</span>
+                        </span>
+                    </label>
                 </section>
             </div>
 
