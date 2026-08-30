@@ -1700,7 +1700,7 @@
             <p class="muted" style="margin:0 0 12px;">
                 শেষ {{ $onuHistoryDays ?? 7 }} দিনের সংরক্ষিত ONU Rx/Tx optical power। সবুজ ব্যান্ড −১৫ থেকে −২৫ dBm (স্বাভাবিক)।
             </p>
-            @include('customers._onu_signal_chart', ['samples' => $onuHistory ?? collect()])
+            @include('customers._onu_signal_chart', ['samples' => $onuHistory ?? collect(), 'showRx' => $onuHistoryShowRx ?? true, 'showTx' => $onuHistoryShowTx ?? false])
         </section>
     @endif
 

@@ -1649,10 +1649,14 @@ Party ONU signal history: `php artisan onu:capture-power-history` (scheduled
 hourly, `withoutOverlapping`) snapshots every party's current matched ONU Rx/Tx
 optical power into `customer_onu_power_samples`. It does not poll the OLTs — it
 reads whatever the `olt:auto-refresh` drip last stored. `OnuPowerHistoryService`
-holds two `app_settings` keys, `onu_power_history.interval_hours` (default 1) and
-`onu_power_history.retention_days` (default 7), edited from the form on the OLT
-ONU list (`PATCH olt-onus/power-history-settings`, `manage_mikrotik_routers`);
-"Save & capture now" runs a sample immediately. The hourly command only samples
+holds four `app_settings` keys, `onu_power_history.interval_hours` (default 1),
+`onu_power_history.retention_days` (default 7), `onu_power_history.show_rx`
+(default `1`) and `onu_power_history.show_tx` (default `0`), edited from the form
+on the OLT ONU list (`PATCH olt-onus/power-history-settings`,
+`manage_mikrotik_routers`); "Save & capture now" runs a sample immediately.
+`retention_days` is both the graph window and the auto-delete cutoff (one
+number). `show_rx`/`show_tx` are display-only checkboxes — `capture()` always
+stores both readings so a later toggle still has history. The hourly command only samples
 when the interval has elapsed since the newest row (`isDue()`), then prunes past
 retention. Party↔ONU matching is centralized in `App\Support\OnuMatcher::byMac()`
 (ONU serial `mac_address` or a `learned_macs` entry, newest `last_live_polled_at`

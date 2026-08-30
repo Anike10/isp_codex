@@ -2,13 +2,17 @@
     /** @var \Illuminate\Support\Collection $samples */
     $samples = ($samples ?? collect())->filter(fn ($s) => $s->rx_power_dbm !== null || $s->tx_power_dbm !== null)->values();
 
+    // Which series the operator has enabled on the OLT ONUs settings form.
+    $showRx = $showRx ?? true;
+    $showTx = $showTx ?? false;
+
     $W = 720; $H = 220;
     $padL = 40; $padR = 12; $padT = 14; $padB = 24;
     $plotW = $W - $padL - $padR;
     $plotH = $H - $padT - $padB;
 
-    $rxVals = $samples->pluck('rx_power_dbm')->filter(fn ($v) => $v !== null)->map(fn ($v) => (float) $v);
-    $txVals = $samples->pluck('tx_power_dbm')->filter(fn ($v) => $v !== null)->map(fn ($v) => (float) $v);
+    $rxVals = $showRx ? $samples->pluck('rx_power_dbm')->filter(fn ($v) => $v !== null)->map(fn ($v) => (float) $v) : collect();
+    $txVals = $showTx ? $samples->pluck('tx_power_dbm')->filter(fn ($v) => $v !== null)->map(fn ($v) => (float) $v) : collect();
     $allVals = $rxVals->merge($txVals);
 
     $yMin = $allVals->isEmpty() ? -30 : floor(min($allVals->min(), -26) - 2);
@@ -34,23 +38,32 @@
         return $pts;
     };
 
-    $rxPts = $points('rx_power_dbm');
-    $txPts = $points('tx_power_dbm');
+    $rxPts = $showRx ? $points('rx_power_dbm') : [];
+    $txPts = $showTx ? $points('tx_power_dbm') : [];
     $polyline = fn ($pts) => implode(' ', array_map(fn ($p) => $p[0].','.$p[1], $pts));
 
     $latest = $samples->last();
     $bandVisible = $yMin <= -25 && $yMax >= -15;
 @endphp
 
-@if ($samples->isEmpty())
+@if (! $showRx && ! $showTx)
+    <p class="muted" style="margin:0">গ্রাফে দেখানোর জন্য Rx বা Tx কোনোটিই নির্বাচন করা নেই। OLT ONUs পেজের সেটিংস থেকে চালু করুন।</p>
+@elseif ($samples->isEmpty())
     <p class="muted" style="margin:0">এখনো কোনো নমুনা জমা হয়নি। প্রতি নির্ধারিত ঘণ্টায় পার্টির ONU Rx/Tx power সংরক্ষণ হয় — কয়েক ঘণ্টা পর এখানে পূর্ণ গ্রাফ দেখা যাবে।</p>
 @else
     <div class="onu-chart">
         <div class="onu-chart__legend">
-            <span><i style="background:#1d76c9"></i> Rx (dBm)</span>
-            <span><i style="background:#0f7a55"></i> Tx (dBm)</span>
+            @if ($showRx)
+                <span><i style="background:#1d76c9"></i> Rx (dBm)</span>
+            @endif
+            @if ($showTx)
+                <span><i style="background:#0f7a55"></i> Tx (dBm)</span>
+            @endif
             @if ($latest)
-                <span class="muted">সর্বশেষ {{ $latest->sampled_at->format('d/m H:i') }} — Rx {{ $latest->rx_power_dbm !== null ? number_format((float) $latest->rx_power_dbm, 2) : '—' }} / Tx {{ $latest->tx_power_dbm !== null ? number_format((float) $latest->tx_power_dbm, 2) : '—' }}</span>
+                <span class="muted">সর্বশেষ {{ $latest->sampled_at->format('d/m H:i') }}
+                    @if ($showRx) — Rx {{ $latest->rx_power_dbm !== null ? number_format((float) $latest->rx_power_dbm, 2) : '—' }} @endif
+                    @if ($showTx) / Tx {{ $latest->tx_power_dbm !== null ? number_format((float) $latest->tx_power_dbm, 2) : '—' }} @endif
+                </span>
             @endif
         </div>
         <svg viewBox="0 0 {{ $W }} {{ $H }}" preserveAspectRatio="none" role="img" aria-label="ONU signal history">

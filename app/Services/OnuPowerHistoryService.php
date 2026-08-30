@@ -17,6 +17,8 @@ class OnuPowerHistoryService
 {
     public const INTERVAL_KEY = 'onu_power_history.interval_hours';
     public const RETENTION_KEY = 'onu_power_history.retention_days';
+    public const SHOW_RX_KEY = 'onu_power_history.show_rx';
+    public const SHOW_TX_KEY = 'onu_power_history.show_tx';
 
     public function intervalHours(): int
     {
@@ -28,6 +30,18 @@ class OnuPowerHistoryService
         return max(1, (int) AppSetting::value(self::RETENTION_KEY, '7'));
     }
 
+    /** Whether the party-page graph draws the Rx series (default on). */
+    public function showRx(): bool
+    {
+        return AppSetting::value(self::SHOW_RX_KEY, '1') === '1';
+    }
+
+    /** Whether the party-page graph draws the Tx series (default off). */
+    public function showTx(): bool
+    {
+        return AppSetting::value(self::SHOW_TX_KEY, '0') === '1';
+    }
+
     public function setIntervalHours(int $hours): void
     {
         AppSetting::setValue(self::INTERVAL_KEY, (string) max(1, min(168, $hours)));
@@ -36,6 +50,16 @@ class OnuPowerHistoryService
     public function setRetentionDays(int $days): void
     {
         AppSetting::setValue(self::RETENTION_KEY, (string) max(1, min(365, $days)));
+    }
+
+    public function setShowRx(bool $show): void
+    {
+        AppSetting::setValue(self::SHOW_RX_KEY, $show ? '1' : '0');
+    }
+
+    public function setShowTx(bool $show): void
+    {
+        AppSetting::setValue(self::SHOW_TX_KEY, $show ? '1' : '0');
     }
 
     /** True when the newest sample is older than the configured interval. */

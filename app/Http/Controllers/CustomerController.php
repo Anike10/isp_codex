@@ -388,9 +388,13 @@ class CustomerController extends Controller
 
         $onuHistory = collect();
         $onuHistoryDays = 7;
+        $onuHistoryShowRx = true;
+        $onuHistoryShowTx = false;
         if (Schema::hasTable('customer_onu_power_samples')) {
             $history = app(\App\Services\OnuPowerHistoryService::class);
             $onuHistoryDays = $history->retentionDays();
+            $onuHistoryShowRx = $history->showRx();
+            $onuHistoryShowTx = $history->showTx();
             $onuHistory = \App\Models\CustomerOnuPowerSample::query()
                 ->where('customer_id', $customer->id)
                 ->where('sampled_at', '>=', now()->subDays($onuHistoryDays))
@@ -409,7 +413,7 @@ class CustomerController extends Controller
             ->get();
         $paymentDefault = $preferenceService->forUser($request->user());
 
-        return view('customers.show', compact('customer', 'routers', 'paymentAccounts', 'paymentDefault', 'onuHistory', 'onuHistoryDays'));
+        return view('customers.show', compact('customer', 'routers', 'paymentAccounts', 'paymentDefault', 'onuHistory', 'onuHistoryDays', 'onuHistoryShowRx', 'onuHistoryShowTx'));
     }
 
     public function inlineUpdate(Request $request, Customer $customer)

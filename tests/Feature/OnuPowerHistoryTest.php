@@ -140,11 +140,80 @@ class OnuPowerHistoryTest extends TestCase
             ->patch(route('olt-onus.power-history-settings.update'), [
                 'interval_hours' => 4,
                 'retention_days' => 21,
+                'show_rx' => '1',
             ])
             ->assertRedirect();
 
         $this->assertSame('4', AppSetting::value(OnuPowerHistoryService::INTERVAL_KEY));
         $this->assertSame('21', AppSetting::value(OnuPowerHistoryService::RETENTION_KEY));
+    }
+
+    public function test_show_rx_defaults_on_and_show_tx_defaults_off(): void
+    {
+        $service = app(OnuPowerHistoryService::class);
+
+        $this->assertTrue($service->showRx());
+        $this->assertFalse($service->showTx());
+    }
+
+    public function test_settings_form_persists_the_rx_tx_graph_checkboxes(): void
+    {
+        $user = User::factory()->create();
+        $service = app(OnuPowerHistoryService::class);
+
+        // Both ticked.
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs($user)
+            ->patch(route('olt-onus.power-history-settings.update'), [
+                'interval_hours' => 1, 'retention_days' => 7,
+                'show_rx' => '1', 'show_tx' => '1',
+            ])->assertRedirect();
+        $this->assertTrue($service->showRx());
+        $this->assertTrue($service->showTx());
+
+        // An unchecked box sends nothing -> stored as off.
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs($user)
+            ->patch(route('olt-onus.power-history-settings.update'), [
+                'interval_hours' => 1, 'retention_days' => 7,
+                'show_tx' => '1',
+            ])->assertRedirect();
+        $this->assertFalse($service->showRx());
+        $this->assertTrue($service->showTx());
+    }
+
+    public function test_party_graph_hides_the_tx_series_when_the_setting_is_off(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = $this->party('AA:BB:CC:DD:EE:01', 'ONU-RXONLY');
+
+        foreach (range(1, 3) as $i) {
+            CustomerOnuPowerSample::create([
+                'customer_id' => $customer->id,
+                'rx_power_dbm' => -20 - $i,
+                'tx_power_dbm' => 2 + $i,
+                'status' => 'online',
+                'sampled_at' => now()->subHours(3 * (4 - $i)),
+                'created_at' => now(),
+            ]);
+        }
+
+        // Default: Rx shown, Tx hidden.
+        $body = $this->actingAs($user)->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Rx (dBm)')
+            ->assertDontSee('Tx (dBm)')
+            ->getContent();
+        $this->assertSame(1, substr_count($body, '<polyline'));
+
+        // Turn Tx on -> both series render.
+        app(OnuPowerHistoryService::class)->setShowTx(true);
+        $body = $this->actingAs($user)->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Tx (dBm)')
+            ->getContent();
+        $this->assertSame(2, substr_count($body, '<polyline'));
     }
 
     public function test_settings_form_can_capture_now(): void
