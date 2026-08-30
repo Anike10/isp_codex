@@ -409,6 +409,29 @@ class CustomerControllerTest extends TestCase
             ->assertSee('Imported comment only');
     }
 
+    public function test_customer_show_has_inline_quick_recharge_form_before_the_activity_log(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Recharge Customer', 'phone' => '01733333340', 'connection_id' => 'RC-001',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $body = $this->actingAs($user)->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Quick Recharge')
+            ->assertSee('Recharge now')
+            ->assertSee('action="'.route('customers.payments.store', $customer).'"', false)
+            ->getContent();
+
+        $this->assertLessThan(
+            strpos($body, 'Party activity &amp; concession log'),
+            strpos($body, 'id="quick-recharge"'),
+            'Quick Recharge should render before the party activity log.'
+        );
+    }
+
     public function test_connection_id_is_required_when_assigning_internet_package(): void
     {
         $user = User::factory()->create();

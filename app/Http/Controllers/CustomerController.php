@@ -6,11 +6,13 @@ use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
+use App\Models\PaymentAccount;
 use App\Models\ResellerCommissionHistory;
 use App\Models\Subscription;
 use App\Observers\RecordVersionObserver;
 use App\Services\ConcessionLogService;
 use App\Services\MikrotikCustomerSyncService;
+use App\Services\PaymentAccountPreferenceService;
 use App\Services\RecordVersionService;
 use App\Support\PartyNote;
 use Carbon\Carbon;
@@ -355,7 +357,7 @@ class CustomerController extends Controller
             ->with('warning', collect([$syncResult['warning'], $staleWarning])->filter()->implode(' ') ?: null);
     }
 
-    public function show(Customer $customer)
+    public function show(Request $request, Customer $customer, PaymentAccountPreferenceService $preferenceService)
     {
         $customer->load([
             'activeSubscription.package',
@@ -381,7 +383,18 @@ class CustomerController extends Controller
 
         $routers = MikrotikRouter::query()->orderBy('name')->get();
 
-        return view('customers.show', compact('customer', 'routers'));
+        // Quick Recharge (inline on the party page) reuses the payment endpoint,
+        // so it needs the same account list and per-user default the full
+        // "Record Party Payment" screen builds.
+        $paymentAccounts = PaymentAccount::query()
+            ->where('status', 'active')
+            ->usableBy($request->user())
+            ->orderBy('payment_method')
+            ->orderBy('account_name')
+            ->get();
+        $paymentDefault = $preferenceService->forUser($request->user());
+
+        return view('customers.show', compact('customer', 'routers', 'paymentAccounts', 'paymentDefault'));
     }
 
     public function inlineUpdate(Request $request, Customer $customer)

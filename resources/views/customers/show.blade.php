@@ -1286,6 +1286,95 @@
         </article>
     </section>
 
+    @php
+        $qrAccountsByMethod = $paymentAccounts
+            ->groupBy('payment_method')
+            ->map(fn ($accounts) => $accounts->map(fn ($account) => [
+                'id' => $account->id,
+                'label' => trim($account->account_name.' — '.$account->account_number, ' —'),
+            ])->values())
+            ->toArray();
+        $qrMethod = old('payment_method', $paymentDefault['payment_method'] ?? 'cash');
+        $qrAccountId = old('payment_account_id', $paymentDefault['payment_account_id'] ?? null);
+        $qrAmount = old('amount', $serviceEffectivePrice > 0
+            ? number_format($serviceEffectivePrice, 2, '.', '')
+            : ($totalDue > 0 ? number_format($totalDue, 2, '.', '') : ''));
+    @endphp
+    <section class="customer-card" id="quick-recharge" style="margin-top:16px;">
+        <h2 class="customer-card__heading">Quick Recharge</h2>
+        <p class="muted" style="margin:0 0 12px;">
+            Records a party payment against the oldest due invoice and renews future months from the amount.
+            For an invoice-by-invoice breakdown use <a href="{{ route('customers.payments.create', $customer) }}">Record Party Payment</a>.
+        </p>
+        <form method="post" action="{{ route('customers.payments.store', $customer) }}" class="form-grid-2" id="quick-recharge-form">
+            @csrf
+            <div>
+                <label for="qr-amount">Amount (৳)</label>
+                <input id="qr-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" value="{{ $qrAmount }}" required>
+            </div>
+            <div>
+                <label for="qr-date">Payment date</label>
+                <input id="qr-date" name="payment_date" type="date" value="{{ old('payment_date', now()->toDateString()) }}" required>
+            </div>
+            <div>
+                <label for="qr-method">Payment method</label>
+                <select id="qr-method" name="payment_method" required>
+                    <option value="cash" @selected($qrMethod === 'cash')>Cash</option>
+                    <option value="bkash" @selected($qrMethod === 'bkash')>bKash</option>
+                    <option value="nagad" @selected($qrMethod === 'nagad')>Nagad</option>
+                    <option value="bank" @selected($qrMethod === 'bank')>Bank</option>
+                </select>
+            </div>
+            <div id="qr-account-wrap">
+                <label for="qr-account">Account</label>
+                <select id="qr-account" name="payment_account_id">
+                    <option value="">Select account</option>
+                </select>
+            </div>
+            <div style="grid-column:1/-1">
+                <label for="qr-note">Note</label>
+                <input id="qr-note" name="note" type="text" value="{{ old('note') }}" placeholder="Optional note">
+            </div>
+            <label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;font-weight:600;">
+                <input type="checkbox" name="keep_as_advance" value="1" style="width:16px;height:16px;" @checked(old('keep_as_advance') === '1')>
+                Keep as advance (do not auto-apply to an invoice)
+            </label>
+            <div class="action-row" style="grid-column:1/-1">
+                <button class="btn" type="submit">Recharge now</button>
+                <small class="muted">
+                    Advance balance ৳ {{ number_format((float) $customer->account_balance, 2) }}
+                    @if ($totalDue > 0) &bull; Due ৳ {{ number_format($totalDue, 2) }} @endif
+                </small>
+            </div>
+        </form>
+    </section>
+    <script>
+        (function () {
+            var accountsByMethod = @json($qrAccountsByMethod);
+            var preselect = @json((string) ($qrAccountId ?? ''));
+            var methodEl = document.getElementById('qr-method');
+            var wrapEl = document.getElementById('qr-account-wrap');
+            var accountEl = document.getElementById('qr-account');
+            if (!methodEl || !accountEl) return;
+            function sync() {
+                var show = methodEl.value !== 'cash';
+                wrapEl.style.display = show ? '' : 'none';
+                accountEl.required = show;
+                accountEl.innerHTML = '<option value="">Select account</option>';
+                if (!show) { accountEl.value = ''; return; }
+                (accountsByMethod[methodEl.value] || []).forEach(function (acc) {
+                    var opt = document.createElement('option');
+                    opt.value = acc.id;
+                    opt.textContent = acc.label;
+                    if (String(preselect) === String(acc.id)) opt.selected = true;
+                    accountEl.appendChild(opt);
+                });
+            }
+            methodEl.addEventListener('change', sync);
+            sync();
+        })();
+    </script>
+
     <section class="customer-activity" id="party-activity">
         <div class="customer-activity__head">
             <h2 class="customer-card__heading">Party activity &amp; concession log</h2>
