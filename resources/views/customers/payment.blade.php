@@ -25,532 +25,681 @@
 
 <style>
     .payment-page {
-        --line: #dde4ef;
-        --soft: #eef3fa;
-        --ink: #0f172a;
-        --muted: #64748b;
-        --primary: #1d76c9;
-        --good: #0d9488;
-        --warn: #c2410c;
+        --pp-ink: var(--ink);
+        --pp-muted: var(--muted);
+        --pp-line: #e4e9f2;
+        --pp-line-soft: #eef2f8;
+        --pp-surface: #fff;
+        --pp-raise: #f8fafd;
+        --pp-accent: var(--accent);
+        --pp-good: #0e9f6e;
+        --pp-warn: #c2410c;
+        --pp-danger: var(--danger);
+        --pp-radius: 16px;
+        --pp-radius-sm: 10px;
+        --pp-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 1px 3px rgba(16, 24, 40, .08);
         display: flex;
         flex-direction: column;
-        gap: 14px;
-        color: var(--ink);
+        gap: 18px;
+        color: var(--pp-ink);
+        font-size: 14px;
     }
-    .payment-page .page-help {
-        display: none;
-    }
-    .payment-topbar {
+    .payment-page .page-help { display: none; }
+
+    /* Header ------------------------------------------------------------ */
+    .pp-head {
         display: flex;
-        justify-content: space-between;
         align-items: flex-start;
-        gap: 12px;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
     }
-    .payment-topbar h1 {
+    .pp-head h1 {
         margin: 0;
-        font-size: 28px;
-        letter-spacing: -0.01em;
+        font-size: 24px;
+        letter-spacing: -0.02em;
     }
-    .customer-subtitle {
-        margin: 4px 0 0;
-        color: var(--muted);
+    .pp-head .pp-sub {
+        margin: 6px 0 0;
+        color: var(--pp-muted);
         font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
     }
-    .topbar-actions {
+    .pp-chip {
         display: inline-flex;
         align-items: center;
-        gap: 10px;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: var(--pp-raise);
+        border: 1px solid var(--pp-line);
+        font-weight: 700;
+        font-size: 12px;
+        color: #334155;
     }
-    .help-dot {
-        width: 28px;
-        height: 28px;
-        border: 1px solid var(--line);
+    .pp-head-actions { display: inline-flex; gap: 8px; align-items: center; }
+    .pp-icon-btn {
+        width: 34px;
+        height: 34px;
+        border: 1px solid var(--pp-line);
         border-radius: 999px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         background: #fff;
-        color: #334155;
-        font-weight: 700;
-        font-size: 14px;
+        color: #475467;
+        font-weight: 800;
+        font-size: 13px;
         cursor: help;
         text-decoration: none;
+        flex: none;
     }
-    .summary-grid {
+
+    /* Summary tiles --------------------------------------------------- */
+    .pp-summary {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 10px;
-    }
-    .summary-card {
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: #fff;
-        padding: 12px;
-    }
-    .summary-card .label {
-        color: var(--muted);
-        font-size: 12px;
-        margin-bottom: 6px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: .4px;
-    }
-    .summary-card .value {
-        font-size: 20px;
-        line-height: 1.2;
-        font-weight: 700;
-    }
-    .form-wrap {
-        display: grid;
-        grid-template-columns: 1.1fr 1fr;
-        gap: 14px;
-        align-items: start;
-    }
-    .panel {
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: #fff;
-        padding: 14px;
-    }
-    .panel h2 {
-        margin: 0 0 10px;
-        font-size: 18px;
-    }
-    .field-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 12px;
     }
-    .field {
+    .pp-tile {
+        border: 1px solid var(--pp-line);
+        border-radius: 14px;
+        background: var(--pp-surface);
+        padding: 14px 16px;
+        box-shadow: var(--pp-shadow);
+        position: relative;
+        overflow: hidden;
+    }
+    .pp-tile::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 3px;
+        background: var(--pp-line);
+    }
+    .pp-tile.is-due::before { background: var(--pp-warn); }
+    .pp-tile.is-advance::before { background: var(--pp-accent); }
+    .pp-tile.is-net::before { background: #6366f1; }
+    .pp-tile.is-after {
+        border-color: rgba(29, 118, 201, .45);
+        background: linear-gradient(180deg, #f5faff, #fff);
+    }
+    .pp-tile.is-after::before { background: var(--pp-accent); }
+    .pp-tile .pp-tile-label {
+        color: var(--pp-muted);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        margin-bottom: 6px;
+    }
+    .pp-tile .pp-tile-value {
+        font-size: 22px;
+        font-weight: 800;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+    }
+    .pp-tile .pp-tile-hint {
+        margin-top: 4px;
+        font-size: 11px;
+        color: var(--pp-muted);
+    }
+
+    /* Layout -------------------------------------------------------------- */
+    .pp-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+    }
+    .pp-card {
+        border: 1px solid var(--pp-line);
+        border-radius: var(--pp-radius);
+        background: var(--pp-surface);
+        box-shadow: var(--pp-shadow);
+        overflow: hidden;
+    }
+    .pp-card__head {
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--pp-line-soft);
         display: flex;
-        flex-direction: column;
-        gap: 6px;
-        min-width: 0;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
     }
-    .field.full {
-        grid-column: 1 / -1;
+    .pp-card__head h2 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
-    .field label {
-        font-weight: 600;
-        font-size: 13px;
+    .pp-card__head .pp-help {
+        font-size: 12px;
+        color: var(--pp-muted);
+        font-weight: 500;
+    }
+    .pp-card__body { padding: 18px; }
+
+    /* Keep as advance callout ----------------------------------------- */
+    .pp-toggle-row {
+        border: 1px solid var(--pp-line);
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: var(--pp-raise);
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        cursor: pointer;
+        transition: border-color .15s ease, background .15s ease;
+    }
+    .pp-toggle-row:has(input:checked) {
+        border-color: rgba(29, 118, 201, .55);
+        background: #f2f8ff;
+    }
+    .pp-toggle-row input {
+        width: 18px;
+        height: 18px;
+        margin-top: 2px;
+        accent-color: var(--pp-accent);
+        flex: none;
+    }
+    .pp-toggle-row .pp-toggle-text strong { display: block; font-size: 13px; }
+    .pp-toggle-row .pp-toggle-text span { color: var(--pp-muted); font-size: 12px; }
+
+    /* Fields ----------------------------------------------------------- */
+    .pp-fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 14px;
+    }
+    .pp-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .pp-field.full { grid-column: 1 / -1; }
+    .pp-field > label {
+        font-weight: 700;
+        font-size: 12.5px;
+        margin: 0;
         display: flex;
         align-items: center;
         gap: 6px;
+        color: #344054;
     }
-    .field input,
-    .field select,
-    .field textarea {
+    .pp-field > label .pp-tip {
+        color: var(--pp-muted);
+        font-weight: 500;
+        cursor: help;
+    }
+    .pp-field input,
+    .pp-field select,
+    .pp-field textarea {
         width: 100%;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background: #f8fbff;
-        padding: 10px 12px;
-        font: inherit;
-        color: var(--ink);
-    }
-    .field input:focus,
-    .field select:focus,
-    .field textarea:focus {
-        outline: 2px solid rgba(29, 118, 201, 0.2);
-        border-color: rgba(29, 118, 201, 0.8);
+        border: 1px solid var(--pp-line);
+        border-radius: var(--pp-radius-sm);
         background: #fff;
-    }
-    .muted {
-        color: var(--muted);
-        font-size: 12px;
-    }
-    .preview-block {
-        border: 1px dashed #c7d2e3;
-        border-radius: 10px;
         padding: 10px 12px;
-        background: #f7faff;
-        font-size: 13px;
-        line-height: 1.45;
+        min-height: 42px;
+        font: inherit;
+        color: var(--pp-ink);
+        transition: border-color .15s ease, box-shadow .15s ease;
     }
-    .preview-block .muted {
-        margin-bottom: 4px;
+    .pp-field input:focus,
+    .pp-field select:focus,
+    .pp-field textarea:focus {
+        outline: none;
+        border-color: var(--pp-accent);
+        box-shadow: 0 0 0 4px rgba(29, 118, 201, .14);
     }
-    .preview-grid {
+    .pp-field textarea { min-height: 70px; resize: vertical; }
+    .pp-amount-wrap { position: relative; }
+    .pp-amount-wrap::before {
+        content: "৳";
+        position: absolute;
+        left: 13px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--pp-muted);
+        font-weight: 800;
+        font-size: 18px;
+        pointer-events: none;
+    }
+    #amountInput {
+        padding-left: 32px;
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        min-height: 50px;
+    }
+    .pp-field .pp-note { margin: 0; color: var(--pp-muted); font-size: 11.5px; }
+    .pp-method-line { display: flex; align-items: flex-end; gap: 10px; }
+    .pp-method-line select { flex: 1; }
+    .pp-method-line .pp-default { flex: none; padding-bottom: 11px; }
+
+    /* Preview block -------------------------------------------------------- */
+    .pp-preview {
+        margin-top: 16px;
+        border: 1px dashed #c6d5e8;
+        border-radius: 12px;
+        background: #f7fbff;
+        padding: 14px;
+    }
+    .pp-preview .pp-preview-title {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        color: var(--pp-muted);
+        margin-bottom: 10px;
+    }
+    .pp-preview-grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
-        margin-top: 6px;
-    }
-    .preview-cell {
-        border: 1px solid #d8e2f0;
-        border-radius: 8px;
-        padding: 6px 8px;
-        background: #fff;
-    }
-    .preview-cell .preview-label {
-        color: var(--muted);
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: .3px;
-    }
-    .preview-cell .preview-value {
-        font-size: 14px;
-        font-weight: 700;
-    }
-    .keep-advance {
-        border: 1px solid #dbe4f2;
-        border-radius: 10px;
-        padding: 10px 12px;
-        background: #fbfdff;
-        display: flex;
-        align-items: flex-start;
         gap: 10px;
     }
-    .keep-advance input {
-        margin-top: 3px;
-        accent-color: var(--primary);
+    .pp-preview-cell {
+        border: 1px solid #dbe6f3;
+        border-radius: var(--pp-radius-sm);
+        padding: 8px 10px;
+        background: #fff;
     }
-    .allocation-toolbar {
+    .pp-preview-cell .k {
+        color: var(--pp-muted);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+    }
+    .pp-preview-cell .v { font-size: 15px; font-weight: 800; margin-top: 2px; }
+    #previewText { margin: 10px 0 0; font-size: 12px; color: var(--pp-muted); }
+
+    /* Invoice allocation -------------------------------------------------- */
+    .pp-alloc-toolbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
-        margin-bottom: 8px;
+        margin-bottom: 10px;
         font-size: 13px;
     }
-    .allocation-toolbar .actions {
+    .pp-alloc-toolbar strong { font-size: 13px; }
+    .pp-selectall {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        color: var(--muted);
+        gap: 7px;
+        color: var(--pp-muted);
+        font-weight: 600;
+        cursor: pointer;
+        user-select: none;
     }
-    .invoice-table {
+    .pp-selectall input { width: 16px; height: 16px; min-height: 0; accent-color: var(--pp-accent); }
+    .pp-table-scroll { overflow-x: auto; border: 1px solid var(--pp-line-soft); border-radius: 12px; }
+    .pp-invoice-table {
         width: 100%;
         border-collapse: collapse;
         font-size: 13px;
-        min-width: 520px;
+        min-width: 460px;
+        background: #fff;
+        border: 0;
     }
-    .invoice-table th,
-    .invoice-table td {
-        border-bottom: 1px solid #e6edf7;
-        padding: 8px 6px;
-        text-align: left;
-        vertical-align: middle;
-    }
-    .invoice-table th {
-        color: var(--muted);
-        font-size: 12px;
-        font-weight: 600;
+    .pp-invoice-table thead th {
+        background: var(--pp-raise);
+        color: var(--pp-muted);
+        font-size: 10.5px;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: .3px;
+        letter-spacing: .4px;
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid var(--pp-line-soft);
     }
-    .invoice-row.disabled .invoice-toggle,
-    .invoice-row.disabled .allocation-amount {
-        opacity: .65;
+    .pp-invoice-table tbody td {
+        padding: 10px;
+        border-bottom: 1px solid var(--pp-line-soft);
+        vertical-align: middle;
+        background: #fff;
     }
-    .invoice-toggle {
-        width: 16px;
-        height: 16px;
-        accent-color: var(--primary);
-    }
-    .allocation-amount {
-        width: 120px;
+    .pp-invoice-table tbody tr:last-child td { border-bottom: 0; }
+    .pp-invoice-table tbody tr:hover td { background: #fbfdff; }
+    .invoice-row.disabled td { opacity: .55; }
+    .invoice-row .invoice-toggle { width: 16px; height: 16px; min-height: 0; accent-color: var(--pp-accent); }
+    .invoice-row .allocation-amount {
+        width: 118px;
+        min-height: 36px;
+        padding: 7px 10px;
+        border: 1px solid var(--pp-line);
+        border-radius: 8px;
+        background: #fff;
+        font: inherit;
         text-align: right;
+        font-weight: 700;
+        transition: border-color .15s ease, box-shadow .15s ease;
     }
-    .allocation-amount[readonly] {
-        background: #f8fafc;
+    .invoice-row .allocation-amount:focus {
+        outline: none;
+        border-color: var(--pp-accent);
+        box-shadow: 0 0 0 4px rgba(29, 118, 201, .14);
     }
-    .allocation-empty {
-        color: var(--muted);
+    .invoice-row .allocation-amount[readonly],
+    .invoice-row .allocation-amount:disabled { background: var(--pp-raise); color: var(--pp-muted); }
+    .pp-inv-no { font-weight: 700; }
+    .pp-inv-meta { color: var(--pp-muted); font-size: 11.5px; margin-top: 2px; }
+    .pp-alloc-empty {
+        color: var(--pp-muted);
         font-size: 13px;
-        padding: 10px 0;
+        padding: 20px;
+        text-align: center;
+        border: 1px dashed var(--pp-line);
+        border-radius: 12px;
+        background: var(--pp-raise);
     }
-    .btn-row {
+
+    /* Footer / submit --------------------------------------------------- */
+    .pp-formfoot {
         display: flex;
         justify-content: flex-end;
-        gap: 10px;
-        margin-top: 12px;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        border-top: 1px solid var(--pp-line-soft);
+        background: var(--pp-raise);
+        flex-wrap: wrap;
     }
-    .btn-row .btn {
-        min-width: 148px;
-        justify-content: center;
+    .pp-formfoot .pp-foot-hint { margin-right: auto; color: var(--pp-muted); font-size: 12px; }
+    #paymentSubmit { min-width: 172px; justify-content: center; font-size: 14px; min-height: 44px; border-radius: var(--pp-radius-sm); }
+
+    /* History --------------------------------------------------------- */
+    .pp-history .pp-card__body { padding: 0; }
+    .pp-history table { border: 0; border-radius: 0; }
+    .pp-history thead th {
+        background: var(--pp-raise);
+        text-transform: uppercase;
+        font-size: 10.5px;
+        letter-spacing: .4px;
+        color: var(--pp-muted);
     }
-    .history-panel {
-        margin-top: 2px;
+    .pp-history th, .pp-history td { padding: 11px 14px; border-bottom: 1px solid var(--pp-line-soft); }
+    .pp-history tbody tr:last-child td { border-bottom: 0; }
+    .pp-history .badge { text-transform: capitalize; }
+
+    @media (max-width: 1040px) {
+        .pp-grid { grid-template-columns: 1fr; }
     }
-    @media (max-width: 1100px) {
-        .form-wrap {
-            grid-template-columns: 1fr;
-        }
-    }
-    @media (max-width: 860px) {
-        .summary-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-        .field-grid {
-            grid-template-columns: 1fr;
-        }
-        .preview-grid {
-            grid-template-columns: 1fr;
-        }
-        .invoice-table {
-            min-width: 0;
-        }
+    @media (max-width: 820px) {
+        .pp-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 560px) {
-        .payment-topbar {
-            align-items: stretch;
-            flex-direction: column;
-        }
-        .topbar-actions {
-            width: 100%;
-            justify-content: space-between;
-        }
+        .pp-summary { grid-template-columns: 1fr; }
+        .pp-fields { grid-template-columns: 1fr; }
+        .pp-preview-grid { grid-template-columns: 1fr; }
+        .pp-formfoot { position: sticky; bottom: 0; }
+        #paymentSubmit { width: 100%; }
     }
 </style>
 
 <div class="payment-page">
-    <div class="payment-topbar">
+    <header class="pp-head">
         <div>
             <h1>Record Party Payment</h1>
-            <p class="customer-subtitle">{{ $customer->name }} • {{ $customer->connection_id }}</p>
+            <p class="pp-sub">
+                <span class="pp-chip">{{ $customer->name }}</span>
+                @if ($customer->connection_id)
+                    <span class="pp-chip">ID {{ $customer->connection_id }}</span>
+                @endif
+            </p>
         </div>
-        <div class="topbar-actions">
-            <a class="help-dot" href="javascript:void(0);" title="Keep amount entry simple: choose payment method/account, type amount, tick invoices to adjust. Uncheck invoices to skip.">?</a>
-            <a class="btn light" href="{{ route('customers.show', $customer) }}">Back</a>
+        <div class="pp-head-actions">
+            <a class="pp-icon-btn" href="javascript:void(0);" title="Choose the payment method/account, type the amount, then tick the invoices to apply it to. Untick an invoice to skip it — the leftover stays as advance.">?</a>
+            <a class="btn light" href="{{ route('customers.show', $customer) }}">Back to party</a>
         </div>
-    </div>
+    </header>
 
-    <section class="summary-grid">
-        <article class="summary-card">
-            <div class="label">Running Total Due</div>
-            <div class="value" id="summaryDue">{{ number_format($totalDue, 2) }}</div>
+    <section class="pp-summary">
+        <article class="pp-tile is-due">
+            <div class="pp-tile-label">Running total due</div>
+            <div class="pp-tile-value" id="summaryDue">{{ number_format($totalDue, 2) }}</div>
         </article>
-        <article class="summary-card">
-            <div class="label">Advance Balance</div>
-            <div class="value" id="summaryAdvance">{{ number_format($advanceBalance, 2) }}</div>
+        <article class="pp-tile is-advance">
+            <div class="pp-tile-label">Advance balance</div>
+            <div class="pp-tile-value" id="summaryAdvance">{{ number_format($advanceBalance, 2) }}</div>
         </article>
-        <article class="summary-card">
-            <div class="label">Net Balance</div>
-            <div class="value" id="summaryNet">{{ number_format($netBalance, 2) }}</div>
+        <article class="pp-tile is-net">
+            <div class="pp-tile-label">Net balance</div>
+            <div class="pp-tile-value" id="summaryNet">{{ number_format($netBalance, 2) }}</div>
         </article>
-        <article class="summary-card">
-            <div class="label">After Payment Preview</div>
-            <div class="value" id="summaryAfter">{{ number_format($netBalance, 2) }}</div>
+        <article class="pp-tile is-after">
+            <div class="pp-tile-label">After payment preview</div>
+            <div class="pp-tile-value" id="summaryAfter">{{ number_format($netBalance, 2) }}</div>
+            <div class="pp-tile-hint">Updates live as you type</div>
         </article>
     </section>
 
-    <form method="post" action="{{ route('customers.payments.store', $customer) }}" class="card" id="paymentForm">
+    <form method="post" action="{{ route('customers.payments.store', $customer) }}" id="paymentForm">
         @csrf
 
-        <div class="form-wrap">
-            <section class="panel">
-                <h2>
-                    Payment Details
-                    <small class="muted" style="font-size:12px; margin-left:6px; font-weight:500;">(Input + allocation are fast)</small>
-                </h2>
+        <div class="pp-grid">
+            <section class="pp-card">
+                <div class="pp-card__head">
+                    <h2>Payment details</h2>
+                    <span class="pp-help">Amount + allocation are fast</span>
+                </div>
+                <div class="pp-card__body">
+                    <label class="pp-toggle-row">
+                        <input type="checkbox" id="keepAsAdvance" name="keep_as_advance" value="1" @checked(old('keep_as_advance') === '1')>
+                        <span class="pp-toggle-text">
+                            <strong>Keep this payment as advance</strong>
+                            <span>Enable when this money should not reduce any invoice automatically.</span>
+                        </span>
+                    </label>
 
-                <label class="keep-advance">
-                    <input type="checkbox" id="keepAsAdvance" name="keep_as_advance" value="1" @checked(old('keep_as_advance') === '1')>
-                    <span>
-                        <strong>Keep this payment as advance</strong>
-                        <span class="muted">Enable when this money should not reduce any invoice automatically.</span>
-                    </span>
-                </label>
+                    <div class="pp-fields">
+                        <div class="pp-field full">
+                            <label for="amountInput">
+                                Amount
+                                <span class="pp-tip" title="Used for invoice allocations first; anything left over stays as advance.">&#9432;</span>
+                            </label>
+                            <div class="pp-amount-wrap">
+                                <input
+                                    id="amountInput"
+                                    name="amount"
+                                    type="text" inputmode="decimal"
+                                    autocomplete="off"
+                                    value="{{ $amountDefault }}"
+                                    placeholder="0.00"
+                                    required
+                                >
+                            </div>
+                            <p class="pp-note">Paying several invoices at once? Type the total amount once. No mouse-wheel or arrow-step adjustment.</p>
+                        </div>
 
-                <div class="field-grid" style="margin-top:12px">
-                    <div class="field">
-                        <label for="amountInput">
-                            Amount
-                            <span title="This value is used for invoice allocations first, remaining stays as advance.">ⓘ</span>
-                        </label>
-                        <input
-                            id="amountInput"
-                            name="amount"
-                            type="text" inputmode="decimal"
-                            autocomplete="off"
-                            value="{{ $amountDefault }}"
-                            required
-                        >
-                        <p class="muted" style="margin:0;">If payment is for multiple invoices, type total amount once.</p>
-                        <p class="muted" style="margin:0;">This field has no mouse-wheel or arrow-step adjustment.</p>
-                    </div>
+                        <div class="pp-field">
+                            <label for="paymentDate">Payment date</label>
+                            <input id="paymentDate" name="payment_date" type="date" value="{{ old('payment_date', now()->toDateString()) }}" required>
+                        </div>
 
-                    <div class="field">
-                        <label for="paymentDate">Payment Date</label>
-                        <input id="paymentDate" name="payment_date" type="date" value="{{ old('payment_date', now()->toDateString()) }}" required>
-                    </div>
-
-                    <div class="field">
-                        <label for="paymentMethod">Payment Method</label>
-                        <div class="field" style="margin:0; gap:6px;">
-                            <select id="paymentMethod" name="payment_method" required>
-                                <option value="cash" @selected($selectedPaymentMethod === 'cash')>Cash</option>
-                                <option value="bkash" @selected($selectedPaymentMethod === 'bkash')>bKash</option>
-                                <option value="nagad" @selected($selectedPaymentMethod === 'nagad')>Nagad</option>
-                                <option value="bank" @selected($selectedPaymentMethod === 'bank')>Bank</option>
-                            </select>
-                            <div class="field" style="margin:0; gap:2px;">
-                                @include('partials.payment_default_checkbox')
+                        <div class="pp-field">
+                            <label for="paymentMethod">Payment method</label>
+                            <div class="pp-method-line">
+                                <select id="paymentMethod" name="payment_method" required>
+                                    <option value="cash" @selected($selectedPaymentMethod === 'cash')>Cash</option>
+                                    <option value="bkash" @selected($selectedPaymentMethod === 'bkash')>bKash</option>
+                                    <option value="nagad" @selected($selectedPaymentMethod === 'nagad')>Nagad</option>
+                                    <option value="bank" @selected($selectedPaymentMethod === 'bank')>Bank</option>
+                                </select>
+                                <span class="pp-default">@include('partials.payment_default_checkbox')</span>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="field" id="accountSelectWrap">
-                        <label for="paymentAccount">Account</label>
-                        <select id="paymentAccount" name="payment_account_id">
-                            <option value="">Select account</option>
-                        </select>
-                    </div>
-
-                    <div class="field full">
-                        <label for="referenceInput">Reference</label>
-                        <input id="referenceInput" type="text" name="reference" value="{{ old('reference') }}" placeholder="Transaction ID / receipt no">
-                    </div>
-
-                    <div class="field full">
-                        <label for="noteInput">Note</label>
-                        <textarea id="noteInput" name="note" rows="2" placeholder="Optional note">{{ old('note') }}</textarea>
-                    </div>
-                </div>
-
-                <div class="preview-block" style="margin-top:12px">
-                    <div class="muted">After Payment Preview</div>
-                    <div class="preview-grid">
-                        <div class="preview-cell">
-                            <div class="preview-label">Due Remaining</div>
-                            <div class="preview-value" id="previewDue">0.00</div>
+                        <div class="pp-field" id="accountSelectWrap">
+                            <label for="paymentAccount">Account</label>
+                            <select id="paymentAccount" name="payment_account_id">
+                                <option value="">Select account</option>
+                            </select>
                         </div>
-                        <div class="preview-cell">
-                            <div class="preview-label">Advance After</div>
-                            <div class="preview-value" id="previewAdvance">0.00</div>
+
+                        <div class="pp-field">
+                            <label for="referenceInput">Reference</label>
+                            <input id="referenceInput" type="text" name="reference" value="{{ old('reference') }}" placeholder="Transaction ID / receipt no">
                         </div>
-                        <div class="preview-cell">
-                            <div class="preview-label">Net Balance</div>
-                            <div class="preview-value" id="previewNet">0.00</div>
+
+                        <div class="pp-field full">
+                            <label for="noteInput">Note</label>
+                            <textarea id="noteInput" name="note" rows="2" placeholder="Optional note">{{ old('note') }}</textarea>
                         </div>
                     </div>
-                    <div class="muted" id="previewText" style="margin-top:6px">Enter amount to preview invoice and balance impact.</div>
+
+                    <div class="pp-preview">
+                        <div class="pp-preview-title">After payment preview</div>
+                        <div class="pp-preview-grid">
+                            <div class="pp-preview-cell">
+                                <div class="k">Due remaining</div>
+                                <div class="v" id="previewDue">0.00</div>
+                            </div>
+                            <div class="pp-preview-cell">
+                                <div class="k">Advance after</div>
+                                <div class="v" id="previewAdvance">0.00</div>
+                            </div>
+                            <div class="pp-preview-cell">
+                                <div class="k">Net balance</div>
+                                <div class="v" id="previewNet">0.00</div>
+                            </div>
+                        </div>
+                        <p id="previewText">Enter amount to preview invoice and balance impact.</p>
+                    </div>
                 </div>
             </section>
 
-            <section class="panel">
-                <h2>
-                    Invoice Allocation
-                    <a
-                        class="help-dot"
-                        href="javascript:void(0);"
-                        title="Check the invoices you want to pay from this entry. If unchecked, that invoice won't be reduced."
-                        style="margin-left: 6px;"
-                    >?</a>
-                </h2>
-
-                @if ($dueInvoices->isNotEmpty())
-                    <div class="allocation-toolbar">
-                        <strong style="font-size: 13px;">Outstanding Invoices ({{ $dueInvoices->count() }})</strong>
-                        <label class="actions">
-                            <input id="toggleAllInvoices" type="checkbox" checked>
-                            <span>Select all</span>
-                        </label>
-                    </div>
-                    <div class="table-scroll" style="overflow:auto;">
-                        <table class="invoice-table">
-                            <thead>
-                                <tr>
-                                    <th style="width:46px;">Use</th>
-                                    <th>Invoice</th>
-                                    <th>Due Amount</th>
-                                    <th style="width:170px;">Apply From This Payment</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($dueInvoices as $invoice)
-                                    @php
-                                        $defaultAllocation = (float) old('invoice_allocations.'.$invoice->id, 0);
-                                    @endphp
-                                    <tr
-                                        class="invoice-row"
-                                        data-id="{{ $invoice->id }}"
-                                        data-due="{{ $invoice->due_amount }}"
-                                    >
-                                        <td>
-                                            <input
-                                                class="invoice-toggle"
-                                                type="checkbox"
-                                                value="1"
-                                                checked
-                                                data-id="{{ $invoice->id }}"
-                                                aria-label="Use {{ $invoice->invoice_no }}"
-                                            >
-                                        </td>
-                                        <td>
-                                            @if ($canOpenInvoices)
-                                                <a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a>
-                                            @else
-                                                {{ $invoice->invoice_no }}
-                                            @endif
-                                            <div class="muted">{{ $invoice->formatted_billing_month }} • {{ $invoice->due_date?->format('d/m/Y') ?? 'No due date' }}</div>
-                                        </td>
-                                        <td>{{ number_format($invoice->due_amount, 2) }}</td>
-                                        <td>
-                                            <input
-                                                class="allocation-amount"
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                max="{{ $invoice->due_amount }}"
-                                                name="invoice_allocations[{{ $invoice->id }}]"
-                                                value="{{ $defaultAllocation > 0 ? number_format($defaultAllocation, 2, '.', '') : '' }}"
-                                                placeholder="0.00"
-                                                aria-label="Allocation amount for {{ $invoice->invoice_no }}"
-                                            >
-                                        </td>
+            <section class="pp-card">
+                <div class="pp-card__head">
+                    <h2>Invoice allocation</h2>
+                    <a class="pp-icon-btn" href="javascript:void(0);" title="Tick the invoices this payment should pay. An unticked invoice is not reduced.">?</a>
+                </div>
+                <div class="pp-card__body">
+                    @if ($dueInvoices->isNotEmpty())
+                        <div class="pp-alloc-toolbar">
+                            <strong>Outstanding invoices ({{ $dueInvoices->count() }})</strong>
+                            <label class="pp-selectall">
+                                <input id="toggleAllInvoices" type="checkbox" checked>
+                                <span>Select all</span>
+                            </label>
+                        </div>
+                        <div class="pp-table-scroll">
+                            <table class="pp-invoice-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:44px;">Use</th>
+                                        <th>Invoice</th>
+                                        <th>Due amount</th>
+                                        <th style="width:150px;">Apply from this payment</th>
                                     </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                @else
-                    <p class="allocation-empty">No outstanding invoices found. Full amount will be saved as advance.</p>
-                @endif
+                                </thead>
+                                <tbody>
+                                    @foreach ($dueInvoices as $invoice)
+                                        @php
+                                            $defaultAllocation = (float) old('invoice_allocations.'.$invoice->id, 0);
+                                        @endphp
+                                        <tr
+                                            class="invoice-row"
+                                            data-id="{{ $invoice->id }}"
+                                            data-due="{{ $invoice->due_amount }}"
+                                        >
+                                            <td>
+                                                <input
+                                                    class="invoice-toggle"
+                                                    type="checkbox"
+                                                    value="1"
+                                                    checked
+                                                    data-id="{{ $invoice->id }}"
+                                                    aria-label="Use {{ $invoice->invoice_no }}"
+                                                >
+                                            </td>
+                                            <td>
+                                                <div class="pp-inv-no">
+                                                    @if ($canOpenInvoices)
+                                                        <a href="{{ route('invoices.show', $invoice) }}">{{ $invoice->invoice_no }}</a>
+                                                    @else
+                                                        {{ $invoice->invoice_no }}
+                                                    @endif
+                                                </div>
+                                                <div class="pp-inv-meta">{{ $invoice->formatted_billing_month }} &bull; {{ $invoice->due_date?->format('d/m/Y') ?? 'No due date' }}</div>
+                                            </td>
+                                            <td>{{ number_format($invoice->due_amount, 2) }}</td>
+                                            <td>
+                                                <input
+                                                    class="allocation-amount"
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    max="{{ $invoice->due_amount }}"
+                                                    name="invoice_allocations[{{ $invoice->id }}]"
+                                                    value="{{ $defaultAllocation > 0 ? number_format($defaultAllocation, 2, '.', '') : '' }}"
+                                                    placeholder="0.00"
+                                                    aria-label="Allocation amount for {{ $invoice->invoice_no }}"
+                                                >
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <p class="pp-alloc-empty">No outstanding invoices found. The full amount will be saved as advance.</p>
+                    @endif
+                </div>
             </section>
         </div>
 
-        <div class="btn-row">
-            <button id="paymentSubmit" class="btn" type="submit">Submit Payment</button>
+        <div class="pp-card" style="margin-top:16px;">
+            <div class="pp-formfoot">
+                <span class="pp-foot-hint">Review the preview above, then submit.</span>
+                <button id="paymentSubmit" class="btn" type="submit">Submit Payment</button>
+            </div>
         </div>
     </form>
 
-    <section class="history-panel card">
-        <h2>Advance Balance History</h2>
-        <div class="table-wrap" style="overflow:auto;">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Type</th>
-                        <th>Amount</th>
-                        <th>Balance</th>
-                        <th>Reference</th>
-                        <th>Note</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($balanceTransactions as $transaction)
+    <section class="pp-card pp-history">
+        <div class="pp-card__head">
+            <h2>Advance balance history</h2>
+            <span class="pp-help">Last {{ $balanceTransactions->count() }} entr{{ $balanceTransactions->count() === 1 ? 'y' : 'ies' }}</span>
+        </div>
+        <div class="pp-card__body">
+            <div class="table-scroll" style="overflow-x:auto;">
+                <table>
+                    <thead>
                         <tr>
-                            <td>{{ $transaction->transaction_date?->format('d/m/Y') }}</td>
-                            <td>
-                                <span class="badge {{ $transaction->direction === 'credit' ? 'active' : 'due' }}">
-                                    {{ $transaction->direction }}
-                                </span>
-                            </td>
-                            <td>{{ number_format($transaction->amount, 2) }}</td>
-                            <td>{{ number_format($transaction->balance_after, 2) }}</td>
-                            <td>{{ $transaction->reference ?? 'N/A' }}</td>
-                            <td>{{ $transaction->note ?? 'N/A' }}</td>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Balance</th>
+                            <th>Reference</th>
+                            <th>Note</th>
                         </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6">No advance balance history yet.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        @forelse ($balanceTransactions as $transaction)
+                            <tr>
+                                <td>{{ $transaction->transaction_date?->format('d/m/Y') }}</td>
+                                <td>
+                                    <span class="badge {{ $transaction->direction === 'credit' ? 'active' : 'due' }}">
+                                        {{ $transaction->direction }}
+                                    </span>
+                                </td>
+                                <td>{{ number_format($transaction->amount, 2) }}</td>
+                                <td>{{ number_format($transaction->balance_after, 2) }}</td>
+                                <td>{{ $transaction->reference ?? 'N/A' }}</td>
+                                <td>{{ $transaction->note ?? 'N/A' }}</td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="6">No advance balance history yet.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
         </div>
     </section>
 </div>
