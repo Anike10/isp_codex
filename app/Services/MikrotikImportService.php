@@ -23,6 +23,63 @@ class MikrotikImportService
         return $this->read($router, $command);
     }
 
+    /**
+     * Run several read-only `.../print` commands against one router. For the
+     * binary API a single socket is reused for the whole batch; over REST each
+     * command is its own request. Best effort: one command failing (or the
+     * connection failing outright) never aborts the others — the failure is
+     * returned in place of that command's records.
+     *
+     * @param  array<int, string>  $commands
+     * @return array<string, array{records?: array<int, array<string, string>>, error?: string}>
+     */
+    public function liveSnapshot(MikrotikRouter $router, array $commands): array
+    {
+        $commands = array_values(array_unique(array_filter(array_map('trim', $commands))));
+        $out = [];
+
+        if ($router->usesRestTransport()) {
+            $rest = new RouterOsRestClient;
+            foreach ($commands as $command) {
+                try {
+                    $out[$command] = ['records' => $rest->records($router, $command)];
+                } catch (Throwable $exception) {
+                    $out[$command] = ['error' => $this->flattenError($exception)];
+                }
+            }
+
+            return $out;
+        }
+
+        $client = new RouterOsClient;
+
+        try {
+            $client->connect($router->ip_address, $router->api_port, $router->username, $router->apiPassword(), 10);
+
+            foreach ($commands as $command) {
+                try {
+                    $out[$command] = ['records' => $client->command($command)];
+                } catch (Throwable $exception) {
+                    $out[$command] = ['error' => $this->flattenError($exception)];
+                }
+            }
+        } catch (Throwable $exception) {
+            $message = $this->flattenError($exception);
+            foreach ($commands as $command) {
+                $out[$command] = ['error' => $message];
+            }
+        } finally {
+            $client->close();
+        }
+
+        return $out;
+    }
+
+    private function flattenError(Throwable $exception): string
+    {
+        return trim(preg_replace('/\s+/', ' ', $exception->getMessage())) ?: $exception::class;
+    }
+
     public function hasPppProfile(MikrotikRouter $router, string $profile): bool
     {
         $profile = trim((string) $profile);

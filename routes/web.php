@@ -38,6 +38,7 @@ use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\ResellerController;
 use App\Http\Controllers\ResellerPortalController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\RouterLiveDataController;
 use App\Http\Controllers\RouterUserController;
 use App\Http\Controllers\SaleReturnController;
 use App\Http\Controllers\TicketController;
@@ -300,6 +301,7 @@ Route::middleware('auth')->group(function () {
         Route::get('mac-changes', [ConnectionAnalyticsController::class, 'macChanges'])->name('mac-changes');
         Route::get('connection-analytics', [ConnectionAnalyticsController::class, 'index'])->name('analytics');
         Route::patch('retention', [ConnectionAnalyticsController::class, 'updateRetention'])->name('retention');
+        Route::get('router-data', [RouterLiveDataController::class, 'index'])->name('router-data');
     });
 
     Route::middleware('permission:manage_tickets')->group(function () {
