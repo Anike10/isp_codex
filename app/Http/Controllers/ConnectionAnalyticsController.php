@@ -130,6 +130,7 @@ class ConnectionAnalyticsController extends Controller
 
         $this->attachCustomers($rows->getCollection());
         $this->attachRecentMacs($rows->getCollection(), $since, $routerId);
+        $this->attachOnuReadings($rows->getCollection());
 
         return view('troubleshoot.mac_changes', [
             'rows' => $rows,
