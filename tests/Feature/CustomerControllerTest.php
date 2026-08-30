@@ -349,17 +349,24 @@ class CustomerControllerTest extends TestCase
             'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
         ]);
 
-        $this->actingAs($user)
+        $body = $this->actingAs($user)
             ->get(route('customers.index'))
             ->assertOk()
-            ->assertSee('OLT / ONU')
             ->assertSee('Kushtia-OLT-1')
             ->assertSee('3/12')
             ->assertSee('Rx -21.40')
             ->assertSee('Tx 2.10')
             ->assertSee('Kushtia-OLT-2')
             ->assertSee('1/4')
-            ->assertSee('Rx -27.90');
+            ->assertSee('Rx -27.90')
+            ->assertSee('onu-sub', false)
+            ->getContent();
+
+        // the ONU line sits inside the name cell, right after the name
+        $this->assertMatchesRegularExpression(
+            '/Serial Match Party<\/span>\s*<div class="onu-sub">/s',
+            $body
+        );
     }
 
     public function test_customer_show_activity_table_lists_the_admin_who_took_a_payment(): void

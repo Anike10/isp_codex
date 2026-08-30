@@ -252,10 +252,9 @@
         color: #98a2b3;
     }
     td.note-cell textarea { width: 100%; font: inherit; font-size: 12px; }
-    td.onu-cell { white-space: nowrap; font-size: 12px; line-height: 1.35; }
-    td.onu-cell__loc, td.onu-cell .onu-cell__loc { font-weight: 700; }
-    td.onu-cell .onu-cell__pwr { margin-top: 3px; display: flex; gap: 4px; }
-    td.onu-cell .badge { font-size: 10.5px; padding: 1px 6px; }
+    .onu-sub { margin-top: 3px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 11px; line-height: 1.3; }
+    .onu-sub__loc { font-weight: 700; color: #475467; }
+    .onu-sub .badge { font-size: 10px; padding: 1px 6px; font-weight: 700; }
     @media (max-width: 1500px) {
         .customer-filter-form {
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -320,7 +319,7 @@
 </div>
 
 <table class="customer-table">
-    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>OLT / ONU</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Package</th><th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th><th>Note</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
+    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Package</th><th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th><th>Note</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
         @php
@@ -347,19 +346,15 @@
             <td>{{ $customers->firstItem() + $loop->index }}</td>
             <td data-inline-field="name" data-inline-url="{{ route('customers.inline-update', $customer) }}">
                 <span data-inline-value>{{ $customer->name }}</span>
-            </td>
-            <td class="onu-cell">
                 @php $onu = $customer->matched_onu ?? null; @endphp
                 @if ($onu)
-                    <div class="onu-cell__loc">{{ $onu->olt_name ?: 'OLT' }} <span class="muted">·</span> {{ $onu->pon_port }}/{{ $onu->onu_id }}</div>
-                    @if ($onu->rx_power_dbm !== null || $onu->tx_power_dbm !== null)
-                        <div class="onu-cell__pwr">
+                    <div class="onu-sub">
+                        <span class="onu-sub__loc">{{ $onu->olt_name ?: 'OLT' }} <span class="muted">·</span> {{ $onu->pon_port }}/{{ $onu->onu_id }}</span>
+                        @if ($onu->rx_power_dbm !== null || $onu->tx_power_dbm !== null)
                             <span class="badge {{ $onu->rx_power_dbm !== null && (float) $onu->rx_power_dbm <= -25 ? 'failed' : 'active' }}">Rx {{ $onu->rx_power_dbm !== null ? number_format((float) $onu->rx_power_dbm, 2) : '—' }}</span>
                             <span class="badge {{ $onu->tx_power_dbm !== null && ((float) $onu->tx_power_dbm <= 0.5 || (float) $onu->tx_power_dbm >= 7) ? 'failed' : 'active' }}">Tx {{ $onu->tx_power_dbm !== null ? number_format((float) $onu->tx_power_dbm, 2) : '—' }}</span>
-                        </div>
-                    @endif
-                @else
-                    <span class="muted">&mdash;</span>
+                        @endif
+                    </div>
                 @endif
             </td>
             <td data-inline-field="phone" data-inline-url="{{ route('customers.inline-update', $customer) }}">
@@ -539,7 +534,7 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="13">No parties found.</td></tr>
+        <tr><td colspan="12">No parties found.</td></tr>
     @endforelse
     </tbody>
 </table>
@@ -624,13 +619,17 @@ function editCustomerInlineCell(cell, event) {
     input.value = originalValue;
     input.style.width = '100%';
 
+    // Keep any sibling nodes in the cell (e.g. the OLT/ONU sub-line under a
+    // name) so an inline edit doesn't drop them until the next reload.
+    const extraNodes = [...cell.childNodes].filter((node) => node !== valueNode);
+
     cell.replaceChildren(input);
     input.focus();
     if (!isNote) input.select();
 
     let saving = false;
     const restoreCell = () => {
-        cell.replaceChildren(valueNode);
+        cell.replaceChildren(valueNode, ...extraNodes);
     };
     const saveField = async () => {
         if (saving) return;
