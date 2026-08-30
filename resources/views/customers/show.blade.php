@@ -1301,22 +1301,6 @@
             : ($totalDue > 0 ? number_format($totalDue, 2, '.', '') : ''));
     @endphp
 
-    @if (($onuHistory ?? collect())->isNotEmpty() || $customer->last_connected_mac)
-        <style>
-            .onu-chart { border:1px solid #dce6f4; border-radius:12px; padding:12px; background:#fff; }
-            .onu-chart svg { width:100%; height:auto; display:block; }
-            .onu-chart__legend { display:flex; gap:16px; flex-wrap:wrap; align-items:center; font-size:12px; margin-bottom:8px; }
-            .onu-chart__legend i { display:inline-block; width:12px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
-        </style>
-        <section class="customer-card" id="onu-signal" style="margin-top:16px;">
-            <h2 class="customer-card__heading">ONU সিগন্যাল হিস্টোরি</h2>
-            <p class="muted" style="margin:0 0 12px;">
-                শেষ {{ $onuHistoryDays ?? 7 }} দিনের সংরক্ষিত ONU Rx/Tx optical power। সবুজ ব্যান্ড −১৫ থেকে −২৫ dBm (স্বাভাবিক)।
-            </p>
-            @include('customers._onu_signal_chart', ['samples' => $onuHistory ?? collect()])
-        </section>
-    @endif
-
     <section class="customer-card" id="quick-recharge" style="margin-top:16px;">
         <h2 class="customer-card__heading">Quick Recharge</h2>
         <p class="muted" style="margin:0 0 12px;">
@@ -1701,6 +1685,22 @@
                     </table>
                 </div>
             </details>
+        </section>
+    @endif
+
+    @if (($onuHistory ?? collect())->isNotEmpty() || $customer->last_connected_mac)
+        <style>
+            .onu-chart { border:1px solid #dce6f4; border-radius:12px; padding:12px; background:#fff; }
+            .onu-chart svg { width:100%; height:auto; display:block; }
+            .onu-chart__legend { display:flex; gap:16px; flex-wrap:wrap; align-items:center; font-size:12px; margin-bottom:8px; }
+            .onu-chart__legend i { display:inline-block; width:12px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
+        </style>
+        <section class="customer-card" id="onu-signal" style="margin-top:16px;">
+            <h2 class="customer-card__heading">ONU সিগন্যাল হিস্টোরি</h2>
+            <p class="muted" style="margin:0 0 12px;">
+                শেষ {{ $onuHistoryDays ?? 7 }} দিনের সংরক্ষিত ONU Rx/Tx optical power। সবুজ ব্যান্ড −১৫ থেকে −২৫ dBm (স্বাভাবিক)।
+            </p>
+            @include('customers._onu_signal_chart', ['samples' => $onuHistory ?? collect()])
         </section>
     @endif
 
