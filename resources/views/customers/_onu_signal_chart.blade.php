@@ -18,25 +18,32 @@
 
     $tsMin = $samples->min(fn ($s) => $s->sampled_at->getTimestamp()) ?? 0;
     $tsMax = $samples->max(fn ($s) => $s->sampled_at->getTimestamp()) ?? 1;
-    $tsSpan = max(1, $tsMax - $tsMin);
+    $tsSpan = $tsMax - $tsMin;
 
-    $x = fn ($ts) => $padL + ($tsSpan ? ($ts - $tsMin) / $tsSpan : 0) * $plotW;
+    // With a single sample (or all at the same instant) there is no time span to
+    // map across, so pin every point to the middle of the plot.
+    $x = fn ($ts) => $tsSpan > 0 ? $padL + ($ts - $tsMin) / $tsSpan * $plotW : $padL + $plotW / 2;
     $y = fn ($v) => $padT + ($yMax - $v) / $span * $plotH;
 
-    $line = function ($key) use ($samples, $x, $y) {
+    $points = function ($key) use ($samples, $x, $y) {
         $pts = [];
         foreach ($samples as $s) {
             if ($s->{$key} === null) { continue; }
-            $pts[] = round($x($s->sampled_at->getTimestamp()), 1).','.round($y((float) $s->{$key}), 1);
+            $pts[] = [round($x($s->sampled_at->getTimestamp()), 1), round($y((float) $s->{$key}), 1)];
         }
-        return implode(' ', $pts);
+        return $pts;
     };
 
+    $rxPts = $points('rx_power_dbm');
+    $txPts = $points('tx_power_dbm');
+    $polyline = fn ($pts) => implode(' ', array_map(fn ($p) => $p[0].','.$p[1], $pts));
+
     $latest = $samples->last();
+    $bandVisible = $yMin <= -25 && $yMax >= -15;
 @endphp
 
-@if ($samples->count() < 2)
-    <p class="muted" style="margin:0">এখনো যথেষ্ট নমুনা জমা হয়নি। প্রতি নির্ধারিত ঘণ্টায় পার্টির ONU Rx/Tx power সংরক্ষণ হয়; কয়েকটি নমুনা জমা হলে এখানে গ্রাফ দেখা যাবে।</p>
+@if ($samples->isEmpty())
+    <p class="muted" style="margin:0">এখনো কোনো নমুনা জমা হয়নি। প্রতি নির্ধারিত ঘণ্টায় পার্টির ONU Rx/Tx power সংরক্ষণ হয় — কয়েক ঘণ্টা পর এখানে পূর্ণ গ্রাফ দেখা যাবে।</p>
 @else
     <div class="onu-chart">
         <div class="onu-chart__legend">
@@ -53,19 +60,30 @@
                 <text x="{{ $padL - 6 }}" y="{{ round($y($gv), 1) + 3 }}" text-anchor="end" font-size="10" fill="#94a3b8">{{ round($gv) }}</text>
             @endforeach
             {{-- -15 / -25 signal band --}}
-            @if ($yMin <= -25 && $yMax >= -15)
+            @if ($bandVisible)
                 <rect x="{{ $padL }}" y="{{ round($y(-15), 1) }}" width="{{ $plotW }}" height="{{ round($y(-25) - $y(-15), 1) }}" fill="#0f7a55" fill-opacity="0.06"/>
                 <line x1="{{ $padL }}" y1="{{ round($y(-15), 1) }}" x2="{{ $W - $padR }}" y2="{{ round($y(-15), 1) }}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
                 <line x1="{{ $padL }}" y1="{{ round($y(-25), 1) }}" x2="{{ $W - $padR }}" y2="{{ round($y(-25), 1) }}" stroke="#d92d20" stroke-width="1" stroke-dasharray="3 3"/>
             @endif
-            @if ($line('tx_power_dbm') !== '')
-                <polyline points="{{ $line('tx_power_dbm') }}" fill="none" stroke="#0f7a55" stroke-width="1.6" stroke-linejoin="round"/>
+            {{-- Tx --}}
+            @if (count($txPts) >= 2)
+                <polyline points="{{ $polyline($txPts) }}" fill="none" stroke="#0f7a55" stroke-width="1.6" stroke-linejoin="round"/>
             @endif
-            @if ($line('rx_power_dbm') !== '')
-                <polyline points="{{ $line('rx_power_dbm') }}" fill="none" stroke="#1d76c9" stroke-width="2" stroke-linejoin="round"/>
+            @foreach ($txPts as $p)
+                <circle cx="{{ $p[0] }}" cy="{{ $p[1] }}" r="{{ count($txPts) === 1 ? 3.2 : 1.8 }}" fill="#0f7a55"/>
+            @endforeach
+            {{-- Rx --}}
+            @if (count($rxPts) >= 2)
+                <polyline points="{{ $polyline($rxPts) }}" fill="none" stroke="#1d76c9" stroke-width="2" stroke-linejoin="round"/>
             @endif
+            @foreach ($rxPts as $p)
+                <circle cx="{{ $p[0] }}" cy="{{ $p[1] }}" r="{{ count($rxPts) === 1 ? 3.6 : 2 }}" fill="#1d76c9"/>
+            @endforeach
             <text x="{{ $padL }}" y="{{ $H - 6 }}" font-size="10" fill="#94a3b8">{{ $samples->first()->sampled_at->format('d/m H:i') }}</text>
             <text x="{{ $W - $padR }}" y="{{ $H - 6 }}" text-anchor="end" font-size="10" fill="#94a3b8">{{ $samples->last()->sampled_at->format('d/m H:i') }}</text>
         </svg>
+        @if ($samples->count() < 2)
+            <p class="muted" style="margin:8px 0 0">একটি নমুনা জমা হয়েছে। প্রতি ঘণ্টায় নতুন নমুনা যোগ হয়ে এটি সম্পূর্ণ লাইন গ্রাফে পরিণত হবে।</p>
+        @endif
     </div>
 @endif

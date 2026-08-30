@@ -187,4 +187,26 @@ class OnuPowerHistoryTest extends TestCase
             ->assertSee('ONU সিগন্যাল হিস্টোরি')
             ->assertSee('<polyline', false);
     }
+
+    public function test_party_page_draws_the_chart_from_a_single_sample(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = $this->party('AA:BB:CC:DD:EE:01', 'ONU-ONE');
+
+        CustomerOnuPowerSample::create([
+            'customer_id' => $customer->id,
+            'rx_power_dbm' => -21.5,
+            'tx_power_dbm' => 2.5,
+            'status' => 'online',
+            'sampled_at' => now(),
+            'created_at' => now(),
+        ]);
+
+        $this->actingAs($user)->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('<svg', false)
+            ->assertSee('<circle', false)
+            ->assertDontSee('এখনো কোনো নমুনা জমা হয়নি');
+    }
 }
