@@ -425,7 +425,7 @@ class MikrotikImportService
     /**
      * Re-pull PPPoE secrets from every active router.
      *
-     * @return array{results: array<int, array{router: string, count?: int, error?: string}>, imported: int, failed: int}
+     * @return array{results: array<int, array{router: string, count?: int, error?: string}>, imported: int, failed: int, pruned_inactive: int}
      */
     public function refreshActiveRouterSecrets(): array
     {
@@ -433,19 +433,28 @@ class MikrotikImportService
         $imported = 0;
         $failed = 0;
 
-        MikrotikRouter::query()->where('status', 'active')->orderBy('id')->get()
-            ->each(function (MikrotikRouter $router) use (&$results, &$imported, &$failed): void {
-                try {
-                    $count = $this->importSecrets($router);
-                    $imported += $count;
-                    $results[] = ['router' => $router->name, 'count' => $count];
-                } catch (Throwable $exception) {
-                    $failed++;
-                    $results[] = ['router' => $router->name, 'error' => $exception->getMessage()];
-                }
-            });
+        $activeRouters = MikrotikRouter::query()->where('status', 'active')->orderBy('id')->get();
 
-        return ['results' => $results, 'imported' => $imported, 'failed' => $failed];
+        $activeRouters->each(function (MikrotikRouter $router) use (&$results, &$imported, &$failed): void {
+            try {
+                $count = $this->importSecrets($router);
+                $imported += $count;
+                $results[] = ['router' => $router->name, 'count' => $count];
+            } catch (Throwable $exception) {
+                $failed++;
+                $results[] = ['router' => $router->name, 'error' => $exception->getMessage()];
+            }
+        });
+
+        // Rows tied to a router that is no longer active (disabled or deleted)
+        // can never be refreshed and just show stale "—" data on the Router
+        // Users list, so drop them — including the `active-*` session
+        // placeholders imported from that router.
+        $prunedInactive = MikrotikImportedSecret::query()
+            ->whereNotIn('mikrotik_router_id', $activeRouters->modelKeys())
+            ->delete();
+
+        return ['results' => $results, 'imported' => $imported, 'failed' => $failed, 'pruned_inactive' => $prunedInactive];
     }
 
     /**
@@ -527,7 +536,7 @@ class MikrotikImportService
     public function importedSecretsOverview(?int $routerId = null): Collection
     {
         $secrets = MikrotikImportedSecret::query()
-            ->with(['router:id,name,ip_address,read_only', 'customer:id,name,last_connected_mac,last_connected_at'])
+            ->with(['router:id,name,ip_address,read_only', 'customer:id,name,last_connected_mac,last_connected_ip,last_connected_at'])
             ->when($routerId, fn (Builder $query) => $query->where('mikrotik_router_id', $routerId))
             ->orderBy('mikrotik_router_id')
             ->orderBy('name')
@@ -550,7 +559,7 @@ class MikrotikImportService
         $byName = [];
         if ($nameKeys->isNotEmpty()) {
             Customer::query()
-                ->select('id', 'name', 'connection_id', 'mikrotik_username', 'last_connected_mac', 'last_connected_at')
+                ->select('id', 'name', 'connection_id', 'mikrotik_username', 'last_connected_mac', 'last_connected_ip', 'last_connected_at')
                 ->where(function ($query) use ($nameKeys): void {
                     $query->whereIn(DB::raw('lower(connection_id)'), $nameKeys)
                         ->orWhereIn(DB::raw('lower(mikrotik_username)'), $nameKeys);

@@ -116,7 +116,17 @@
                                     </td>
                                     <td>{{ $secret->profile ?: '—' }}</td>
                                     <td>{{ $secret->service ?: '—' }}</td>
-                                    <td>{{ $secret->remote_address ?: '—' }}</td>
+                                    <td>
+                                        @php($addr = $secret->remote_address ?: $secret->matched_customer?->last_connected_ip)
+                                        @if ($addr)
+                                            <code>{{ $addr }}</code>
+                                            @unless ($secret->remote_address)
+                                                <div class="muted">party live IP</div>
+                                            @endunless
+                                        @else
+                                            <span class="muted">—</span>
+                                        @endif
+                                    </td>
                                     <td>
                                         @if ($secret->isActiveSessionOnly())
                                             <span class="badge active">active session</span>

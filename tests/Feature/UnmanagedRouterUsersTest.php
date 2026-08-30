@@ -227,6 +227,47 @@ class UnmanagedRouterUsersTest extends TestCase
             ->assertSee('00:8D:FF:02:2A:17');
     }
 
+    public function test_refresh_secrets_prunes_rows_from_a_router_that_is_no_longer_active(): void
+    {
+        Http::fake([
+            '10.0.0.7:8181/rest/ppp/profile' => Http::response([], 200),
+            '10.0.0.7:8181/rest/ppp/secret' => Http::response([], 200),
+            '10.0.0.7:8181/rest/ppp/active' => Http::response([], 200),
+        ]);
+
+        MikrotikRouter::query()->update(['status' => 'inactive']);
+        $active = MikrotikRouter::create([
+            'name' => 'Active REST', 'ip_address' => '10.0.0.7', 'api_port' => 8181, 'transport' => 'rest',
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'api', 'password' => 'x', 'status' => 'active',
+        ]);
+        $retired = MikrotikRouter::create([
+            'name' => 'Retired', 'ip_address' => '10.9.9.1', 'api_port' => 8728,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'api', 'password' => 'x', 'status' => 'inactive',
+        ]);
+
+        $staleSecret = MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $retired->id, 'routeros_id' => '*7', 'name' => 'old-user',
+            'password' => 'x', 'service' => 'pppoe', 'disabled' => false, 'imported_at' => now()->subMonth(),
+        ]);
+        $staleActive = MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $retired->id, 'routeros_id' => 'active-*9', 'name' => 'old-session',
+            'password' => 'x', 'service' => 'pppoe', 'disabled' => false, 'imported_at' => now()->subMonth(),
+        ]);
+        $keepActive = MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $active->id, 'routeros_id' => 'active-*1', 'name' => 'live-session',
+            'password' => 'x', 'service' => 'pppoe', 'disabled' => false, 'imported_at' => now(),
+        ]);
+
+        $this->actingAs($this->user(['view_dashboard', 'view_unmanaged_router_users']))
+            ->post(route('router-users.refresh'))
+            ->assertRedirect(route('router-users.index'))
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'Removed 2 stale row(s) from inactive/removed routers'));
+
+        $this->assertNull($staleSecret->fresh());
+        $this->assertNull($staleActive->fresh());
+        $this->assertNotNull($keepActive->fresh());
+    }
+
     public function test_pull_active_connections_also_copies_the_device_mac_onto_the_party(): void
     {
         Http::fake([

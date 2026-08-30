@@ -93,8 +93,11 @@ class RouterUserController extends Controller
         $summary = $this->importService->refreshActiveRouterSecrets();
         $macs = $this->syncActivePartyMacs();
 
-        $message = "Refreshed router users: {$summary['imported']} secret(s) read from ".count($summary['results']).' router(s). '
-            .$this->partyMacSummary($macs);
+        $message = "Refreshed router users: {$summary['imported']} secret(s) read from ".count($summary['results']).' router(s).';
+        if (($summary['pruned_inactive'] ?? 0) > 0) {
+            $message .= " Removed {$summary['pruned_inactive']} stale row(s) from inactive/removed routers.";
+        }
+        $message .= ' '.$this->partyMacSummary($macs);
         $errors = collect($summary['results'])->filter(fn ($r) => isset($r['error']))
             ->map(fn ($r) => $r['router'].' — '.$r['error'])
             ->merge($macs['errors'])

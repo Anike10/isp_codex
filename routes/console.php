@@ -187,7 +187,11 @@ Artisan::command('mikrotik:import-secrets', function (MikrotikImportService $imp
         }
     }
 
-    $this->info("Router secret refresh finished. Read: {$summary['imported']}. Failed routers: {$summary['failed']}.");
+    if (($summary['pruned_inactive'] ?? 0) > 0) {
+        $this->line("Pruned {$summary['pruned_inactive']} stale row(s) tied to inactive/removed routers.");
+    }
+
+    $this->info("Router secret refresh finished. Read: {$summary['imported']}. Pruned (inactive routers): ".($summary['pruned_inactive'] ?? 0).". Failed routers: {$summary['failed']}.");
 
     return $summary['failed'] === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Re-pull PPPoE secrets from active routers so the "router users not in app" list stays fresh');
