@@ -152,7 +152,7 @@ Artisan::command('mikrotik:sync-active-macs {--force : Poll every active router 
 
             try {
                 $summary = $syncService->syncActiveConnectionMacs($router);
-                $text = "sessions={$summary['sessions']}, macs_updated={$summary['updated']}, unmatched={$summary['unmatched']}";
+                $text = "sessions={$summary['sessions']}, matched={$summary['matched']}, macs_changed={$summary['updated']}, unmatched={$summary['unmatched']}, no_mac={$summary['no_mac']}";
 
                 $router->update([
                     'last_active_mac_sync_at' => now(),

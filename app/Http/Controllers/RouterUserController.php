@@ -21,25 +21,43 @@ class RouterUserController extends Controller
      * they belong to, so the ONU lookup on the parties list (and elsewhere) has
      * a fresh `last_connected_mac` to match on.
      *
-     * @return array{updated: int, routers: int, errors: array<int, string>}
+     * @return array{sessions: int, matched: int, updated: int, unmatched: int, no_mac: int, errors: array<int, string>}
      */
     private function syncActivePartyMacs(): array
     {
-        $updated = 0;
-        $routers = 0;
+        $totals = ['sessions' => 0, 'matched' => 0, 'updated' => 0, 'unmatched' => 0, 'no_mac' => 0];
         $errors = [];
 
         foreach (MikrotikRouter::query()->where('status', 'active')->orderBy('id')->get() as $router) {
             try {
                 $result = $this->customerSync->syncActiveConnectionMacs($router);
-                $updated += $result['updated'];
-                $routers++;
+                foreach ($totals as $key => $_) {
+                    $totals[$key] += $result[$key] ?? 0;
+                }
             } catch (Throwable $exception) {
                 $errors[] = $router->name.' — '.$exception->getMessage();
             }
         }
 
-        return ['updated' => $updated, 'routers' => $routers, 'errors' => $errors];
+        return $totals + ['errors' => $errors];
+    }
+
+    /** One-line human summary of a {@see syncActivePartyMacs()} result. */
+    private function partyMacSummary(array $macs): string
+    {
+        $summary = "Party device MACs: {$macs['matched']} live session(s) matched a party, "
+            ."{$macs['updated']} MAC(s) newly set"
+            .($macs['updated'] === 0 && $macs['matched'] > 0 ? ' (the rest were already current)' : '')
+            .'.';
+
+        if ($macs['unmatched'] > 0) {
+            $summary .= " {$macs['unmatched']} session(s) had no matching party.";
+        }
+        if ($macs['no_mac'] > 0) {
+            $summary .= " {$macs['no_mac']} session(s) sent no device MAC in caller-id.";
+        }
+
+        return $summary;
     }
 
     /** Full-page list of every imported PPPoE secret, matched parties marked. */
@@ -75,8 +93,8 @@ class RouterUserController extends Controller
         $summary = $this->importService->refreshActiveRouterSecrets();
         $macs = $this->syncActivePartyMacs();
 
-        $message = "Refreshed router users: {$summary['imported']} secret(s) read from ".count($summary['results']).' router(s).'
-            ." Party device MACs updated: {$macs['updated']}.";
+        $message = "Refreshed router users: {$summary['imported']} secret(s) read from ".count($summary['results']).' router(s). '
+            .$this->partyMacSummary($macs);
         $errors = collect($summary['results'])->filter(fn ($r) => isset($r['error']))
             ->map(fn ($r) => $r['router'].' — '.$r['error'])
             ->merge($macs['errors'])
@@ -110,7 +128,7 @@ class RouterUserController extends Controller
         if ($summary['skipped'] > 0) {
             $message .= " {$summary['skipped']} skipped (no username yet, or an extra session for a name already listed).";
         }
-        $message .= " Users without a real secret got the shared password. Party device MACs updated: {$macs['updated']}.";
+        $message .= ' Users without a real secret got the shared password. '.$this->partyMacSummary($macs);
         $errors = collect($summary['results'])->filter(fn ($r) => isset($r['error']))
             ->map(fn ($r) => $r['router'].' — '.$r['error'])
             ->merge($macs['errors'])

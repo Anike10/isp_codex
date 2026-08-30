@@ -189,7 +189,12 @@ class MikrotikCustomerSyncService
      * the live IP / timestamp. Read-only, transport-agnostic, and far lighter
      * than {@see syncRouter()} so it can run on a short interval.
      *
-     * @return array{sessions: int, updated: int, unmatched: int}
+     * `updated` counts only parties whose stored MAC actually changed this run;
+     * `matched` is every session that resolved to a party (its "last seen" is
+     * still refreshed even when the MAC is unchanged), and `no_mac` is sessions
+     * whose `caller-id` was not a device MAC at all.
+     *
+     * @return array{sessions: int, no_mac: int, matched: int, unmatched: int, updated: int}
      */
     public function syncActiveConnectionMacs(MikrotikRouter $router): array
     {
@@ -199,7 +204,7 @@ class MikrotikCustomerSyncService
             ->filter(fn ($session) => ! blank($session['name'] ?? null));
 
         if ($sessions->isEmpty()) {
-            return ['sessions' => 0, 'updated' => 0, 'unmatched' => 0];
+            return ['sessions' => 0, 'no_mac' => 0, 'matched' => 0, 'unmatched' => 0, 'updated' => 0];
         }
 
         $names = $sessions->pluck('name')
@@ -224,13 +229,17 @@ class MikrotikCustomerSyncService
             });
 
         $updated = 0;
+        $matched = 0;
         $unmatched = 0;
+        $noMac = 0;
 
         foreach ($sessions as $session) {
             $mac = $this->normalizeMacAddress(trim((string) ($session['caller-id'] ?? '')) ?: null);
             // Only real MACs — some PPP services put an IP or interface name in
             // caller-id, and that must not land in last_connected_mac.
             if (! $mac || ! preg_match('/^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/i', $mac)) {
+                $noMac++;
+
                 continue;
             }
 
@@ -241,6 +250,7 @@ class MikrotikCustomerSyncService
                 continue;
             }
 
+            $matched++;
             $ipAddress = trim((string) ($session['address'] ?? '')) ?: null;
             $updates = ['last_connected_at' => now()];
             if ($customer->last_connected_mac !== $mac) {
@@ -256,7 +266,13 @@ class MikrotikCustomerSyncService
             RecordVersionObserver::withoutRecording(fn () => $customer->forceFill($updates)->save());
         }
 
-        return ['sessions' => $sessions->count(), 'updated' => $updated, 'unmatched' => $unmatched];
+        return [
+            'sessions' => $sessions->count(),
+            'no_mac' => $noMac,
+            'matched' => $matched,
+            'unmatched' => $unmatched,
+            'updated' => $updated,
+        ];
     }
 
     public function captureActiveSessions(RouterOsClient $client, MikrotikRouter $router): int

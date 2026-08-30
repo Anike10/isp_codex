@@ -255,7 +255,7 @@ class UnmanagedRouterUsersTest extends TestCase
         $this->actingAs($this->user(['view_dashboard', 'view_unmanaged_router_users']))
             ->post(route('router-users.refresh-active'), ['active_password' => 'shared-pw'])
             ->assertRedirect(route('router-users.index'))
-            ->assertSessionHas('success', fn ($m) => str_contains($m, 'Party device MACs updated: 1'));
+            ->assertSessionHas('success', fn ($m) => str_contains($m, '1 live session(s) matched a party, 1 MAC(s) newly set'));
 
         $this->assertSame('00:8D:FF:02:2A:17', $party->fresh()->last_connected_mac);
     }
