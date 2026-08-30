@@ -1645,6 +1645,21 @@ always wins and the app is never loaded by more than one OLT poll at a time.
 `OltSnmpClient` also reads `snmp_tx_power_oid_template` (optional, same divisor as
 Rx) so quick SNMP polls can capture ONU Tx power.
 
+Party ONU signal history: `php artisan onu:capture-power-history` (scheduled
+hourly, `withoutOverlapping`) snapshots every party's current matched ONU Rx/Tx
+optical power into `customer_onu_power_samples`. It does not poll the OLTs — it
+reads whatever the `olt:auto-refresh` drip last stored. `OnuPowerHistoryService`
+holds two `app_settings` keys, `onu_power_history.interval_hours` (default 1) and
+`onu_power_history.retention_days` (default 7), edited from the form on the OLT
+ONU list (`PATCH olt-onus/power-history-settings`, `manage_mikrotik_routers`);
+"Save & capture now" runs a sample immediately. The hourly command only samples
+when the interval has elapsed since the newest row (`isDue()`), then prunes past
+retention. Party↔ONU matching is centralized in `App\Support\OnuMatcher::byMac()`
+(ONU serial `mac_address` or a `learned_macs` entry, newest `last_live_polled_at`
+first) — the parties list uses the same helper. The party page
+(`customers.show`) renders the last `retention_days` of samples as an inline SVG
+line chart (`customers/_onu_signal_chart.blade.php`, green band −15..−25 dBm).
+
 The Router Users page's "Refresh secrets" and "Pull active connections" buttons
 also run `MikrotikCustomerSyncService::syncActiveConnectionMacs()` for every
 active router, so a manual pull immediately writes each live session's

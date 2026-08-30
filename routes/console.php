@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\BkashSmsRetentionService;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\MikrotikImportService;
+use App\Services\OnuPowerHistoryService;
 use App\Services\PppWebhookService;
 use App\Support\BillingWindow;
 use Carbon\Carbon;
@@ -248,6 +249,21 @@ Artisan::command('olt:auto-refresh {--force : Refresh the most-overdue OLT now, 
     }
 })->purpose('Drip-refresh one overdue OLT (power, VLAN, MAC) per run so ONU data stays fresh without load spikes');
 
+Artisan::command('onu:capture-power-history {--force : Capture now, ignoring the interval}', function (OnuPowerHistoryService $history) {
+    if (! $this->option('force') && ! $history->isDue()) {
+        $this->info('Skipped: next ONU power sample is not due yet.');
+
+        return self::SUCCESS;
+    }
+
+    $result = $history->capture();
+    $pruned = $history->prune();
+
+    $this->info("ONU power history: sampled {$result['sampled']} party ONU reading(s) from {$result['customers']} party/parties. Pruned {$pruned} old row(s).");
+
+    return self::SUCCESS;
+})->purpose('Snapshot every party\'s current OLT ONU Rx/Tx power for the party-page signal graph');
+
 Artisan::command('ppp:prune-usage-logs', function (PppWebhookService $webhook) {
     $days = $webhook->retentionDays();
 
@@ -385,6 +401,12 @@ Schedule::command('mikrotik:import-secrets')
 // One overdue OLT per hour, each gated by its own
 // auto_refresh_interval_hours; skips itself while any manual refresh runs.
 Schedule::command('olt:auto-refresh')
+    ->hourly()
+    ->withoutOverlapping();
+
+// Hourly dispatcher; the command itself only samples when the configured
+// onu_power_history.interval_hours has elapsed, then prunes to retention.
+Schedule::command('onu:capture-power-history')
     ->hourly()
     ->withoutOverlapping();
 

@@ -209,6 +209,22 @@
     <div class="card stat"><span class="muted">Weak <= -25 dBm</span><strong>{{ $stats['weak_power'] }}</strong></div>
     <div class="card stat"><span class="muted">Last Poll</span><strong style="font-size:18px">{{ $stats['last_polled_at'] ? \Carbon\Carbon::parse($stats['last_polled_at'])->format('d/m/Y H:i') : 'Never' }}</strong></div>
 </div>
+
+<form method="post" action="{{ route('olt-onus.power-history-settings.update') }}" class="card" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:16px">
+    @csrf
+    @method('patch')
+    <div>
+        <label class="muted" style="display:block;font-size:12px">Party signal graph — sample every</label>
+        <input type="number" name="interval_hours" min="1" max="168" value="{{ $powerHistoryIntervalHours }}" style="width:90px"> ঘণ্টা
+    </div>
+    <div>
+        <label class="muted" style="display:block;font-size:12px">Keep history for</label>
+        <input type="number" name="retention_days" min="1" max="365" value="{{ $powerHistoryRetentionDays }}" style="width:90px"> দিন
+    </div>
+    <button class="btn" type="submit">Save</button>
+    <button class="btn light" type="submit" name="action" value="capture">Save &amp; capture now</button>
+    <span class="muted" style="font-size:12px">প্রতিটি পার্টির ONU Rx/Tx power এই বিরতিতে সংরক্ষণ হয়ে party details পেজে graph হিসেবে দেখানো হয়। Runs hourly।</span>
+</form>
 @if (request()->filled('olt_device_id'))
     <div class="muted" style="margin:-6px 0 16px">
         Current scope:

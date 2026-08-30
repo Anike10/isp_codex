@@ -231,6 +231,11 @@ class Customer extends Model
         return $this->hasMany(ConcessionLog::class);
     }
 
+    public function onuPowerSamples(): HasMany
+    {
+        return $this->hasMany(CustomerOnuPowerSample::class);
+    }
+
     public function latestInvoice(): HasOne
     {
         return $this->hasOne(Invoice::class)->latestOfMany();

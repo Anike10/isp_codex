@@ -386,6 +386,18 @@ class CustomerController extends Controller
 
         $routers = MikrotikRouter::query()->orderBy('name')->get();
 
+        $onuHistory = collect();
+        $onuHistoryDays = 7;
+        if (Schema::hasTable('customer_onu_power_samples')) {
+            $history = app(\App\Services\OnuPowerHistoryService::class);
+            $onuHistoryDays = $history->retentionDays();
+            $onuHistory = \App\Models\CustomerOnuPowerSample::query()
+                ->where('customer_id', $customer->id)
+                ->where('sampled_at', '>=', now()->subDays($onuHistoryDays))
+                ->orderBy('sampled_at')
+                ->get(['rx_power_dbm', 'tx_power_dbm', 'status', 'sampled_at']);
+        }
+
         // Quick Recharge (inline on the party page) reuses the payment endpoint,
         // so it needs the same account list and per-user default the full
         // "Record Party Payment" screen builds.
@@ -397,7 +409,7 @@ class CustomerController extends Controller
             ->get();
         $paymentDefault = $preferenceService->forUser($request->user());
 
-        return view('customers.show', compact('customer', 'routers', 'paymentAccounts', 'paymentDefault'));
+        return view('customers.show', compact('customer', 'routers', 'paymentAccounts', 'paymentDefault', 'onuHistory', 'onuHistoryDays'));
     }
 
     public function inlineUpdate(Request $request, Customer $customer)
@@ -1179,59 +1191,17 @@ class CustomerController extends Controller
             return;
         }
 
-        $macs = $customers
-            ->pluck('last_connected_mac')
-            ->map(fn ($mac) => mb_strtolower(trim((string) $mac)))
-            ->filter()
-            ->unique()
-            ->values();
+        $byMac = \App\Support\OnuMatcher::byMac($customers->pluck('last_connected_mac'));
 
-        if ($macs->isEmpty()) {
+        if ($byMac === []) {
             return;
         }
 
-        $onus = OltOnu::query()
-            ->select('id', 'olt_name', 'pon_port', 'onu_id', 'onu_type', 'mac_address', 'learned_macs', 'port_vlans', 'rx_power_dbm', 'tx_power_dbm', 'status', 'name', 'last_live_polled_at')
-            ->where(function ($query) use ($macs): void {
-                $query->whereIn(DB::raw('lower(mac_address)'), $macs->all());
-                foreach ($macs as $mac) {
-                    $query->orWhere('learned_macs', 'like', '%"'.$mac.'"%');
-                }
-            })
-            ->orderByRaw('last_live_polled_at is null')
-            ->orderByDesc('last_live_polled_at')
-            ->get();
-
-        $byMac = [];
-        $vlanByMac = [];
-        foreach ($onus as $onu) {
-            // Distinct configured VLANs on the ONU's ports, used when a learned
-            // MAC entry itself carries no VLAN.
-            $portVlans = collect((array) $onu->port_vlans)
-                ->pluck('vlan')->map(fn ($v) => trim((string) $v))->filter()->unique()->values();
-            $portVlanLabel = $portVlans->isEmpty() ? null : $portVlans->implode(', ');
-
-            $keys = [mb_strtolower(trim((string) $onu->mac_address)) => null];
-            foreach ((array) $onu->learned_macs as $entry) {
-                $mac = mb_strtolower(trim((string) (is_array($entry) ? ($entry['mac'] ?? '') : $entry)));
-                if ($mac !== '') {
-                    $entryVlan = is_array($entry) && isset($entry['vlan']) ? trim((string) $entry['vlan']) : '';
-                    $keys[$mac] = $entryVlan !== '' ? $entryVlan : null;
-                }
-            }
-            foreach ($keys as $key => $vlan) {
-                if ($key === '' || isset($byMac[$key])) {
-                    continue;
-                }
-                $byMac[$key] = $onu;
-                $vlanByMac[$key] = $vlan ?: $portVlanLabel;
-            }
-        }
-
-        $customers->each(function (Customer $customer) use ($byMac, $vlanByMac): void {
+        $customers->each(function (Customer $customer) use ($byMac): void {
             $key = mb_strtolower(trim((string) $customer->last_connected_mac));
-            $customer->matched_onu = $byMac[$key] ?? null;
-            $customer->matched_onu_vlan = $vlanByMac[$key] ?? null;
+            $onu = $byMac[$key] ?? null;
+            $customer->matched_onu = $onu;
+            $customer->matched_onu_vlan = $onu ? \App\Support\OnuMatcher::vlanFor($onu, $customer->last_connected_mac) : null;
         });
     }
 

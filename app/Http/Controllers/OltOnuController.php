@@ -132,7 +132,32 @@ class OltOnuController extends Controller
 
         $protocolProfiles = $this->protocolProfileOptions();
 
-        return view('olt_onus.index', compact('onus', 'stats', 'ponPorts', 'oltPonPorts', 'oltPonSummaries', 'oltCommandWarnings', 'oltDevices', 'perPageDefault', 'perPageOptions', 'perPage', 'protocolProfiles'));
+        $powerHistory = app(\App\Services\OnuPowerHistoryService::class);
+        $powerHistoryIntervalHours = $powerHistory->intervalHours();
+        $powerHistoryRetentionDays = $powerHistory->retentionDays();
+
+        return view('olt_onus.index', compact('onus', 'stats', 'ponPorts', 'oltPonPorts', 'oltPonSummaries', 'oltCommandWarnings', 'oltDevices', 'perPageDefault', 'perPageOptions', 'perPage', 'protocolProfiles', 'powerHistoryIntervalHours', 'powerHistoryRetentionDays'));
+    }
+
+    /** Sampling interval + retention for the party-page ONU signal graph. */
+    public function updatePowerHistorySettings(Request $request, \App\Services\OnuPowerHistoryService $history)
+    {
+        $data = $request->validate([
+            'interval_hours' => ['required', 'integer', 'min:1', 'max:168'],
+            'retention_days' => ['required', 'integer', 'min:1', 'max:365'],
+        ]);
+
+        $history->setIntervalHours($data['interval_hours']);
+        $history->setRetentionDays($data['retention_days']);
+
+        if ($request->input('action') === 'capture') {
+            $result = $history->capture();
+            $history->prune();
+
+            return back()->with('success', "ONU signal settings saved. Captured {$result['sampled']} reading(s) now.");
+        }
+
+        return back()->with('success', 'ONU signal history settings saved.');
     }
 
     public function createOlt()

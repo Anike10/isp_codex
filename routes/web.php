@@ -232,6 +232,7 @@ Route::middleware('auth')->group(function () {
         Route::get('network-map/features', [NetworkMapController::class, 'index'])->name('network-map.features.index');
         Route::post('network-map/features', [NetworkMapController::class, 'store'])->name('network-map.features.store');
         Route::post('network-map/photos', [NetworkMapController::class, 'uploadPhotos'])->name('network-map.photos.store');
+        Route::patch('olt-onus/power-history-settings', [OltOnuController::class, 'updatePowerHistorySettings'])->name('olt-onus.power-history-settings.update');
         Route::get('olt-onus/olts/create', [OltOnuController::class, 'createOlt'])->name('olt-onus.olts.create');
         Route::post('olt-onus/olts', [OltOnuController::class, 'storeOlt'])->name('olt-onus.olts.store');
         Route::get('olt-onus/olts/{oltDevice}/edit', [OltOnuController::class, 'editOlt'])->name('olt-onus.olts.edit');
