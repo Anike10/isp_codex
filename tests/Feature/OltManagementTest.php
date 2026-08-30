@@ -371,6 +371,47 @@ class OltManagementTest extends TestCase
         $this->assertStringContainsString(' | Laser: N/A (no live power)', $withoutPower->fresh()->note);
     }
 
+    public function test_olt_auto_refresh_drips_the_single_most_overdue_active_olt(): void
+    {
+        \Illuminate\Support\Facades\Bus::fake();
+
+        $overdue = $this->gponOltWithEponCommands();
+        $overdue->update(['name' => 'Overdue OLT', 'auto_refresh_interval_hours' => 24, 'last_auto_refresh_at' => now()->subDays(2)]);
+
+        $notDue = $this->gponOltWithEponCommands();
+        $notDue->update(['name' => 'Fresh OLT', 'host' => '192.0.2.11', 'auto_refresh_interval_hours' => 24, 'last_auto_refresh_at' => now()->subHour()]);
+
+        $off = $this->gponOltWithEponCommands();
+        $off->update(['name' => 'Off OLT', 'host' => '192.0.2.12', 'auto_refresh_interval_hours' => 0]);
+
+        $this->artisan('olt:auto-refresh')->assertSuccessful();
+
+        \Illuminate\Support\Facades\Bus::assertDispatchedSync(RunOltFullRefresh::class, 1);
+        $this->assertDatabaseHas('olt_refresh_runs', ['olt_device_id' => $overdue->id, 'refresh_mode' => 'full_mac']);
+        $this->assertTrue($overdue->fresh()->last_auto_refresh_at->gt(now()->subMinute()));
+        $this->assertTrue($notDue->fresh()->last_auto_refresh_at->lt(now()->subMinutes(30)));
+        $this->assertDatabaseMissing('olt_refresh_runs', ['olt_device_id' => $notDue->id]);
+        $this->assertDatabaseMissing('olt_refresh_runs', ['olt_device_id' => $off->id]);
+    }
+
+    public function test_olt_auto_refresh_stands_down_while_another_refresh_is_running(): void
+    {
+        \Illuminate\Support\Facades\Bus::fake();
+
+        $olt = $this->gponOltWithEponCommands();
+        $olt->update(['auto_refresh_interval_hours' => 24, 'last_auto_refresh_at' => now()->subDays(3)]);
+
+        OltRefreshRun::query()->create([
+            'olt_device_id' => $olt->id, 'olt_name' => $olt->name,
+            'refresh_mode' => 'full_mac', 'status' => 'running', 'progress' => 40,
+        ]);
+
+        $this->artisan('olt:auto-refresh')->expectsOutputToContain('already running')->assertSuccessful();
+
+        \Illuminate\Support\Facades\Bus::assertNothingDispatched();
+        $this->assertSame(1, OltRefreshRun::query()->count());
+    }
+
     public function test_background_job_records_an_inactive_olt_failure_without_network_access(): void
     {
         $olt = $this->gponOltWithEponCommands();

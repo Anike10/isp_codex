@@ -42,6 +42,8 @@ class OltDevice extends Model
         'onu_mac_command',
         'status',
         'last_polled_at',
+        'auto_refresh_interval_hours',
+        'last_auto_refresh_at',
         'last_error',
         'last_raw_output',
         'notes',
@@ -65,6 +67,8 @@ class OltDevice extends Model
             'snmp_retries' => 'integer',
             'snmp_power_divisor' => 'decimal:2',
             'last_polled_at' => 'datetime',
+            'auto_refresh_interval_hours' => 'integer',
+            'last_auto_refresh_at' => 'datetime',
         ];
     }
 

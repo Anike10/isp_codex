@@ -1,8 +1,11 @@
 <?php
 
+use App\Jobs\RunOltFullRefresh;
 use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\MikrotikRouter;
+use App\Models\OltDevice;
+use App\Models\OltRefreshRun;
 use App\Models\User;
 use App\Services\BkashSmsRetentionService;
 use App\Services\MikrotikCustomerSyncService;
@@ -189,6 +192,58 @@ Artisan::command('mikrotik:import-secrets', function (MikrotikImportService $imp
     return $summary['failed'] === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Re-pull PPPoE secrets from active routers so the "router users not in app" list stays fresh');
 
+Artisan::command('olt:auto-refresh {--force : Refresh the most-overdue OLT now, ignoring interval and the idle check}', function () {
+    // Never run alongside a manual or background refresh — the app should
+    // stay responsive; the drip waits its turn.
+    if (! $this->option('force') && OltRefreshRun::query()->whereIn('status', ['queued', 'running'])->exists()) {
+        $this->info('Skipped: an OLT refresh is already running.');
+
+        return self::SUCCESS;
+    }
+
+    $force = (bool) $this->option('force');
+    $device = OltDevice::query()
+        ->where('status', 'active')
+        ->where('auto_refresh_interval_hours', '>', 0)
+        ->get()
+        ->filter(fn (OltDevice $d): bool => $force
+            || $d->last_auto_refresh_at === null
+            || $d->last_auto_refresh_at->addHours(max(1, (int) $d->auto_refresh_interval_hours))->lte(now()))
+        ->sortBy(fn (OltDevice $d): int => $d->last_auto_refresh_at?->getTimestamp() ?? 0)
+        ->first();
+
+    if (! $device) {
+        $this->info('No OLT is due for auto-refresh.');
+
+        return self::SUCCESS;
+    }
+
+    $run = OltRefreshRun::query()->create([
+        'olt_device_id' => $device->id,
+        'olt_name' => $device->name,
+        'refresh_mode' => 'full_mac',
+        'pon_port' => null,
+        'status' => 'queued',
+        'progress' => 0,
+        'message' => 'Queued by daily auto-refresh',
+    ]);
+
+    $device->forceFill(['last_auto_refresh_at' => now()])->save();
+
+    try {
+        dispatch_sync(new RunOltFullRefresh($run->id));
+        $fresh = $run->fresh();
+        $this->info("olt:auto-refresh {$device->name}: {$fresh->status} - {$fresh->message}");
+
+        return $fresh->status === 'failed' ? self::FAILURE : self::SUCCESS;
+    } catch (Throwable $exception) {
+        $run->update(['status' => 'failed', 'progress' => 100, 'message' => $exception->getMessage(), 'completed_at' => now()]);
+        $this->error("olt:auto-refresh {$device->name}: failed - {$exception->getMessage()}");
+
+        return self::FAILURE;
+    }
+})->purpose('Drip-refresh one overdue OLT (power, VLAN, MAC) per run so ONU data stays fresh without load spikes');
+
 Artisan::command('ppp:prune-usage-logs', function (PppWebhookService $webhook) {
     $days = $webhook->retentionDays();
 
@@ -321,6 +376,12 @@ Schedule::command('mikrotik:sync-active-macs')
 
 Schedule::command('mikrotik:import-secrets')
     ->everyThreeHours()
+    ->withoutOverlapping();
+
+// One overdue OLT per hour, each gated by its own
+// auto_refresh_interval_hours; skips itself while any manual refresh runs.
+Schedule::command('olt:auto-refresh')
+    ->hourly()
     ->withoutOverlapping();
 
 Schedule::command('ppp:prune-usage-logs')

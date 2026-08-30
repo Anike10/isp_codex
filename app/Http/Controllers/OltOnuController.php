@@ -2678,10 +2678,13 @@ class OltOnuController extends Controller
             'onu_vlan_command' => ['nullable', 'string', 'max:255'],
             'onu_mac_command' => ['nullable', 'string', 'max:255'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
+            'auto_refresh_interval_hours' => ['nullable', 'integer', 'min:0', 'max:720'],
             'notes' => ['nullable', 'string'],
         ]) + [
             'snmp_enabled' => false,
         ];
+
+        $data['auto_refresh_interval_hours'] = (int) ($data['auto_refresh_interval_hours'] ?? 24);
 
         $data['username'] = $data['olt_access_username'];
         $data['password'] = $data['olt_access_password'];

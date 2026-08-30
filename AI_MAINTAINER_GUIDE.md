@@ -1636,6 +1636,22 @@ The feature is for live data, not backup-file display. The app stores OLT access
 credentials in `olt_devices`, then the refresh action connects to the OLT and
 runs configured read-only commands.
 
+Auto-refresh drip: `php artisan olt:auto-refresh` (scheduled hourly, `withoutOverlapping`)
+picks the single most-overdue active OLT whose `auto_refresh_interval_hours`
+(per-OLT, default 24, `0` = off) has elapsed since `last_auto_refresh_at`, then
+runs a full (`full_mac`) refresh for it via `RunOltFullRefresh`. It stands down
+whenever any `olt_refresh_runs` row is `queued`/`running`, so a manual refresh
+always wins and the app is never loaded by more than one OLT poll at a time.
+`OltSnmpClient` also reads `snmp_tx_power_oid_template` (optional, same divisor as
+Rx) so quick SNMP polls can capture ONU Tx power.
+
+The Router Users page's "Refresh secrets" and "Pull active connections" buttons
+also run `MikrotikCustomerSyncService::syncActiveConnectionMacs()` for every
+active router, so a manual pull immediately writes each live session's
+`caller-id` onto the matching party's `last_connected_mac` (used for the OLT/ONU
+lookup on the parties list). The scheduled `mikrotik:sync-active-macs` keeps it
+fresh between manual pulls.
+
 ONU name editing uses a wide field and allows up to 255 App characters. OLT
 models may accept fewer characters or return a truncated fixed-width name. A
 shorter prefix read back from the device remains a successful write for

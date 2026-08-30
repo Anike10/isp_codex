@@ -79,6 +79,12 @@
             </select>
         </div>
         <div>
+            <label for="auto_refresh_interval_hours">Auto-refresh every (hours)</label>
+            <input id="auto_refresh_interval_hours" name="auto_refresh_interval_hours" type="number" min="0" max="720"
+                   value="{{ old('auto_refresh_interval_hours', $oltDevice->auto_refresh_interval_hours ?? 24) }}">
+            <div class="muted" style="margin-top:6px">Background drip refresh, one OLT per hour when idle. 0 = off.</div>
+        </div>
+        <div>
             <label for="olt_access_username">Username</label>
             <input id="olt_access_username" name="olt_access_username" value="{{ old('olt_access_username', old('username', $oltDevice->username)) }}" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" required>
         </div>

@@ -227,6 +227,39 @@ class UnmanagedRouterUsersTest extends TestCase
             ->assertSee('00:8D:FF:02:2A:17');
     }
 
+    public function test_pull_active_connections_also_copies_the_device_mac_onto_the_party(): void
+    {
+        Http::fake([
+            '10.0.0.7:8181/rest/ppp/profile' => Http::response([['.id' => '*1', 'name' => 'home-10', 'disabled' => 'false']], 200),
+            '10.0.0.7:8181/rest/ppp/active' => Http::response([
+                ['.id' => '*A1', 'name' => 'party-user', 'service' => 'pppoe', 'profile' => 'home-10',
+                    'address' => '10.7.0.20', 'caller-id' => '00:8d:ff:02:2a:17'],
+            ], 200),
+        ]);
+
+        MikrotikRouter::query()->update(['status' => 'inactive']);
+        $router = MikrotikRouter::create([
+            'name' => 'Edge Router', 'ip_address' => '10.0.0.7', 'api_port' => 8181,
+            'transport' => 'rest', 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'anike', 'password' => 'reader-pass', 'status' => 'active', 'read_only' => true,
+        ]);
+
+        $party = Customer::create([
+            'name' => 'Live Party', 'phone' => '01700000021', 'connection_id' => 'party-user',
+            'mikrotik_username' => 'party-user', 'mikrotik_router_id' => $router->id,
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $this->assertNull($party->last_connected_mac);
+
+        $this->actingAs($this->user(['view_dashboard', 'view_unmanaged_router_users']))
+            ->post(route('router-users.refresh-active'), ['active_password' => 'shared-pw'])
+            ->assertRedirect(route('router-users.index'))
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'Party device MACs updated: 1'));
+
+        $this->assertSame('00:8D:FF:02:2A:17', $party->fresh()->last_connected_mac);
+    }
+
     public function test_refresh_active_requires_a_shared_password(): void
     {
         $seer = $this->user(['view_dashboard', 'view_unmanaged_router_users']);

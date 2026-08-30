@@ -4,13 +4,43 @@ namespace App\Http\Controllers;
 
 use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
+use App\Services\MikrotikCustomerSyncService;
 use App\Services\MikrotikImportService;
 use Illuminate\Http\Request;
 use Throwable;
 
 class RouterUserController extends Controller
 {
-    public function __construct(private readonly MikrotikImportService $importService) {}
+    public function __construct(
+        private readonly MikrotikImportService $importService,
+        private readonly MikrotikCustomerSyncService $customerSync,
+    ) {}
+
+    /**
+     * Copy each active router's live `/ppp/active` device MACs onto the parties
+     * they belong to, so the ONU lookup on the parties list (and elsewhere) has
+     * a fresh `last_connected_mac` to match on.
+     *
+     * @return array{updated: int, routers: int, errors: array<int, string>}
+     */
+    private function syncActivePartyMacs(): array
+    {
+        $updated = 0;
+        $routers = 0;
+        $errors = [];
+
+        foreach (MikrotikRouter::query()->where('status', 'active')->orderBy('id')->get() as $router) {
+            try {
+                $result = $this->customerSync->syncActiveConnectionMacs($router);
+                $updated += $result['updated'];
+                $routers++;
+            } catch (Throwable $exception) {
+                $errors[] = $router->name.' — '.$exception->getMessage();
+            }
+        }
+
+        return ['updated' => $updated, 'routers' => $routers, 'errors' => $errors];
+    }
 
     /** Full-page list of every imported PPPoE secret, matched parties marked. */
     public function index(Request $request)
@@ -43,9 +73,14 @@ class RouterUserController extends Controller
     public function refresh(Request $request)
     {
         $summary = $this->importService->refreshActiveRouterSecrets();
+        $macs = $this->syncActivePartyMacs();
 
-        $message = "Refreshed router users: {$summary['imported']} secret(s) read from ".count($summary['results']).' router(s).';
-        $errors = collect($summary['results'])->filter(fn ($r) => isset($r['error']));
+        $message = "Refreshed router users: {$summary['imported']} secret(s) read from ".count($summary['results']).' router(s).'
+            ." Party device MACs updated: {$macs['updated']}.";
+        $errors = collect($summary['results'])->filter(fn ($r) => isset($r['error']))
+            ->map(fn ($r) => $r['router'].' — '.$r['error'])
+            ->merge($macs['errors'])
+            ->values();
 
         $redirect = $request->input('redirect_to') === 'dashboard'
             ? redirect()->route('dashboard')
@@ -54,7 +89,7 @@ class RouterUserController extends Controller
         if ($errors->isNotEmpty()) {
             return $redirect
                 ->with('success', $message)
-                ->with('warning', 'Some routers failed: '.$errors->map(fn ($r) => $r['router'].' — '.$r['error'])->implode(' | '));
+                ->with('warning', 'Some routers failed: '.$errors->implode(' | '));
         }
 
         return $redirect->with('success', $message);
@@ -68,14 +103,18 @@ class RouterUserController extends Controller
         ]);
 
         $summary = $this->importService->refreshActiveRouterConnections($data['active_password']);
+        $macs = $this->syncActivePartyMacs();
 
         $message = "Pulled active connections: {$summary['imported']} stored from {$summary['seen']} live session(s) across "
             .count($summary['results']).' router(s).';
         if ($summary['skipped'] > 0) {
             $message .= " {$summary['skipped']} skipped (no username yet, or an extra session for a name already listed).";
         }
-        $message .= ' Users without a real secret got the shared password.';
-        $errors = collect($summary['results'])->filter(fn ($r) => isset($r['error']));
+        $message .= " Users without a real secret got the shared password. Party device MACs updated: {$macs['updated']}.";
+        $errors = collect($summary['results'])->filter(fn ($r) => isset($r['error']))
+            ->map(fn ($r) => $r['router'].' — '.$r['error'])
+            ->merge($macs['errors'])
+            ->values();
 
         $redirect = $request->input('redirect_to') === 'dashboard'
             ? redirect()->route('dashboard')
@@ -84,7 +123,7 @@ class RouterUserController extends Controller
         if ($errors->isNotEmpty()) {
             return $redirect
                 ->with('success', $message)
-                ->with('warning', 'Some routers failed: '.$errors->map(fn ($r) => $r['router'].' — '.$r['error'])->implode(' | '));
+                ->with('warning', 'Some routers failed: '.$errors->implode(' | '));
         }
 
         return $redirect->with('success', $message);
