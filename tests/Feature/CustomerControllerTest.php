@@ -1198,6 +1198,70 @@ class CustomerControllerTest extends TestCase
         $this->assertNull($customer->last_connected_ip);
     }
 
+    public function test_inline_connection_id_change_removes_the_secret_left_under_the_old_name(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        $router = MikrotikRouter::create([
+            'name' => 'Core', 'ip_address' => '10.6.0.1', 'api_port' => 8728,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+        $customer = Customer::create([
+            'name' => 'Rename Party', 'phone' => '01733333334', 'connection_id' => 'OLD-NAME',
+            'mikrotik_username' => 'OLD-NAME', 'mikrotik_router_id' => $router->id,
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+        $staleRow = MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $router->id, 'customer_id' => $customer->id, 'routeros_id' => '*7',
+            'name' => 'OLD-NAME', 'password' => 'x', 'service' => 'pppoe', 'disabled' => false, 'imported_at' => now(),
+        ]);
+
+        $syncService = \Mockery::mock(MikrotikCustomerSyncService::class);
+        $syncService->shouldReceive('sync')->once()->andReturn('updated');
+        $syncService->shouldReceive('removeUsername')
+            ->once()
+            ->withArgs(fn ($party, $username) => $username === 'OLD-NAME')
+            ->andReturn('Core: 1 secret(s) removed');
+        $this->app->instance(MikrotikCustomerSyncService::class, $syncService);
+
+        $this->actingAs($user)->patchJson(route('customers.inline-update', $customer), [
+            'field' => 'connection_id',
+            'value' => 'NEW-NAME',
+        ])->assertOk();
+
+        $this->assertNull($staleRow->fresh());
+    }
+
+    public function test_deleting_a_party_drops_its_imported_secret_row(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        $router = MikrotikRouter::create([
+            'name' => 'Core', 'ip_address' => '10.6.0.2', 'api_port' => 8728,
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+        $customer = Customer::create([
+            'name' => 'Doomed Party', 'phone' => '01733333335', 'connection_id' => 'DOOMED',
+            'mikrotik_username' => 'DOOMED', 'mikrotik_router_id' => $router->id,
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+        $row = MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $router->id, 'customer_id' => $customer->id, 'routeros_id' => '*8',
+            'name' => 'DOOMED', 'password' => 'x', 'service' => 'pppoe', 'disabled' => false, 'imported_at' => now(),
+        ]);
+
+        $syncService = \Mockery::mock(MikrotikCustomerSyncService::class);
+        $syncService->shouldReceive('remove')->once()->andReturn('Core: 1 secret(s) removed');
+        $this->app->instance(MikrotikCustomerSyncService::class, $syncService);
+
+        $this->actingAs($user)->delete(route('customers.destroy', $customer))->assertRedirect();
+
+        $this->assertNull($row->fresh());
+        $this->assertSoftDeleted('customers', ['id' => $customer->id]);
+    }
+
     public function test_inline_package_change_resyncs_mikrotik(): void
     {
         $user = User::factory()->create();

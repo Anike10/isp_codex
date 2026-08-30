@@ -1468,6 +1468,15 @@ PPPoE sync:
   `createPartiesFromSecrets()`.
 - Selected unmanaged rows can be imported as parties through
   `RouterUserController` and `MikrotikImportService::createPartiesFromSecrets()`.
+- Each unmanaged row also has a "Delete from MikroTik" button
+  (`DELETE /router-users/{secret}` -> `RouterUserController::destroySecret` ->
+  `MikrotikImportService::forgetImportedSecret()`): closes any live session,
+  removes the `/ppp/secret`, and drops the local row. Linked / name-matched
+  rows and read-only routers are refused. This is the cleanup path for a
+  secret left behind by a party rename or a customer delete whose router
+  removal failed. Renames now self-clean: `CustomerController` captures the
+  previous username and calls `MikrotikCustomerSyncService::removeUsername()`
+  after the resync (best effort — a router failure becomes a warning).
 - "Refresh secrets" on those pages runs `refreshActiveRouterSecrets()`
   (`/ppp/secret` from every active router). "Pull active connections" runs
   `refreshActiveRouterConnections($sharedPassword)` — same loop but

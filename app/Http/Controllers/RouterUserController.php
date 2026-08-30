@@ -6,6 +6,7 @@ use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
 use App\Services\MikrotikImportService;
 use Illuminate\Http\Request;
+use Throwable;
 
 class RouterUserController extends Controller
 {
@@ -120,5 +121,42 @@ class RouterUserController extends Controller
             : redirect()->route('router-users.index');
 
         return $redirect->with('success', "Added parties from router users: {$result['created']} created, {$result['updated']} updated, {$result['skipped']} skipped.");
+    }
+
+    /**
+     * Delete one router-only PPPoE secret from its MikroTik (and the local
+     * imported row). Only rows that are genuinely not in the app can go —
+     * anything still linked to, or name-matching, a party must be handled by
+     * editing that party.
+     */
+    public function destroySecret(Request $request, MikrotikImportedSecret $secret)
+    {
+        $secret->loadMissing('router');
+        $name = $secret->name;
+
+        if (! $this->importService->unmanagedSecretsQuery()->whereKey($secret->id)->exists()) {
+            return back()->with('warning', "\"{$name}\" is linked to a party — rename or delete that party instead.");
+        }
+
+        if ($secret->router?->read_only) {
+            return back()->with('warning', "\"{$name}\" is on a read-only router ({$secret->router->name}). Remove it on the MikroTik directly, then Refresh secrets.");
+        }
+
+        try {
+            $result = $this->importService->forgetImportedSecret($secret);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->with('error', "Could not remove \"{$name}\" from the router: ".$exception->getMessage());
+        }
+
+        $message = $result['router_removed'] > 0
+            ? "Removed \"{$name}\" from MikroTik."
+            : "Removed \"{$name}\" from the app list (no matching secret was on the router).";
+        if ($result['sessions_closed'] > 0) {
+            $message .= " {$result['sessions_closed']} live session(s) closed.";
+        }
+
+        return back()->with('success', $message);
     }
 }

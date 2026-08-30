@@ -63,6 +63,24 @@ class MikrotikCustomerSyncService
             return 'skipped (no connection ID)';
         }
 
+        return $this->removeUsername($customer, $username);
+    }
+
+    /**
+     * Remove the PPPoE secret for one explicit username from every router this
+     * party is (or was) assigned to, closing any live session first.
+     *
+     * Separate from {@see remove()} because a rename has already overwritten
+     * `mikrotik_username`; the caller passes the OLD name so the secret left
+     * behind on the router can be cleaned up.
+     */
+    public function removeUsername(Customer $customer, string $username): string
+    {
+        $username = trim($username);
+        if ($username === '') {
+            return 'skipped (no connection ID)';
+        }
+
         $customer->loadMissing('mikrotikRouters');
         $routers = $customer->mikrotikRouters->isNotEmpty()
             ? $customer->mikrotikRouters->where('status', 'active')->sortBy('id')->values()

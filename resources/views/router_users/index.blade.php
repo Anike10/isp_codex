@@ -81,6 +81,7 @@
                                 <th>Service</th>
                                 <th>Remote address</th>
                                 <th>Status at last refresh</th>
+                                <th>Cleanup</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -126,6 +127,20 @@
                                             <div class="muted">read-only router</div>
                                         @endif
                                     </td>
+                                    <td>
+                                        @if ($secret->is_unmanaged)
+                                            @if ($secret->router?->read_only)
+                                                <span class="muted" title="This router is read-only — remove the secret on the MikroTik itself, then Refresh secrets.">remove on router</span>
+                                            @else
+                                                <button type="submit" class="btn danger" form="forget-secret-{{ $secret->id }}"
+                                                    onclick="return confirm('Delete router user &quot;{{ $secret->name }}&quot; from {{ $routerName }}? This removes the PPPoE secret on the MikroTik and drops any live session.')">
+                                                    Delete from MikroTik
+                                                </button>
+                                            @endif
+                                        @else
+                                            <span class="muted">—</span>
+                                        @endif
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -134,6 +149,20 @@
             </section>
         @endforeach
     </form>
+
+    {{-- Per-row "Delete from MikroTik" posts live outside the import form: a
+         <form> cannot be nested inside another, so each button targets one of
+         these by id via its form="" attribute. --}}
+    @foreach ($groups as $secrets)
+        @foreach ($secrets as $secret)
+            @if ($secret->is_unmanaged && ! $secret->router?->read_only)
+                <form id="forget-secret-{{ $secret->id }}" method="post" action="{{ route('router-users.destroy-secret', $secret) }}" hidden>
+                    @csrf
+                    @method('DELETE')
+                </form>
+            @endif
+        @endforeach
+    @endforeach
     <script>
         document.querySelectorAll('#router-users-form [data-select-all-router]').forEach(function (master) {
             master.addEventListener('change', function () {

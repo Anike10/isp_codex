@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\InternetPackage;
+use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
 use App\Models\ResellerCommissionHistory;
 use App\Models\Subscription;
@@ -225,6 +226,8 @@ class CustomerController extends Controller
         $data['phone'] = trim((string) ($data['phone'] ?? ''));
         $data['address'] = trim((string) ($data['address'] ?? ''));
 
+        $previousMikrotikUsername = $customer->mikrotik_username ?: $customer->connection_id;
+
         $this->normalizeCustomerConnectionData($data, $customer);
         $data['is_customer'] = (bool) ($data['is_customer'] ?? false) || ! empty($data['internet_package_id']);
         $data['is_vendor'] = (bool) ($data['is_vendor'] ?? false);
@@ -344,11 +347,12 @@ class CustomerController extends Controller
         }
 
         $syncResult = $this->syncMikrotikCustomer($customer->refresh());
+        $staleWarning = $this->removeStaleMikrotikUsername($customer, $previousMikrotikUsername);
 
         return redirect()
             ->route('customers.show', $customer)
             ->with('success', 'Party updated successfully. MikroTik user '.$syncResult['status'].'.')
-            ->with('warning', $syncResult['warning']);
+            ->with('warning', collect([$syncResult['warning'], $staleWarning])->filter()->implode(' ') ?: null);
     }
 
     public function show(Customer $customer)
@@ -409,6 +413,7 @@ class CustomerController extends Controller
         $value = $validated['value'];
 
         if ($field === 'connection_id') {
+            $previousUsername = $customer->mikrotik_username ?: $customer->connection_id;
             $normalizedValue = trim((string) $value);
             $customer->update([
                 'connection_id' => $normalizedValue === '' ? null : $normalizedValue,
@@ -421,11 +426,13 @@ class CustomerController extends Controller
             ]);
 
             $sync = $this->syncMikrotikCustomer($customer);
+            $staleWarning = $this->removeStaleMikrotikUsername($customer, $previousUsername);
+            $warning = collect([$sync['warning'], $staleWarning])->filter()->implode(' ');
 
             return response()->json([
                 'message' => 'Party updated. MikroTik user '.$sync['status'].'.',
                 'value' => $customer->fresh()->connection_id,
-                'warning' => $sync['warning'],
+                'warning' => $warning ?: null,
             ]);
         }
 
@@ -535,6 +542,13 @@ class CustomerController extends Controller
         }
 
         $customer->delete();
+
+        // The party is gone; drop its local mirror of the router secret. If the
+        // router still has the secret (removal failed above), the next "Refresh
+        // secrets" re-imports it as an unmanaged row the Router Users screen can
+        // clean up — otherwise it would sit there forever showing "✓ Linked" to
+        // a deleted party with no delete button.
+        MikrotikImportedSecret::where('customer_id', $customer->id)->delete();
 
         $message = "\"{$customerName}\" moved to deleted parties. ";
         $message .= $mikrotikWarning
@@ -1016,6 +1030,46 @@ class CustomerController extends Controller
                 'warning' => 'MikroTik sync failed: '.$exception->getMessage(),
             ];
         }
+    }
+
+    /**
+     * After a party's PPPoE username changed, delete the secret left behind on
+     * the router(s) under the OLD name and drop its imported-secret row.
+     *
+     * Best effort: it never blocks the edit. On a router failure it returns a
+     * warning so the operator knows to finish the job from the Router Users
+     * screen once the box is reachable.
+     */
+    private function removeStaleMikrotikUsername(Customer $customer, ?string $previousUsername): ?string
+    {
+        $previousUsername = trim((string) $previousUsername);
+        $currentUsername = trim((string) ($customer->mikrotik_username ?: $customer->connection_id));
+
+        if ($previousUsername === '' || strcasecmp($previousUsername, $currentUsername) === 0) {
+            return null;
+        }
+
+        $warning = null;
+        if (MikrotikRouter::where('status', 'active')->exists()) {
+            try {
+                app(MikrotikCustomerSyncService::class)->removeUsername($customer->refresh(), $previousUsername);
+            } catch (Throwable $exception) {
+                $warning = 'The old MikroTik user "'.$previousUsername.'" could not be removed automatically ('
+                    .$exception->getMessage().'). Remove it from the Router Users screen once the router is reachable.';
+            }
+        }
+
+        $routerIds = $customer->mikrotikRouters()->pluck('mikrotik_routers.id')->all();
+        if ($customer->mikrotik_router_id) {
+            $routerIds[] = (int) $customer->mikrotik_router_id;
+        }
+
+        MikrotikImportedSecret::query()
+            ->whereRaw('lower(name) = ?', [mb_strtolower($previousUsername)])
+            ->when($routerIds !== [], fn ($query) => $query->whereIn('mikrotik_router_id', array_unique($routerIds)))
+            ->delete();
+
+        return $warning;
     }
 
     private function normalizeCustomerConnectionData(array &$data, ?Customer $customer = null): void

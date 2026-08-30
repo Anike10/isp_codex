@@ -216,6 +216,7 @@ Route::middleware('auth')->group(function () {
         Route::post('router-users/refresh', [RouterUserController::class, 'refresh'])->name('router-users.refresh');
         Route::post('router-users/refresh-active', [RouterUserController::class, 'refreshActive'])->name('router-users.refresh-active');
         Route::post('router-users/import', [RouterUserController::class, 'import'])->name('router-users.import');
+        Route::delete('router-users/{secret}', [RouterUserController::class, 'destroySecret'])->name('router-users.destroy-secret');
     });
 
     Route::middleware('permission:manage_mikrotik_routers')->group(function () {

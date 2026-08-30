@@ -517,6 +517,51 @@ class MikrotikImportService
     }
 
     /**
+     * Remove one imported PPPoE secret from its MikroTik and drop the local
+     * row. Used by the Router Users screen to clean up a secret that only
+     * exists on the router — e.g. left behind by a party rename or by a
+     * customer delete whose router removal failed at the time.
+     *
+     * A read-only router is never written to; the caller is expected to have
+     * blocked that already. An unassigned row (no router) just leaves the app.
+     *
+     * @return array{router_removed: int, sessions_closed: int}
+     */
+    public function forgetImportedSecret(MikrotikImportedSecret $secret): array
+    {
+        $router = $secret->router;
+        $name = trim((string) $secret->name);
+        $routerRemoved = 0;
+        $sessionsClosed = 0;
+
+        if ($router && ! $router->read_only && $name !== '') {
+            $active = $this->read($router, '/ppp/active/print', ['?name' => $name, '.proplist' => '.id']);
+            foreach ($active as $session) {
+                if (! empty($session['.id'])) {
+                    $this->write($router, '/ppp/active/remove', ['.id' => $session['.id']]);
+                    $sessionsClosed++;
+                }
+            }
+
+            // `active-*` rows are a snapshot of a live session, not a real
+            // /ppp/secret — there is nothing to remove from the secret list.
+            if (! $secret->isActiveSessionOnly()) {
+                $rows = $this->read($router, '/ppp/secret/print', ['?name' => $name, '.proplist' => '.id']);
+                foreach ($rows as $row) {
+                    if (! empty($row['.id'])) {
+                        $this->write($router, '/ppp/secret/remove', ['.id' => $row['.id']]);
+                        $routerRemoved++;
+                    }
+                }
+            }
+        }
+
+        $secret->delete();
+
+        return ['router_removed' => $routerRemoved, 'sessions_closed' => $sessionsClosed];
+    }
+
+    /**
      * Create (or optionally update) app parties from imported PPPoE secrets.
      * Extracted so both the router page and the dashboard can reuse it.
      *

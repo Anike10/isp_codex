@@ -258,6 +258,79 @@ class UnmanagedRouterUsersTest extends TestCase
         $this->assertNull(Customer::where('connection_id', 'blocked-user')->first());
     }
 
+    public function test_index_offers_a_delete_from_mikrotik_button_only_for_unmanaged_rows(): void
+    {
+        $party = Customer::create([
+            'name' => 'Linked', 'phone' => '01700000009', 'connection_id' => 'linked-user',
+            'mikrotik_username' => 'linked-user', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+        $linked = $this->makeSecret('linked-user', 'home-10');
+        $linked->update(['customer_id' => $party->id]);
+        $loose = $this->makeSecret('router-only-user', 'home-10');
+
+        $this->actingAs($this->user(['view_dashboard', 'view_unmanaged_router_users']))
+            ->get(route('router-users.index'))
+            ->assertOk()
+            ->assertSee('id="forget-secret-'.$loose->id.'"', false)
+            ->assertDontSee('id="forget-secret-'.$linked->id.'"', false);
+    }
+
+    public function test_destroy_secret_removes_the_router_user_and_the_local_row(): void
+    {
+        Http::fake([
+            '10.9.9.9:8181/rest/ppp/active*' => Http::response([], 200),
+            '10.9.9.9:8181/rest/ppp/secret/*' => Http::response([], 200),
+            '10.9.9.9:8181/rest/ppp/secret*' => Http::response([['.id' => '*9', 'name' => 'router-only-user']], 200),
+        ]);
+
+        $router = MikrotikRouter::create([
+            'name' => 'REST Edge', 'ip_address' => '10.9.9.9', 'api_port' => 8181, 'transport' => 'rest',
+            'inactive_pppoe_profile' => 'inactive', 'username' => 'api', 'password' => 'secret',
+            'status' => 'active', 'read_only' => false,
+        ]);
+        $secret = MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $router->id, 'routeros_id' => '*9', 'name' => 'router-only-user',
+            'password' => 'x', 'service' => 'pppoe', 'profile' => 'home-10', 'disabled' => false, 'imported_at' => now(),
+        ]);
+
+        $this->actingAs($this->user(['view_dashboard', 'view_unmanaged_router_users']))
+            ->delete(route('router-users.destroy-secret', $secret))
+            ->assertRedirect();
+
+        $this->assertNull($secret->fresh());
+        Http::assertSent(fn ($request) => $request->method() === 'DELETE'
+            && str_contains($request->url(), '/rest/ppp/secret/*9'));
+    }
+
+    public function test_destroy_secret_refuses_a_row_linked_to_a_party(): void
+    {
+        $party = Customer::create([
+            'name' => 'Keep Me', 'phone' => '01700000010', 'connection_id' => 'keep-user',
+            'mikrotik_username' => 'keep-user', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+        $secret = $this->makeSecret('keep-user', 'home-10');
+        $secret->update(['customer_id' => $party->id]);
+
+        $this->actingAs($this->user(['view_dashboard', 'view_unmanaged_router_users']))
+            ->from(route('router-users.index'))
+            ->delete(route('router-users.destroy-secret', $secret))
+            ->assertRedirect(route('router-users.index'))
+            ->assertSessionHas('warning');
+
+        $this->assertNotNull($secret->fresh());
+    }
+
+    public function test_destroy_secret_requires_the_permission(): void
+    {
+        $secret = $this->makeSecret('router-only-user', 'home-10');
+
+        $this->actingAs($this->user(['view_dashboard']))
+            ->delete(route('router-users.destroy-secret', $secret))
+            ->assertForbidden();
+
+        $this->assertNotNull($secret->fresh());
+    }
+
     private function user(array $permissions): User
     {
         $user = User::factory()->create();
