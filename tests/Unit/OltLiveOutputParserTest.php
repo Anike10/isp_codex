@@ -54,6 +54,7 @@ OUTPUT;
         $this->assertSame('Access krishi bank', $records[0]['name']);
         $this->assertSame('13-10-25 -25', $records[0]['description']);
         $this->assertSame('2026-05-18 09:43:42', $records[0]['last_registered_at']->format('Y-m-d H:i:s'));
+        $this->assertSame(1.9296, $records[0]['tx_power_dbm']);
         $this->assertSame(-28.2391, $records[0]['rx_power_dbm']);
     }
 

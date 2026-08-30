@@ -40,6 +40,17 @@ class OltSnmpClient
             }
         }
 
+        if ($oltDevice->snmp_tx_power_oid_template) {
+            $oid = $this->fillOidTemplate($oltDevice->snmp_tx_power_oid_template, $oltOnu);
+            $value = $this->get($oltDevice, $oid);
+            $power = $this->normalizePower($value, (float) ($oltDevice->snmp_power_divisor ?: 1));
+
+            if ($power !== null) {
+                $record['tx_power_dbm'] = $power;
+                $raw[] = $oid.' = '.$value;
+            }
+        }
+
         if (count($record) <= 2) {
             return null;
         }

@@ -134,8 +134,13 @@
             <div class="muted" style="margin-top:6px">Supported placeholders: {pon_port}, {onu_id}, {pon_onu}, {pon_onu_dot}.</div>
         </div>
         <div class="full">
-            <label for="snmp_power_oid_template">SNMP Power OID Template</label>
+            <label for="snmp_power_oid_template">SNMP Rx Power OID Template</label>
             <input id="snmp_power_oid_template" name="snmp_power_oid_template" value="{{ old('snmp_power_oid_template', $oltDevice->snmp_power_oid_template) }}" placeholder=".1.3.6.1.x.x.{pon_port}.{onu_id}">
+        </div>
+        <div class="full">
+            <label for="snmp_tx_power_oid_template">SNMP Tx Power OID Template</label>
+            <input id="snmp_tx_power_oid_template" name="snmp_tx_power_oid_template" value="{{ old('snmp_tx_power_oid_template', $oltDevice->snmp_tx_power_oid_template) }}" placeholder=".1.3.6.1.x.x.{pon_port}.{onu_id}">
+            <div class="muted" style="margin-top:6px">Optional — ONU upstream transmit power. Uses the same divisor. Leave blank if the OLT has no Tx OID.</div>
         </div>
         <div>
             <label for="snmp_power_divisor">SNMP Power Divisor</label>

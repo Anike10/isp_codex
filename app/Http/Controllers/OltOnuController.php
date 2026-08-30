@@ -2661,6 +2661,7 @@ class OltOnuController extends Controller
             'snmp_retries' => ['required', 'integer', 'min:0', 'max:5'],
             'snmp_status_oid_template' => ['nullable', 'string', 'max:255'],
             'snmp_power_oid_template' => ['nullable', 'string', 'max:255'],
+            'snmp_tx_power_oid_template' => ['nullable', 'string', 'max:255'],
             'snmp_power_divisor' => ['required', 'numeric', 'min:0.01', 'max:100000'],
             'read_context_commands' => ['nullable', 'string'],
             'pon_ports' => [

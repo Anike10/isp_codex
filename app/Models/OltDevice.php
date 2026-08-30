@@ -31,6 +31,7 @@ class OltDevice extends Model
         'snmp_retries',
         'snmp_status_oid_template',
         'snmp_power_oid_template',
+        'snmp_tx_power_oid_template',
         'snmp_power_divisor',
         'read_context_commands',
         'pon_ports',

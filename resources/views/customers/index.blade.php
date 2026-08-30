@@ -252,7 +252,7 @@
         color: #98a2b3;
     }
     td.note-cell textarea { width: 100%; font: inherit; font-size: 12px; }
-    .onu-sub { margin-top: 3px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 11px; line-height: 1.3; }
+    .onu-sub { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #dbe2ec; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; line-height: 1.35; }
     .onu-sub__loc { font-weight: 700; color: #475467; }
     .onu-sub .badge { font-size: 10px; padding: 1px 6px; font-weight: 700; }
     @media (max-width: 1500px) {
