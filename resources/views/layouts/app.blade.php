@@ -472,9 +472,9 @@
             </div>
         @endif
 
-        @include('partials.page_help')
-
         @yield('content')
+
+        @include('partials.page_help')
     </main>
     <footer class="app-footer">Powered by Ultimate Solution</footer>
 </div>
