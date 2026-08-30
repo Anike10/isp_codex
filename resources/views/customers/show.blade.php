@@ -1694,12 +1694,22 @@
             .onu-chart svg { width:100%; height:auto; display:block; }
             .onu-chart__legend { display:flex; gap:16px; flex-wrap:wrap; align-items:center; font-size:12px; margin-bottom:8px; }
             .onu-chart__legend i { display:inline-block; width:12px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
+            .onu-signal__show { display:flex; align-items:center; gap:12px; font-size:13px; margin:0 0 12px; }
+            .onu-signal__show label { display:inline-flex; align-items:center; gap:5px; }
         </style>
         <section class="customer-card" id="onu-signal" style="margin-top:16px;">
-            <h2 class="customer-card__heading">ONU সিগন্যাল হিস্টোরি</h2>
+            <h2 class="customer-card__heading">ONU Signal History</h2>
             <p class="muted" style="margin:0 0 12px;">
                 শেষ {{ $onuHistoryDays ?? 7 }} দিনের সংরক্ষিত ONU Rx/Tx optical power। সবুজ ব্যান্ড −১৫ থেকে −২৫ dBm (স্বাভাবিক)।
             </p>
+            <form method="post" action="{{ route('customers.onu-signal-visibility.update') }}" class="onu-signal__show" onchange="this.submit()">
+                @csrf
+                @method('patch')
+                <span class="muted">Show on graph:</span>
+                <label><input type="checkbox" name="show_rx" value="1" @checked($onuHistoryShowRx ?? true)> Rx</label>
+                <label><input type="checkbox" name="show_tx" value="1" @checked($onuHistoryShowTx ?? false)> Tx</label>
+                <noscript><button class="btn light" type="submit">Save</button></noscript>
+            </form>
             @include('customers._onu_signal_chart', ['samples' => $onuHistory ?? collect(), 'showRx' => $onuHistoryShowRx ?? true, 'showTx' => $onuHistoryShowTx ?? false])
         </section>
     @endif

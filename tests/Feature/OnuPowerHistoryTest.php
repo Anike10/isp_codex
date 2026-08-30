@@ -140,7 +140,6 @@ class OnuPowerHistoryTest extends TestCase
             ->patch(route('olt-onus.power-history-settings.update'), [
                 'interval_hours' => 4,
                 'retention_days' => 21,
-                'show_rx' => '1',
             ])
             ->assertRedirect();
 
@@ -156,26 +155,38 @@ class OnuPowerHistoryTest extends TestCase
         $this->assertFalse($service->showTx());
     }
 
-    public function test_settings_form_persists_the_rx_tx_graph_checkboxes(): void
+    public function test_saving_interval_and_retention_leaves_the_graph_visibility_alone(): void
+    {
+        $service = app(OnuPowerHistoryService::class);
+        $service->setShowTx(true);
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs(User::factory()->create())
+            ->patch(route('olt-onus.power-history-settings.update'), [
+                'interval_hours' => 2, 'retention_days' => 10,
+            ])->assertRedirect();
+
+        $this->assertTrue($service->showRx());
+        $this->assertTrue($service->showTx());
+    }
+
+    public function test_party_page_visibility_form_persists_the_rx_tx_checkboxes(): void
     {
         $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
         $service = app(OnuPowerHistoryService::class);
 
         // Both ticked.
-        $this->withoutMiddleware(EnsureUserHasPermission::class)
-            ->actingAs($user)
-            ->patch(route('olt-onus.power-history-settings.update'), [
-                'interval_hours' => 1, 'retention_days' => 7,
+        $this->actingAs($user)
+            ->patch(route('customers.onu-signal-visibility.update'), [
                 'show_rx' => '1', 'show_tx' => '1',
             ])->assertRedirect();
         $this->assertTrue($service->showRx());
         $this->assertTrue($service->showTx());
 
         // An unchecked box sends nothing -> stored as off.
-        $this->withoutMiddleware(EnsureUserHasPermission::class)
-            ->actingAs($user)
-            ->patch(route('olt-onus.power-history-settings.update'), [
-                'interval_hours' => 1, 'retention_days' => 7,
+        $this->actingAs($user)
+            ->patch(route('customers.onu-signal-visibility.update'), [
                 'show_tx' => '1',
             ])->assertRedirect();
         $this->assertFalse($service->showRx());
@@ -253,7 +264,7 @@ class OnuPowerHistoryTest extends TestCase
 
         $this->actingAs($user)->get(route('customers.show', $customer))
             ->assertOk()
-            ->assertSee('ONU সিগন্যাল হিস্টোরি')
+            ->assertSee('ONU Signal History')
             ->assertSee('<polyline', false);
     }
 

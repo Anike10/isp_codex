@@ -416,6 +416,18 @@ class CustomerController extends Controller
         return view('customers.show', compact('customer', 'routers', 'paymentAccounts', 'paymentDefault', 'onuHistory', 'onuHistoryDays', 'onuHistoryShowRx', 'onuHistoryShowTx'));
     }
 
+    /**
+     * Which series the ONU Signal History graph draws. This is a global display
+     * preference, toggled from inside that card on the party page.
+     */
+    public function updateOnuSignalVisibility(Request $request, \App\Services\OnuPowerHistoryService $history)
+    {
+        $history->setShowRx($request->boolean('show_rx'));
+        $history->setShowTx($request->boolean('show_tx'));
+
+        return back()->withFragment('onu-signal')->with('success', 'ONU signal graph updated.');
+    }
+
     public function inlineUpdate(Request $request, Customer $customer)
     {
         $field = $request->validate([

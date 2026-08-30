@@ -221,11 +221,6 @@
         <label class="muted" style="display:block;font-size:12px">Keep history for</label>
         <input type="number" name="retention_days" min="1" max="365" value="{{ $powerHistoryRetentionDays }}" style="width:90px"> দিন
     </div>
-    <div>
-        <label class="muted" style="display:block;font-size:12px">Show on graph</label>
-        <label style="font-size:13px;margin-right:10px"><input type="checkbox" name="show_rx" value="1" @checked($powerHistoryShowRx)> Rx</label>
-        <label style="font-size:13px"><input type="checkbox" name="show_tx" value="1" @checked($powerHistoryShowTx)> Tx</label>
-    </div>
     <button class="btn" type="submit">Save</button>
     <button class="btn light" type="submit" name="action" value="capture">Save &amp; capture now</button>
     <span class="muted" style="font-size:12px">প্রতিটি পার্টির ONU Rx/Tx power এই বিরতিতে সংরক্ষণ হয়ে party details পেজে graph হিসেবে দেখানো হয়। Runs hourly।</span>

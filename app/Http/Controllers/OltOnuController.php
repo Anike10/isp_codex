@@ -135,10 +135,8 @@ class OltOnuController extends Controller
         $powerHistory = app(\App\Services\OnuPowerHistoryService::class);
         $powerHistoryIntervalHours = $powerHistory->intervalHours();
         $powerHistoryRetentionDays = $powerHistory->retentionDays();
-        $powerHistoryShowRx = $powerHistory->showRx();
-        $powerHistoryShowTx = $powerHistory->showTx();
 
-        return view('olt_onus.index', compact('onus', 'stats', 'ponPorts', 'oltPonPorts', 'oltPonSummaries', 'oltCommandWarnings', 'oltDevices', 'perPageDefault', 'perPageOptions', 'perPage', 'protocolProfiles', 'powerHistoryIntervalHours', 'powerHistoryRetentionDays', 'powerHistoryShowRx', 'powerHistoryShowTx'));
+        return view('olt_onus.index', compact('onus', 'stats', 'ponPorts', 'oltPonPorts', 'oltPonSummaries', 'oltCommandWarnings', 'oltDevices', 'perPageDefault', 'perPageOptions', 'perPage', 'protocolProfiles', 'powerHistoryIntervalHours', 'powerHistoryRetentionDays'));
     }
 
     /** Sampling interval + retention for the party-page ONU signal graph. */
@@ -151,8 +149,6 @@ class OltOnuController extends Controller
 
         $history->setIntervalHours($data['interval_hours']);
         $history->setRetentionDays($data['retention_days']);
-        $history->setShowRx($request->boolean('show_rx'));
-        $history->setShowTx($request->boolean('show_tx'));
 
         if ($request->input('action') === 'capture') {
             $result = $history->capture();

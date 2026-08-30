@@ -83,6 +83,7 @@ Route::middleware('auth')->group(function () {
         Route::patch('customers/{customer}/inline', [CustomerController::class, 'inlineUpdate'])->withTrashed()->name('customers.inline-update');
         Route::post('customers/{customer}/service-validity', [CustomerController::class, 'updateServiceValidity'])->middleware('permission:override_service_validity')->name('customers.service-validity.update');
         Route::post('customers/{customer}/mikrotik-targets', [CustomerController::class, 'updateMikrotikTargets'])->name('customers.mikrotik-targets.update');
+        Route::patch('customers/onu-signal-visibility', [CustomerController::class, 'updateOnuSignalVisibility'])->name('customers.onu-signal-visibility.update');
         Route::post('customers/{customer}/force-inactive', [CustomerController::class, 'forceInactive'])->middleware('permission:force_service_status')->name('customers.force-inactive');
         Route::post('customers/{customer}/force-active', [CustomerController::class, 'forceActive'])->middleware('permission:force_service_status')->name('customers.force-active');
         Route::post('customers/{customer}/toggle-special', [CustomerController::class, 'toggleSpecial'])->middleware('permission:mark_special_customer')->name('customers.toggle-special');
