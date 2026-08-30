@@ -255,8 +255,8 @@
     .onu-sub { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #dbe2ec; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; line-height: 1.35; }
     .onu-sub__loc { font-weight: 700; color: #475467; }
     .onu-sub__vlan { font-weight: 700; color: #175cd3; }
-    .onu-pwr { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #dbe2ec; display: grid; gap: 3px; font-size: 11px; line-height: 1.3; }
-    .onu-pwr__row { display: grid; grid-template-columns: 20px auto; align-items: center; gap: 6px; }
+    .onu-pwr { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #dbe2ec; display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; white-space: nowrap; font-size: 11px; line-height: 1.3; }
+    .onu-pwr__row { display: inline-flex; align-items: center; gap: 5px; }
     .onu-pwr__row b { color: #667085; font-weight: 700; }
     .onu-pwr .badge { font-size: 10px; padding: 1px 6px; font-weight: 700; justify-self: start; font-variant-numeric: tabular-nums; }
     @media (max-width: 1500px) {
