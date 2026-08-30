@@ -210,11 +210,9 @@ class OnuPowerHistoryTest extends TestCase
             ]);
         }
 
-        // Default: Rx shown, Tx hidden.
+        // Default: Rx shown, Tx hidden -> only the Rx polyline is drawn.
         $body = $this->actingAs($user)->get(route('customers.show', $customer))
             ->assertOk()
-            ->assertSee('Rx (dBm)')
-            ->assertDontSee('Tx (dBm)')
             ->getContent();
         $this->assertSame(1, substr_count($body, '<polyline'));
 
@@ -222,7 +220,6 @@ class OnuPowerHistoryTest extends TestCase
         app(OnuPowerHistoryService::class)->setShowTx(true);
         $body = $this->actingAs($user)->get(route('customers.show', $customer))
             ->assertOk()
-            ->assertSee('Tx (dBm)')
             ->getContent();
         $this->assertSame(2, substr_count($body, '<polyline'));
     }

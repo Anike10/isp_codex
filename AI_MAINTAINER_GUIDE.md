@@ -1664,8 +1664,14 @@ when the interval has elapsed since the newest row (`isDue()`), then prunes past
 retention. Party↔ONU matching is centralized in `App\Support\OnuMatcher::byMac()`
 (ONU serial `mac_address` or a `learned_macs` entry, newest `last_live_polled_at`
 first) — the parties list uses the same helper. The party page
-(`customers.show`) renders the last `retention_days` of samples as an inline SVG
-line chart (`customers/_onu_signal_chart.blade.php`, green band −15..−25 dBm).
+(`customers.show`) renders the last `retention_days` of samples in the "ONU
+Signal History" card as an inline SVG line chart
+(`customers/_onu_signal_chart.blade.php`, green band −15..−25 dBm). The card's
+one-line header carries "Last N days · every Nh", the Rx/Tx "Show" checkboxes,
+and the latest reading. The chart itself is interactive (small vanilla JS in the
+partial): hovering shows a date-time + Rx/Tx tooltip for the nearest sample, and
+a Zoom slider widens the SVG inside an `overflow-x:auto` scroller for a
+horizontal scrollbar.
 
 The Router Users page's "Refresh secrets" and "Pull active connections" buttons
 also run `MikrotikCustomerSyncService::syncActiveConnectionMacs()` for every

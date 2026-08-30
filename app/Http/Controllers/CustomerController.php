@@ -388,11 +388,13 @@ class CustomerController extends Controller
 
         $onuHistory = collect();
         $onuHistoryDays = 7;
+        $onuHistoryIntervalHours = 1;
         $onuHistoryShowRx = true;
         $onuHistoryShowTx = false;
         if (Schema::hasTable('customer_onu_power_samples')) {
             $history = app(\App\Services\OnuPowerHistoryService::class);
             $onuHistoryDays = $history->retentionDays();
+            $onuHistoryIntervalHours = $history->intervalHours();
             $onuHistoryShowRx = $history->showRx();
             $onuHistoryShowTx = $history->showTx();
             $onuHistory = \App\Models\CustomerOnuPowerSample::query()
@@ -413,7 +415,7 @@ class CustomerController extends Controller
             ->get();
         $paymentDefault = $preferenceService->forUser($request->user());
 
-        return view('customers.show', compact('customer', 'routers', 'paymentAccounts', 'paymentDefault', 'onuHistory', 'onuHistoryDays', 'onuHistoryShowRx', 'onuHistoryShowTx'));
+        return view('customers.show', compact('customer', 'routers', 'paymentAccounts', 'paymentDefault', 'onuHistory', 'onuHistoryDays', 'onuHistoryIntervalHours', 'onuHistoryShowRx', 'onuHistoryShowTx'));
     }
 
     /**
