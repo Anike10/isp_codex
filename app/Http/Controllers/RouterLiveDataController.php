@@ -20,6 +20,7 @@ class RouterLiveDataController extends Controller
      * command box.
      */
     private const SECTIONS = [
+        'Recent log' => '/log/print',
         'System resource' => '/system/resource/print',
         'Identity' => '/system/identity/print',
         'RouterBOARD' => '/system/routerboard/print',
@@ -33,7 +34,6 @@ class RouterLiveDataController extends Controller
         'Firewall filter' => '/ip/firewall/filter/print',
         'Firewall NAT' => '/ip/firewall/nat/print',
         'Simple queues' => '/queue/simple/print',
-        'Recent log' => '/log/print',
     ];
 
     /** Rows rendered per section — protects the browser from a huge table. */

@@ -4,7 +4,7 @@
 @php
     // Sections opened on load — the small, always-useful ones plus a
     // custom command result. Everything else starts collapsed.
-    $openByDefault = ['System resource', 'Identity', 'PPP active'];
+    $openByDefault = ['Recent log', 'System resource', 'Identity', 'PPP active'];
     $tailSections = ['/log/print'];
 @endphp
 
