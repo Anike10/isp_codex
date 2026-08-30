@@ -325,6 +325,7 @@ class CustomerControllerTest extends TestCase
         \App\Models\OltOnu::create([
             'olt_name' => 'Kushtia-OLT-1', 'pon_port' => 3, 'onu_id' => 12, 'status' => 'online',
             'mac_address' => '00:8d:ff:02:2a:17', 'rx_power_dbm' => -21.40, 'tx_power_dbm' => 2.10,
+            'port_vlans' => [['port' => 1, 'vlan' => 842]],
         ]);
         Customer::create([
             'name' => 'Serial Match Party', 'phone' => '01710000201', 'connection_id' => 'ONU-SERIAL',
@@ -354,19 +355,23 @@ class CustomerControllerTest extends TestCase
             ->assertOk()
             ->assertSee('Kushtia-OLT-1')
             ->assertSee('3/12')
-            ->assertSee('Rx -21.40')
-            ->assertSee('Tx 2.10')
+            ->assertSee('VLAN 842')
+            ->assertSee('-21.40')
+            ->assertSee('2.10')
             ->assertSee('Kushtia-OLT-2')
             ->assertSee('1/4')
-            ->assertSee('Rx -27.90')
+            ->assertSee('VLAN 100')
+            ->assertSee('-27.90')
             ->assertSee('onu-sub', false)
+            ->assertSee('onu-pwr', false)
             ->getContent();
 
-        // the ONU line sits inside the name cell, right after the name
-        $this->assertMatchesRegularExpression(
-            '/Serial Match Party<\/span>\s*<div class="onu-sub">/s',
-            $body
-        );
+        // OLT / ONU + VLAN sit under the name; Rx / Tx sit under the phone
+        $this->assertMatchesRegularExpression('#Serial Match Party</span>\s*<div class="onu-sub">#s', $body);
+        $this->assertMatchesRegularExpression('#01710000201</span>\s*<div class="onu-pwr">#s', $body);
+        // -27.90 (weaker than -25) is red, -21.40 (-25..-15) is green
+        $this->assertMatchesRegularExpression('#badge failed">-27\.90#', $body);
+        $this->assertMatchesRegularExpression('#badge active">-21\.40#', $body);
     }
 
     public function test_customer_show_activity_table_lists_the_admin_who_took_a_payment(): void

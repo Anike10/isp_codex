@@ -1191,7 +1191,7 @@ class CustomerController extends Controller
         }
 
         $onus = OltOnu::query()
-            ->select('id', 'olt_name', 'pon_port', 'onu_id', 'onu_type', 'mac_address', 'learned_macs', 'rx_power_dbm', 'tx_power_dbm', 'status', 'name', 'last_live_polled_at')
+            ->select('id', 'olt_name', 'pon_port', 'onu_id', 'onu_type', 'mac_address', 'learned_macs', 'port_vlans', 'rx_power_dbm', 'tx_power_dbm', 'status', 'name', 'last_live_polled_at')
             ->where(function ($query) use ($macs): void {
                 $query->whereIn(DB::raw('lower(mac_address)'), $macs->all());
                 foreach ($macs as $mac) {
@@ -1203,19 +1203,35 @@ class CustomerController extends Controller
             ->get();
 
         $byMac = [];
+        $vlanByMac = [];
         foreach ($onus as $onu) {
-            $keys = [mb_strtolower(trim((string) $onu->mac_address))];
+            // Distinct configured VLANs on the ONU's ports, used when a learned
+            // MAC entry itself carries no VLAN.
+            $portVlans = collect((array) $onu->port_vlans)
+                ->pluck('vlan')->map(fn ($v) => trim((string) $v))->filter()->unique()->values();
+            $portVlanLabel = $portVlans->isEmpty() ? null : $portVlans->implode(', ');
+
+            $keys = [mb_strtolower(trim((string) $onu->mac_address)) => null];
             foreach ((array) $onu->learned_macs as $entry) {
-                $mac = is_array($entry) ? ($entry['mac'] ?? null) : $entry;
-                $keys[] = mb_strtolower(trim((string) $mac));
+                $mac = mb_strtolower(trim((string) (is_array($entry) ? ($entry['mac'] ?? '') : $entry)));
+                if ($mac !== '') {
+                    $entryVlan = is_array($entry) && isset($entry['vlan']) ? trim((string) $entry['vlan']) : '';
+                    $keys[$mac] = $entryVlan !== '' ? $entryVlan : null;
+                }
             }
-            foreach (array_filter($keys) as $key) {
-                $byMac[$key] ??= $onu;
+            foreach ($keys as $key => $vlan) {
+                if ($key === '' || isset($byMac[$key])) {
+                    continue;
+                }
+                $byMac[$key] = $onu;
+                $vlanByMac[$key] = $vlan ?: $portVlanLabel;
             }
         }
 
-        $customers->each(function (Customer $customer) use ($byMac): void {
-            $customer->matched_onu = $byMac[mb_strtolower(trim((string) $customer->last_connected_mac))] ?? null;
+        $customers->each(function (Customer $customer) use ($byMac, $vlanByMac): void {
+            $key = mb_strtolower(trim((string) $customer->last_connected_mac));
+            $customer->matched_onu = $byMac[$key] ?? null;
+            $customer->matched_onu_vlan = $vlanByMac[$key] ?? null;
         });
     }
 

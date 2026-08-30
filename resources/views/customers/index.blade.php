@@ -254,7 +254,11 @@
     td.note-cell textarea { width: 100%; font: inherit; font-size: 12px; }
     .onu-sub { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #dbe2ec; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; line-height: 1.35; }
     .onu-sub__loc { font-weight: 700; color: #475467; }
-    .onu-sub .badge { font-size: 10px; padding: 1px 6px; font-weight: 700; }
+    .onu-sub__vlan { font-weight: 700; color: #175cd3; }
+    .onu-pwr { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #dbe2ec; display: grid; gap: 3px; font-size: 11px; line-height: 1.3; }
+    .onu-pwr__row { display: grid; grid-template-columns: 20px auto; align-items: center; gap: 6px; }
+    .onu-pwr__row b { color: #667085; font-weight: 700; }
+    .onu-pwr .badge { font-size: 10px; padding: 1px 6px; font-weight: 700; justify-self: start; font-variant-numeric: tabular-nums; }
     @media (max-width: 1500px) {
         .customer-filter-form {
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -344,21 +348,35 @@
                 </td>
             @endif
             <td>{{ $customers->firstItem() + $loop->index }}</td>
+            @php
+                $onu = $customer->matched_onu ?? null;
+                $onuVlan = $customer->matched_onu_vlan ?? null;
+                $rx = $onu?->rx_power_dbm;
+                $tx = $onu?->tx_power_dbm;
+                $rxClass = $rx === null ? 'inactive'
+                    : ((float) $rx > -15 ? 'partial' : ((float) $rx >= -25 ? 'active' : 'failed'));
+                $txClass = $tx === null ? 'inactive'
+                    : (((float) $tx <= 0.5 || (float) $tx >= 7) ? 'failed' : 'active');
+            @endphp
             <td data-inline-field="name" data-inline-url="{{ route('customers.inline-update', $customer) }}">
                 <span data-inline-value>{{ $customer->name }}</span>
-                @php $onu = $customer->matched_onu ?? null; @endphp
                 @if ($onu)
                     <div class="onu-sub">
                         <span class="onu-sub__loc">{{ $onu->olt_name ?: 'OLT' }} <span class="muted">·</span> {{ $onu->pon_port }}/{{ $onu->onu_id }}</span>
-                        @if ($onu->rx_power_dbm !== null || $onu->tx_power_dbm !== null)
-                            <span class="badge {{ $onu->rx_power_dbm !== null && (float) $onu->rx_power_dbm <= -25 ? 'failed' : 'active' }}">Rx {{ $onu->rx_power_dbm !== null ? number_format((float) $onu->rx_power_dbm, 2) : '—' }}</span>
-                            <span class="badge {{ $onu->tx_power_dbm !== null && ((float) $onu->tx_power_dbm <= 0.5 || (float) $onu->tx_power_dbm >= 7) ? 'failed' : 'active' }}">Tx {{ $onu->tx_power_dbm !== null ? number_format((float) $onu->tx_power_dbm, 2) : '—' }}</span>
+                        @if ($onuVlan)
+                            <span class="onu-sub__vlan">VLAN {{ $onuVlan }}</span>
                         @endif
                     </div>
                 @endif
             </td>
             <td data-inline-field="phone" data-inline-url="{{ route('customers.inline-update', $customer) }}">
                 <span data-inline-value>{{ $customer->phone }}</span>
+                @if ($onu && ($rx !== null || $tx !== null))
+                    <div class="onu-pwr">
+                        <span class="onu-pwr__row"><b>Rx</b><span class="badge {{ $rxClass }}">{{ $rx !== null ? number_format((float) $rx, 2) : '—' }}</span></span>
+                        <span class="onu-pwr__row"><b>Tx</b><span class="badge {{ $txClass }}">{{ $tx !== null ? number_format((float) $tx, 2) : '—' }}</span></span>
+                    </div>
+                @endif
             </td>
             <td class="col-center">
                 @if ($customer->never_suspend)
