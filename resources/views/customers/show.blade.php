@@ -1704,7 +1704,7 @@
             @php $onuLatest = ($onuHistory ?? collect())->last(); @endphp
             <div class="onu-signal__bar">
                 <span class="muted">Last {{ $onuHistoryDays ?? 7 }} days · every {{ $onuHistoryIntervalHours ?? 1 }}h</span>
-                <form method="post" action="{{ route('customers.onu-signal-visibility.update') }}" class="onu-signal__show" onchange="this.submit()">
+                <form method="post" action="{{ route('customers.onu-signal-visibility.update') }}" class="onu-signal__show">
                     @csrf
                     @method('patch')
                     <span class="muted">Show:</span>
@@ -1715,8 +1715,8 @@
                 @if ($onuLatest)
                     <span class="muted onu-signal__latest">
                         সর্বশেষ {{ $onuLatest->sampled_at->format('d/m H:i') }}
-                        @if ($onuHistoryShowRx ?? true)— <b style="color:#1d76c9">Rx</b> {{ $onuLatest->rx_power_dbm !== null ? number_format((float) $onuLatest->rx_power_dbm, 2) : '—' }}@endif
-                        @if ($onuHistoryShowTx ?? false) <b style="color:#0f7a55">Tx</b> {{ $onuLatest->tx_power_dbm !== null ? number_format((float) $onuLatest->tx_power_dbm, 2) : '—' }}@endif
+                        <span class="onu-series--rx {{ ($onuHistoryShowRx ?? true) ? '' : 'onu-hidden' }}">— <b style="color:#1d76c9">Rx</b> {{ $onuLatest->rx_power_dbm !== null ? number_format((float) $onuLatest->rx_power_dbm, 2) : '—' }}</span>
+                        <span class="onu-series--tx {{ ($onuHistoryShowTx ?? false) ? '' : 'onu-hidden' }}"> <b style="color:#0f7a55">Tx</b> {{ $onuLatest->tx_power_dbm !== null ? number_format((float) $onuLatest->tx_power_dbm, 2) : '—' }}</span>
                     </span>
                 @endif
             </div>

@@ -1669,9 +1669,15 @@ Signal History" card as an inline SVG line chart
 (`customers/_onu_signal_chart.blade.php`, green band −15..−25 dBm). The card's
 one-line header carries "Last N days · every Nh", the Rx/Tx "Show" checkboxes,
 and the latest reading. The chart itself is interactive (small vanilla JS in the
-partial): hovering shows a date-time + Rx/Tx tooltip for the nearest sample, and
-a Zoom slider widens the SVG inside an `overflow-x:auto` scroller for a
-horizontal scrollbar.
+partial): hovering shows a date-time + Rx/Tx tooltip for the nearest sample; a
+Zoom slider widens the plot SVG inside an `overflow-x:auto` scroller for a
+horizontal scrollbar. The dBm (y) labels sit in a separate fixed-width SVG
+gutter so they never zoom; x-axis date labels and data dots carry a
+counter-scale `matrix()` transform so their glyphs/shape stay upright at any
+zoom. The Rx/Tx "Show" checkboxes toggle series visibility live (CSS
+`.onu-hidden` on `.onu-series--rx`/`--tx`, both always rendered) and POST the
+new flags to `customers/onu-signal-visibility` via `fetch` — the controller
+returns `204` for XHR/JSON — so nothing reloads.
 
 The Router Users page's "Refresh secrets" and "Pull active connections" buttons
 also run `MikrotikCustomerSyncService::syncActiveConnectionMacs()` for every

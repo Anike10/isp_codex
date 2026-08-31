@@ -193,6 +193,21 @@ class OnuPowerHistoryTest extends TestCase
         $this->assertTrue($service->showTx());
     }
 
+    public function test_visibility_endpoint_answers_ajax_calls_with_no_content(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        $this->actingAs($user)
+            ->patch(route('customers.onu-signal-visibility.update'), ['show_rx' => '1'], [
+                'X-Requested-With' => 'XMLHttpRequest',
+            ])
+            ->assertNoContent();
+
+        $this->assertTrue(app(OnuPowerHistoryService::class)->showRx());
+        $this->assertFalse(app(OnuPowerHistoryService::class)->showTx());
+    }
+
     public function test_party_graph_hides_the_tx_series_when_the_setting_is_off(): void
     {
         $user = User::factory()->create();
@@ -210,18 +225,20 @@ class OnuPowerHistoryTest extends TestCase
             ]);
         }
 
-        // Default: Rx shown, Tx hidden -> only the Rx polyline is drawn.
+        // Default: Rx shown, Tx hidden -> the Tx series group carries onu-hidden.
         $body = $this->actingAs($user)->get(route('customers.show', $customer))
             ->assertOk()
             ->getContent();
-        $this->assertSame(1, substr_count($body, '<polyline'));
+        $this->assertStringContainsString('onu-series--tx onu-hidden', $body);
+        $this->assertStringNotContainsString('onu-series--rx onu-hidden', $body);
 
-        // Turn Tx on -> both series render.
+        // Turn Tx on -> neither group is hidden.
         app(OnuPowerHistoryService::class)->setShowTx(true);
         $body = $this->actingAs($user)->get(route('customers.show', $customer))
             ->assertOk()
             ->getContent();
-        $this->assertSame(2, substr_count($body, '<polyline'));
+        $this->assertStringNotContainsString('onu-series--tx onu-hidden', $body);
+        $this->assertStringNotContainsString('onu-series--rx onu-hidden', $body);
     }
 
     public function test_settings_form_can_capture_now(): void

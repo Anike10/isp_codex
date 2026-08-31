@@ -427,6 +427,10 @@ class CustomerController extends Controller
         $history->setShowRx($request->boolean('show_rx'));
         $history->setShowTx($request->boolean('show_tx'));
 
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->noContent();
+        }
+
         return back()->withFragment('onu-signal')->with('success', 'ONU signal graph updated.');
     }
 
