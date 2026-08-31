@@ -71,13 +71,14 @@
 @if ($samples->isEmpty())
     <p class="muted" style="margin:0">এখনো কোনো নমুনা জমা হয়নি। প্রতি নির্ধারিত ঘণ্টায় পার্টির ONU Rx/Tx power সংরক্ষণ হয় — কয়েক ঘণ্টা পর এখানে পূর্ণ গ্রাফ দেখা যাবে।</p>
 @else
+    @once
     <style>
         .onu-chart { position:relative; }
         .onu-chart__toolbar { display:flex; justify-content:flex-end; align-items:center; gap:8px; font-size:12px; color:#667085; margin-bottom:6px; }
         .onu-chart__toolbar input[type=range] { vertical-align:middle; width:130px; }
         .onu-chart__zoomreset { border:1px solid #d0d5dd; background:#fff; border-radius:6px; padding:1px 8px; cursor:pointer; font-size:12px; }
         .onu-chart__plot { display:flex; align-items:flex-start; }
-        .onu-chart__yaxis { flex:0 0 {{ $gutterW }}px; height:220px; display:block; }
+        .onu-chart__yaxis { flex:0 0 38px; height:220px; display:block; }
         .onu-chart__scroll { flex:1 1 auto; min-width:0; overflow-x:auto; overflow-y:hidden; }
         .onu-chart__scroll svg { height:220px; width:100%; display:block; }
         .onu-chart__hit { cursor:crosshair; }
@@ -85,6 +86,7 @@
         .onu-chart__tip { position:absolute; z-index:5; pointer-events:none; background:#101828; color:#fff; font-size:11px; line-height:1.45; padding:5px 8px; border-radius:6px; white-space:nowrap; box-shadow:0 4px 12px rgba(16,24,40,.25); }
         .onu-chart__tip[hidden], .onu-chart__plot[hidden], .onu-chart__toolbar[hidden] { display:none; }
     </style>
+    @endonce
     <div class="onu-chart" id="{{ $cid }}">
         @if ($showLegend)
             <div class="onu-chart__legend">
@@ -267,36 +269,47 @@
 
             applyZoom();
         })();
-
-        // Shared once per page: one Rx/Tx "Show" form drives every chart and
-        // persists the choice (no reload). Guarded so N includes wire it once.
+        </script>
+        @once
+        <script>
+        // Shared once per page: the single Rx/Tx "Show" form drives every chart
+        // and persists the choice (no reload).
         (function () {
-            if (window.__onuSignalToggleWired) return;
-            var form = document.querySelector('.onu-signal__show');
-            if (!form) return;
-            window.__onuSignalToggleWired = true;
-            var cbRx = form.querySelector('[name=show_rx]');
-            var cbTx = form.querySelector('[name=show_tx]');
-            function sync() {
-                var rx = !!(cbRx && cbRx.checked), tx = !!(cbTx && cbTx.checked);
-                (window.onuSignalCharts || []).forEach(function (fn) { try { fn(rx, tx); } catch (e) {} });
-                document.querySelectorAll('.onu-signal__latest .onu-series--rx').forEach(function (el) { el.classList.toggle('onu-hidden', !rx); });
-                document.querySelectorAll('.onu-signal__latest .onu-series--tx').forEach(function (el) { el.classList.toggle('onu-hidden', !tx); });
-            }
-            sync();
-            form.addEventListener('change', function () {
+            function wire() {
+                if (window.__onuSignalToggleWired) return;
+                var form = document.querySelector('.onu-signal__show');
+                if (!form) return;
+                window.__onuSignalToggleWired = true;
+                var cbRx = form.querySelector('[name=show_rx]');
+                var cbTx = form.querySelector('[name=show_tx]');
+                function sync() {
+                    var rx = !!(cbRx && cbRx.checked), tx = !!(cbTx && cbTx.checked);
+                    (window.onuSignalCharts || []).forEach(function (fn) { try { fn(rx, tx); } catch (e) {} });
+                    document.querySelectorAll('.onu-signal__latest .onu-series--rx').forEach(function (el) { el.classList.toggle('onu-hidden', !rx); });
+                    document.querySelectorAll('.onu-signal__latest .onu-series--tx').forEach(function (el) { el.classList.toggle('onu-hidden', !tx); });
+                }
+                window.__onuSignalSync = sync;
                 sync();
-                try {
-                    fetch(form.getAttribute('action'), {
-                        method: 'POST',
-                        body: new FormData(form),
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                        credentials: 'same-origin',
-                    }).catch(function () {});
-                } catch (e) {}
-            });
+                form.addEventListener('change', function () {
+                    sync();
+                    try {
+                        fetch(form.getAttribute('action'), {
+                            method: 'POST',
+                            body: new FormData(form),
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                            credentials: 'same-origin',
+                        }).catch(function () {});
+                    } catch (e) {}
+                });
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', wire);
+            } else {
+                wire();
+            }
         })();
         </script>
+        @endonce
         @if ($samples->count() < 2)
             <p class="muted" style="margin:8px 0 0">একটি নমুনা জমা হয়েছে। প্রতি ঘণ্টায় নতুন নমুনা যোগ হয়ে এটি সম্পূর্ণ লাইন গ্রাফে পরিণত হবে।</p>
         @endif

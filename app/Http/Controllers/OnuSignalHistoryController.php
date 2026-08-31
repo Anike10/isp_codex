@@ -16,8 +16,6 @@ use Illuminate\Support\Facades\Schema;
  */
 class OnuSignalHistoryController extends Controller
 {
-    private const PER_PAGE = 20;
-
     public function index(Request $request)
     {
         $history = app(OnuPowerHistoryService::class);
@@ -25,6 +23,10 @@ class OnuSignalHistoryController extends Controller
         $intervalHours = $history->intervalHours();
         $showRx = $history->showRx();
         $showTx = $history->showTx();
+
+        $perPageDefault = 20;
+        $perPageOptions = [10, 20, 50, 100, 200];
+        $perPage = $this->perPage($request, $perPageDefault, $perPageOptions);
 
         $parties = collect();
         $pagination = null;
@@ -35,7 +37,7 @@ class OnuSignalHistoryController extends Controller
             $paginator = Customer::query()
                 ->whereHas('onuPowerSamples', fn ($q) => $q->where('sampled_at', '>=', $since))
                 ->orderBy('name')
-                ->paginate(self::PER_PAGE)
+                ->paginate($perPage)
                 ->withQueryString();
 
             $ids = $paginator->getCollection()->modelKeys();
@@ -58,7 +60,8 @@ class OnuSignalHistoryController extends Controller
         }
 
         return view('troubleshoot.onu_signal', compact(
-            'parties', 'pagination', 'days', 'intervalHours', 'showRx', 'showTx'
+            'parties', 'pagination', 'days', 'intervalHours', 'showRx', 'showTx',
+            'perPage', 'perPageDefault', 'perPageOptions'
         ));
     }
 }

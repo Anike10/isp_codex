@@ -23,8 +23,10 @@
     }
     .onu-signal__show { display: inline-flex; align-items: center; gap: 10px; margin: 0; }
     .onu-signal__show label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
-    .onu-allsig__card { margin-top: 14px; }
-    .onu-allsig__card h2 { margin: 0 0 8px; font-size: 15px; }
+    .onu-allsig__bar .per-page-form { margin: 0; }
+    /* No box / top rule around each party block — only the graph line stands out. */
+    .onu-allsig__card { margin: 22px 0 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+    .onu-allsig__card h2 { margin: 0 0 6px; font-size: 15px; }
     .onu-allsig__card h2 .muted { font-weight: 400; font-size: 12px; }
 </style>
 
@@ -38,10 +40,11 @@
         <label><input type="checkbox" name="show_tx" value="1" @checked($showTx)> Tx</label>
         <noscript><button class="btn light" type="submit">Save</button></noscript>
     </form>
+    @include('partials.per_page')
 </div>
 
 @forelse ($parties as $party)
-    <section class="card onu-allsig__card">
+    <section class="onu-allsig__card">
         <h2>
             <a href="{{ route('customers.show', $party) }}">{{ $party->name }}</a>
             <span class="muted">· {{ $party->connection_id ?? ('#'.$party->id) }}@if ($party->last_connected_mac) · {{ $party->last_connected_mac }}@endif</span>

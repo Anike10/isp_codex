@@ -328,11 +328,41 @@ class OnuPowerHistoryTest extends TestCase
             ->assertSee('Party With Graph')
             ->assertDontSee('Party Without Graph')
             ->assertSee('Show on every graph')
+            ->assertSee('Rows per page')
+            ->assertSee('Set as Default')
             ->assertSee('<svg', false)
             ->getContent();
 
         // Exactly one Rx/Tx form element on the page.
         $this->assertSame(1, substr_count($body, 'class="onu-signal__show"'));
+    }
+
+    public function test_troubleshoot_page_honours_rows_per_page_and_can_store_it_as_default(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'view_network_diagnostics')->firstOrFail());
+
+        foreach (range(1, 25) as $n) {
+            $party = $this->party('AA:BB:CC:DD:'.sprintf('%02X', $n).':01', 'RPP-'.$n);
+            $party->update(['name' => sprintf('Signal Party %02d', $n)]);
+            CustomerOnuPowerSample::create([
+                'customer_id' => $party->id, 'rx_power_dbm' => -21,
+                'sampled_at' => now()->subHours($n), 'created_at' => now(),
+            ]);
+        }
+
+        // Default page size is 20.
+        $this->actingAs($user)->get(route('troubleshoot.onu-signal'))
+            ->assertSee('Signal Party 20')
+            ->assertDontSee('Signal Party 21');
+
+        // Explicit per_page shows the rest and, with make_per_page_default, sticks.
+        $this->actingAs($user)
+            ->get(route('troubleshoot.onu-signal', ['per_page' => 200, 'make_per_page_default' => 1]))
+            ->assertSee('Signal Party 25');
+
+        $this->actingAs($user)->get(route('troubleshoot.onu-signal'))
+            ->assertSee('Signal Party 25');
     }
 
     public function test_troubleshoot_visibility_toggle_is_allowed_for_network_diagnostics_users(): void
