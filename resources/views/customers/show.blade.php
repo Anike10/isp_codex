@@ -1704,7 +1704,7 @@
             @php $onuLatest = ($onuHistory ?? collect())->last(); @endphp
             <div class="onu-signal__bar">
                 <span class="muted">Last {{ $onuHistoryDays ?? 7 }} days · every {{ $onuHistoryIntervalHours ?? 1 }}h</span>
-                <form method="post" action="{{ route('customers.onu-signal-visibility.update') }}" class="onu-signal__show">
+                <form method="post" action="{{ route('onu-signal.visibility.update') }}" class="onu-signal__show">
                     @csrf
                     @method('patch')
                     <span class="muted">Show:</span>

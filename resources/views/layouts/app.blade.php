@@ -225,7 +225,7 @@
                 $canManageNetwork = collect(['packages', 'mikrotik_routers', 'ip_pools', 'network_map', 'olt_onus', 'onu_deny_list', 'onu_auto_discovery', 'olt_protocol_profiles', 'unmanaged_router_users'])->contains($canMenu);
                 $canManageBilling = collect(['parties', 'resellers', 'invoices', 'create_invoice', 'sale_returns', 'quotations', 'create_quotation', 'payment_note_default', 'organizations', 'print_history', 'payments', 'bkash_sms', 'payment_accounts', 'accounting_ledger', 'concession_reports', 'employees', 'expenses'])->contains($canMenu);
                 $canManageWarranty = collect(['warranty_claims', 'new_warranty_claim'])->contains($canMenu);
-                $canManageTroubleshoot = collect(['troubleshoot_webhook', 'troubleshoot_frequent_disconnects', 'troubleshoot_mac_changes', 'troubleshoot_analytics', 'troubleshoot_router_data'])->contains($canMenu);
+                $canManageTroubleshoot = collect(['troubleshoot_webhook', 'troubleshoot_frequent_disconnects', 'troubleshoot_mac_changes', 'troubleshoot_analytics', 'troubleshoot_router_data', 'troubleshoot_onu_signal'])->contains($canMenu);
                 $canManageAdmin = collect(['users', 'roles', 'database_backup'])->contains($canMenu)
                     || (bool) $currentUser?->isSuperAdmin();
                 $canManageFleet = collect(['fleet_vehicles', 'fleet_add_vehicle', 'fleet_maintenance_schedules', 'fleet_log_maintenance', 'fleet_settings', 'fleet_reports', 'fleet_expense_report', 'fleet_maintenance_report', 'fleet_due_report', 'fleet_duty_history'])->contains($canMenu)
@@ -292,6 +292,9 @@
                         @endif
                         @if ($canMenu('troubleshoot_router_data'))
                             <a href="{{ route('troubleshoot.router-data') }}">Router Live Data</a>
+                        @endif
+                        @if ($canMenu('troubleshoot_onu_signal'))
+                            <a href="{{ route('troubleshoot.onu-signal') }}">ONU Signal History</a>
                         @endif
                     </div>
                 </details>

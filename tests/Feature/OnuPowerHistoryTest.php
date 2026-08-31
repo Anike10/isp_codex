@@ -178,7 +178,7 @@ class OnuPowerHistoryTest extends TestCase
 
         // Both ticked.
         $this->actingAs($user)
-            ->patch(route('customers.onu-signal-visibility.update'), [
+            ->patch(route('onu-signal.visibility.update'), [
                 'show_rx' => '1', 'show_tx' => '1',
             ])->assertRedirect();
         $this->assertTrue($service->showRx());
@@ -186,7 +186,7 @@ class OnuPowerHistoryTest extends TestCase
 
         // An unchecked box sends nothing -> stored as off.
         $this->actingAs($user)
-            ->patch(route('customers.onu-signal-visibility.update'), [
+            ->patch(route('onu-signal.visibility.update'), [
                 'show_tx' => '1',
             ])->assertRedirect();
         $this->assertFalse($service->showRx());
@@ -199,7 +199,7 @@ class OnuPowerHistoryTest extends TestCase
         $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
 
         $this->actingAs($user)
-            ->patch(route('customers.onu-signal-visibility.update'), ['show_rx' => '1'], [
+            ->patch(route('onu-signal.visibility.update'), ['show_rx' => '1'], [
                 'X-Requested-With' => 'XMLHttpRequest',
             ])
             ->assertNoContent();
@@ -302,5 +302,50 @@ class OnuPowerHistoryTest extends TestCase
             ->assertSee('<svg', false)
             ->assertSee('<circle', false)
             ->assertDontSee('এখনো কোনো নমুনা জমা হয়নি');
+    }
+
+    public function test_troubleshoot_page_lists_only_parties_that_have_samples_with_one_shared_toggle(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'view_network_diagnostics')->firstOrFail());
+
+        $withSamples = $this->party('AA:BB:CC:DD:EE:01', 'HAS-SAMPLES');
+        $withSamples->update(['name' => 'Party With Graph']);
+        foreach (range(1, 3) as $i) {
+            CustomerOnuPowerSample::create([
+                'customer_id' => $withSamples->id,
+                'rx_power_dbm' => -20 - $i,
+                'sampled_at' => now()->subHours($i),
+                'created_at' => now(),
+            ]);
+        }
+
+        $bare = $this->party('AA:BB:CC:DD:EE:02', 'NO-SAMPLES');
+        $bare->update(['name' => 'Party Without Graph']);
+
+        $body = $this->actingAs($user)->get(route('troubleshoot.onu-signal'))
+            ->assertOk()
+            ->assertSee('Party With Graph')
+            ->assertDontSee('Party Without Graph')
+            ->assertSee('Show on every graph')
+            ->assertSee('<svg', false)
+            ->getContent();
+
+        // Exactly one Rx/Tx form element on the page.
+        $this->assertSame(1, substr_count($body, 'class="onu-signal__show"'));
+    }
+
+    public function test_troubleshoot_visibility_toggle_is_allowed_for_network_diagnostics_users(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'view_network_diagnostics')->firstOrFail());
+
+        $this->actingAs($user)
+            ->patch(route('onu-signal.visibility.update'), ['show_rx' => '1', 'show_tx' => '1'], [
+                'X-Requested-With' => 'XMLHttpRequest',
+            ])
+            ->assertNoContent();
+
+        $this->assertTrue(app(OnuPowerHistoryService::class)->showTx());
     }
 }

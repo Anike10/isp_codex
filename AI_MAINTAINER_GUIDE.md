@@ -1655,10 +1655,11 @@ the OLT ONU list (`PATCH olt-onus/power-history-settings`,
 `manage_mikrotik_routers`); "Save & capture now" runs a sample immediately.
 `retention_days` is both the graph window and the auto-delete cutoff (one
 number). `onu_power_history.show_rx` (default `1`) and `onu_power_history.show_tx`
-(default `0`) are display-only and toggled by the "Show on graph" checkboxes
-inside the ONU Signal History card on the party page (`PATCH
-customers/onu-signal-visibility`, `CustomerController::updateOnuSignalVisibility`,
-`manage_customers`, auto-submits on change). `capture()` always stores both
+(default `0`) are display-only and toggled by the Rx/Tx "Show" checkboxes inside
+the ONU Signal History card (`PATCH onu-signal/visibility`,
+`onu-signal.visibility.update`, `CustomerController::updateOnuSignalVisibility`,
+`manage_customers` OR `view_network_diagnostics` — named outside `customers.*` so
+the Parties menu gate does not apply). `capture()` always stores both
 readings so a later toggle still has history. The hourly command only samples
 when the interval has elapsed since the newest row (`isDue()`), then prunes past
 retention. Party↔ONU matching is centralized in `App\Support\OnuMatcher::byMac()`
@@ -1676,8 +1677,17 @@ gutter so they never zoom; x-axis date labels and data dots carry a
 counter-scale `matrix()` transform so their glyphs/shape stay upright at any
 zoom. The Rx/Tx "Show" checkboxes toggle series visibility live (CSS
 `.onu-hidden` on `.onu-series--rx`/`--tx`, both always rendered) and POST the
-new flags to `customers/onu-signal-visibility` via `fetch` — the controller
-returns `204` for XHR/JSON — so nothing reloads.
+new flags to `onu-signal/visibility` via `fetch` — the controller returns `204`
+for XHR/JSON — so nothing reloads.
+
+Troubleshoot → **ONU Signal History** (`troubleshoot.onu-signal`,
+`OnuSignalHistoryController`, `troubleshoot/onu_signal.blade.php`,
+`view_network_diagnostics`) is the same chart for every party that has samples,
+paginated 20 per page, with a single sticky Rx/Tx "Show" form at the top that
+drives all charts. The partial registers each chart in `window.onuSignalCharts`;
+one guarded bootstrap block wires the single `.onu-signal__show` form, calls
+every registered chart on change, and persists once — so N charts still make one
+request per toggle, no reload.
 
 The Router Users page's "Refresh secrets" and "Pull active connections" buttons
 also run `MikrotikCustomerSyncService::syncActiveConnectionMacs()` for every

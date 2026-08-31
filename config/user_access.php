@@ -121,6 +121,7 @@ return [
                 'troubleshoot_mac_changes' => ['label' => 'Frequent MAC Changes', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.mac-changes']],
                 'troubleshoot_analytics' => ['label' => 'Connection Analytics', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.analytics']],
                 'troubleshoot_router_data' => ['label' => 'Router Live Data', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.router-data']],
+                'troubleshoot_onu_signal' => ['label' => 'ONU Signal History', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.onu-signal']],
             ],
         ],
         'billing' => [

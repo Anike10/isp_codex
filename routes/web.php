@@ -24,6 +24,7 @@ use App\Http\Controllers\MikrotikRouterController;
 use App\Http\Controllers\MikrotikRouterDataController;
 use App\Http\Controllers\NetworkMapController;
 use App\Http\Controllers\OltOnuController;
+use App\Http\Controllers\OnuSignalHistoryController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\PackageController;
 use App\Http\Controllers\PaymentAccountAccessController;
@@ -67,6 +68,13 @@ Route::middleware('auth')->group(function () {
         Route::post('reseller/customers/{customer}/payments', [ResellerPortalController::class, 'storePayment'])->name('reseller.customers.payments.store');
     });
 
+    // Global ONU-signal-graph display preference: usable from the party page and
+    // the Troubleshoot "ONU Signal History" page. Not named under customers.* so
+    // it is not gated by the Parties menu.
+    Route::middleware('permission:manage_customers,view_network_diagnostics')
+        ->patch('onu-signal/visibility', [CustomerController::class, 'updateOnuSignalVisibility'])
+        ->name('onu-signal.visibility.update');
+
     Route::middleware('permission:manage_customers')->group(function () {
         Route::post('customers/bulk-payments/selection', [BulkCustomerPaymentController::class, 'select'])->name('customers.bulk-payments.select');
         Route::get('customers/bulk-payments/{token}', [BulkCustomerPaymentController::class, 'create'])->name('customers.bulk-payments.create');
@@ -83,7 +91,6 @@ Route::middleware('auth')->group(function () {
         Route::patch('customers/{customer}/inline', [CustomerController::class, 'inlineUpdate'])->withTrashed()->name('customers.inline-update');
         Route::post('customers/{customer}/service-validity', [CustomerController::class, 'updateServiceValidity'])->middleware('permission:override_service_validity')->name('customers.service-validity.update');
         Route::post('customers/{customer}/mikrotik-targets', [CustomerController::class, 'updateMikrotikTargets'])->name('customers.mikrotik-targets.update');
-        Route::patch('customers/onu-signal-visibility', [CustomerController::class, 'updateOnuSignalVisibility'])->name('customers.onu-signal-visibility.update');
         Route::post('customers/{customer}/force-inactive', [CustomerController::class, 'forceInactive'])->middleware('permission:force_service_status')->name('customers.force-inactive');
         Route::post('customers/{customer}/force-active', [CustomerController::class, 'forceActive'])->middleware('permission:force_service_status')->name('customers.force-active');
         Route::post('customers/{customer}/toggle-special', [CustomerController::class, 'toggleSpecial'])->middleware('permission:mark_special_customer')->name('customers.toggle-special');
@@ -304,6 +311,7 @@ Route::middleware('auth')->group(function () {
         Route::get('connection-analytics', [ConnectionAnalyticsController::class, 'index'])->name('analytics');
         Route::patch('retention', [ConnectionAnalyticsController::class, 'updateRetention'])->name('retention');
         Route::get('router-data', [RouterLiveDataController::class, 'index'])->name('router-data');
+        Route::get('onu-signal', [OnuSignalHistoryController::class, 'index'])->name('onu-signal');
     });
 
     Route::middleware('permission:manage_tickets')->group(function () {

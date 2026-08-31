@@ -5,4 +5,5 @@
     <a class="btn {{ $active === 'mac' ? '' : 'light' }}" href="{{ route('troubleshoot.mac-changes') }}">Frequent MAC Changes</a>
     <a class="btn {{ $active === 'analytics' ? '' : 'light' }}" href="{{ route('troubleshoot.analytics') }}">Connection Analytics</a>
     <a class="btn {{ $active === 'router-data' ? '' : 'light' }}" href="{{ route('troubleshoot.router-data') }}">Router Live Data</a>
+    <a class="btn {{ $active === 'onu-signal' ? '' : 'light' }}" href="{{ route('troubleshoot.onu-signal') }}">ONU Signal History</a>
 </div>

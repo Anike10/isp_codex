@@ -251,38 +251,50 @@
             hit.addEventListener('touchmove', move, { passive: true });
             hit.addEventListener('touchend', leave);
 
-            // Live Rx/Tx show toggle — no page reload, no flicker.
-            var visForm = document.querySelector('.onu-signal__show');
-            if (visForm) {
-                var cbRx = visForm.querySelector('[name=show_rx]');
-                var cbTx = visForm.querySelector('[name=show_tx]');
-                var applyVisibility = function () {
-                    showRx = !!(cbRx && cbRx.checked);
-                    showTx = !!(cbTx && cbTx.checked);
-                    document.querySelectorAll('.onu-series--rx').forEach(function (el) { el.classList.toggle('onu-hidden', !showRx); });
-                    document.querySelectorAll('.onu-series--tx').forEach(function (el) { el.classList.toggle('onu-hidden', !showTx); });
-                    var none = !showRx && !showTx;
-                    if (plot) plot.hidden = none;
-                    if (toolbar) toolbar.hidden = none;
-                    if (empty) empty.hidden = !none;
-                    leave();
-                    if (!none) applyZoom();
-                };
-                applyVisibility();
-                visForm.addEventListener('change', function () {
-                    applyVisibility();
-                    try {
-                        fetch(visForm.getAttribute('action'), {
-                            method: 'POST',
-                            body: new FormData(visForm),
-                            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                            credentials: 'same-origin',
-                        }).catch(function () {});
-                    } catch (e) {}
-                });
+            // This chart's own show/hide, driven by the shared toggle below.
+            function applyVisibility(rx, tx) {
+                showRx = rx; showTx = tx;
+                root.querySelectorAll('.onu-series--rx').forEach(function (el) { el.classList.toggle('onu-hidden', !rx); });
+                root.querySelectorAll('.onu-series--tx').forEach(function (el) { el.classList.toggle('onu-hidden', !tx); });
+                var none = !rx && !tx;
+                if (plot) plot.hidden = none;
+                if (toolbar) toolbar.hidden = none;
+                if (empty) empty.hidden = !none;
+                leave();
+                if (!none) applyZoom();
             }
+            (window.onuSignalCharts = window.onuSignalCharts || []).push(applyVisibility);
 
             applyZoom();
+        })();
+
+        // Shared once per page: one Rx/Tx "Show" form drives every chart and
+        // persists the choice (no reload). Guarded so N includes wire it once.
+        (function () {
+            if (window.__onuSignalToggleWired) return;
+            var form = document.querySelector('.onu-signal__show');
+            if (!form) return;
+            window.__onuSignalToggleWired = true;
+            var cbRx = form.querySelector('[name=show_rx]');
+            var cbTx = form.querySelector('[name=show_tx]');
+            function sync() {
+                var rx = !!(cbRx && cbRx.checked), tx = !!(cbTx && cbTx.checked);
+                (window.onuSignalCharts || []).forEach(function (fn) { try { fn(rx, tx); } catch (e) {} });
+                document.querySelectorAll('.onu-signal__latest .onu-series--rx').forEach(function (el) { el.classList.toggle('onu-hidden', !rx); });
+                document.querySelectorAll('.onu-signal__latest .onu-series--tx').forEach(function (el) { el.classList.toggle('onu-hidden', !tx); });
+            }
+            sync();
+            form.addEventListener('change', function () {
+                sync();
+                try {
+                    fetch(form.getAttribute('action'), {
+                        method: 'POST',
+                        body: new FormData(form),
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        credentials: 'same-origin',
+                    }).catch(function () {});
+                } catch (e) {}
+            });
         })();
         </script>
         @if ($samples->count() < 2)
