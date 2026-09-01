@@ -90,8 +90,6 @@
     </div>
 </div>
 
-@include('troubleshoot._tabs', ['active' => 'router-data'])
-
 <form method="get" class="card" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:16px">
     <div style="flex:1;min-width:260px">
         <label class="muted" style="display:block;font-size:12px">Extra command &mdash; any read-only path ending in <code>/print</code></label>

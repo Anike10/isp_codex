@@ -8,8 +8,6 @@
     </div>
 </div>
 
-@include('troubleshoot._tabs', ['active' => 'webhook'])
-
 @error('url')<div class="alert error">{{ $message }}</div>@enderror
 
 <form method="post" action="{{ route('troubleshoot.webhook.update') }}" class="card form-grid">

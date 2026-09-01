@@ -8,8 +8,6 @@
     </div>
 </div>
 
-@include('troubleshoot._tabs', ['active' => 'mac'])
-
 <form method="get" class="card" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
     <div>
         <label class="muted" style="display:block;font-size:12px">Window (hours)</label>

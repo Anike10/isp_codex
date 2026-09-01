@@ -12,8 +12,6 @@
     </div>
 </div>
 
-@include('troubleshoot._tabs', ['active' => 'onu-signal'])
-
 <style>
     .onu-allsig__bar {
         position: sticky; top: 0; z-index: 6;
@@ -27,9 +25,12 @@
     .onu-allsig__bar .per-page-form { margin: 0; }
     /* No box / top rule around each party block — only the graph line stands out. */
     .onu-allsig__card { margin: 22px 0 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
-    .onu-allsig__card h2 { margin: 0 0 6px; font-size: 15px; }
+    .onu-allsig__card h2 { margin: 0 0 4px; font-size: 15px; }
+    .onu-allsig__card h2 .onu-allsig__sl { color: #667085; font-weight: 700; margin-right: 6px; }
     .onu-allsig__card h2 .muted { font-weight: 400; font-size: 12px; }
     .onu-allsig__card h2 .badge.unstable { background: #fdecec; color: #b42318; border: 1px solid #f4bcbc; }
+    .onu-allsig__meta { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 12px; color: #475467; margin: 0 0 8px; }
+    .onu-allsig__meta b { color: #101828; font-weight: 700; font-variant-numeric: tabular-nums; }
 </style>
 
 <form method="get" class="card filter-form" style="margin-bottom:16px">
@@ -76,12 +77,46 @@
 </div>
 
 @forelse ($parties as $party)
+    @php
+        $sl = ($pagination?->firstItem() ?? 1) + $loop->index;
+        $win = $party->onuSamplesWindow;
+        $rxWin = $win->pluck('rx_power_dbm')->filter(fn ($v) => $v !== null)->map(fn ($v) => (float) $v);
+        $latest = $win->last();
+        $onu = $party->matched_onu ?? null;
+        $subParts = array_values(array_filter([
+            $party->connection_id ?: '#'.$party->id,
+            ($party->mikrotik_username && $party->mikrotik_username !== $party->connection_id) ? $party->mikrotik_username : null,
+            $party->last_connected_mac ?: null,
+        ]));
+    @endphp
     <section class="onu-allsig__card">
         <h2>
+            <span class="onu-allsig__sl">{{ $sl }}.</span>
             <a href="{{ route('customers.show', $party) }}">{{ $party->name }}</a>
-            <span class="muted">· {{ $party->connection_id ?? ('#'.$party->id) }}@if ($party->last_connected_mac) · {{ $party->last_connected_mac }}@endif</span>
+            <span class="muted">· {{ implode(' · ', $subParts) }}</span>
             @if ($party->onu_unstable ?? false)<span class="badge unstable">not stable</span>@endif
         </h2>
+        <div class="onu-allsig__meta">
+            @if ($onu)
+                <span>Serial: <b>{{ $onu->mac_address ?: '—' }}</b></span>
+                <span>OLT: <b>{{ $onu->olt_name ?: '—' }}</b></span>
+                <span>PON/ONU: <b>{{ $onu->pon_port }}/{{ $onu->onu_id }}</b></span>
+                <span>ONU status: <b>{{ $onu->status ?: '—' }}</b></span>
+            @else
+                <span class="muted">No matching OLT ONU for this MAC.</span>
+            @endif
+            <span>Samples: <b>{{ $win->count() }}</b></span>
+            @if ($rxWin->isNotEmpty())
+                <span>Rx min/max: <b>{{ number_format($rxWin->min(), 2) }}</b> / <b>{{ number_format($rxWin->max(), 2) }}</b></span>
+                <span>Swing: <b>{{ number_format($rxWin->max() - $rxWin->min(), 2) }}</b> dB</span>
+            @endif
+            @if ($latest)
+                <span>Latest: <b>{{ $latest->sampled_at->format('d/m H:i') }}</b>
+                    @if ($latest->rx_power_dbm !== null) · Rx <b>{{ number_format((float) $latest->rx_power_dbm, 2) }}</b>@endif
+                    @if ($latest->tx_power_dbm !== null) · Tx <b>{{ number_format((float) $latest->tx_power_dbm, 2) }}</b>@endif
+                </span>
+            @endif
+        </div>
         @include('customers._onu_signal_chart', [
             'samples' => $party->onuSamplesWindow,
             'showRx' => $showRx,

@@ -77,9 +77,16 @@ class OnuSignalHistoryController extends Controller
 
             $unstableLookup = $unstableIds->flip();
 
-            $paginator->getCollection()->transform(function (Customer $customer) use ($samplesByParty, $unstableLookup) {
+            // The OLT ONU each listed party currently maps to, for the serial /
+            // OLT / PON-ONU line under the graph title.
+            $onuByMac = Schema::hasTable('olt_onus')
+                ? \App\Support\OnuMatcher::byMac($paginator->getCollection()->pluck('last_connected_mac'))
+                : [];
+
+            $paginator->getCollection()->transform(function (Customer $customer) use ($samplesByParty, $unstableLookup, $onuByMac) {
                 $customer->setRelation('onuSamplesWindow', $samplesByParty->get($customer->id, collect()));
                 $customer->onu_unstable = $unstableLookup->has($customer->id);
+                $customer->matched_onu = $onuByMac[mb_strtolower(trim((string) $customer->last_connected_mac))] ?? null;
 
                 return $customer;
             });

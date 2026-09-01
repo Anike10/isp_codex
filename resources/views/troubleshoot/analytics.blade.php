@@ -17,8 +17,6 @@
     </div>
 </div>
 
-@include('troubleshoot._tabs', ['active' => 'analytics'])
-
 <form method="get" class="card" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
     <input type="hidden" name="sort" value="{{ $sort }}">
     <input type="hidden" name="dir" value="{{ $dir }}">
