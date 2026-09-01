@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}?v=us-20260718">
     <title>{{ $title ?? ($appOrganization?->name ?? config('app.name')) }}</title>
+    @include('partials.searchable_select_styles')
     <style>
         :root { color-scheme: light; --ink:#172033; --muted:#667085; --line:#d8dee9; --bg:#f4f7fb; --panel:#fff; --brand:#116149; --accent:#1d76c9; --warn:#b45309; --danger:#b42318; --zebra:#edf4f8; --zebra-soft:#f7fafc; }
         * { box-sizing: border-box; }
@@ -562,5 +563,6 @@ document.querySelectorAll('[data-pagination-summary]').forEach(function (wrap) {
     resultTable.insertAdjacentElement('beforebegin', topSummary);
 });
 </script>
+@include('partials.searchable_select_script')
 </body>
 </html>

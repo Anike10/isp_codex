@@ -79,6 +79,22 @@ class TicketReplyTest extends TestCase
             ->assertSee('Send Reply');
     }
 
+    public function test_ticket_create_lists_use_the_global_writable_search_component(): void
+    {
+        $this->ticket();
+        $user = User::factory()->create(['name' => 'Searchable Technician']);
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs($user)
+            ->get(route('tickets.create'))
+            ->assertOk()
+            ->assertSee('data-search-placeholder="পার্টির নাম, সংযোগ আইডি বা ধরন লিখুন"', false)
+            ->assertSee('data-search-placeholder="Technician-এর নাম লিখুন"', false)
+            ->assertSee('searchable-select-menu', false)
+            ->assertSee('searchableSelectComponent', false)
+            ->assertSee('Searchable Technician');
+    }
+
     public function test_status_update_changes_ticket_and_logs_the_change(): void
     {
         $ticket = $this->ticket();

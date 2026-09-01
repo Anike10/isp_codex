@@ -4,14 +4,17 @@
 
 @section('content')
     <link rel="stylesheet" href="{{ asset('css/maplibre-gl.css') }}?v=4.7.1">
-    <link rel="stylesheet" href="{{ asset('css/network-map-db60f32d1f7e.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/network-map-adca2f74dd88.css') }}">
 
     <section class="network-map-page">
         <aside class="network-sidebar">
-            <div>
-                <p class="eyebrow">GIS Operations</p>
-                <h1>FTTX Network Map</h1>
-                <p class="muted">Draw nodes and fiber routes, add infrastructure attributes, then persist the full topology as GeoJSON.</p>
+            <div class="map-party-search" role="search" aria-label="Search parties on the network map">
+                <form class="map-party-search-form" id="customerSearch">
+                    <label class="sr-only" for="customerIdQuery">Search party by name</label>
+                    <input type="search" id="customerIdQuery" placeholder="পার্টির নামের অংশ লিখে সার্চ করুন" value="{{ $initialCustomerId }}" autocomplete="off">
+                    <button type="submit" class="btn secondary">Search</button>
+                </form>
+                <div class="search-results map-party-search-results" id="customerSearchResult" hidden></div>
             </div>
 
             <section class="unmapped-party-panel" aria-labelledby="unmappedPartyHeading">
@@ -114,14 +117,6 @@
 
         <div class="map-stage">
             <div id="networkMap"></div>
-            <div class="map-party-search" role="search" aria-label="Search parties on the network map">
-                <form class="map-party-search-form" id="customerSearch">
-                    <label class="sr-only" for="customerIdQuery">Search party by name</label>
-                    <input type="search" id="customerIdQuery" placeholder="পার্টির নামের অংশ লিখে সার্চ করুন" value="{{ $initialCustomerId }}" autocomplete="off">
-                    <button type="submit" class="btn secondary">Search</button>
-                </form>
-                <div class="search-results map-party-search-results" id="customerSearchResult" hidden></div>
-            </div>
             <div class="map-status" id="mapStatus">Loading topology...</div>
         </div>
     </section>
@@ -154,5 +149,5 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map-f4951e5d4840.js') }}"></script>
+    <script src="{{ asset('js/network-map-ae2ec6ba305e.js') }}"></script>
 @endsection

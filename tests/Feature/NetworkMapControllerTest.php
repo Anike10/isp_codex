@@ -24,11 +24,18 @@ class NetworkMapControllerTest extends TestCase
             ->assertOk()
             ->assertSee(asset('css/maplibre-gl.css'), false)
             ->assertSee(asset('js/maplibre-gl.js'), false)
-            ->assertSee(asset('css/network-map-db60f32d1f7e.css'), false)
-            ->assertSee(asset('js/network-map-f4951e5d4840.js'), false)
+            ->assertSee(asset('css/network-map-adca2f74dd88.css'), false)
+            ->assertSee(asset('js/network-map-ae2ec6ba305e.js'), false)
             ->assertSee('id="unmappedPartySummary"', false)
             ->assertSee('class="map-party-search"', false)
             ->assertSee('placeholder="পার্টির নামের অংশ লিখে সার্চ করুন"', false)
+            ->assertSeeInOrder([
+                '<aside class="network-sidebar">',
+                'class="map-party-search"',
+                'class="unmapped-party-panel"',
+            ], false)
+            ->assertDontSee('GIS Operations')
+            ->assertDontSee('Draw nodes and fiber routes')
             ->assertDontSee('<h2>Party Search</h2>', false)
             ->assertDontSee('unpkg.com/maplibre-gl', false);
 
@@ -36,10 +43,10 @@ class NetworkMapControllerTest extends TestCase
         $this->assertFileExists(public_path('js/maplibre-gl.js'));
 
         $script = File::get(public_path('js/network-map.js'));
-        $this->assertSame($script, File::get(public_path('js/network-map-f4951e5d4840.js')));
+        $this->assertSame($script, File::get(public_path('js/network-map-ae2ec6ba305e.js')));
         $this->assertSame(
             File::get(public_path('css/network-map.css')),
-            File::get(public_path('css/network-map-db60f32d1f7e.css'))
+            File::get(public_path('css/network-map-adca2f74dd88.css'))
         );
         $this->assertStringContainsString('parties mapped', $script);
         $this->assertStringContainsString('setupSearchableDropdown', $script);
@@ -47,6 +54,9 @@ class NetworkMapControllerTest extends TestCase
         $this->assertStringContainsString('setPartySearchHighlights(uniqueMatches)', $script);
         $this->assertStringContainsString('state.map.fitBounds(bounds', $script);
         $this->assertStringContainsString('partySearchDebounce', $script);
+        $this->assertStringContainsString('class="party-id-result"', $script);
+        $this->assertStringNotContainsString('Name: ${mapPartyInlineFieldHtml', $script);
+        $this->assertStringNotContainsString('Mobile: ${mapPartyInlineFieldHtml', $script);
         $this->assertStringContainsString('{ allowCustom: true }', $script);
         $this->assertStringNotContainsString('<select', $script);
         $this->assertStringContainsString('appendSplitterPortLinks', $script);
