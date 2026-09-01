@@ -1688,8 +1688,10 @@
         </section>
     @endif
 
-    @if (($onuHistory ?? collect())->isNotEmpty() || $customer->last_connected_mac)
-        <style>
+    @php $onuHistory = $onuHistory ?? collect(); @endphp
+    {{-- Always rendered, even for a brand-new party with no samples yet: the
+         partial shows a "no samples collected yet" note in that case. --}}
+    <style>
             .onu-chart { border:1px solid #dce6f4; border-radius:12px; padding:12px; background:#fff; }
             .onu-chart svg { width:100%; height:auto; display:block; }
             .onu-chart__legend { display:flex; gap:16px; flex-wrap:wrap; align-items:center; font-size:12px; margin-bottom:8px; }
@@ -1722,7 +1724,6 @@
             </div>
             @include('customers._onu_signal_chart', ['samples' => $onuHistory ?? collect(), 'showRx' => $onuHistoryShowRx ?? true, 'showTx' => $onuHistoryShowTx ?? false, 'showLegend' => false])
         </section>
-    @endif
 
     @include('customers.partials.map_location', ['editable' => false])
 </div>
