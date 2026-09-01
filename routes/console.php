@@ -241,6 +241,61 @@ Artisan::command('olt:auto-refresh {--force : Refresh the most-overdue OLT now, 
     }
 })->purpose('Drip-refresh one overdue OLT (power, VLAN, MAC) per run so ONU data stays fresh without load spikes');
 
+Artisan::command('olt:sync-all {--force : Run even while another OLT refresh is in progress}', function () {
+    // Nightly whole-fleet sync: full-refresh EVERY active OLT (power, VLAN, MAC,
+    // status -> olt_onus), then snapshot each party's ONU Rx/Tx so the party
+    // page and the Troubleshoot ONU Signal History are current the next morning.
+    // The party <-> ONU MAC link is refreshed hourly by mikrotik:sync-active-macs.
+    if (! $this->option('force') && OltRefreshRun::query()->whereIn('status', ['queued', 'running'])->exists()) {
+        $this->info('Skipped: an OLT refresh is already running.');
+
+        return self::SUCCESS;
+    }
+
+    $devices = OltDevice::query()->where('status', 'active')->orderBy('id')->get();
+
+    if ($devices->isEmpty()) {
+        $this->info('No active OLT to sync.');
+
+        return self::SUCCESS;
+    }
+
+    $failed = 0;
+
+    foreach ($devices as $device) {
+        $run = OltRefreshRun::query()->create([
+            'olt_device_id' => $device->id,
+            'olt_name' => $device->name,
+            'refresh_mode' => 'full_mac',
+            'pon_port' => null,
+            'status' => 'queued',
+            'progress' => 0,
+            'message' => 'Queued by nightly olt:sync-all',
+        ]);
+
+        $device->forceFill(['last_auto_refresh_at' => now()])->save();
+
+        try {
+            dispatch_sync(new RunOltFullRefresh($run->id));
+            $fresh = $run->fresh();
+            $this->info("olt:sync-all {$device->name}: {$fresh->status} - {$fresh->message}");
+
+            if ($fresh->status === 'failed') {
+                $failed++;
+            }
+        } catch (Throwable $exception) {
+            $failed++;
+            $run->update(['status' => 'failed', 'progress' => 100, 'message' => $exception->getMessage(), 'completed_at' => now()]);
+            $this->error("olt:sync-all {$device->name}: failed - {$exception->getMessage()}");
+        }
+    }
+
+    // Now that olt_onus holds fresh optical power, snapshot it per party.
+    $this->call('onu:capture-power-history', ['--force' => true]);
+
+    return $failed === 0 ? self::SUCCESS : self::FAILURE;
+})->purpose('Nightly full refresh of every active OLT, then snapshot party ONU power for the signal history');
+
 Artisan::command('onu:capture-power-history {--force : Capture now, ignoring the interval}', function (OnuPowerHistoryService $history) {
     if (! $this->option('force') && ! $history->isDue()) {
         $this->info('Skipped: next ONU power sample is not due yet.');
@@ -394,6 +449,13 @@ Schedule::command('mikrotik:import-secrets')
 // auto_refresh_interval_hours; skips itself while any manual refresh runs.
 Schedule::command('olt:auto-refresh')
     ->hourly()
+    ->withoutOverlapping();
+
+// Whole fleet once a day in the quiet early-morning window: every active OLT
+// gets a full refresh and every party's ONU power is re-sampled, so the party
+// page and Troubleshoot ONU Signal History are complete each morning.
+Schedule::command('olt:sync-all')
+    ->dailyAt('02:00')
     ->withoutOverlapping();
 
 // Hourly dispatcher; the command itself only samples when the configured
