@@ -6,8 +6,11 @@ use App\Http\Middleware\EnsureUserHasPermission;
 use App\Models\AppSetting;
 use App\Models\Customer;
 use App\Models\CustomerOnuPowerSample;
+use App\Models\MikrotikImportedSecret;
+use App\Models\MikrotikRouter;
 use App\Models\OltOnu;
 use App\Models\Permission;
+use App\Models\PppUsageLog;
 use App\Models\User;
 use App\Services\OnuPowerHistoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -72,6 +75,60 @@ class OnuPowerHistoryTest extends TestCase
 
         $this->assertSame(0, $result['sampled']);
         $this->assertSame(0, CustomerOnuPowerSample::count());
+    }
+
+    public function test_capture_backfills_a_missing_party_mac_from_a_linked_webhook_log(): void
+    {
+        $customer = $this->party('', 'WEBHOOK-BACKFILL');
+        $customer->forceFill(['last_connected_mac' => null])->save();
+        $this->onu([
+            'mac_address' => 'GPONabcdef01',
+            'learned_macs' => [['mac' => 'b8:3a:08:da:0c:5f', 'vlan' => 41]],
+        ]);
+        PppUsageLog::create([
+            'customer_id' => $customer->id,
+            'username' => 'WEBHOOK-BACKFILL',
+            'caller_id' => 'b8-3a-08-da-0c-5f',
+            'download_bytes' => 0,
+            'upload_bytes' => 0,
+            'payload' => [],
+            'disconnected_at' => now()->subMinute(),
+        ]);
+
+        $result = app(OnuPowerHistoryService::class)->capture();
+
+        $this->assertSame(1, $result['macs_backfilled']);
+        $this->assertSame(1, $result['sampled']);
+        $this->assertSame('B8:3A:08:DA:0C:5F', $customer->refresh()->last_connected_mac);
+        $this->assertSame(1, CustomerOnuPowerSample::where('customer_id', $customer->id)->count());
+    }
+
+    public function test_capture_backfills_an_unlinked_imported_secret_on_the_assigned_router(): void
+    {
+        $router = MikrotikRouter::create([
+            'name' => 'Backfill Router', 'ip_address' => '10.0.0.50', 'api_port' => 8728,
+            'username' => 'reader', 'password' => 'secret', 'status' => 'active',
+        ]);
+        $customer = $this->party('', 'SECRET-BACKFILL');
+        $customer->forceFill(['last_connected_mac' => null, 'mikrotik_router_id' => $router->id])->save();
+        $this->onu([
+            'mac_address' => 'GPONabcdef02',
+            'learned_macs' => [['mac' => '00:8d:ff:02:2a:17', 'vlan' => 51]],
+        ]);
+        MikrotikImportedSecret::create([
+            'mikrotik_router_id' => $router->id,
+            'routeros_id' => '*42',
+            'name' => 'SECRET-BACKFILL',
+            'device_mac' => '00-8D-FF-02-2A-17',
+            'disabled' => false,
+            'imported_at' => now(),
+        ]);
+
+        $result = app(OnuPowerHistoryService::class)->capture();
+
+        $this->assertSame(1, $result['macs_backfilled']);
+        $this->assertSame(1, $result['sampled']);
+        $this->assertSame('00:8D:FF:02:2A:17', $customer->refresh()->last_connected_mac);
     }
 
     public function test_is_due_respects_the_configured_interval(): void

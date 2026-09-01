@@ -306,7 +306,7 @@ Artisan::command('onu:capture-power-history {--force : Capture now, ignoring the
     $result = $history->capture();
     $pruned = $history->prune();
 
-    $this->info("ONU power history: sampled {$result['sampled']} party ONU reading(s) from {$result['customers']} party/parties. Pruned {$pruned} old row(s).");
+    $this->info("ONU power history: sampled {$result['sampled']} party ONU reading(s) from {$result['customers']} party/parties. Backfilled {$result['macs_backfilled']} missing party MAC(s). Pruned {$pruned} old row(s).");
 
     return self::SUCCESS;
 })->purpose('Snapshot every party\'s current OLT ONU Rx/Tx power for the party-page signal graph');

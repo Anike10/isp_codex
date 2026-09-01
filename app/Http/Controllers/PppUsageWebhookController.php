@@ -77,6 +77,17 @@ class PppUsageWebhookController extends Controller
                 ->first();
         }
 
+        // The disconnect webhook is an independent, authenticated source of
+        // the party's latest device MAC. Persist it here as well as in the log
+        // so ONU matching and signal-history capture keep working even when a
+        // router's API credential is temporarily unavailable.
+        if ($customer && $callerMac !== null) {
+            $customer->forceFill([
+                'last_connected_mac' => strtoupper($callerMac),
+                'last_connected_at' => now(),
+            ])->save();
+        }
+
         $log = PppUsageLog::create([
             'mikrotik_router_id' => $router?->id,
             'customer_id' => $customer?->id,

@@ -1554,8 +1554,11 @@ PPPoE sync:
   `olt_onu_id` by `caller_id` against `olt_onus.mac_address` or a `learned_macs`
   entry (MAC compare via `App\Support\Mac`), snapshots that ONU's
   `rx_power_dbm`, parses the RouterOS uptime string to `uptime_seconds`, and
-  stores the raw payload. Migration `2026_08_29_000004` adds `caller_id`,
-  `olt_onu_id`, `rx_power_dbm`.
+  stores the raw payload. When the webhook links a party and receives a valid
+  MAC, it also refreshes `customers.last_connected_mac` / `last_connected_at`;
+  ONU matching therefore keeps working even while the RouterOS API credential
+  is unavailable. Migration `2026_08_29_000004` adds `caller_id`, `olt_onu_id`,
+  `rx_power_dbm`.
 - Party creation from imported secrets matches both `connection_id` and
   `mikrotik_username` case-insensitively, including soft-deleted rows. Repeated
   names from multiple routers link to the first live party instead of creating
@@ -1692,6 +1695,12 @@ drives all charts. The partial registers each chart in `window.onuSignalCharts`;
 one guarded bootstrap block wires the single `.onu-signal__show` form, calls
 every registered chart on change, and persists once — so N charts still make one
 request per toggle, no reload.
+
+Before every ONU history snapshot, `OnuPowerHistoryService::capture()` repairs
+older parties whose `last_connected_mac` is empty. It prefers an already-linked
+PPP webhook log or imported secret, then same-username data on one of the
+party's assigned routers. This lets existing parties gain signal history
+without waiting for a successful RouterOS API poll.
 
 The Router Users page's "Refresh secrets" and "Pull active connections" buttons
 also run `MikrotikCustomerSyncService::syncActiveConnectionMacs()` for every

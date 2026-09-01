@@ -221,6 +221,28 @@ class PppWebhookTest extends TestCase
         $this->assertSame(2097152, $log->upload_bytes);
     }
 
+    public function test_webhook_copies_a_valid_caller_mac_onto_the_matched_party(): void
+    {
+        $router = $this->restRouter('10.0.0.25');
+        $customer = Customer::create([
+            'name' => 'MAC Repair User', 'phone' => '01700000025', 'connection_id' => 'mac-repair',
+            'mikrotik_username' => 'mac-repair', 'mikrotik_router_id' => $router->id,
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $this->withHeader(PppWebhookService::SECRET_HEADER, app(PppWebhookService::class)->secret())
+            ->postJson('/api/ppp/usage', [
+                'user' => 'mac-repair',
+                'caller_id' => 'b8-3a-08-da-0c-5f',
+                'router_id' => (string) $router->id,
+            ])
+            ->assertCreated();
+
+        $customer->refresh();
+        $this->assertSame('B8:3A:08:DA:0C:5F', $customer->last_connected_mac);
+        $this->assertNotNull($customer->last_connected_at);
+    }
+
     public function test_webhook_matches_the_onu_by_serial_mac_and_records_its_receiving_power(): void
     {
         $onu = OltOnu::create([

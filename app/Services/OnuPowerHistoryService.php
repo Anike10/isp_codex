@@ -5,7 +5,13 @@ namespace App\Services;
 use App\Models\AppSetting;
 use App\Models\Customer;
 use App\Models\CustomerOnuPowerSample;
+use App\Models\MikrotikImportedSecret;
+use App\Models\PppUsageLog;
+use App\Support\Mac;
 use App\Support\OnuMatcher;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -76,14 +82,15 @@ class OnuPowerHistoryService
      * device MAC. Uses whatever the OLT poll last stored — it does not poll
      * the OLTs itself (the `olt:auto-refresh` drip keeps those fresh).
      *
-     * @return array{customers: int, sampled: int}
+     * @return array{customers: int, sampled: int, macs_backfilled: int}
      */
     public function capture(): array
     {
         if (! Schema::hasTable('olt_onus') || ! Schema::hasTable('customer_onu_power_samples')) {
-            return ['customers' => 0, 'sampled' => 0];
+            return ['customers' => 0, 'sampled' => 0, 'macs_backfilled' => 0];
         }
 
+        $macsBackfilled = $this->backfillMissingCustomerMacs();
         $now = now();
         $sampled = 0;
         $seen = 0;
@@ -122,7 +129,156 @@ class OnuPowerHistoryService
                 }
             });
 
-        return ['customers' => $seen, 'sampled' => $sampled];
+        return ['customers' => $seen, 'sampled' => $sampled, 'macs_backfilled' => $macsBackfilled];
+    }
+
+    /**
+     * Repair older parties whose last-connected MAC was never copied from the
+     * router. Prefer a webhook row already linked to the party, then a linked
+     * imported secret; finally use same-username data only when it belongs to
+     * one of the party's assigned routers.
+     */
+    public function backfillMissingCustomerMacs(): int
+    {
+        if (! Schema::hasTable('customers')) {
+            return 0;
+        }
+
+        $hasUsageLogs = Schema::hasTable('ppp_usage_logs');
+        $hasImportedSecrets = Schema::hasTable('mikrotik_imported_secrets');
+
+        if (! $hasUsageLogs && ! $hasImportedSecrets) {
+            return 0;
+        }
+
+        $updated = 0;
+
+        Customer::query()
+            ->where(function ($query): void {
+                $query->whereNull('last_connected_mac')->orWhere('last_connected_mac', '');
+            })
+            ->where(function ($query): void {
+                $query->whereNotNull('connection_id')->orWhereNotNull('mikrotik_username');
+            })
+            ->with('mikrotikRouters:id')
+            ->select('id', 'connection_id', 'mikrotik_username', 'mikrotik_router_id', 'last_connected_mac', 'last_connected_at')
+            ->chunkById(500, function (Collection $customers) use ($hasUsageLogs, $hasImportedSecrets, &$updated): void {
+                $ids = $customers->modelKeys();
+                $identifiers = $customers
+                    ->flatMap(fn (Customer $customer): array => [$customer->connection_id, $customer->mikrotik_username])
+                    ->map(fn ($identifier): string => mb_strtolower(trim((string) $identifier)))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                $directLogs = collect();
+                $logsByIdentifier = collect();
+                if ($hasUsageLogs) {
+                    $directLogIds = PppUsageLog::query()
+                        ->whereIn('customer_id', $ids)
+                        ->whereNotNull('caller_id')
+                        ->selectRaw('MAX(id) AS id')
+                        ->groupBy('customer_id')
+                        ->pluck('id');
+                    $directLogs = PppUsageLog::query()
+                        ->whereIn('id', $directLogIds)
+                        ->get(['id', 'customer_id', 'mikrotik_router_id', 'username', 'caller_id', 'disconnected_at'])
+                        ->keyBy('customer_id');
+
+                    if ($identifiers !== []) {
+                        $namedLogIds = PppUsageLog::query()
+                            ->whereIn(DB::raw('lower(username)'), $identifiers)
+                            ->whereNotNull('caller_id')
+                            ->selectRaw('MAX(id) AS id')
+                            ->groupBy(DB::raw('lower(username)'), 'mikrotik_router_id')
+                            ->pluck('id');
+                        $logsByIdentifier = PppUsageLog::query()
+                            ->whereIn('id', $namedLogIds)
+                            ->get(['id', 'customer_id', 'mikrotik_router_id', 'username', 'caller_id', 'disconnected_at'])
+                            ->groupBy(fn (PppUsageLog $log): string => mb_strtolower(trim((string) $log->username)));
+                    }
+                }
+
+                $directSecrets = collect();
+                $secretsByIdentifier = collect();
+                if ($hasImportedSecrets) {
+                    $directSecretIds = MikrotikImportedSecret::query()
+                        ->whereIn('customer_id', $ids)
+                        ->whereNotNull('device_mac')
+                        ->selectRaw('MAX(id) AS id')
+                        ->groupBy('customer_id')
+                        ->pluck('id');
+                    $directSecrets = MikrotikImportedSecret::query()
+                        ->whereIn('id', $directSecretIds)
+                        ->get(['id', 'customer_id', 'mikrotik_router_id', 'name', 'device_mac', 'imported_at'])
+                        ->keyBy('customer_id');
+
+                    if ($identifiers !== []) {
+                        $namedSecretIds = MikrotikImportedSecret::query()
+                            ->whereIn(DB::raw('lower(name)'), $identifiers)
+                            ->whereNotNull('device_mac')
+                            ->selectRaw('MAX(id) AS id')
+                            ->groupBy(DB::raw('lower(name)'), 'mikrotik_router_id')
+                            ->pluck('id');
+                        $secretsByIdentifier = MikrotikImportedSecret::query()
+                            ->whereIn('id', $namedSecretIds)
+                            ->get(['id', 'customer_id', 'mikrotik_router_id', 'name', 'device_mac', 'imported_at'])
+                            ->groupBy(fn (MikrotikImportedSecret $secret): string => mb_strtolower(trim((string) $secret->name)));
+                    }
+                }
+
+                foreach ($customers as $customer) {
+                    $candidate = $directLogs->get($customer->id);
+                    $mac = Mac::colon($candidate?->caller_id);
+                    $seenAt = $candidate?->disconnected_at;
+
+                    if ($mac === null) {
+                        $candidate = $directSecrets->get($customer->id);
+                        $mac = Mac::colon($candidate?->device_mac);
+                        $seenAt = $candidate?->imported_at;
+                    }
+
+                    $routerIds = $customer->mikrotikRouters->modelKeys();
+                    if ($routerIds === [] && $customer->mikrotik_router_id) {
+                        $routerIds = [(int) $customer->mikrotik_router_id];
+                    }
+
+                    if ($mac === null && $routerIds !== []) {
+                        foreach (array_unique(array_filter([$customer->mikrotik_username, $customer->connection_id])) as $identifier) {
+                            $key = mb_strtolower(trim((string) $identifier));
+                            $candidate = collect($logsByIdentifier->get($key, []))
+                                ->first(fn (PppUsageLog $log): bool => in_array((int) $log->mikrotik_router_id, $routerIds, true) && Mac::colon($log->caller_id) !== null);
+                            if ($candidate) {
+                                $mac = Mac::colon($candidate->caller_id);
+                                $seenAt = $candidate->disconnected_at;
+                                break;
+                            }
+
+                            $candidate = collect($secretsByIdentifier->get($key, []))
+                                ->first(fn (MikrotikImportedSecret $secret): bool => in_array((int) $secret->mikrotik_router_id, $routerIds, true) && Mac::colon($secret->device_mac) !== null);
+                            if ($candidate) {
+                                $mac = Mac::colon($candidate->device_mac);
+                                $seenAt = $candidate->imported_at;
+                                break;
+                            }
+                        }
+                    }
+
+                    if ($mac === null) {
+                        continue;
+                    }
+
+                    $values = ['last_connected_mac' => strtoupper($mac)];
+                    if ($seenAt && (! $customer->last_connected_at || Carbon::parse($seenAt)->gt($customer->last_connected_at))) {
+                        $values['last_connected_at'] = $seenAt;
+                    }
+                    $customer->forceFill($values)->save();
+                    $updated++;
+                }
+            });
+
+        return $updated;
     }
 
     /** Delete samples older than the retention window. */
