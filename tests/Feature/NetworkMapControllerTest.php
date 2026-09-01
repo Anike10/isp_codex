@@ -25,6 +25,9 @@ class NetworkMapControllerTest extends TestCase
             ->assertSee(asset('css/maplibre-gl.css'), false)
             ->assertSee(asset('js/maplibre-gl.js'), false)
             ->assertSee('id="unmappedPartySummary"', false)
+            ->assertSee('class="map-party-search"', false)
+            ->assertSee('placeholder="পার্টির নামের অংশ লিখে সার্চ করুন"', false)
+            ->assertDontSee('<h2>Party Search</h2>', false)
             ->assertDontSee('unpkg.com/maplibre-gl', false);
 
         $this->assertFileExists(public_path('css/maplibre-gl.css'));
@@ -33,6 +36,12 @@ class NetworkMapControllerTest extends TestCase
         $script = File::get(public_path('js/network-map.js'));
         $this->assertStringContainsString('parties mapped', $script);
         $this->assertStringContainsString('setupSearchableDropdown', $script);
+        $this->assertStringContainsString("addSource('party-search-highlight'", $script);
+        $this->assertStringContainsString('setPartySearchHighlights(uniqueMatches)', $script);
+        $this->assertStringContainsString('state.map.fitBounds(bounds', $script);
+        $this->assertStringContainsString('partySearchDebounce', $script);
+        $this->assertStringContainsString('{ allowCustom: true }', $script);
+        $this->assertStringNotContainsString('<select', $script);
         $this->assertStringContainsString('appendSplitterPortLinks', $script);
         $this->assertStringContainsString('network-map-endpoint-options-', $script);
         $this->assertStringContainsString('withParallelLineOffsets', $script);

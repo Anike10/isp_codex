@@ -9,6 +9,7 @@
     const visibilityStorageKey = 'network-map-visible-types-v2';
     const hiddenFeaturesStorageKey = 'network-map-hidden-features';
     let endpointDropdownSequence = 0;
+    let partySearchDebounce = null;
 
     const state = {
         map: null,
@@ -33,6 +34,7 @@
         features: new Map(),
         customerFeatures: new Map(),
         customerLocationIndex: new Map(),
+        partySearchCustomerIds: new Set(),
         customerPopup: null,
         pendingPartyLocationCustomerId: null,
         editingFeatureId: null,
@@ -329,6 +331,7 @@
     function addNetworkLayers() {
         state.map.addSource('network-nodes', { type: 'geojson', data: emptyCollection() });
         state.map.addSource('customer-locations', { type: 'geojson', data: emptyCollection() });
+        state.map.addSource('party-search-highlight', { type: 'geojson', data: emptyCollection() });
         state.map.addSource('network-links', { type: 'geojson', data: emptyCollection() });
         state.map.addSource('endpoint-core-links', { type: 'geojson', data: emptyCollection() });
         state.map.addSource('draft-line', { type: 'geojson', data: emptyCollection() });
@@ -516,6 +519,19 @@
                 'text-halo-width': 3,
             },
         });
+
+        state.map.addLayer({
+            id: 'party-search-highlight-ring',
+            type: 'circle',
+            source: 'party-search-highlight',
+            paint: {
+                'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 14, 16, 22],
+                'circle-color': 'rgba(247, 144, 9, .2)',
+                'circle-stroke-color': '#f04438',
+                'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 10, 4, 16, 6],
+                'circle-opacity': 0.96,
+            },
+        });
     }
 
     function bindUi() {
@@ -547,6 +563,17 @@
         document.getElementById('saveTopology').addEventListener('click', persistTopology);
         document.getElementById('exportGeojson').addEventListener('click', toggleGeoJsonPreview);
         document.getElementById('customerSearch').addEventListener('submit', searchCustomer);
+        document.getElementById('customerIdQuery').addEventListener('input', (event) => {
+            window.clearTimeout(partySearchDebounce);
+            if (!event.currentTarget.value.trim()) {
+                clearPartySearchSelection();
+                return;
+            }
+
+            partySearchDebounce = window.setTimeout(() => {
+                document.getElementById('customerSearch').requestSubmit();
+            }, 300);
+        });
         document.getElementById('locationSearch').addEventListener('submit', searchLocation);
         document.getElementById('defaultViewForm').addEventListener('submit', applyDefaultViewForm);
         document.getElementById('useCurrentView').addEventListener('click', saveCurrentDefaultView);
@@ -1071,11 +1098,12 @@
             state.customerFeatures = new Map(customerFeatures.map((feature) => [String(feature.properties.customer_id), feature]));
             rebuildCustomerLocationSource();
             renderUnmappedPartyList();
-            renderPartySearchResults(customerFeatures);
             refreshStatsFromData();
 
             if (config.initialCustomerId) {
                 focusCustomer(String(config.initialCustomerId));
+            } else {
+                document.getElementById('customerSearchResult').hidden = true;
             }
         } catch (error) {
             setCustomerSearchResult(error.message, true);
@@ -1113,14 +1141,139 @@
         return all.filter((feature) => matchesPartySearch(feature, query));
     }
 
+    function uniquePartyMatches(matches) {
+        return matches.filter((feature, index, all) => {
+            return index === all.findIndex((item) => String(item.properties.customer_id) === String(feature.properties.customer_id));
+        });
+    }
+
+    function mappedPartyMatches(matches) {
+        return uniquePartyMatches(matches).filter((feature) => customerHasLocation(feature));
+    }
+
+    function refreshPartySearchHighlightSource() {
+        const features = [...state.partySearchCustomerIds]
+            .map((customerId) => state.customerFeatures.get(String(customerId)))
+            .filter((feature) => feature && customerHasLocation(feature));
+
+        setSourceData('party-search-highlight', {
+            type: 'FeatureCollection',
+            features,
+        });
+
+        return features;
+    }
+
+    function setPartySearchHighlights(matches) {
+        state.partySearchCustomerIds = new Set(uniquePartyMatches(matches)
+            .map((feature) => String(feature?.properties?.customer_id || ''))
+            .filter(Boolean));
+
+        return refreshPartySearchHighlightSource();
+    }
+
+    function clearPartySearchSelection() {
+        state.partySearchCustomerIds.clear();
+        setSourceData('party-search-highlight', emptyCollection());
+
+        const resultPanel = document.getElementById('customerSearchResult');
+        if (resultPanel) {
+            resultPanel.hidden = true;
+            resultPanel.innerHTML = '';
+        }
+
+        if (state.customerPopup) {
+            state.customerPopup.remove();
+            state.customerPopup = null;
+        }
+
+        const url = new URL(window.location.href);
+        url.searchParams.delete('customer_id');
+        window.history.replaceState({}, '', url);
+    }
+
+    function framePartySearchMatches(matches) {
+        const locatedMatches = mappedPartyMatches(matches);
+        if (!state.map || locatedMatches.length === 0) {
+            return locatedMatches;
+        }
+
+        if (locatedMatches.length === 1) {
+            const feature = locatedMatches[0];
+            state.map.flyTo({
+                center: feature.geometry.coordinates,
+                zoom: Math.max(state.map.getZoom(), 17),
+                duration: 850,
+            });
+            showCustomerPopup(feature);
+
+            const url = new URL(window.location.href);
+            url.searchParams.set('customer_id', feature.properties.customer_id);
+            window.history.replaceState({}, '', url);
+            return locatedMatches;
+        }
+
+        if (state.customerPopup) {
+            state.customerPopup.remove();
+            state.customerPopup = null;
+        }
+
+        const coordinates = locatedMatches.map((feature) => feature.geometry.coordinates);
+        const first = coordinates[0];
+        const allAtSamePoint = coordinates.every((coordinate) => coordinate[0] === first[0] && coordinate[1] === first[1]);
+        if (allAtSamePoint) {
+            state.map.flyTo({ center: first, zoom: Math.max(state.map.getZoom(), 17), duration: 850 });
+        } else {
+            const bounds = new maplibregl.LngLatBounds(first, first);
+            coordinates.slice(1).forEach((coordinate) => bounds.extend(coordinate));
+            const wideLayout = state.map.getContainer().clientWidth > 980;
+            state.map.fitBounds(bounds, {
+                padding: {
+                    top: 96,
+                    right: 48,
+                    bottom: 72,
+                    left: wideLayout ? 372 : 48,
+                },
+                maxZoom: 17,
+                duration: 850,
+            });
+        }
+
+        const url = new URL(window.location.href);
+        url.searchParams.delete('customer_id');
+        window.history.replaceState({}, '', url);
+        return locatedMatches;
+    }
+
+    function applyPartySearchMatches(matches, query) {
+        const uniqueMatches = uniquePartyMatches(matches);
+        renderPartySearchResults(uniqueMatches);
+        setPartySearchHighlights(uniqueMatches);
+        const locatedMatches = framePartySearchMatches(uniqueMatches);
+
+        if (uniqueMatches.length === 1 && locatedMatches.length === 1) {
+            setStatus(`1 party found for "${query}" and highlighted on the map.`);
+            return;
+        }
+
+        if (uniqueMatches.length === 1) {
+            setStatus(`${formatPartyLabel(uniqueMatches[0]) || query} has no saved map location.`);
+            return;
+        }
+
+        const missingCount = uniqueMatches.length - locatedMatches.length;
+        setStatus(`${uniqueMatches.length} parties found; ${locatedMatches.length} highlighted on the map${missingCount ? `, ${missingCount} without a saved location` : ''}.`);
+    }
+
     async function searchCustomer(event) {
         event.preventDefault();
+        window.clearTimeout(partySearchDebounce);
         const input = document.getElementById('customerIdQuery');
         const query = input.value.trim();
 
         if (!query) {
-            renderPartySearchResults([...state.customerFeatures.values()]);
-            setStatus('Showing all loaded parties.');
+            clearPartySearchSelection();
+            setStatus('Type part of a party name to search.');
             return;
         }
 
@@ -1131,49 +1284,26 @@
 
         const cachedMatches = searchPartyFeaturesLocally(query);
         if (cachedMatches.length > 0) {
-            if (cachedMatches.length === 1) {
-                const match = cachedMatches[0];
-                renderPartySearchResults([match]);
-                if (customerHasLocation(match)) {
-                    setStatus(`1 party found for "${query}".`);
-                } else {
-                    setStatus(`${formatPartyLabel(match) || query} has no saved map location.`);
-                }
-                return;
-            }
-
-            renderPartySearchResults(cachedMatches);
-            setStatus(`${cachedMatches.length} parties found for "${query}".`);
+            applyPartySearchMatches(cachedMatches, query);
             return;
         }
 
         try {
-            let matches = await searchPartiesByQuery(query, 'q');
+            const matches = await searchPartiesByQuery(query, 'q');
 
-            if (matches.length === 1) {
-                const match = matches[0];
-                renderPartySearchResults([match]);
-                if (customerHasLocation(match)) {
-                    setStatus(`1 party found for "${query}".`);
-                } else {
-                    setStatus(`${formatPartyLabel(match) || query} has no saved map location.`);
-                }
+            if (matches.length > 0) {
+                cacheCustomerSearchMatches(matches);
+                applyPartySearchMatches(matches, query);
                 return;
             }
 
-            if (matches.length > 1) {
-                renderPartySearchResults(matches);
-                setStatus(`${matches.length} parties found for "${query}".`);
-                return;
-            }
-
+            setPartySearchHighlights([]);
             setCustomerSearchResult(`No party found for "${query}".`, true);
             setStatus('No party found.');
         } catch (error) {
             const localFallback = searchPartyFeaturesLocally(query);
             if (localFallback.length) {
-                renderPartySearchResults(localFallback);
-                setStatus(`${localFallback.length} parties found for "${query}".`);
+                applyPartySearchMatches(localFallback, query);
                 return;
             }
 
@@ -1182,10 +1312,7 @@
                     const fallbackMatches = await searchPartiesByQuery(query, 'customer_id');
                     if (fallbackMatches.length) {
                         cacheCustomerSearchMatches(fallbackMatches);
-                        renderPartySearchResults(fallbackMatches);
-                        setStatus(fallbackMatches.length === 1
-                            ? `1 party found for "${query}".`
-                            : `${fallbackMatches.length} parties found for "${query}".`);
+                        applyPartySearchMatches(fallbackMatches, query);
                         return;
                     }
                 } catch (_) {
@@ -1193,6 +1320,7 @@
                 }
             }
 
+            setPartySearchHighlights([]);
             resultPanel.innerHTML = `<div class="search-empty">${escapeHtml(error.message)}</div>`;
             setStatus(error.message);
         }
@@ -1236,9 +1364,7 @@
 
     function renderPartySearchResults(matches) {
         const resultsPanel = document.getElementById('customerSearchResult');
-        const uniqueMatches = matches.filter((feature, index, all) => {
-            return index === all.findIndex((item) => String(item.properties.customer_id) === String(feature.properties.customer_id));
-        });
+        const uniqueMatches = uniquePartyMatches(matches);
         if (!uniqueMatches.length) {
             resultsPanel.innerHTML = '<div class="search-empty">No matching party found.</div>';
             resultsPanel.hidden = false;
@@ -1390,6 +1516,7 @@
         }
 
         const label = formatPartyLabel(feature);
+        setPartySearchHighlights([feature]);
         state.map.flyTo({
             center: feature.geometry.coordinates,
             zoom: Math.max(state.map.getZoom(), 17),
@@ -1569,7 +1696,10 @@
 
         const resultPanel = document.getElementById('customerSearchResult');
         if (resultPanel && !resultPanel.hidden) {
-            renderPartySearchResults([...state.customerFeatures.values()]);
+            const query = document.getElementById('customerIdQuery')?.value?.trim() || '';
+            if (query) {
+                renderPartySearchResults(searchPartyFeaturesLocally(query));
+            }
         }
 
         refreshStatsFromData();
@@ -1601,6 +1731,7 @@
             type: 'FeatureCollection',
             features: locationFeatures,
         });
+        refreshPartySearchHighlightSource();
     }
 
     function renderPartyPlacementPanel(feature) {
@@ -2400,6 +2531,7 @@
         const target = document.getElementById('featureFields');
         const schema = [...(formSchemas[componentType] || []), photoField];
         target.innerHTML = schema.map((field) => fieldHtml(field, properties[field.name])).join('');
+        hydrateSearchableFormLists(target, schema);
         hydrateDynamicMaps(target, properties);
         bindEndpointUnlinkButtons(target);
     }
@@ -3133,6 +3265,7 @@
 
         const existingLink = devicePortLinks(device)[sourcePort];
         const options = directDevicePortOptions(deviceId, existingLink);
+        const selectedMedium = existingLink?.medium === 'Copper' ? 'Copper' : 'Fiber';
         if (options.length === 0) {
             setStatus('No free endpoint is available on another device.');
             return;
@@ -3157,10 +3290,7 @@
                 ${searchableDropdownHtml('direct_device_port', 'Type device name or port')}
             </label>
             <label class="core-panel-select">Medium
-                <select name="direct_link_medium">
-                    <option value="Fiber">Fiber</option>
-                    <option value="Copper">Copper</option>
-                </select>
+                ${searchableDropdownHtml('direct_link_medium', 'Type or choose medium', selectedMedium, selectedMedium, true)}
             </label>
             <label class="core-panel-select">Link Color
                 <input type="color" name="direct_link_color" value="${escapeHtml(existingLink?.color_hex || mediumLinkColor(existingLink?.medium || 'Fiber'))}">
@@ -3176,6 +3306,13 @@
             options,
             'Type device name or port'
         );
+        setupSearchableDropdown(
+            panel.querySelector('[data-searchable-dropdown="direct_link_medium"]'),
+            ['Fiber', 'Copper'].map((medium) => ({ value: medium, label: medium, search: medium })),
+            'Type or choose medium',
+            null,
+            { allowCustom: true }
+        );
         const targetInput = panel.querySelector('[data-dropdown-search]');
         const targetValueInput = panel.querySelector('input[name="direct_device_port"]');
         const selectedOption = options.find((option) => option.value === directLinkTargetValue(existingLink))
@@ -3184,15 +3321,14 @@
             targetInput.value = selectedOption.label;
             targetValueInput.value = selectedOption.value;
         }
-        const mediumSelect = panel.querySelector('select[name="direct_link_medium"]');
+        const mediumInput = panel.querySelector('input[name="direct_link_medium"]');
         const colorInput = panel.querySelector('input[name="direct_link_color"]');
-        mediumSelect.value = existingLink?.medium === 'Copper' ? 'Copper' : 'Fiber';
-        mediumSelect.addEventListener('change', () => {
-            colorInput.value = mediumLinkColor(mediumSelect.value);
+        mediumInput.addEventListener('change', () => {
+            colorInput.value = mediumLinkColor(mediumInput.value);
         });
         panel.querySelector('[data-save-direct-device-link]').addEventListener('click', () => {
             const targetValue = targetValueInput?.value;
-            const medium = panel.querySelector('select[name="direct_link_medium"]')?.value;
+            const medium = panel.querySelector('input[name="direct_link_medium"]')?.value;
             const colorHex = colorInput?.value;
             if (!targetValue) {
                 setStatus('Choose a target device port from the dropdown.');
@@ -3788,23 +3924,28 @@
         }));
     }
 
-    function searchableDropdownHtml(name, placeholder) {
+    function searchableDropdownHtml(name, placeholder, selectedLabel = '', selectedValue = '', required = false) {
         return `
             <span class="searchable-dropdown" data-searchable-dropdown="${escapeHtml(name)}">
-                <input type="search" data-dropdown-search autocomplete="off" placeholder="${escapeHtml(placeholder)}">
-                <input type="hidden" name="${escapeHtml(name)}" data-dropdown-value>
+                <input type="search" data-dropdown-search role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off" placeholder="${escapeHtml(placeholder)}" value="${escapeHtml(selectedLabel)}" ${required ? 'required' : ''}>
+                <input type="hidden" name="${escapeHtml(name)}" data-dropdown-value value="${escapeHtml(selectedValue)}">
                 <span class="searchable-dropdown-list" data-dropdown-list role="listbox" hidden></span>
             </span>
         `;
     }
 
-    function setupSearchableDropdown(container, options, placeholder, onSelect = null) {
+    function setupSearchableDropdown(container, options, placeholder, onSelect = null, settings = {}) {
         if (!container) return;
 
         const searchInput = container.querySelector('[data-dropdown-search]');
         const valueInput = container.querySelector('[data-dropdown-value]');
         const list = container.querySelector('[data-dropdown-list]');
+        const allowCustom = Boolean(settings.allowCustom);
         searchInput.placeholder = placeholder;
+
+        const notifyValueChange = () => {
+            valueInput.dispatchEvent(new Event('change', { bubbles: true }));
+        };
 
         const rankedOptions = (query) => {
             const normalizedQuery = String(query || '').trim().toLowerCase();
@@ -3833,20 +3974,33 @@
                 `).join('')
                 : '<em>No matching option</em>';
             list.hidden = false;
+            searchInput.setAttribute('aria-expanded', 'true');
         };
 
         searchInput.addEventListener('focus', renderOptions);
         searchInput.addEventListener('input', () => {
-            valueInput.value = '';
+            valueInput.value = allowCustom ? searchInput.value : '';
+            notifyValueChange();
             renderOptions();
         });
         searchInput.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 list.hidden = true;
+                searchInput.setAttribute('aria-expanded', 'false');
+            }
+            if (event.key === 'Enter' && !list.hidden) {
+                const firstOption = list.querySelector('[data-dropdown-option]');
+                if (firstOption) {
+                    event.preventDefault();
+                    firstOption.click();
+                }
             }
         });
         searchInput.addEventListener('blur', () => {
-            window.setTimeout(() => { list.hidden = true; }, 120);
+            window.setTimeout(() => {
+                list.hidden = true;
+                searchInput.setAttribute('aria-expanded', 'false');
+            }, 120);
         });
         list.addEventListener('mousedown', (event) => event.preventDefault());
         list.addEventListener('click', (event) => {
@@ -3858,7 +4012,9 @@
 
             searchInput.value = option.label;
             valueInput.value = option.value;
+            notifyValueChange();
             list.hidden = true;
+            searchInput.setAttribute('aria-expanded', 'false');
             if (onSelect) onSelect(option.value, option);
         });
     }
@@ -4597,11 +4753,13 @@
         }
 
         if (field.type === 'select') {
-            const options = field.options.map((option) => {
-                const selected = option === safeValue ? 'selected' : '';
-                return `<option value="${escapeHtml(option)}" ${selected}>${escapeHtml(option)}</option>`;
-            }).join('');
-            return `<label class="${full}">${escapeHtml(field.label)}<select name="${escapeHtml(field.name)}" ${required}>${options}</select></label>`;
+            return `<label class="${full}">${escapeHtml(field.label)}${searchableDropdownHtml(
+                field.name,
+                `Type or choose ${field.label.toLowerCase()}`,
+                String(safeValue),
+                String(safeValue),
+                field.required
+            )}</label>`;
         }
 
         if (field.type === 'textarea') {
@@ -4647,19 +4805,52 @@
         return { type: 'tj_box_select', name, label };
     }
 
-    function tjBoxSelectHtml(name, selectedValue) {
-        const boxes = [...state.features.values()]
-            .filter((feature) => feature.geometry.type === 'Point' && feature.properties.component_type === 'tj_box');
-        const selected = String(selectedValue || '');
+    function tjBoxDropdownOptions() {
+        return [{ value: '', label: 'Not inside TJ Box', search: 'none not inside' }].concat([...state.features.values()]
+            .filter((feature) => feature.geometry.type === 'Point' && feature.properties.component_type === 'tj_box')
+            .map((box) => ({
+                value: String(box.properties.id || box.id || ''),
+                label: String(box.properties.box_name || box.properties.name || 'TJ Box'),
+                search: compactJoin([
+                    box.properties.box_name,
+                    box.properties.name,
+                    box.properties.id || box.id,
+                ]),
+            })));
+    }
 
-        return `<select name="${escapeHtml(name)}">
-            <option value="">Not inside TJ Box</option>
-            ${boxes.map((box) => {
-                const id = box.properties.id;
-                const label = box.properties.box_name || box.properties.name || 'TJ Box';
-                return `<option value="${escapeHtml(id)}" ${id === selected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
-            }).join('')}
-        </select>`;
+    function tjBoxSelectHtml(name, selectedValue) {
+        const selected = String(selectedValue || '');
+        const options = tjBoxDropdownOptions();
+        const selectedOption = options.find((option) => option.value === selected);
+
+        return searchableDropdownHtml(
+            name,
+            'Type TJ Box name',
+            selectedOption?.label || selected,
+            selected
+        );
+    }
+
+    function hydrateSearchableFormLists(container, schema) {
+        schema.forEach((field) => {
+            if (!['select', 'tj_box_select'].includes(field.type)) {
+                return;
+            }
+
+            const dropdown = container.querySelector(`[data-searchable-dropdown="${field.name}"]`);
+            const options = field.type === 'select'
+                ? field.options.map((option) => ({ value: String(option), label: String(option), search: String(option) }))
+                : tjBoxDropdownOptions();
+
+            setupSearchableDropdown(
+                dropdown,
+                options,
+                field.type === 'select' ? `Type or choose ${field.label.toLowerCase()}` : 'Type TJ Box name',
+                null,
+                { allowCustom: field.type === 'select' }
+            );
+        });
     }
 
     function linkedEndpointHtml(value) {
@@ -4742,7 +4933,7 @@
             renderDynamicMap(section, properties[section.dataset.property] || []);
         });
 
-        const coreCount = container.querySelector('select[name="core_count"]');
+        const coreCount = container.querySelector('input[name="core_count"]');
         if (coreCount) {
             coreCount.addEventListener('change', () => {
                 const section = container.querySelector('.dynamic-map[data-map-type="fiber_core_map"]');
@@ -4750,7 +4941,7 @@
             });
         }
 
-        const splitterType = container.querySelector('select[name="splitter_type"]');
+        const splitterType = container.querySelector('input[name="splitter_type"]');
         if (splitterType) {
             splitterType.addEventListener('change', () => {
                 const section = container.querySelector('.dynamic-map[data-map-type="splitter_port_map"]');
@@ -4771,7 +4962,7 @@
     }
 
     function buildFiberCoreRows(section, existingRows) {
-        const count = Number(section.closest('form').querySelector('select[name="core_count"]')?.value?.replace('F', '') || 4);
+        const count = Number(section.closest('form').querySelector('input[name="core_count"]')?.value?.replace('F', '') || 4);
         const existing = mapByKey(existingRows, 'key');
 
         return Array.from({ length: count }, (_, index) => {
@@ -4795,7 +4986,7 @@
     }
 
     function buildSplitterPortRows(section, existingRows) {
-        const splitterType = section.closest('form').querySelector('select[name="splitter_type"]')?.value || '1:8';
+        const splitterType = section.closest('form').querySelector('input[name="splitter_type"]')?.value || '1:8';
         const outputCount = Number(splitterType.split(':')[1] || 8);
         const existing = mapByKey(existingRows, 'port');
         const input = existing.get('IN') || {};
@@ -4857,14 +5048,10 @@
     }
 
     function splitterLinkStyleControls(row) {
-        const colorOptions = corePalette.map(([name]) => `<option value="${escapeHtml(name)}" ${name === row.color_name ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('');
         return `<span class="splitter-link-style">
-            <select data-map-field="color_name" data-link-color-name>${colorOptions}</select>
+            ${endpointSelect('color_name', row.color_name, corePalette.map(([name]) => name), 'Type or choose color', 'data-link-color-name')}
             <input type="color" data-link-color-picker value="${escapeHtml(row.color_hex)}" title="Custom link color">
-            <select data-map-field="medium">
-                <option value="Fiber" ${row.medium === 'Fiber' ? 'selected' : ''}>Fiber</option>
-                <option value="Copper" ${row.medium === 'Copper' ? 'selected' : ''}>Copper</option>
-            </select>
+            ${endpointSelect('medium', row.medium, ['Fiber', 'Copper'], 'Type or choose medium')}
             <input type="hidden" data-map-field="color_hex" data-link-color-hex value="${escapeHtml(row.color_hex)}">
         </span>`;
     }
@@ -4934,7 +5121,7 @@
         }));
     }
 
-    function endpointSelect(name, value, options, placeholder) {
+    function endpointSelect(name, value, options, placeholder, inputAttributes = '') {
         const normalizedValue = value || '';
         const listId = `network-map-endpoint-options-${++endpointDropdownSequence}`;
         const optionHtml = options
@@ -4942,15 +5129,13 @@
             .join('');
 
         return `<span class="map-search-select">
-            <input type="search" data-map-field="${escapeHtml(name)}" value="${escapeHtml(normalizedValue)}" list="${listId}" autocomplete="off" placeholder="${escapeHtml(placeholder)}">
+            <input type="search" data-map-field="${escapeHtml(name)}" value="${escapeHtml(normalizedValue)}" list="${listId}" autocomplete="off" placeholder="${escapeHtml(placeholder)}" ${inputAttributes}>
             <datalist id="${listId}">${optionHtml}</datalist>
         </span>`;
     }
 
     function coreColorSelect(name, value) {
-        const options = corePalette.map(([color]) => `<option value="${escapeHtml(color)}" ${color === value ? 'selected' : ''}>${escapeHtml(color)}</option>`).join('');
-
-        return `<select data-map-field="${escapeHtml(name)}"><option value="">Select core</option>${options}</select>`;
+        return endpointSelect(name, value, corePalette.map(([color]) => color), 'Type or select core');
     }
 
     function bindCoreMapActions(container) {
@@ -4970,7 +5155,7 @@
 
         container.querySelectorAll('[data-clear-row]').forEach((button) => {
             button.addEventListener('click', () => {
-                button.closest('.core-map-row').querySelectorAll('input[data-map-field], select[data-map-field]').forEach((field) => {
+                button.closest('.core-map-row').querySelectorAll('input[data-map-field]').forEach((field) => {
                     if (!['tube', 'core', 'color_name', 'color_hex'].includes(field.dataset.mapField)) {
                         field.value = '';
                     }
@@ -4984,7 +5169,7 @@
             });
         });
 
-        container.querySelectorAll('.core-map-row select[data-map-field], .core-map-row input[data-map-field]').forEach((field) => {
+        container.querySelectorAll('.core-map-row input[data-map-field]').forEach((field) => {
             field.addEventListener('dragover', (event) => event.preventDefault());
             field.addEventListener('drop', (event) => {
                 event.preventDefault();

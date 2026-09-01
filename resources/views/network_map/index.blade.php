@@ -4,7 +4,7 @@
 
 @section('content')
     <link rel="stylesheet" href="{{ asset('css/maplibre-gl.css') }}?v=4.7.1">
-    <link rel="stylesheet" href="{{ asset('css/network-map.css') }}?v=20260826-14">
+    <link rel="stylesheet" href="{{ asset('css/network-map.css') }}?v=20260901-15">
 
     <section class="network-map-page">
         <aside class="network-sidebar">
@@ -25,6 +25,15 @@
                     <div class="unmapped-party-empty">Loading parties...</div>
                 </div>
             </section>
+
+            <div class="party-placement-panel" id="partyPlacementPanel" hidden>
+                <p class="party-placement-title" id="partyPlacementTitle">Place party location</p>
+                <div class="party-placement-info" id="partyPlacementInfo"></div>
+                <div class="party-placement-actions">
+                    <button type="button" class="btn secondary" id="startPartyPlacementBtn">Add on map</button>
+                    <button type="button" class="btn light" id="cancelPartyPlacementBtn">Cancel</button>
+                </div>
+            </div>
 
             <div class="tool-section">
                 <h2>Map Style</h2>
@@ -52,23 +61,6 @@
                         <button type="submit" class="btn secondary">Go</button>
                     </div>
                 </form>
-            </div>
-
-            <div class="tool-section">
-                <h2>Party Search</h2>
-                <div class="party-placement-panel" id="partyPlacementPanel" hidden>
-                    <p class="party-placement-title">Place party location</p>
-                    <div class="party-placement-info" id="partyPlacementInfo"></div>
-                    <div class="party-placement-actions">
-                        <button type="button" class="btn secondary" id="startPartyPlacementBtn">Add on map</button>
-                        <button type="button" class="btn light" id="cancelPartyPlacementBtn">Cancel</button>
-                    </div>
-                </div>
-                <form class="location-search" id="customerSearch">
-                    <input type="search" id="customerIdQuery" placeholder="Party name, mobile, or connection ID" value="{{ $initialCustomerId }}">
-                    <button type="submit" class="btn secondary">Search Party</button>
-                </form>
-                <div class="search-results" id="customerSearchResult" hidden></div>
             </div>
 
             <div class="tool-section">
@@ -122,6 +114,14 @@
 
         <div class="map-stage">
             <div id="networkMap"></div>
+            <div class="map-party-search" role="search" aria-label="Search parties on the network map">
+                <form class="map-party-search-form" id="customerSearch">
+                    <label class="sr-only" for="customerIdQuery">Search party by name</label>
+                    <input type="search" id="customerIdQuery" placeholder="পার্টির নামের অংশ লিখে সার্চ করুন" value="{{ $initialCustomerId }}" autocomplete="off">
+                    <button type="submit" class="btn secondary">Search</button>
+                </form>
+                <div class="search-results map-party-search-results" id="customerSearchResult" hidden></div>
+            </div>
             <div class="map-status" id="mapStatus">Loading topology...</div>
         </div>
     </section>
@@ -154,5 +154,5 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map.js') }}?v=20260827-15"></script>
+    <script src="{{ asset('js/network-map.js') }}?v=20260901-16"></script>
 @endsection
