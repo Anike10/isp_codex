@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Models\MikrotikRouter;
 use App\Models\Permission;
+use App\Models\PppLiveSession;
+use App\Models\PppUsageLog;
 use App\Models\User;
 use App\Services\MikrotikCustomerSyncService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -175,5 +177,89 @@ class MikrotikActiveMacSyncTest extends TestCase
 
         $this->assertSame(1, $summary['updated']);
         $this->assertSame('00:8D:FF:02:2A:99', $customer->refresh()->last_connected_mac);
+    }
+
+    public function test_active_poll_finalises_the_last_byte_snapshot_when_a_session_disappears(): void
+    {
+        MikrotikRouter::query()->update(['status' => 'inactive']);
+        $router = $this->restRouter('10.0.0.46');
+
+        Http::fake([
+            '10.0.0.46:8181/rest/ppp/active' => Http::sequence()
+                ->push([[
+                    '.id' => '*A1', 'name' => 'usage-1',
+                    'service' => 'pppoe',
+                    'caller-id' => '00:8D:FF:02:2A:46', 'uptime' => '1h2m3s',
+                ]], 200)
+                ->push([], 200),
+            '10.0.0.46:8181/rest/interface' => Http::sequence()
+                ->push([[
+                    '.id' => '*F1', 'name' => '<pppoe-usage-1>', 'type' => 'pppoe-in',
+                    'rx-byte' => '2097152', 'tx-byte' => '10485760',
+                ]], 200)
+                ->push([], 200),
+        ]);
+
+        $customer = Customer::create([
+            'name' => 'Usage Party', 'phone' => '01700000046', 'connection_id' => 'usage-1',
+            'mikrotik_username' => 'usage-1', 'mikrotik_router_id' => $router->id,
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $service = app(MikrotikCustomerSyncService::class);
+        $service->syncActiveConnectionMacs($router);
+
+        $snapshot = PppLiveSession::firstOrFail();
+        $this->assertSame(10485760, $snapshot->download_bytes);
+        $this->assertSame(2097152, $snapshot->upload_bytes);
+        $this->assertSame(3723, $snapshot->uptime_seconds);
+        $this->assertSame($customer->id, $snapshot->customer_id);
+
+        $service->syncActiveConnectionMacs($router);
+
+        $this->assertSame(0, PppLiveSession::count());
+        $log = PppUsageLog::firstOrFail();
+        $this->assertSame('snapshot', $log->source);
+        $this->assertSame('*A1', $log->routeros_session_id);
+        $this->assertSame(10485760, $log->download_bytes);
+        $this->assertSame(2097152, $log->upload_bytes);
+        $this->assertSame(3723, $log->uptime_seconds);
+    }
+
+    public function test_active_poll_merges_into_a_recent_webhook_row_instead_of_double_counting(): void
+    {
+        MikrotikRouter::query()->update(['status' => 'inactive']);
+        $router = $this->restRouter('10.0.0.47');
+
+        Http::fake([
+            '10.0.0.47:8181/rest/ppp/active' => Http::sequence()
+                ->push([[
+                    '.id' => '*A2', 'name' => 'usage-2', 'uptime' => '5m',
+                    'bytes-in' => '2000', 'bytes-out' => '9000',
+                ]], 200)
+                ->push([], 200),
+            '10.0.0.47:8181/rest/interface' => Http::response([], 200),
+        ]);
+
+        $service = app(MikrotikCustomerSyncService::class);
+        $service->syncActiveConnectionMacs($router);
+
+        PppUsageLog::create([
+            'mikrotik_router_id' => $router->id,
+            'username' => 'usage-2',
+            'source' => 'webhook',
+            'download_bytes' => 0,
+            'upload_bytes' => 0,
+            'payload' => ['user' => 'usage-2'],
+            'disconnected_at' => now(),
+        ]);
+
+        $service->syncActiveConnectionMacs($router);
+
+        $this->assertSame(1, PppUsageLog::count());
+        $log = PppUsageLog::firstOrFail();
+        $this->assertSame('webhook+snapshot', $log->source);
+        $this->assertSame(9000, $log->download_bytes);
+        $this->assertSame(2000, $log->upload_bytes);
     }
 }

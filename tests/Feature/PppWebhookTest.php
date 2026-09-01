@@ -219,6 +219,40 @@ class PppWebhookTest extends TestCase
         $this->assertSame(3723, $log->uptime_seconds);
         $this->assertSame(10485760, $log->download_bytes);
         $this->assertSame(2097152, $log->upload_bytes);
+        $this->assertSame('webhook', $log->source);
+    }
+
+    public function test_delayed_webhook_enriches_a_recent_snapshot_log_without_replacing_its_bytes(): void
+    {
+        $router = $this->restRouter('10.0.0.48');
+        $log = PppUsageLog::create([
+            'mikrotik_router_id' => $router->id,
+            'username' => 'late-hook',
+            'source' => 'snapshot',
+            'routeros_session_id' => '*A3',
+            'download_bytes' => 12345,
+            'upload_bytes' => 6789,
+            'payload' => ['ppp_active_snapshot' => ['bytes-out' => '12345']],
+            'disconnected_at' => now(),
+        ]);
+
+        $this->withHeader(PppWebhookService::SECRET_HEADER, app(PppWebhookService::class)->secret())
+            ->postJson('/api/ppp/usage', [
+                'user' => 'late-hook',
+                'router_id' => (string) $router->id,
+                'download' => 0,
+                'upload' => 0,
+                'reason' => 'peer-request',
+            ])
+            ->assertCreated();
+
+        $this->assertSame(1, PppUsageLog::count());
+        $log->refresh();
+        $this->assertSame('webhook+snapshot', $log->source);
+        $this->assertSame(12345, $log->download_bytes);
+        $this->assertSame(6789, $log->upload_bytes);
+        $this->assertSame('peer-request', $log->disconnect_reason);
+        $this->assertArrayHasKey('webhook', $log->payload);
     }
 
     public function test_webhook_copies_a_valid_caller_mac_onto_the_matched_party(): void

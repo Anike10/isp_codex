@@ -198,10 +198,25 @@ class MikrotikCustomerSyncService
      */
     public function syncActiveConnectionMacs(MikrotikRouter $router): array
     {
-        $records = app(MikrotikImportService::class)->liveRecords($router, '/ppp/active/print');
+        $live = app(MikrotikImportService::class)->liveSnapshot($router, [
+            '/ppp/active/print',
+            '/interface/print',
+        ]);
+
+        if (isset($live['/ppp/active/print']['error'])) {
+            throw new RuntimeException($live['/ppp/active/print']['error']);
+        }
+
+        $records = $live['/ppp/active/print']['records'] ?? [];
+        $interfaces = collect($live['/interface/print']['records'] ?? []);
 
         $sessions = collect($records)
             ->filter(fn ($session) => ! blank($session['name'] ?? null));
+
+        // Persist the same successful `/ppp/active` read before doing the MAC
+        // work. An empty result is significant: it finalises snapshots that
+        // were present on the preceding poll.
+        app(PppSessionSnapshotService::class)->sync($router, $sessions, $interfaces);
 
         if ($sessions->isEmpty()) {
             return ['sessions' => 0, 'no_mac' => 0, 'matched' => 0, 'unmatched' => 0, 'updated' => 0];

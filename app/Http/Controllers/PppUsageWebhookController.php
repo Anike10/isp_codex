@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\MikrotikRouter;
 use App\Models\OltOnu;
 use App\Models\PppUsageLog;
+use App\Services\PppSessionSnapshotService;
 use App\Services\PppWebhookService;
 use App\Support\Mac;
 use Illuminate\Http\JsonResponse;
@@ -17,7 +18,10 @@ use Illuminate\Http\Request;
  */
 class PppUsageWebhookController extends Controller
 {
-    public function __construct(private readonly PppWebhookService $webhook) {}
+    public function __construct(
+        private readonly PppWebhookService $webhook,
+        private readonly PppSessionSnapshotService $snapshots,
+    ) {}
 
     public function store(Request $request): JsonResponse
     {
@@ -88,13 +92,14 @@ class PppUsageWebhookController extends Controller
             ])->save();
         }
 
-        $log = PppUsageLog::create([
+        $attributes = [
             'mikrotik_router_id' => $router?->id,
             'customer_id' => $customer?->id,
             'olt_onu_id' => $onu?->id,
             'username' => $username,
             'caller_id' => $callerId ?: null,
             'disconnect_reason' => $this->cleanReason($data['reason'] ?? null),
+            'source' => 'webhook',
             'reported_router_id' => $reportedRouterId,
             'uptime' => $data['uptime'] ?? null,
             'uptime_seconds' => isset($data['uptime']) ? $this->uptimeToSeconds($data['uptime']) : null,
@@ -104,7 +109,30 @@ class PppUsageWebhookController extends Controller
             'tx_power_dbm' => $onu?->tx_power_dbm,
             'payload' => $request->all(),
             'disconnected_at' => now(),
-        ]);
+        ];
+
+        // A one-minute poll may notice the vanished session just before a
+        // delayed on-down request arrives. Enrich that snapshot row with the
+        // event reason/ONU data instead of inserting the disconnect twice.
+        $log = $router ? $this->snapshots->recentSnapshotLog($router, $username) : null;
+        if ($log) {
+            $payload = is_array($log->payload) ? $log->payload : [];
+            $payload['webhook'] = $request->all();
+
+            $log->forceFill([
+                'customer_id' => $customer?->id ?? $log->customer_id,
+                'olt_onu_id' => $onu?->id ?? $log->olt_onu_id,
+                'caller_id' => $callerId ?: $log->caller_id,
+                'disconnect_reason' => $attributes['disconnect_reason'] ?? $log->disconnect_reason,
+                'source' => 'webhook+snapshot',
+                'reported_router_id' => $reportedRouterId ?? $log->reported_router_id,
+                'rx_power_dbm' => $onu?->rx_power_dbm ?? $log->rx_power_dbm,
+                'tx_power_dbm' => $onu?->tx_power_dbm ?? $log->tx_power_dbm,
+                'payload' => $payload,
+            ])->save();
+        } else {
+            $log = PppUsageLog::create($attributes);
+        }
 
         return response()->json([
             'stored' => true,

@@ -140,9 +140,9 @@ Artisan::command('mikrotik:sync-active-macs {--force : Kept for compatibility; e
         ->orderBy('id')
         ->get()
         ->each(function (MikrotikRouter $router) use ($syncService, &$synced, &$failed): void {
-            // Runs on every hourly dispatch for every active router — polling
-            // /ppp/active is cheap and keeps each party's device MAC (and so the
-            // ONU match on the party list) at most an hour stale.
+            // Runs on every dispatch for every active router. The same
+            // /ppp/active read refreshes party MACs and retains byte/uptime
+            // snapshots for sessions that disappear on the following poll.
             try {
                 $summary = $syncService->syncActiveConnectionMacs($router);
                 $text = "sessions={$summary['sessions']}, matched={$summary['matched']}, macs_changed={$summary['updated']}, unmatched={$summary['unmatched']}, no_mac={$summary['no_mac']}";
@@ -435,10 +435,10 @@ Schedule::command('mikrotik:sync-router-users')
     ->hourly()
     ->withoutOverlapping();
 
-// Polls /ppp/active on every active router each hour and copies the live
-// device MAC onto the matching party (drives the ONU match on the party list).
+// Polls /ppp/active once a minute. Besides refreshing each party's device MAC,
+// the last byte/uptime snapshot becomes its usage row when a session vanishes.
 Schedule::command('mikrotik:sync-active-macs')
-    ->hourly()
+    ->everyMinute()
     ->withoutOverlapping();
 
 Schedule::command('mikrotik:import-secrets')
