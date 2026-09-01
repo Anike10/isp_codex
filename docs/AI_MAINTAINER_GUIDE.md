@@ -335,7 +335,7 @@ Living Expertise Register or add a new expert role before completing the task.
 
 Update these files as needed:
 
-- `README.md`: user-facing feature list, routes, setup, commands, and basic operations
+- `../README.md`: user-facing feature list, routes, setup, commands, and basic operations
 - `AI_MAINTAINER_GUIDE.md`: architecture, important files, business rules, route/permission model, implementation notes, limitations, and testing guidance
 - `DEPLOYMENT.md`: isp.us.com.bd deployment steps, server paths, migrations, cache clearing, cron, rollback, and troubleshooting
 - `PROJECT_ROADMAP.md`: future plans, larger module direction, or roadmap-level decisions

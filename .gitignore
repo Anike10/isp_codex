@@ -23,3 +23,10 @@ database/*backup*.sql
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Local-only build/deploy artifacts and scratch files (never commit)
+*.tgz
+*.patch
+/.codex-*
+/tmp_*.ps1
+/testgemini.txt

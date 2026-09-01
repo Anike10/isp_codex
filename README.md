@@ -35,7 +35,7 @@ A Laravel 12 application for an ISP and computer service business.
 - Multi-warehouse product inventory with an invoice-style multi-item `Inventory > In-house Use` entry page (writable product lookup, quantity, editable unit value, line total, serials, note, and private approval scan/PDF), separate employee/value/used-stock/history reports, partial returns, and isolated returned-used stock
 - Purchase bills support a private vendor bill/invoice image or PDF; draft edits can preserve the current copy or securely replace it
 - Sale-return credit respects invoice-level discount/VAT, settles the source invoice due first, and only the excess becomes customer advance; all later cash/advance settlement keeps that return credit in the due calculation, and a fully returned unpaid invoice is marked `returned`
-- Vehicle & Fleet Management with vehicle status/mileage, Driver/Helper/Supervisor duty history, date/mileage maintenance schedules, itemized trip expenses, and filtered fleet reports (see `FLEET_MANAGEMENT.md`)
+- Vehicle & Fleet Management with vehicle status/mileage, Driver/Helper/Supervisor duty history, date/mileage maintenance schedules, itemized trip expenses, and filtered fleet reports (see `docs/FLEET_MANAGEMENT.md`)
 - Role and permission based admin access, with a protected super-admin tier for global access and payment-account ownership/delegation management
 
 ## Local Setup
@@ -76,7 +76,7 @@ Production Laravel root:
 Read the deployment runbook before updating production:
 
 ```text
-DEPLOYMENT.md
+docs/DEPLOYMENT.md
 ```
 
 Short version:
@@ -90,7 +90,7 @@ qm guest exec 102 -- runuser -u ispus3797 -- bash -lc 'cd /home/isp.us.com.bd/is
 ```
 
 The VM checkout currently contains production-local hotfixes. Read
-`DEPLOYMENT.md`; do not run a blind pull/reset/clean until they are reconciled.
+`docs/DEPLOYMENT.md`; do not run a blind pull/reset/clean until they are reconciled.
 
 Do not commit SSH passwords, `.env` secrets, SMS tokens, or database passwords.
 
@@ -534,13 +534,13 @@ CWMP/TR-069 support should be implemented through an ACS server such as GenieACS
 The full implementation plan, required tables, routes, security notes, MikroTik/CPE setup notes, and acceptance checklist are documented in:
 
 ```text
-AI_MAINTAINER_GUIDE.md
+docs/AI_MAINTAINER_GUIDE.md
 ```
 
 ## Important Files
 
-- `DEPLOYMENT.md`: Production deployment, backup, rollback, cron, and isp.us.com.bd server notes.
-- `AI_MAINTAINER_GUIDE.md`: Read this first before asking another AI to modify billing, bKash SMS, customer status, MikroTik sync, or CWMP/TR-069 logic.
+- `docs/DEPLOYMENT.md`: Production deployment, backup, rollback, cron, and isp.us.com.bd server notes.
+- `docs/AI_MAINTAINER_GUIDE.md`: Read this first before asking another AI to modify billing, bKash SMS, customer status, MikroTik sync, or CWMP/TR-069 logic.
 - `routes/web.php`: Browser routes
 - `routes/api.php`: API/webhook routes
 - `routes/console.php`: Artisan commands
@@ -557,16 +557,16 @@ AI_MAINTAINER_GUIDE.md
 - `app/Services/OltLiveOutputParser.php`: Parses live OLT ONU status and power output
 - `resources/views`: Blade admin screens
 - `resources/views/partials/record_versions.blade.php`: Full-width old-version preview UI for edit history
-- `PROJECT_ROADMAP.md`: Longer roadmap and developer documentation
+- `docs/PROJECT_ROADMAP.md`: Longer roadmap and developer documentation
 
 ## Documentation Rule
 
 After any code or production change, update the relevant Markdown files in the same work session:
 
 - `README.md`: user-facing features, routes, setup, commands, and operational notes
-- `AI_MAINTAINER_GUIDE.md`: architecture, business rules, important files, route/permission rules, limitations, and safe-change notes
-- `DEPLOYMENT.md`: production server path, deploy steps, migrations, cache commands, cron, rollback, and isp.us.com.bd operational details
-- `PROJECT_ROADMAP.md`: longer-term plans or module roadmap changes
+- `docs/AI_MAINTAINER_GUIDE.md`: architecture, business rules, important files, route/permission rules, limitations, and safe-change notes
+- `docs/DEPLOYMENT.md`: production server path, deploy steps, migrations, cache commands, cron, rollback, and isp.us.com.bd operational details
+- `docs/PROJECT_ROADMAP.md`: longer-term plans or module roadmap changes
 
 Always update docs when changing:
 

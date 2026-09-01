@@ -449,7 +449,7 @@ Confirm `APP_URL`, `SESSION_DRIVER`, HTTPS, and storage permissions.
 
 When future deployment or operational details change, update this file and cross-check:
 
-- `README.md`
+- `../README.md`
 - `AI_MAINTAINER_GUIDE.md`
 - `PROJECT_ROADMAP.md` when roadmap-level plans change
 - Server path, host, runtime user, and branch
