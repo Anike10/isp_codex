@@ -43,7 +43,6 @@ class MikrotikRouterController extends Controller
             'transport' => ['nullable', Rule::in(['api', 'rest'])],
             'rest_secure' => ['nullable', 'boolean'],
             'pppoe_sync_interval_days' => ['nullable', 'integer', 'min:1', 'max:365'],
-            'active_mac_sync_interval_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'inactive_pppoe_profile' => ['required', 'string', 'max:255'],
             'router_api_username' => ['required', 'string', 'max:255'],
             'router_api_password' => ['required', 'string', 'max:255'],
@@ -54,7 +53,6 @@ class MikrotikRouterController extends Controller
         $data['username'] = $data['router_api_username'];
         $data['password'] = $data['router_api_password'];
         $data['pppoe_sync_interval_days'] = $data['pppoe_sync_interval_days'] ?? 10;
-        $data['active_mac_sync_interval_days'] = $data['active_mac_sync_interval_days'] ?? 1;
         $data['transport'] = $data['transport'] ?? 'api';
         $data['rest_secure'] = $data['transport'] === 'rest' && $request->boolean('rest_secure');
         $data['read_only'] = $request->boolean('read_only');
@@ -323,7 +321,6 @@ class MikrotikRouterController extends Controller
             'transport' => ['nullable', Rule::in(['api', 'rest'])],
             'rest_secure' => ['nullable', 'boolean'],
             'pppoe_sync_interval_days' => ['nullable', 'integer', 'min:1', 'max:365'],
-            'active_mac_sync_interval_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'inactive_pppoe_profile' => ['required', 'string', 'max:255'],
             'router_api_username' => ['required', 'string', 'max:255'],
             'router_api_password' => $passwordNeedsReentry
@@ -335,10 +332,8 @@ class MikrotikRouterController extends Controller
         ]);
 
         $data['username'] = $data['router_api_username'];
-        foreach (['pppoe_sync_interval_days', 'active_mac_sync_interval_days'] as $optionalInterval) {
-            if (($data[$optionalInterval] ?? null) === null) {
-                unset($data[$optionalInterval]);
-            }
+        if (($data['pppoe_sync_interval_days'] ?? null) === null) {
+            unset($data['pppoe_sync_interval_days']);
         }
         $data['transport'] = $data['transport'] ?? $mikrotikRouter->transport ?? 'api';
         $data['rest_secure'] = $data['transport'] === 'rest' && $request->boolean('rest_secure');

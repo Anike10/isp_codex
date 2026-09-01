@@ -132,7 +132,7 @@ Artisan::command('mikrotik:sync-router-users {--force : Sync every active router
     return $failed === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Verify and sync PPPoE users on MikroTik routers by each router interval');
 
-Artisan::command('mikrotik:sync-active-macs {--force : Poll every active router now, ignoring interval}', function (MikrotikCustomerSyncService $syncService) {
+Artisan::command('mikrotik:sync-active-macs {--force : Kept for compatibility; every active router is polled on every run}', function (MikrotikCustomerSyncService $syncService) {
     $synced = 0;
     $failed = 0;
 
@@ -140,17 +140,9 @@ Artisan::command('mikrotik:sync-active-macs {--force : Poll every active router 
         ->orderBy('id')
         ->get()
         ->each(function (MikrotikRouter $router) use ($syncService, &$synced, &$failed): void {
-            $interval = max(1, (int) $router->active_mac_sync_interval_days);
-            $isDue = $this->option('force')
-                || ! $router->last_active_mac_sync_at
-                || $router->last_active_mac_sync_at->addDays($interval)->lte(now());
-
-            if (! $isDue) {
-                $this->line("{$router->name} ({$router->ip_address}): active-MAC sync skipped until next interval.");
-
-                return;
-            }
-
+            // Runs on every hourly dispatch for every active router — polling
+            // /ppp/active is cheap and keeps each party's device MAC (and so the
+            // ONU match on the party list) at most an hour stale.
             try {
                 $summary = $syncService->syncActiveConnectionMacs($router);
                 $text = "sessions={$summary['sessions']}, matched={$summary['matched']}, macs_changed={$summary['updated']}, unmatched={$summary['unmatched']}, no_mac={$summary['no_mac']}";
@@ -175,7 +167,7 @@ Artisan::command('mikrotik:sync-active-macs {--force : Poll every active router 
     $this->info("Active-MAC sync finished. Synced: {$synced}. Failed: {$failed}.");
 
     return $failed === 0 ? self::SUCCESS : self::FAILURE;
-})->purpose('Copy live /ppp/active device MACs onto matching parties by each router interval');
+})->purpose('Copy live /ppp/active device MACs onto matching parties for every active router');
 
 Artisan::command('mikrotik:import-secrets', function (MikrotikImportService $importService) {
     $summary = $importService->refreshActiveRouterSecrets();
@@ -388,8 +380,8 @@ Schedule::command('mikrotik:sync-router-users')
     ->hourly()
     ->withoutOverlapping();
 
-// Hourly dispatcher; each router is still gated by its own
-// active_mac_sync_interval_days inside the command.
+// Polls /ppp/active on every active router each hour and copies the live
+// device MAC onto the matching party (drives the ONU match on the party list).
 Schedule::command('mikrotik:sync-active-macs')
     ->hourly()
     ->withoutOverlapping();

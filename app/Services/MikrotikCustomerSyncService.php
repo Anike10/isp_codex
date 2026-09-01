@@ -275,6 +275,43 @@ class MikrotikCustomerSyncService
         ];
     }
 
+    /**
+     * Poll `/ppp/active` on this party's own router(s) right now and copy device
+     * MACs onto the matching parties. Called right after a party is created or
+     * its connection changes so the ONU match on the party list does not have to
+     * wait for the scheduled {@see syncActiveConnectionMacs()} run.
+     *
+     * Best effort: a router that is unreachable now is skipped silently — the
+     * hourly job will catch up.
+     *
+     * @return array{sessions: int, no_mac: int, matched: int, unmatched: int, updated: int}
+     */
+    public function syncActiveConnectionMacsForCustomer(Customer $customer): array
+    {
+        $customer->loadMissing('mikrotikRouters');
+
+        $routers = $customer->mikrotikRouters->isNotEmpty()
+            ? $customer->mikrotikRouters->where('status', 'active')->sortBy('id')->values()
+            : ($customer->mikrotik_router_id
+                ? MikrotikRouter::whereKey($customer->mikrotik_router_id)->where('status', 'active')->get()
+                : collect());
+
+        $totals = ['sessions' => 0, 'no_mac' => 0, 'matched' => 0, 'unmatched' => 0, 'updated' => 0];
+
+        foreach ($routers as $router) {
+            try {
+                $summary = $this->syncActiveConnectionMacs($router);
+                foreach ($totals as $key => $_) {
+                    $totals[$key] += (int) ($summary[$key] ?? 0);
+                }
+            } catch (Throwable) {
+                // Router down right now; the scheduled run will pick it up.
+            }
+        }
+
+        return $totals;
+    }
+
     public function captureActiveSessions(RouterOsClient $client, MikrotikRouter $router): int
     {
         $sessions = collect($client->command('/ppp/active/print', [

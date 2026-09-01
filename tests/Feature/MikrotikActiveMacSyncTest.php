@@ -21,7 +21,6 @@ class MikrotikActiveMacSyncTest extends TestCase
         return MikrotikRouter::create(array_merge([
             'name' => 'REST Router', 'ip_address' => $ip, 'api_port' => 8181,
             'transport' => 'rest', 'pppoe_sync_interval_days' => 10,
-            'active_mac_sync_interval_days' => 1,
             'inactive_pppoe_profile' => 'inactive', 'username' => 'anike', 'password' => 'reader-pass',
             'status' => 'active', 'read_only' => true,
         ], $overrides));
@@ -47,7 +46,10 @@ class MikrotikActiveMacSyncTest extends TestCase
 
         $summary = app(MikrotikCustomerSyncService::class)->syncActiveConnectionMacs($router);
 
-        $this->assertSame(['sessions' => 2, 'updated' => 1, 'unmatched' => 1], $summary);
+        $this->assertSame(
+            ['sessions' => 2, 'no_mac' => 0, 'matched' => 1, 'unmatched' => 1, 'updated' => 1],
+            $summary
+        );
 
         $customer->refresh();
         $this->assertSame('00:8D:FF:02:2A:17', $customer->last_connected_mac);
@@ -103,13 +105,13 @@ class MikrotikActiveMacSyncTest extends TestCase
         $this->assertNull($customer->last_connected_ip, 'A non-MAC session must not touch the party at all.');
     }
 
-    public function test_router_edit_form_saves_the_active_mac_sync_interval(): void
+    public function test_router_edit_form_no_longer_exposes_an_active_mac_sync_interval(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
         $router = MikrotikRouter::create([
             'name' => 'Editable', 'ip_address' => '10.0.0.42', 'api_port' => 8728,
-            'pppoe_sync_interval_days' => 10, 'active_mac_sync_interval_days' => 1,
+            'pppoe_sync_interval_days' => 10,
             'inactive_pppoe_profile' => 'inactive', 'username' => 'api', 'password' => 'secret', 'status' => 'active',
         ]);
 
@@ -122,25 +124,18 @@ class MikrotikActiveMacSyncTest extends TestCase
         $this->actingAs($user)
             ->get(route('mikrotik-routers.edit', $router))
             ->assertOk()
-            ->assertSee('name="active_mac_sync_interval_days"', false);
+            ->assertDontSee('name="active_mac_sync_interval_days"', false);
 
-        // A value out of range is rejected.
+        // The field is now ignored, not validated: an out-of-range value no
+        // longer blocks the save.
         $this->actingAs($user)
             ->from(route('mikrotik-routers.edit', $router))
             ->put(route('mikrotik-routers.update', $router), $base + ['active_mac_sync_interval_days' => 400])
-            ->assertSessionHasErrors('active_mac_sync_interval_days');
-
-        // A valid value is saved; omitting it keeps the current value.
-        $this->actingAs($user)
-            ->put(route('mikrotik-routers.update', $router), $base + ['active_mac_sync_interval_days' => 7])
-            ->assertRedirect(route('mikrotik-routers.show', $router));
-        $this->assertSame(7, $router->refresh()->active_mac_sync_interval_days);
-
-        $this->actingAs($user)->put(route('mikrotik-routers.update', $router), $base)->assertRedirect();
-        $this->assertSame(7, $router->refresh()->active_mac_sync_interval_days);
+            ->assertRedirect(route('mikrotik-routers.show', $router))
+            ->assertSessionHasNoErrors();
     }
 
-    public function test_sync_active_macs_command_gates_on_the_router_interval(): void
+    public function test_sync_active_macs_command_runs_for_every_active_router_each_time(): void
     {
         MikrotikRouter::query()->update(['status' => 'inactive']);
         $router = $this->restRouter('10.0.0.43');
@@ -153,20 +148,32 @@ class MikrotikActiveMacSyncTest extends TestCase
         $this->assertNotNull($router->refresh()->last_active_mac_sync_at);
         $firstRun = $router->last_active_mac_sync_at;
 
-        // Still inside the 1-day interval: skipped, timestamp unchanged.
-        $this->travel(6)->hours();
-        Artisan::call('mikrotik:sync-active-macs');
-        $this->assertEquals($firstRun, $router->refresh()->last_active_mac_sync_at);
-
-        // Past the interval: runs again on its own.
-        $this->travel(2)->days();
+        // No per-router interval gate any more: it runs again on the next dispatch.
+        $this->travel(1)->hours();
         Artisan::call('mikrotik:sync-active-macs');
         $this->assertTrue($router->refresh()->last_active_mac_sync_at->greaterThan($firstRun));
+    }
 
-        // --force runs regardless of the interval.
-        $forcedFrom = $router->last_active_mac_sync_at;
-        $this->travel(1)->minutes();
-        Artisan::call('mikrotik:sync-active-macs', ['--force' => true]);
-        $this->assertTrue($router->refresh()->last_active_mac_sync_at->greaterThan($forcedFrom));
+    public function test_sync_active_macs_for_customer_polls_only_its_own_router(): void
+    {
+        MikrotikRouter::query()->update(['status' => 'inactive']);
+        $router = $this->restRouter('10.0.0.45');
+
+        Http::fake([
+            '10.0.0.45:8181/rest/ppp/active' => Http::response([
+                ['.id' => '*1', 'name' => 'pppoe-new', 'caller-id' => '00:8D:FF:02:2A:99', 'address' => '10.9.0.7'],
+            ], 200),
+        ]);
+
+        $customer = Customer::create([
+            'name' => 'Brand New', 'phone' => '01700000009', 'connection_id' => 'pppoe-new',
+            'mikrotik_username' => 'pppoe-new', 'mikrotik_router_id' => $router->id,
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $summary = app(MikrotikCustomerSyncService::class)->syncActiveConnectionMacsForCustomer($customer);
+
+        $this->assertSame(1, $summary['updated']);
+        $this->assertSame('00:8D:FF:02:2A:99', $customer->refresh()->last_connected_mac);
     }
 }

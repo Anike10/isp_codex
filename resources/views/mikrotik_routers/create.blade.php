@@ -106,12 +106,9 @@
                 <small class="rf-hint">Full reconcile of every party's PPPoE secret &amp; profile. Default 10 days; the scheduler checks hourly whether this router is due.</small>
             </div>
             <div class="rf-field">
-                <label for="rf-mac-interval">Active connection MAC sync interval</label>
-                <div class="rf-input-suffix">
-                    <input id="rf-mac-interval" type="number" min="1" max="365" name="active_mac_sync_interval_days" value="{{ old('active_mac_sync_interval_days', 1) }}" required>
-                    <span>days</span>
-                </div>
-                <small class="rf-hint">Polls <code>/ppp/active</code> and copies each session's device MAC onto the matching party. Default 1 day.</small>
+                <label>Active connection MAC sync</label>
+                <div><strong>Hourly</strong></div>
+                <small class="rf-hint">Polls <code>/ppp/active</code> every hour and copies each session's device MAC onto the matching party.</small>
             </div>
             <div class="rf-field">
                 <label for="rf-inactive-profile">Inactive PPPoE profile</label>

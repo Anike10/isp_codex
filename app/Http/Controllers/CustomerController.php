@@ -173,6 +173,17 @@ class CustomerController extends Controller
 
         $syncResult = $this->syncMikrotikCustomer($customer);
 
+        // Populate last_connected_mac now (if the line is already online) so the
+        // party list can match its ONU — VLAN, Rx/Tx — without waiting for the
+        // scheduled mikrotik:sync-active-macs run.
+        if ($customer->mikrotik_username || $customer->connection_id) {
+            try {
+                app(MikrotikCustomerSyncService::class)->syncActiveConnectionMacsForCustomer($customer->refresh());
+            } catch (Throwable) {
+                // Best effort only; the hourly job will catch up.
+            }
+        }
+
         return redirect()
             ->route('customers.index')
             ->with('success', 'Party created successfully. MikroTik user '.$syncResult['status'].'.')

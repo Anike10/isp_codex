@@ -1439,17 +1439,21 @@ PPPoE sync:
   `mikrotik:sync-active-macs` handles the periodic MAC capture.
 - Imported-secret refresh: `php artisan mikrotik:import-secrets`; the scheduler
   runs it every three hours.
-- Active-connection MAC sync: `php artisan mikrotik:sync-active-macs`
-  (`--force` ignores the interval). Scheduled hourly; each router is gated by
-  its own `mikrotik_routers.active_mac_sync_interval_days` (1–365, default 1,
-  editable on the router form — migration `2026_08_29_000007` replaced the
-  earlier `_minutes` column). `MikrotikCustomerSyncService::
-  syncActiveConnectionMacs()` reads `/ppp/active` (transport-agnostic, via
-  `MikrotikImportService::liveRecords`) and, for every session whose name
-  matches a party's `mikrotik_username` / `connection_id` on that router, writes
-  the session `caller-id` to `customers.last_connected_mac` (normalised
-  uppercase) plus `last_connected_at` / `last_connected_ip`. Shown as "Last
-  device MAC" in the party profile and "Last active MAC sync" on the router.
+- Active-connection MAC sync: `php artisan mikrotik:sync-active-macs`. Scheduled
+  hourly and runs for **every** active router on every dispatch — there is no
+  per-router interval any more (`--force` is kept only for backward
+  compatibility; the `mikrotik_routers.active_mac_sync_interval_days` column is
+  retained but unused, and the router form no longer exposes it).
+  `MikrotikCustomerSyncService::syncActiveConnectionMacs()` reads `/ppp/active`
+  (transport-agnostic, via `MikrotikImportService::liveRecords`) and, for every
+  session whose name matches a party's `mikrotik_username` / `connection_id` on
+  that router, writes the session `caller-id` to `customers.last_connected_mac`
+  (normalised uppercase) plus `last_connected_at` / `last_connected_ip`. Shown as
+  "Last device MAC" in the party profile and "Last active MAC sync" on the
+  router. `syncActiveConnectionMacsForCustomer(Customer)` runs the same poll for
+  just one party's own router(s); `CustomerController::store()` calls it right
+  after creating a party so a line that is already online gets its MAC — and so
+  its ONU VLAN / Rx-Tx on the party list — without waiting for the hourly job.
 - The permission-protected `/router-users` page lists **every** imported PPPoE
   secret via `MikrotikImportService::importedSecretsOverview(?routerId)`, which
   decorates each row with `is_unmanaged` and `matched_customer` (the linked
