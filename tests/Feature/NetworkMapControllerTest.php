@@ -24,6 +24,8 @@ class NetworkMapControllerTest extends TestCase
             ->assertOk()
             ->assertSee(asset('css/maplibre-gl.css'), false)
             ->assertSee(asset('js/maplibre-gl.js'), false)
+            ->assertSee(asset('css/network-map-db60f32d1f7e.css'), false)
+            ->assertSee(asset('js/network-map-f4951e5d4840.js'), false)
             ->assertSee('id="unmappedPartySummary"', false)
             ->assertSee('class="map-party-search"', false)
             ->assertSee('placeholder="পার্টির নামের অংশ লিখে সার্চ করুন"', false)
