@@ -6,8 +6,6 @@
     </FilesMatch>
 
     RewriteRule ^$ index.php [L]
-    RewriteRule ^css/network-map-[a-f0-9]{12}\.css$ public/css/network-map.css [L]
-    RewriteRule ^js/network-map-[a-f0-9]{12}\.js$ public/js/network-map.js [L]
     RewriteRule ^(css|js|storage)/(.*)$ public/$1/$2 [L]
     RewriteRule ^(favicon\.ico|favicon\.svg|robots\.txt)$ public/$1 [L]
 

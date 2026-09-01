@@ -34,9 +34,13 @@ class NetworkMapControllerTest extends TestCase
 
         $this->assertFileExists(public_path('css/maplibre-gl.css'));
         $this->assertFileExists(public_path('js/maplibre-gl.js'));
-        $this->assertStringContainsString('network-map-[a-f0-9]{12}', File::get(public_path('.htaccess')));
 
         $script = File::get(public_path('js/network-map.js'));
+        $this->assertSame($script, File::get(public_path('js/network-map-f4951e5d4840.js')));
+        $this->assertSame(
+            File::get(public_path('css/network-map.css')),
+            File::get(public_path('css/network-map-db60f32d1f7e.css'))
+        );
         $this->assertStringContainsString('parties mapped', $script);
         $this->assertStringContainsString('setupSearchableDropdown', $script);
         $this->assertStringContainsString("addSource('party-search-highlight'", $script);

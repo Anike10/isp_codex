@@ -13,10 +13,6 @@
 
     RewriteEngine On
 
-    # Serve content-versioned map assets from their source files.
-    RewriteRule ^css/network-map-[a-f0-9]{12}\.css$ css/network-map.css [L]
-    RewriteRule ^js/network-map-[a-f0-9]{12}\.js$ js/network-map.js [L]
-
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
