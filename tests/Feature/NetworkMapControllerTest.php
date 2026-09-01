@@ -24,8 +24,8 @@ class NetworkMapControllerTest extends TestCase
             ->assertOk()
             ->assertSee(asset('css/maplibre-gl.css'), false)
             ->assertSee(asset('js/maplibre-gl.js'), false)
-            ->assertSee(asset('css/network-map-adca2f74dd88.css'), false)
-            ->assertSee(asset('js/network-map-ae2ec6ba305e.js'), false)
+            ->assertSee(asset('css/network-map-7993e11add8f.css'), false)
+            ->assertSee(asset('js/network-map-a03872c4076d.js'), false)
             ->assertSee('id="unmappedPartySummary"', false)
             ->assertSee('class="map-party-search"', false)
             ->assertSee('placeholder="পার্টির নামের অংশ লিখে সার্চ করুন"', false)
@@ -43,10 +43,10 @@ class NetworkMapControllerTest extends TestCase
         $this->assertFileExists(public_path('js/maplibre-gl.js'));
 
         $script = File::get(public_path('js/network-map.js'));
-        $this->assertSame($script, File::get(public_path('js/network-map-ae2ec6ba305e.js')));
+        $this->assertSame($script, File::get(public_path('js/network-map-a03872c4076d.js')));
         $this->assertSame(
             File::get(public_path('css/network-map.css')),
-            File::get(public_path('css/network-map-adca2f74dd88.css'))
+            File::get(public_path('css/network-map-7993e11add8f.css'))
         );
         $this->assertStringContainsString('parties mapped', $script);
         $this->assertStringContainsString('setupSearchableDropdown', $script);
@@ -54,7 +54,9 @@ class NetworkMapControllerTest extends TestCase
         $this->assertStringContainsString('setPartySearchHighlights(uniqueMatches)', $script);
         $this->assertStringContainsString('state.map.fitBounds(bounds', $script);
         $this->assertStringContainsString('partySearchDebounce', $script);
-        $this->assertStringContainsString('class="party-id-result"', $script);
+        $this->assertStringContainsString('class="party-username-result"', $script);
+        $this->assertStringContainsString('formatPartyUserName(feature)', $script);
+        $this->assertStringNotContainsString('class="party-id-result"', $script);
         $this->assertStringNotContainsString('Name: ${mapPartyInlineFieldHtml', $script);
         $this->assertStringNotContainsString('Mobile: ${mapPartyInlineFieldHtml', $script);
         $this->assertStringContainsString('{ allowCustom: true }', $script);
