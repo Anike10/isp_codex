@@ -57,6 +57,28 @@ class TicketReplyTest extends TestCase
             ->assertSee('Technician dispatched');
     }
 
+    public function test_ticket_list_and_details_expose_reply_and_update_controls(): void
+    {
+        $ticket = $this->ticket();
+        $user = User::factory()->create();
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs($user)
+            ->get(route('tickets.index'))
+            ->assertOk()
+            ->assertSee(route('tickets.show', $ticket), false)
+            ->assertSee('Reply / Update');
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs($user)
+            ->get(route('tickets.show', $ticket))
+            ->assertOk()
+            ->assertSee(route('tickets.status.update', $ticket), false)
+            ->assertSee(route('tickets.replies.store', $ticket), false)
+            ->assertSee('Save Update')
+            ->assertSee('Send Reply');
+    }
+
     public function test_status_update_changes_ticket_and_logs_the_change(): void
     {
         $ticket = $this->ticket();

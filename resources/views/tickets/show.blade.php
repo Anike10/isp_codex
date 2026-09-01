@@ -62,7 +62,7 @@
     @forelse ($ticket->replies as $reply)
         <div style="padding:10px 0; border-bottom:1px solid var(--line, #e6ebf2)">
             <div class="muted" style="font-size:12px">
-                {{ $reply->user?->name ?? 'System' }} · {{ $reply->created_at->format('d/m/Y H:i') }}
+                {{ $reply->user?->name ?? 'System' }} &middot; {{ $reply->created_at->format('d/m/Y H:i') }}
             </div>
             @if ($reply->isStatusChange())
                 <p style="margin:6px 0">

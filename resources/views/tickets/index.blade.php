@@ -22,11 +22,11 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>Subject</th><th>Party</th><th>Technician</th><th>Priority</th><th>Status</th></tr></thead>
+    <thead><tr><th>Subject</th><th>Party</th><th>Technician</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead>
     <tbody>
     @forelse ($tickets as $ticket)
         <tr data-href="{{ route('tickets.show', $ticket) }}">
-            <td>{{ $ticket->subject }}</td>
+            <td><a href="{{ route('tickets.show', $ticket) }}"><strong>{{ $ticket->subject }}</strong></a></td>
             <td>
                 @if ($canOpenPartyLedger)
                     <a href="{{ route('accounting.ledger', ['customer_id' => $ticket->customer_id]) }}">{{ $ticket->customer->name }}</a>
@@ -37,9 +37,10 @@
             <td>{{ $ticket->technician?->name ?? 'Unassigned' }}</td>
             <td>{{ $ticket->priority }}</td>
             <td><span class="badge {{ $ticket->status }}">{{ $ticket->status }}</span></td>
+            <td><a class="btn light" href="{{ route('tickets.show', $ticket) }}">Reply / Update</a></td>
         </tr>
     @empty
-        <tr><td colspan="5">No tickets found.</td></tr>
+        <tr><td colspan="6">No tickets found.</td></tr>
     @endforelse
     </tbody>
 </table>
