@@ -54,7 +54,37 @@
     .onu-allsig__latest-values { display: inline-flex; gap: 8px; margin-left: 8px; flex-wrap: wrap; }
     .onu-allsig__latest-values span { padding: 2px 6px; border-radius: 999px; background: #e9f2ff; color: #175cd3; font-weight: 700; font-variant-numeric: tabular-nums; }
     .onu-allsig__chart { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line, #e6ebf2); }
-    .onu-ticket__button { width: auto; min-height: 32px; padding: 7px 11px; font-size: 12px; white-space: nowrap; }
+    .onu-ticket__button { width: auto; min-height: 32px; padding: 7px 11px; font-size: 12px; white-space: nowrap; transition: opacity .15s, box-shadow .15s, filter .15s; }
+    /* Stable parties: de-emphasise the ticket button so it does not invite noise. */
+    .onu-ticket__button--muted { opacity: .4; filter: grayscale(.45); }
+    .onu-ticket__button--muted:hover,
+    .onu-ticket__button--muted:focus-visible { opacity: 1; filter: none; }
+    /* Rows that need attention: pull the eye to the ticket button. */
+    .onu-ticket__button--alert {
+        background: #b42318; border-color: #b42318; color: #fff; font-weight: 700;
+        animation: onu-ticket-glow 1.6s ease-in-out infinite;
+    }
+    .onu-ticket__button--alert:hover,
+    .onu-ticket__button--alert:focus-visible { background: #952015; border-color: #952015; color: #fff; }
+    /* Power out of band but link otherwise steady: amber, gentler pulse. */
+    .onu-ticket__button--warn {
+        background: #b54708; border-color: #b54708; color: #fff; font-weight: 700;
+        animation: onu-ticket-glow-warn 2s ease-in-out infinite;
+    }
+    .onu-ticket__button--warn:hover,
+    .onu-ticket__button--warn:focus-visible { background: #973c06; border-color: #973c06; color: #fff; }
+    @keyframes onu-ticket-glow {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(180, 35, 24, .55); }
+        50% { box-shadow: 0 0 0 7px rgba(180, 35, 24, 0); }
+    }
+    @keyframes onu-ticket-glow-warn {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(181, 71, 8, .5); }
+        50% { box-shadow: 0 0 0 6px rgba(181, 71, 8, 0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .onu-ticket__button--alert { animation: none; box-shadow: 0 0 0 3px rgba(180, 35, 24, .35); }
+        .onu-ticket__button--warn { animation: none; box-shadow: 0 0 0 3px rgba(181, 71, 8, .32); }
+    }
     @media (max-width: 620px) {
         .onu-allsig__card { padding: 13px; }
         .onu-allsig__metric--wide { grid-column: span 1; }
@@ -86,6 +116,18 @@
         <label>Swing threshold (dB)</label>
         <input type="number" name="swing" min="0.1" max="40" step="0.1" value="{{ $swing + 0 }}">
     </div>
+    <div>
+        <label>Latest Rx power</label>
+        <select name="power_op">
+            <option value="">Any</option>
+            <option value="lt" @selected($powerOp === 'lt')>Less than (&lt;)</option>
+            <option value="gt" @selected($powerOp === 'gt')>Greater than (&gt;)</option>
+        </select>
+    </div>
+    <div>
+        <label>Rx power value (dBm)</label>
+        <input type="number" name="power_dbm" min="-40" max="5" step="0.1" placeholder="-25" value="{{ $powerValue !== null ? $powerValue + 0 : '' }}">
+    </div>
     <div class="full actions">
         <button class="btn secondary" type="submit">Search</button>
         <a class="btn light" href="{{ route('troubleshoot.onu-signal') }}">Reset</a>
@@ -93,7 +135,7 @@
 </form>
 
 <div class="onu-allsig__bar">
-    <span class="muted">Showing {{ $pagination?->firstItem() ?? 0 }}–{{ $pagination?->lastItem() ?? 0 }} of {{ $pagination?->total() ?? 0 }} parties@if ($unstableOnly) · not stable@endif</span>
+    <span class="muted">Showing {{ $pagination?->firstItem() ?? 0 }}–{{ $pagination?->lastItem() ?? 0 }} of {{ $pagination?->total() ?? 0 }} parties@if ($unstableOnly) · not stable@endif @if ($powerActive) · latest Rx {{ $powerOp === 'lt' ? '<' : '>' }} {{ $powerValue + 0 }} dBm @endif</span>
     <form method="post" action="{{ route('onu-signal.visibility.update') }}" class="onu-signal__show">
         @csrf
         @method('patch')
@@ -143,12 +185,26 @@
                 </span>
             </h2>
             @if (auth()->user()?->hasPermission('manage_tickets') && auth()->user()?->canAccessMenu('tickets'))
-                <a class="btn onu-ticket__button" href="{{ route('tickets.onu-signal.create', [
-                    'customer' => $party,
-                    'from' => $from->toDateString(),
-                    'to' => $to->toDateString(),
-                    'swing' => $swing + 0,
-                ]) }}" title="বাংলা সিগন্যাল বিস্তারিতসহ editable ticket form খুলুন">Add Ticket</a>
+                @php($isUnstable = (bool) ($party->onu_unstable ?? false))
+                @php($isPowerDanger = $powerBadgeClass === 'power-danger' && $powerBadge)
+                @php($isPowerWarn = $powerBadgeClass === 'power-warning' && $powerBadge)
+                @php($ticketReason = match (true) {
+                    $isUnstable => 'This party is not stable — open a ticket',
+                    $isPowerDanger => 'ONU power is far out of band — open a ticket',
+                    $isPowerWarn => 'ONU power is out of band — open a ticket',
+                    default => 'This party looks stable',
+                })
+                <a @class([
+                        'btn onu-ticket__button',
+                        'onu-ticket__button--alert' => $isUnstable || $isPowerDanger,
+                        'onu-ticket__button--warn' => ! $isUnstable && ! $isPowerDanger && $isPowerWarn,
+                        'onu-ticket__button--muted' => ! $isUnstable && ! $isPowerDanger && ! $isPowerWarn,
+                    ]) href="{{ route('tickets.onu-signal.create', [
+                        'customer' => $party,
+                        'from' => $from->toDateString(),
+                        'to' => $to->toDateString(),
+                        'swing' => $swing + 0,
+                    ]) }}" title="{{ $ticketReason }} · বাংলা সিগন্যাল বিস্তারিতসহ editable ticket form খুলুন">Add Ticket</a>
             @endif
         </div>
         <div class="onu-allsig__meta">

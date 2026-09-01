@@ -8,6 +8,7 @@ use App\Http\Controllers\BulkCustomerPaymentController;
 use App\Http\Controllers\ConcessionReportController;
 use App\Http\Controllers\ConnectionAnalyticsController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\DataUsageController;
 use App\Http\Controllers\CustomerPaymentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseBackupController;
@@ -312,6 +313,9 @@ Route::middleware('auth')->group(function () {
         Route::patch('retention', [ConnectionAnalyticsController::class, 'updateRetention'])->name('retention');
         Route::get('router-data', [RouterLiveDataController::class, 'index'])->name('router-data');
         Route::get('onu-signal', [OnuSignalHistoryController::class, 'index'])->name('onu-signal');
+        Route::get('data-usage', [DataUsageController::class, 'index'])->name('data-usage');
+        Route::get('data-usage-party', [DataUsageController::class, 'select'])->name('data-usage.select');
+        Route::get('data-usage/{customer}', [DataUsageController::class, 'show'])->name('data-usage.show');
     });
 
     Route::middleware('permission:manage_tickets')->group(function () {

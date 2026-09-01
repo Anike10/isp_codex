@@ -447,6 +447,7 @@
         border-top: 1px dashed #d3deea;
         margin-top: 3px;
         padding-top: 10px;
+        white-space: pre-line;
     }
     .party-note-panel {
         padding: 0;
@@ -1060,9 +1061,8 @@
                 <dd class="kv-grid__value kv-grid__note">{{ $customer->address ?: 'Not provided' }}</dd>
 
                 <dt class="kv-grid__label">Party note</dt>
-                <dd class="kv-grid__value kv-grid__note">
-                    See the full <a href="#party-activity">party activity &amp; concession log</a> table below.
-                </dd>
+                <dd class="kv-grid__value kv-grid__note">{{ $customer->notes ?: 'No note' }}</dd>
+
                 <dt class="kv-grid__label">MikroTik comment</dt>
                 <dd class="kv-grid__value kv-grid__note">
                     {{ $customer->importedSecret?->router_comment ?: 'No comment' }}

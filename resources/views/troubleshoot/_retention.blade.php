@@ -9,5 +9,5 @@
     </label>
     <button class="btn light" type="submit">Save</button>
     <button class="btn light" type="submit" name="action" value="prune">Delete now</button>
-    <span class="muted" style="font-size:12px">Applies to all three Troubleshoot reports. <strong>0 = keep forever.</strong> Runs nightly.</span>
+    <span class="muted" style="font-size:12px">Applies to every Troubleshoot report that reads the PPP disconnect log. <strong>0 = keep forever.</strong> Runs nightly.</span>
 </form>

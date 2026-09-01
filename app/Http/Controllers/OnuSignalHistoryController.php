@@ -39,6 +39,10 @@ class OnuSignalHistoryController extends Controller
         $unstableOnly = $request->query('stability') === 'unstable';
         $swing = max(0.1, (float) $request->query('swing', self::DEFAULT_SWING_DB));
 
+        $powerOp = in_array($request->query('power_op'), ['lt', 'gt'], true) ? $request->query('power_op') : '';
+        $powerValue = is_numeric($request->query('power_dbm')) ? (float) $request->query('power_dbm') : null;
+        $powerActive = $powerOp !== '' && $powerValue !== null;
+
         $perPageDefault = 20;
         $perPageOptions = [10, 20, 50, 100, 200];
         $perPage = $this->perPage($request, $perPageDefault, $perPageOptions);
@@ -64,6 +68,7 @@ class OnuSignalHistoryController extends Controller
                     });
                 })
                 ->when($unstableOnly, fn ($q) => $q->whereIn('id', $unstableIds))
+                ->when($powerActive, fn ($q) => $q->whereIn('id', $this->powerFilteredPartyIds($from, $to, $powerOp, $powerValue)))
                 ->orderBy('name')
                 ->paginate($perPage)
                 ->withQueryString();
@@ -100,7 +105,8 @@ class OnuSignalHistoryController extends Controller
         return view('troubleshoot.onu_signal', compact(
             'parties', 'pagination', 'retentionDays', 'intervalHours', 'showRx', 'showTx',
             'perPage', 'perPageDefault', 'perPageOptions',
-            'from', 'to', 'search', 'unstableOnly', 'swing', 'unstableCount'
+            'from', 'to', 'search', 'unstableOnly', 'swing', 'unstableCount',
+            'powerOp', 'powerValue', 'powerActive'
         ));
     }
 
@@ -135,9 +141,10 @@ class OnuSignalHistoryController extends Controller
     }
 
     /**
-     * Parties whose Rx power over the window swings by >= $swing dB or reports
-     * more than one ONU status. Power outside the normal band is shown as a
-     * separate high/low condition and is not, by itself, instability.
+     * Parties whose Rx power over the window swings by >= $swing dB or whose ONU
+     * genuinely changed state (e.g. online -> offline). Power outside the normal
+     * band is shown as a separate high/low condition and is not, by itself,
+     * instability.
      *
      * @return Collection<int, int>
      */
@@ -146,18 +153,70 @@ class OnuSignalHistoryController extends Controller
         $swing = max(0.1, $swing);
 
         return CustomerOnuPowerSample::query()
-            ->selectRaw('customer_id, MIN(rx_power_dbm) AS min_rx, MAX(rx_power_dbm) AS max_rx, COUNT(DISTINCT status) AS status_count')
+            ->selectRaw('customer_id, MIN(rx_power_dbm) AS min_rx, MAX(rx_power_dbm) AS max_rx, GROUP_CONCAT(DISTINCT status) AS statuses')
             ->whereBetween('sampled_at', [$from, $to])
             ->whereNotNull('rx_power_dbm')
             ->groupBy('customer_id')
             ->get()
             ->filter(function (CustomerOnuPowerSample $row) use ($swing): bool {
                 $rxSwing = round((float) $row->max_rx - (float) $row->min_rx, 2);
-                $swingIsUnstable = $rxSwing >= $swing;
 
-                return $swingIsUnstable || (int) $row->status_count > 1;
+                if ($rxSwing >= $swing) {
+                    return true;
+                }
+
+                $states = collect(explode(',', (string) $row->statuses))
+                    ->map(fn ($status) => $this->normaliseOnuState($status))
+                    ->filter()
+                    ->unique();
+
+                return $states->count() > 1;
             })
             ->map(fn (CustomerOnuPowerSample $row) => (int) $row->customer_id)
             ->values();
+    }
+
+    /**
+     * Parties whose most recent Rx reading in the window is below ($op = 'lt')
+     * or above ($op = 'gt') $value dBm. "Most recent" is the latest sample by
+     * sampled_at (id breaks ties), matching the reading shown on each card.
+     *
+     * @return Collection<int, int>
+     */
+    private function powerFilteredPartyIds(Carbon $from, Carbon $to, string $op, float $value)
+    {
+        return CustomerOnuPowerSample::query()
+            ->selectRaw('customer_id, SUBSTRING_INDEX(GROUP_CONCAT(rx_power_dbm ORDER BY sampled_at DESC, id DESC), ",", 1) AS latest_rx')
+            ->whereBetween('sampled_at', [$from, $to])
+            ->whereNotNull('rx_power_dbm')
+            ->groupBy('customer_id')
+            ->get()
+            ->filter(function (CustomerOnuPowerSample $row) use ($op, $value): bool {
+                $rx = (float) $row->latest_rx;
+
+                return $op === 'lt' ? $rx < $value : $rx > $value;
+            })
+            ->map(fn (CustomerOnuPowerSample $row) => (int) $row->customer_id)
+            ->values();
+    }
+
+    /**
+     * Collapse ONU status synonyms to one token so cosmetic wording differences
+     * ("online" vs "active", written by different sample sources) do not read as
+     * a real state change.
+     */
+    private function normaliseOnuState(?string $status): ?string
+    {
+        $status = mb_strtolower(trim((string) $status));
+
+        if ($status === '') {
+            return null;
+        }
+
+        return match ($status) {
+            'online', 'active', 'up', 'ok', 'working', 'normal', 'connected' => 'online',
+            'offline', 'down', 'disconnected', 'inactive' => 'offline',
+            default => $status,
+        };
     }
 }

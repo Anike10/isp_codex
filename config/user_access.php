@@ -122,6 +122,8 @@ return [
                 'troubleshoot_analytics' => ['label' => 'Connection Analytics', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.analytics']],
                 'troubleshoot_router_data' => ['label' => 'Router Live Data', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.router-data']],
                 'troubleshoot_onu_signal' => ['label' => 'ONU Signal History', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.onu-signal']],
+                'troubleshoot_data_usage' => ['label' => 'Data Usage', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.data-usage']],
+                'troubleshoot_data_usage_party' => ['label' => 'Data Usage by Party', 'permission' => 'view_network_diagnostics', 'routes' => ['troubleshoot.data-usage.select', 'troubleshoot.data-usage.show']],
             ],
         ],
         'billing' => [
