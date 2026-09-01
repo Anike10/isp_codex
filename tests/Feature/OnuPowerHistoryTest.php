@@ -11,10 +11,11 @@ use App\Models\MikrotikRouter;
 use App\Models\OltOnu;
 use App\Models\Permission;
 use App\Models\PppUsageLog;
+use App\Models\SupportTicket;
 use App\Models\User;
 use App\Services\OnuPowerHistoryService;
+use App\Services\OnuSignalTicketService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
@@ -484,5 +485,196 @@ class OnuPowerHistoryTest extends TestCase
             ->assertOk()
             ->assertSee('Swinging Signal')
             ->assertDontSee('Steady Signal');
+    }
+
+    public function test_troubleshoot_page_shows_add_ticket_button_only_to_ticket_managers(): void
+    {
+        $customer = $this->party('AA:BB:CC:DD:EE:31', 'TICKET-BUTTON');
+        CustomerOnuPowerSample::create([
+            'customer_id' => $customer->id,
+            'rx_power_dbm' => -27,
+            'sampled_at' => now(),
+            'created_at' => now(),
+        ]);
+
+        $diagnosticsOnly = User::factory()->create();
+        $diagnosticsOnly->permissions()->attach(Permission::where('name', 'view_network_diagnostics')->firstOrFail());
+
+        $this->actingAs($diagnosticsOnly)->get(route('troubleshoot.onu-signal'))
+            ->assertOk()
+            ->assertDontSee(route('tickets.onu-signal.create', $customer), false);
+        $this->actingAs($diagnosticsOnly)->get(route('tickets.onu-signal.create', $customer))
+            ->assertForbidden();
+
+        $ticketManager = User::factory()->create();
+        $ticketManager->permissions()->attach(Permission::whereIn('name', ['view_network_diagnostics', 'manage_tickets'])->get());
+
+        $this->actingAs($ticketManager)->get(route('troubleshoot.onu-signal'))
+            ->assertOk()
+            ->assertSee(route('tickets.onu-signal.create', $customer), false)
+            ->assertSee('Add Ticket');
+    }
+
+    public function test_add_ticket_opens_an_editable_bangla_draft_and_only_save_ticket_creates_it(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::whereIn('name', ['view_network_diagnostics', 'manage_tickets'])->get());
+
+        $customer = $this->party('AA:BB:CC:DD:EE:32', 'AUTO-TICKET');
+        $customer->update(['name' => 'Auto Ticket Party', 'phone' => '01712345678']);
+        $onu = $this->onu([
+            'mac_address' => 'AA:BB:CC:DD:EE:32',
+            'olt_name' => 'KST-OLT-01',
+            'pon_port' => 7,
+            'onu_id' => 12,
+        ]);
+
+        CustomerOnuPowerSample::create([
+            'customer_id' => $customer->id,
+            'olt_onu_id' => $onu->id,
+            'rx_power_dbm' => -26,
+            'tx_power_dbm' => 2.10,
+            'status' => 'online',
+            'sampled_at' => now()->subHour(),
+            'created_at' => now(),
+        ]);
+        CustomerOnuPowerSample::create([
+            'customer_id' => $customer->id,
+            'olt_onu_id' => $onu->id,
+            'rx_power_dbm' => -32,
+            'tx_power_dbm' => 2.05,
+            'status' => 'online',
+            'sampled_at' => now(),
+            'created_at' => now(),
+        ]);
+
+        $from = now()->subDay()->startOfDay();
+        $to = now()->endOfDay();
+        $response = $this->actingAs($user)->get(route('tickets.onu-signal.create', [
+            'customer' => $customer,
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'swing' => 3,
+        ]));
+
+        $response->assertOk()
+            ->assertSee('এটি এখনো টিকিট হিসেবে সেভ হয়নি')
+            ->assertSee('লেজার পাওয়ার অনেক কম')
+            ->assertSee('লেজার পাওয়ার ওঠানামা করছে')
+            ->assertSee('Rx সর্বনিম্ন/সর্বোচ্চ: -32.00 dBm / -26.00 dBm')
+            ->assertSee('OLT: KST-OLT-01')
+            ->assertSee('PON/ONU: 7/12')
+            ->assertSee('ফাইবারে টান বা অতিরিক্ত বেন্ড')
+            ->assertSee('Save Ticket');
+        $this->assertDatabaseCount('support_tickets', 0);
+
+        $draft = app(OnuSignalTicketService::class)->draft($customer, $from, $to, 3.0);
+        $this->assertNotNull($draft);
+        $draft['subject'] .= ' — সম্পাদিত';
+        $draft['description'] .= PHP_EOL.'অতিরিক্ত সম্পাদিত নোট।';
+
+        $saveResponse = $this->actingAs($user)->post(route('tickets.store'), $draft);
+
+        $ticket = SupportTicket::sole();
+        $saveResponse->assertRedirect(route('tickets.index'));
+        $this->assertStringContainsString('সম্পাদিত', $ticket->subject);
+        $this->assertStringContainsString('অতিরিক্ত সম্পাদিত নোট', $ticket->description);
+        $this->assertSame('urgent', $ticket->priority);
+        $this->assertSame('open', $ticket->status);
+    }
+
+    public function test_constant_low_power_is_not_unstable_and_non_zero_swing_is_highlighted(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'view_network_diagnostics')->firstOrFail());
+
+        $constant = $this->party('AA:BB:CC:DD:EE:41', 'CONSTANT-LOW');
+        foreach ([2, 1] as $hoursAgo) {
+            CustomerOnuPowerSample::create([
+                'customer_id' => $constant->id,
+                'rx_power_dbm' => -27.70,
+                'status' => 'online',
+                'sampled_at' => now()->subHours($hoursAgo),
+                'created_at' => now(),
+            ]);
+        }
+
+        $constantBody = $this->actingAs($user)
+            ->get(route('troubleshoot.onu-signal', ['q' => 'CONSTANT-LOW', 'swing' => 0]))
+            ->assertOk()
+            ->assertSee('power low')
+            ->assertSee('name="swing" min="0.1" max="40" step="0.1" value="0.1"', false)
+            ->getContent();
+        $this->assertStringNotContainsString('class="badge unstable"', $constantBody);
+        $this->assertSame(1, substr_count($constantBody, '.onu-allsig__metric--swing'));
+
+        $constantDraft = app(OnuSignalTicketService::class)->draft(
+            $constant,
+            now()->subDay()->startOfDay(),
+            now()->endOfDay(),
+            0.1
+        );
+        $this->assertNotNull($constantDraft);
+        $this->assertStringNotContainsString('লেজার পাওয়ার ওঠানামা করছে', $constantDraft['subject']);
+
+        $changing = $this->party('AA:BB:CC:DD:EE:42', 'CHANGING-LOW');
+        foreach ([-27.70, -27.20] as $index => $rx) {
+            CustomerOnuPowerSample::create([
+                'customer_id' => $changing->id,
+                'rx_power_dbm' => $rx,
+                'status' => 'online',
+                'sampled_at' => now()->subHours(2 - $index),
+                'created_at' => now(),
+            ]);
+        }
+
+        $changingBody = $this->actingAs($user)
+            ->get(route('troubleshoot.onu-signal', ['q' => 'CHANGING-LOW']))
+            ->assertOk()
+            ->assertSee('0.50 dB')
+            ->getContent();
+        $this->assertSame(2, substr_count($changingBody, 'onu-allsig__metric--swing'));
+        $this->assertStringNotContainsString('class="badge unstable"', $changingBody);
+
+        $changingAtZeroBody = $this->actingAs($user)
+            ->get(route('troubleshoot.onu-signal', ['q' => 'CHANGING-LOW', 'swing' => 0.1]))
+            ->assertOk()
+            ->getContent();
+        $this->assertStringContainsString('class="badge unstable"', $changingAtZeroBody);
+    }
+
+    public function test_ticket_draft_uses_the_expected_bangla_label_for_each_rx_power_band(): void
+    {
+        $cases = [
+            [-9.0, 'লেজার পাওয়ার অনেক বেশি', 'urgent'],
+            [-12.0, 'লেজার পাওয়ার বেশি', 'high'],
+            [-20.0, 'লেজার পাওয়ার স্বাভাবিক সীমায় আছে', 'normal'],
+            [-27.0, 'লেজার পাওয়ার কম', 'high'],
+            [-31.0, 'লেজার পাওয়ার অনেক কম', 'urgent'],
+        ];
+
+        foreach ($cases as $index => [$rx, $label, $priority]) {
+            $customer = $this->party('AA:BB:CC:DD:FF:'.sprintf('%02X', $index), 'POWER-BAND-'.$index);
+            CustomerOnuPowerSample::create([
+                'customer_id' => $customer->id,
+                'rx_power_dbm' => $rx,
+                'status' => 'online',
+                'sampled_at' => now(),
+                'created_at' => now(),
+            ]);
+
+            $draft = app(OnuSignalTicketService::class)->draft(
+                $customer,
+                now()->subDay()->startOfDay(),
+                now()->endOfDay(),
+                3.0
+            );
+
+            $this->assertNotNull($draft);
+            $this->assertStringContainsString($label, $draft['subject']);
+            $this->assertSame($priority, $draft['priority']);
+        }
+
+        $this->assertDatabaseCount('support_tickets', 0);
     }
 }

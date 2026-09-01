@@ -316,6 +316,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('permission:manage_tickets')->group(function () {
         Route::resource('tickets', TicketController::class)->only(['index', 'show', 'create', 'store']);
+        Route::get('tickets/create/from-onu-signal/{customer}', [TicketController::class, 'createFromOnuSignal'])->name('tickets.onu-signal.create');
         Route::post('tickets/{ticket}/replies', [TicketController::class, 'reply'])->name('tickets.replies.store');
         Route::patch('tickets/{ticket}/status', [TicketController::class, 'updateStatus'])->name('tickets.status.update');
     });

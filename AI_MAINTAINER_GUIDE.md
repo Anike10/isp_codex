@@ -1696,6 +1696,15 @@ one guarded bootstrap block wires the single `.onu-signal__show` form, calls
 every registered chart on change, and persists once — so N charts still make one
 request per toggle, no reload.
 
+Each ONU Signal History result has an **Add Ticket** link to
+`GET /troubleshoot/onu-signal/ticket` (`tickets.onu-signal.create`). The action
+builds an editable Bengali ticket draft from the party, ONU, OLT, Rx/Tx range,
+swing, and status data; it does not write a support-ticket row. A ticket is
+created only when the operator submits the normal `POST /tickets` form. Signal
+stability is based on ONU-status changes or Rx swing at/above the configured
+threshold (minimum `0.1` dB); constant but out-of-band Rx power is labelled
+separately and is not treated as unstable.
+
 Before every ONU history snapshot, `OnuPowerHistoryService::capture()` repairs
 older parties whose `last_connected_mac` is empty. It prefers an already-linked
 PPP webhook log or imported secret, then same-username data on one of the

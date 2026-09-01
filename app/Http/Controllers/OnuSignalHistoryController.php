@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\CustomerOnuPowerSample;
 use App\Services\OnuPowerHistoryService;
+use App\Support\OnuMatcher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -35,7 +37,7 @@ class OnuSignalHistoryController extends Controller
         [$from, $to] = $this->windowFromRequest($request);
         $search = trim((string) $request->query('q', ''));
         $unstableOnly = $request->query('stability') === 'unstable';
-        $swing = max(0.0, (float) $request->query('swing', self::DEFAULT_SWING_DB));
+        $swing = max(0.1, (float) $request->query('swing', self::DEFAULT_SWING_DB));
 
         $perPageDefault = 20;
         $perPageOptions = [10, 20, 50, 100, 200];
@@ -80,7 +82,7 @@ class OnuSignalHistoryController extends Controller
             // The OLT ONU each listed party currently maps to, for the serial /
             // OLT / PON-ONU line under the graph title.
             $onuByMac = Schema::hasTable('olt_onus')
-                ? \App\Support\OnuMatcher::byMac($paginator->getCollection()->pluck('last_connected_mac'))
+                ? OnuMatcher::byMac($paginator->getCollection()->pluck('last_connected_mac'))
                 : [];
 
             $paginator->getCollection()->transform(function (Customer $customer) use ($samplesByParty, $unstableLookup, $onuByMac) {
@@ -133,23 +135,29 @@ class OnuSignalHistoryController extends Controller
     }
 
     /**
-     * Parties whose Rx power over the window swings by >= $swing dB, or leaves
-     * the -25..-15 dBm normal band, or reports more than one ONU status.
+     * Parties whose Rx power over the window swings by >= $swing dB or reports
+     * more than one ONU status. Power outside the normal band is shown as a
+     * separate high/low condition and is not, by itself, instability.
      *
-     * @return \Illuminate\Support\Collection<int, int>
+     * @return Collection<int, int>
      */
     private function unstablePartyIds(Carbon $from, Carbon $to, float $swing)
     {
+        $swing = max(0.1, $swing);
+
         return CustomerOnuPowerSample::query()
+            ->selectRaw('customer_id, MIN(rx_power_dbm) AS min_rx, MAX(rx_power_dbm) AS max_rx, COUNT(DISTINCT status) AS status_count')
             ->whereBetween('sampled_at', [$from, $to])
             ->whereNotNull('rx_power_dbm')
             ->groupBy('customer_id')
-            ->havingRaw(
-                '(MAX(rx_power_dbm) - MIN(rx_power_dbm)) >= ? OR MIN(rx_power_dbm) < -25 OR MAX(rx_power_dbm) > -15 OR COUNT(DISTINCT status) > 1',
-                [$swing]
-            )
-            ->pluck('customer_id')
-            ->map(fn ($id) => (int) $id)
+            ->get()
+            ->filter(function (CustomerOnuPowerSample $row) use ($swing): bool {
+                $rxSwing = round((float) $row->max_rx - (float) $row->min_rx, 2);
+                $swingIsUnstable = $rxSwing >= $swing;
+
+                return $swingIsUnstable || (int) $row->status_count > 1;
+            })
+            ->map(fn (CustomerOnuPowerSample $row) => (int) $row->customer_id)
             ->values();
     }
 }

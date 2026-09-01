@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\SupportTicket;
 use App\Models\User;
+use App\Services\OnuSignalTicketService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 class TicketController extends Controller
@@ -44,10 +46,7 @@ class TicketController extends Controller
 
     public function create()
     {
-        return view('tickets.create', [
-            'customers' => Customer::orderBy('name')->get(),
-            'technicians' => User::orderBy('name')->get(),
-        ]);
+        return $this->createView();
     }
 
     public function show(SupportTicket $ticket)
@@ -73,6 +72,42 @@ class TicketController extends Controller
         ]));
 
         return redirect()->route('tickets.index')->with('success', 'Ticket created successfully.');
+    }
+
+    public function createFromOnuSignal(
+        Request $request,
+        Customer $customer,
+        OnuSignalTicketService $tickets
+    ) {
+        $data = $request->validate([
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
+            'swing' => ['nullable', 'numeric', 'min:0.1', 'max:40'],
+        ]);
+
+        $from = isset($data['from'])
+            ? Carbon::parse($data['from'])->startOfDay()
+            : Carbon::today()->subDays(7)->startOfDay();
+        $to = isset($data['to'])
+            ? Carbon::parse($data['to'])->endOfDay()
+            : Carbon::today()->endOfDay();
+
+        if ($from->greaterThan($to)) {
+            [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
+        }
+
+        $swing = max(0.1, (float) ($data['swing'] ?? 3.0));
+        $ticketDefaults = $tickets->draft($customer, $from, $to, $swing);
+
+        if (! $ticketDefaults) {
+            return back()->with('warning', 'নির্বাচিত সময়ে এই পার্টির কোনো ONU সিগন্যাল নমুনা পাওয়া যায়নি।');
+        }
+
+        return $this->createView($ticketDefaults, route('troubleshoot.onu-signal', [
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'swing' => $swing,
+        ]));
     }
 
     public function reply(Request $request, SupportTicket $ticket)
@@ -115,5 +150,16 @@ class TicketController extends Controller
         }
 
         return redirect()->route('tickets.show', $ticket)->with('success', 'Ticket updated.');
+    }
+
+    private function createView(array $ticketDefaults = [], ?string $backUrl = null)
+    {
+        return view('tickets.create', [
+            'customers' => Customer::orderBy('name')->get(),
+            'technicians' => User::orderBy('name')->get(),
+            'ticketDefaults' => $ticketDefaults,
+            'isOnuDraft' => $ticketDefaults !== [],
+            'backUrl' => $backUrl ?? route('tickets.index'),
+        ]);
     }
 }
