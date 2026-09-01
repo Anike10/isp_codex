@@ -435,4 +435,54 @@ class OnuPowerHistoryTest extends TestCase
 
         $this->assertTrue(app(OnuPowerHistoryService::class)->showTx());
     }
+
+    public function test_troubleshoot_page_filters_by_name_and_date_window(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'view_network_diagnostics')->firstOrFail());
+
+        $alice = $this->party('AA:BB:CC:DD:EE:11', 'ALICE');
+        $alice->update(['name' => 'Alice Rahman']);
+        $bob = $this->party('AA:BB:CC:DD:EE:12', 'BOB');
+        $bob->update(['name' => 'Bob Karim']);
+
+        // Alice has a recent sample; Bob's only sample is 40 days back.
+        CustomerOnuPowerSample::create(['customer_id' => $alice->id, 'rx_power_dbm' => -21, 'sampled_at' => now()->subDay(), 'created_at' => now()]);
+        CustomerOnuPowerSample::create(['customer_id' => $bob->id, 'rx_power_dbm' => -21, 'sampled_at' => now()->subDays(40), 'created_at' => now()]);
+
+        // Default window (last 7 days) hides Bob.
+        $this->actingAs($user)->get(route('troubleshoot.onu-signal'))
+            ->assertOk()->assertSee('Alice Rahman')->assertDontSee('Bob Karim');
+
+        // Widen the window to include Bob's old sample.
+        $this->actingAs($user)->get(route('troubleshoot.onu-signal', ['from' => now()->subDays(60)->toDateString()]))
+            ->assertSee('Alice Rahman')->assertSee('Bob Karim');
+
+        // Name search narrows to Bob.
+        $this->actingAs($user)->get(route('troubleshoot.onu-signal', ['from' => now()->subDays(60)->toDateString(), 'q' => 'Karim']))
+            ->assertSee('Bob Karim')->assertDontSee('Alice Rahman');
+    }
+
+    public function test_troubleshoot_page_can_show_only_unstable_parties(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'view_network_diagnostics')->firstOrFail());
+
+        $steady = $this->party('AA:BB:CC:DD:EE:21', 'STEADY');
+        $steady->update(['name' => 'Steady Signal']);
+        foreach ([-21, -21.5, -20.8] as $i => $rx) {
+            CustomerOnuPowerSample::create(['customer_id' => $steady->id, 'rx_power_dbm' => $rx, 'sampled_at' => now()->subHours($i + 1), 'created_at' => now()]);
+        }
+
+        $swinging = $this->party('AA:BB:CC:DD:EE:22', 'SWINGING');
+        $swinging->update(['name' => 'Swinging Signal']);
+        foreach ([-19, -27, -18] as $i => $rx) {
+            CustomerOnuPowerSample::create(['customer_id' => $swinging->id, 'rx_power_dbm' => $rx, 'sampled_at' => now()->subHours($i + 1), 'created_at' => now()]);
+        }
+
+        $this->actingAs($user)->get(route('troubleshoot.onu-signal', ['stability' => 'unstable']))
+            ->assertOk()
+            ->assertSee('Swinging Signal')
+            ->assertDontSee('Steady Signal');
+    }
 }

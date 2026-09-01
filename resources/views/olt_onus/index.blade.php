@@ -223,7 +223,7 @@
     </div>
     <button class="btn" type="submit">Save</button>
     <button class="btn light" type="submit" name="action" value="capture">Save &amp; capture now</button>
-    <span class="muted" style="font-size:12px">প্রতিটি পার্টির ONU Rx/Tx power এই বিরতিতে সংরক্ষণ হয়ে party details পেজে graph হিসেবে দেখানো হয়। Runs hourly।</span>
+    <span class="muted" style="font-size:12px">প্রতিটি পার্টির ONU Rx/Tx power এই বিরতিতে সংরক্ষণ হয়ে party details পেজে graph হিসেবে দেখানো হয়। Runs hourly। "Keep history for" দিনের চেয়ে পুরোনো নমুনা মুছে ফেলা হয় — দেখার তারিখ পরিসর Troubleshoot → ONU Signal History পেজে আলাদাভাবে বাছাই করা যায়।</span>
 </form>
 @if (request()->filled('olt_device_id'))
     <div class="muted" style="margin:-6px 0 16px">
