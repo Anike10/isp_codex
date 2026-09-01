@@ -131,6 +131,25 @@
         line-height: 1.5;
     }
     .special-toggle-btn:hover { background: #e7eef7; }
+    .customer-pay-line {
+        display: block;
+        margin-top: 6px;
+    }
+    .customer-pay-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 12px;
+        font-size: 12px;
+        font-weight: 700;
+        border-radius: 999px;
+        line-height: 1.6;
+        white-space: nowrap;
+    }
+    .customer-pay-btn .customer-pay-amt {
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
     .special-toggle-btn.is-on {
         border-color: #f0c98b;
         background: #fff4e2;
@@ -456,6 +475,20 @@
                     @if ($customer->hasActiveGracePeriod())
                         <span class="badge pending">Grace</span>
                     @endif
+                    @php
+                        $payAmount = $effectivePrice > 0 ? number_format((float) $effectivePrice, 2, '.', '') : null;
+                        $payUrl = $payAmount
+                            ? route('customers.payments.create', ['customer' => $customer, 'amount' => $payAmount])
+                            : route('customers.payments.create', $customer);
+                    @endphp
+                    <div class="customer-pay-line">
+                        <a class="btn secondary customer-pay-btn" href="{{ $payUrl }}" title="Record a payment for this party">
+                            <span>Pay</span>
+                            @if ($payAmount)
+                                <span class="customer-pay-amt">৳{{ $fmtPrice($effectivePrice) }}</span>
+                            @endif
+                        </a>
+                    </div>
                 @endif
             </td>
             <td class="col-center">
@@ -537,7 +570,6 @@
                     <details class="customer-action-menu">
                         <summary class="btn light">Actions</summary>
                         <div class="customer-action-menu-list">
-                            <a href="{{ route('customers.payments.create', $customer) }}">Pay</a>
                             <a href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}">Ledger</a>
                             <a href="{{ route('customers.show', $customer) }}">View</a>
                             <a href="{{ route('customers.edit', $customer) }}">Edit</a>
