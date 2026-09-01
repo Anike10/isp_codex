@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\SupportTicket;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class TicketController extends Controller
 {
@@ -51,9 +52,13 @@ class TicketController extends Controller
 
     public function show(SupportTicket $ticket)
     {
-        $ticket->load(['customer', 'technician']);
+        $ticket->load(['customer', 'technician', 'replies.user']);
 
-        return view('tickets.show', compact('ticket'));
+        return view('tickets.show', [
+            'ticket' => $ticket,
+            'technicians' => User::orderBy('name')->get(),
+            'statuses' => SupportTicket::STATUSES,
+        ]);
     }
 
     public function store(Request $request)
@@ -64,9 +69,51 @@ class TicketController extends Controller
             'subject' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string'],
             'priority' => ['required', 'in:low,normal,high,urgent'],
-            'status' => ['required', 'in:open,processing,resolved,closed'],
+            'status' => ['required', Rule::in(SupportTicket::STATUSES)],
         ]));
 
         return redirect()->route('tickets.index')->with('success', 'Ticket created successfully.');
+    }
+
+    public function reply(Request $request, SupportTicket $ticket)
+    {
+        $data = $request->validate([
+            'body' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $ticket->replies()->create([
+            'user_id' => $request->user()->id,
+            'body' => $data['body'],
+        ]);
+
+        return redirect()->route('tickets.show', $ticket)->with('success', 'Reply added.');
+    }
+
+    public function updateStatus(Request $request, SupportTicket $ticket)
+    {
+        $data = $request->validate([
+            'status' => ['required', Rule::in(SupportTicket::STATUSES)],
+            'assigned_to' => ['nullable', 'exists:users,id'],
+            'note' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        $oldStatus = $ticket->status;
+        $statusChanged = $oldStatus !== $data['status'];
+
+        $ticket->update([
+            'status' => $data['status'],
+            'assigned_to' => $data['assigned_to'] ?? null,
+        ]);
+
+        if ($statusChanged || filled($data['note'])) {
+            $ticket->replies()->create([
+                'user_id' => $request->user()->id,
+                'body' => $data['note'] ?? null,
+                'old_status' => $statusChanged ? $oldStatus : null,
+                'new_status' => $statusChanged ? $data['status'] : null,
+            ]);
+        }
+
+        return redirect()->route('tickets.show', $ticket)->with('success', 'Ticket updated.');
     }
 }
