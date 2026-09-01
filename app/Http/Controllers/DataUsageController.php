@@ -264,7 +264,7 @@ class DataUsageController extends Controller
         }
 
         // Reject rolled-over values like 2026-13-99 that createFromFormat accepts.
-        if ($date === false || $date->format('Y-m-d') !== $value) {
+        if ($date === false || $date->toDateString() !== $value) {
             return null;
         }
 
