@@ -196,7 +196,7 @@ class PppWebhookService
             .':local webhookUptime $uptime;'
             .':local webhookCallerId $"caller-id";'
             .':local webhookReason $"last-disconnect-reason";'
-            .':if ($webhookUptime = "null" || [:len $webhookUptime] = 0) do={:set webhookUptime "0";}'
+            .':if ($webhookUptime = "null" || [:len $webhookUptime] = 0) do={:set webhookUptime "0";};'
             .':local webhookBytesIn $"bytes-in";'
             .':local webhookBytesOut $"bytes-out";'
             .':if ([:len $webhookBytesIn] = 0 || $webhookBytesIn = "null") do={:set webhookBytesIn 0};'

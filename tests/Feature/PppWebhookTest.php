@@ -76,6 +76,7 @@ class PppWebhookTest extends TestCase
                     && str_contains($onDown, ':local webhookBytesOut $"bytes-out";')
                     && str_contains($onDown, ':local webhookCallerId $"caller-id";')
                     && str_contains($onDown, ':local webhookReason $"last-disconnect-reason";')
+                    && str_contains($onDown, ':if ($webhookUptime = "null" || [:len $webhookUptime] = 0) do={:set webhookUptime "0";};:local webhookBytesIn')
                     && str_contains($onDown, '\"reason\":\"".$webhookReason."\"')
                     && str_contains($onDown, '\"download\":\"".$webhookBytesOut."\"')
                     && str_contains($onDown, '\"upload\":\"".$webhookBytesIn."\"')
