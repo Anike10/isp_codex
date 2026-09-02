@@ -21,7 +21,19 @@ class SupportTicket extends Model
         'description',
         'priority',
         'status',
+        'rx_power_on_create',
+        'rx_power_on_update',
+        'rx_power_updated_at',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'rx_power_on_create' => 'decimal:2',
+            'rx_power_on_update' => 'decimal:2',
+            'rx_power_updated_at' => 'datetime',
+        ];
+    }
 
     public function customer(): BelongsTo
     {

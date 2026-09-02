@@ -35,8 +35,8 @@
         </select>
     </div>
     <div>
-        <label>Technician</label>
-        <select name="assigned_to" data-search-placeholder="Technician-এর নাম লিখুন">
+        <label>Authorized</label>
+        <select name="assigned_to" data-search-placeholder="Authorized-এর নাম লিখুন">
             <option value="">Unassigned</option>
             @foreach ($technicians as $technician)
                 <option value="{{ $technician->id }}" @selected((string) old('assigned_to', $defaults['assigned_to'] ?? '') === (string) $technician->id)>{{ $technician->name }}</option>

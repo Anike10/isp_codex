@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\CustomerOnuPowerSample;
 use App\Models\SupportTicket;
 use App\Models\User;
 use App\Services\OnuSignalTicketService;
@@ -67,16 +68,46 @@ class TicketController extends Controller
 
     public function store(Request $request)
     {
-        SupportTicket::create($request->validate([
+        $data = $request->validate([
             'customer_id' => ['required', 'exists:customers,id'],
             'assigned_to' => ['nullable', 'exists:users,id'],
             'subject' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string'],
             'priority' => ['required', 'in:low,normal,high,urgent'],
             'status' => ['required', Rule::in(SupportTicket::STATUSES)],
-        ]));
+        ]);
+
+        // Snapshot the party's current ONU Rx so the ticket keeps a "signal at
+        // open" reading; it is also the first "last update" value.
+        $rx = $this->latestOnuRx((int) $data['customer_id']);
+        $data['rx_power_on_create'] = $rx;
+        $data['rx_power_on_update'] = $rx;
+        $data['rx_power_updated_at'] = now();
+
+        SupportTicket::create($data);
 
         return redirect()->route('tickets.index')->with('success', 'Ticket created successfully.');
+    }
+
+    /** The party's most recent non-null ONU Rx laser power, in dBm. */
+    private function latestOnuRx(int $customerId): ?float
+    {
+        $value = CustomerOnuPowerSample::query()
+            ->where('customer_id', $customerId)
+            ->whereNotNull('rx_power_dbm')
+            ->orderByDesc('sampled_at')
+            ->value('rx_power_dbm');
+
+        return $value === null ? null : (float) $value;
+    }
+
+    /** Re-snapshot the party's ONU Rx whenever a ticket is touched. */
+    private function refreshOnuRx(SupportTicket $ticket): void
+    {
+        $ticket->update([
+            'rx_power_on_update' => $this->latestOnuRx((int) $ticket->customer_id),
+            'rx_power_updated_at' => now(),
+        ]);
     }
 
     public function createFromOnuSignal(
@@ -126,6 +157,8 @@ class TicketController extends Controller
             'body' => $data['body'],
         ]);
 
+        $this->refreshOnuRx($ticket);
+
         return redirect()->route('tickets.show', $ticket)->with('success', 'Reply added.');
     }
 
@@ -144,6 +177,8 @@ class TicketController extends Controller
             'status' => $data['status'],
             'assigned_to' => $data['assigned_to'] ?? null,
         ]);
+
+        $this->refreshOnuRx($ticket);
 
         if ($statusChanged || filled($data['note'])) {
             $ticket->replies()->create([

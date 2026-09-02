@@ -15,7 +15,15 @@
         <p><strong>Subject:</strong> {{ $ticket->subject }}</p>
         <p><strong>Priority:</strong> {{ ucfirst($ticket->priority) }}</p>
         <p><strong>Status:</strong> <span class="badge {{ $ticket->status }}">{{ $ticket->status }}</span></p>
-        <p><strong>Technician:</strong> {{ $ticket->technician?->name ?? 'Unassigned' }}</p>
+        <p><strong>Authorized:</strong> {{ $ticket->technician?->name ?? 'Unassigned' }}</p>
+        <p><strong>ONU Rx (dBm):</strong>
+            {{ $ticket->rx_power_on_create === null ? '—' : number_format((float) $ticket->rx_power_on_create, 2) }} at create
+            &middot;
+            {{ $ticket->rx_power_on_update === null ? '—' : number_format((float) $ticket->rx_power_on_update, 2) }} at last update
+            @if ($ticket->rx_power_updated_at)
+                <span class="muted">({{ $ticket->rx_power_updated_at->format('d/m/Y H:i') }})</span>
+            @endif
+        </p>
     </section>
     <section class="card">
         <h2>Party</h2>
@@ -44,7 +52,7 @@
             </select>
         </div>
         <div>
-            <label>Technician</label>
+            <label>Authorized</label>
             <select name="assigned_to">
                 <option value="">Unassigned</option>
                 @foreach ($technicians as $technician)

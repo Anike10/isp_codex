@@ -89,7 +89,7 @@ class TicketReplyTest extends TestCase
             ->get(route('tickets.create'))
             ->assertOk()
             ->assertSee('data-search-placeholder="পার্টির নাম, সংযোগ আইডি বা ধরন লিখুন"', false)
-            ->assertSee('data-search-placeholder="Technician-এর নাম লিখুন"', false)
+            ->assertSee('data-search-placeholder="Authorized-এর নাম লিখুন"', false)
             ->assertSee('searchable-select-menu', false)
             ->assertSee('searchableSelectComponent', false)
             ->assertSee('Searchable Technician');
