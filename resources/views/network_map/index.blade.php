@@ -8,6 +8,11 @@
 
     <section class="network-map-page">
         <aside class="network-sidebar">
+            <div class="tool-grid" id="historyTools">
+                <button type="button" class="btn light" id="undoTopology" disabled title="Undo (Ctrl+Z)">Undo</button>
+                <button type="button" class="btn light" id="redoTopology" disabled title="Redo (Ctrl+Y)">Redo</button>
+            </div>
+
             <div class="map-party-search" role="search" aria-label="Search parties on the network map">
                 <form class="map-party-search-form" id="customerSearch">
                     <label class="sr-only" for="customerIdQuery">Search party by name</label>
@@ -94,10 +99,6 @@
             </div>
 
             <div class="map-actions">
-                <div class="tool-grid">
-                    <button type="button" class="btn light" id="undoTopology" disabled title="Undo (Ctrl+Z)">Undo</button>
-                    <button type="button" class="btn light" id="redoTopology" disabled title="Redo (Ctrl+Y)">Redo</button>
-                </div>
                 <button type="button" class="btn" id="saveTopology">Save Network</button>
                 <button type="button" class="btn light" id="exportGeojson">Show GeoJSON</button>
                 <button type="button" class="btn light" id="cancelDraft">Cancel Draw</button>
