@@ -112,6 +112,62 @@ class CustomerControllerTest extends TestCase
         ]);
     }
 
+    public function test_vendor_only_party_is_hidden_from_customer_list_but_dual_role_party_remains(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        Customer::create([
+            'name' => 'Wholesale Vendor Only',
+            'phone' => '01710000001',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => false,
+            'is_vendor' => true,
+        ]);
+        Customer::create([
+            'name' => 'Customer And Vendor',
+            'phone' => '01710000002',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'is_vendor' => true,
+        ]);
+
+        $this->actingAs($user)->get(route('customers.index'))
+            ->assertOk()
+            ->assertDontSee('Wholesale Vendor Only')
+            ->assertSee('Customer And Vendor');
+    }
+
+    public function test_assigning_a_package_does_not_activate_an_unpaid_customer(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $package = InternetPackage::create([
+            'name' => 'Unpaid Plan',
+            'speed' => '20 Mbps',
+            'monthly_price' => 800,
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($user)->post(route('customers.store'), [
+            'name' => 'New Unpaid Customer',
+            'phone' => '01710000003',
+            'connection_id' => 'UNPAID-NEW',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => '1',
+            'internet_package_id' => $package->id,
+            'start_date' => now()->toDateString(),
+        ])->assertRedirect(route('customers.index'));
+
+        $customer = Customer::where('connection_id', 'UNPAID-NEW')->firstOrFail();
+        $this->assertSame('inactive', $customer->status);
+        $this->assertSame('inactive', $customer->subscriptions()->firstOrFail()->status);
+        $this->assertNull($customer->service_valid_until);
+    }
+
     public function test_party_inline_update_supports_name_and_phone_fields(): void
     {
         $user = User::factory()->create();
@@ -272,20 +328,29 @@ class CustomerControllerTest extends TestCase
 
         $subscription->refresh();
         $this->assertSame($packageTwo->id, $subscription->internet_package_id);
-        $this->assertSame('active', $subscription->status);
-        $this->assertNull($subscription->end_date);
+        $this->assertSame('inactive', $subscription->status);
+        $this->assertNotNull($subscription->end_date);
         $customer->refresh();
+        $this->assertSame('inactive', $customer->status);
         $this->assertNull($customer->learned_ip_address);
         $this->assertNull($customer->learned_ip_package_id);
         $this->assertNull($customer->last_connected_ip);
         $this->assertNull($customer->last_connected_at);
     }
 
-    public function test_parties_list_separates_ip_assignment_from_last_connected_ip(): void
+    public function test_customers_list_combines_mikrotik_id_and_ip_and_lists_routers(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
-        Customer::create([
+        $routerOne = MikrotikRouter::create([
+            'name' => 'Core MikroTik', 'ip_address' => '10.0.0.1', 'api_port' => 8728,
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+        $routerTwo = MikrotikRouter::create([
+            'name' => 'Backup MikroTik', 'ip_address' => '10.0.0.2', 'api_port' => 8728,
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
+        ]);
+        $dynamic = Customer::create([
             'name' => 'Dynamic IP Party',
             'phone' => '01710000101',
             'connection_id' => 'DYNAMIC-IP-USER',
@@ -295,6 +360,16 @@ class CustomerControllerTest extends TestCase
             'use_fixed_ip' => false,
             'last_connected_ip' => '10.55.0.25',
         ]);
+        foreach ([$routerOne, $routerTwo] as $index => $router) {
+            MikrotikImportedSecret::create([
+                'mikrotik_router_id' => $router->id,
+                'customer_id' => $dynamic->id,
+                'routeros_id' => '*'.($index + 1),
+                'name' => 'DYNAMIC-IP-USER',
+                'disabled' => false,
+                'imported_at' => now(),
+            ]);
+        }
         Customer::create([
             'name' => 'Fixed IP Party',
             'phone' => '01710000102',
@@ -310,13 +385,16 @@ class CustomerControllerTest extends TestCase
         $this->actingAs($user)
             ->get(route('customers.index'))
             ->assertOk()
+            ->assertSee('MikroTik ID : IP')
             ->assertSee('DYNAMIC-IP-USER')
             ->assertSee('10.55.0.25')
-            ->assertSee('Dynamic (profile pool)')
-            ->assertSee('Last connected IP')
+            ->assertSee('Core MikroTik')
+            ->assertSee('Backup MikroTik')
             ->assertSee('FIXED-IP-USER')
             ->assertSee('10.66.0.10')
-            ->assertSee('10.66.0.99');
+            ->assertDontSee('IP assignment:')
+            ->assertDontSee('Last connected IP')
+            ->assertDontSee('10.66.0.99');
     }
 
     public function test_parties_list_shows_the_olt_onu_and_optical_power_next_to_the_name(): void
@@ -550,7 +628,7 @@ class CustomerControllerTest extends TestCase
         ])->assertSessionHasErrors('connection_id');
     }
 
-    public function test_active_customer_without_paid_month_can_be_activated_until_next_month_date(): void
+    public function test_quick_activate_endpoint_does_not_activate_customer_without_payment_or_grace(): void
     {
         Carbon::setTestNow('2026-08-11 10:00:00');
 
@@ -573,7 +651,7 @@ class CustomerControllerTest extends TestCase
                 'phone' => '01788888888',
                 'connection_id' => 'QACT-001',
                 'address' => 'Kushtia',
-                'status' => 'active',
+                'status' => 'inactive',
                 'is_customer' => true,
             ]);
             $this->makeImportedSecretForCustomer($customer, 'QACT-001');
@@ -582,30 +660,29 @@ class CustomerControllerTest extends TestCase
                 'customer_id' => $customer->id,
                 'internet_package_id' => $package->id,
                 'start_date' => '2026-07-01',
-                'status' => 'active',
+                'status' => 'inactive',
             ]);
 
             $this->actingAs($user)
                 ->from(route('customers.index'))
                 ->post(route('customers.activate-next-date', $customer))
                 ->assertRedirect(route('customers.index'))
-                ->assertSessionHasNoErrors();
+                ->assertSessionHasErrors('active_until');
 
             $customer->refresh();
             $subscription->refresh();
 
-            $this->assertSame('active', $customer->status);
-            $this->assertSame('2026-09-11', $customer->service_valid_until?->format('Y-m-d'));
-            $this->assertSame('2026-08-11', $customer->service_valid_from?->format('Y-m-d'));
-            $this->assertSame('active', $subscription->status);
-            $this->assertNull($subscription->end_date);
+            $this->assertSame('inactive', $customer->status);
+            $this->assertNull($customer->service_valid_until);
+            $this->assertNull($customer->service_valid_from);
+            $this->assertSame('inactive', $subscription->status);
             $this->assertNull($customer->grace_used_at);
         } finally {
             Carbon::setTestNow();
         }
     }
 
-    public function test_active_customer_without_paid_month_can_be_activated_until_selected_date(): void
+    public function test_quick_activate_endpoint_rejects_a_selected_date(): void
     {
         Carbon::setTestNow('2026-08-11 10:00:00');
 
@@ -628,7 +705,7 @@ class CustomerControllerTest extends TestCase
                 'phone' => '01788999999',
                 'connection_id' => 'QACT-002',
                 'address' => 'Kushtia',
-                'status' => 'active',
+                'status' => 'inactive',
                 'is_customer' => true,
             ]);
             $this->makeImportedSecretForCustomer($customer, 'QACT-002');
@@ -637,24 +714,25 @@ class CustomerControllerTest extends TestCase
                 'customer_id' => $customer->id,
                 'internet_package_id' => $package->id,
                 'start_date' => '2026-07-01',
-                'status' => 'active',
+                'status' => 'inactive',
             ]);
 
             $this->actingAs($user)
                 ->from(route('customers.index'))
                 ->post(route('customers.activate-next-date', $customer), ['active_until' => '2026-10-01'])
                 ->assertRedirect(route('customers.index'))
-                ->assertSessionHasNoErrors();
+                ->assertSessionHasErrors('active_until');
 
             $customer->refresh();
 
-            $this->assertSame('2026-10-01', $customer->service_valid_until?->format('Y-m-d'));
+            $this->assertSame('inactive', $customer->status);
+            $this->assertNull($customer->service_valid_until);
         } finally {
             Carbon::setTestNow();
         }
     }
 
-    public function test_inactive_customer_with_no_paid_month_shows_activate_action(): void
+    public function test_inactive_customer_with_no_paid_month_shows_grace_instead_of_quick_activate(): void
     {
         Carbon::setTestNow('2026-08-11 10:00:00');
 
@@ -690,7 +768,8 @@ class CustomerControllerTest extends TestCase
 
             $this->actingAs($user)->get(route('customers.index'))
                 ->assertOk()
-                ->assertSee('Activate until');
+                ->assertSee('Grace')
+                ->assertDontSee('Activate until');
         } finally {
             Carbon::setTestNow();
         }
@@ -853,6 +932,41 @@ class CustomerControllerTest extends TestCase
         }
     }
 
+    public function test_billing_command_inactivates_customer_with_package_but_no_paid_month(): void
+    {
+        Carbon::setTestNow('2026-06-20 12:00:00');
+
+        try {
+            $package = InternetPackage::create([
+                'name' => 'Never Paid Plan',
+                'speed' => '10 Mbps',
+                'monthly_price' => 500,
+                'status' => 'active',
+            ]);
+            $customer = Customer::create([
+                'name' => 'Never Paid Customer',
+                'phone' => '01730000001',
+                'connection_id' => 'NEVER-PAID-1',
+                'address' => 'Kushtia',
+                'status' => 'active',
+                'is_customer' => true,
+            ]);
+            $subscription = Subscription::create([
+                'customer_id' => $customer->id,
+                'internet_package_id' => $package->id,
+                'start_date' => '2026-06-01',
+                'status' => 'active',
+            ]);
+
+            Artisan::call('billing:disable-overdue-customers', ['--date' => '2026-06-20']);
+
+            $this->assertSame('inactive', $customer->refresh()->status);
+            $this->assertSame('inactive', $subscription->refresh()->status);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_expired_active_customer_with_package_can_receive_grace_period(): void
     {
         Carbon::setTestNow('2026-06-20 12:00:00');
@@ -908,6 +1022,7 @@ class CustomerControllerTest extends TestCase
             $this->assertSame('active', $customer->status);
             $this->assertSame(3, $customer->grace_days);
             $this->assertSame('2026-06-23', $customer->grace_until->format('Y-m-d'));
+            $this->assertSame('2026-06-23', $customer->activeUntil()?->format('Y-m-d'));
             $this->assertNotNull($customer->grace_used_at);
         } finally {
             Carbon::setTestNow();
@@ -1182,7 +1297,7 @@ class CustomerControllerTest extends TestCase
         }
     }
 
-    public function test_inactive_customer_with_no_paid_month_and_used_grace_still_shows_activate_button(): void
+    public function test_inactive_customer_with_no_paid_month_and_used_grace_has_no_activation_button(): void
     {
         Carbon::setTestNow('2026-08-11 10:00:00');
 
@@ -1222,7 +1337,7 @@ class CustomerControllerTest extends TestCase
                 ->get(route('customers.index'))
                 ->assertOk()
                 ->assertSee('No paid month')
-                ->assertSee('Activate until')
+                ->assertDontSee('Activate until')
                 ->assertSee('Grace already used');
         } finally {
             Carbon::setTestNow();

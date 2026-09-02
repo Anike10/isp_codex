@@ -47,7 +47,6 @@ return [
             'items' => [
                 'grant_grace_period' => ['label' => 'Grant Grace Period', 'menus' => ['Party grace period action']],
                 'override_service_validity' => ['label' => 'Force / Override Validity Date', 'menus' => ['Party validity override action']],
-                'quick_activate_service' => ['label' => 'Quick-Activate To Next Date', 'menus' => ['Party quick-activate action']],
                 'force_service_status' => ['label' => 'Force Service Active / Inactive', 'menus' => ['Party force active/inactive action']],
                 'mark_special_customer' => ['label' => 'Mark Party Special (Never Suspend)', 'menus' => ['Special party toggle']],
                 'set_special_package_price' => ['label' => 'Set Party Special Package Price', 'menus' => ['Party special price field']],

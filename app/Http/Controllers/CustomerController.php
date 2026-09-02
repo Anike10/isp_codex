@@ -40,6 +40,7 @@ class CustomerController extends Controller
         $perPage = $this->perPage($request, 200);
         $today = now()->toDateString();
         $expiryCountQuery = Customer::query()
+            ->visibleInCustomerList()
             ->where('never_suspend', false)
             ->whereNotNull('service_valid_until');
         $expirySummary = [
@@ -146,6 +147,10 @@ class CustomerController extends Controller
         if ($data['never_suspend']) {
             // A special ISP customer is never suspended, so the line stays active.
             $data['status'] = 'active';
+        } elseif (! empty($data['internet_package_id'])) {
+            // Assigning a package does not grant service. A normal ISP line only
+            // becomes active after payment or an approved grace period.
+            $data['status'] = 'inactive';
         }
         $this->normalizeIpMode($data);
         $this->ensureFixedIpIsAvailable($data);
@@ -173,7 +178,8 @@ class CustomerController extends Controller
                 'customer_id' => $customer->id,
                 'internet_package_id' => $data['internet_package_id'],
                 'start_date' => $data['start_date'] ?? now()->toDateString(),
-                'status' => 'active',
+                'status' => $customer->status,
+                'end_date' => $customer->status === 'inactive' ? now()->toDateString() : null,
             ]);
         }
 
@@ -264,6 +270,12 @@ class CustomerController extends Controller
             // A special ISP customer is never suspended, so keep the line active
             // and reconnect it to the service profile on the next sync.
             $data['status'] = 'active';
+        } elseif (! empty($data['internet_package_id']) && $data['status'] === 'active') {
+            $activeUntil = $customer->activeUntil();
+            if (! $activeUntil || $activeUntil->lt(now()->startOfDay())) {
+                // An edit may not bypass billing by turning a no-validity line on.
+                $data['status'] = 'inactive';
+            }
         }
         $this->normalizeIpMode($data);
         $this->ensureFixedIpIsAvailable($data);
@@ -272,12 +284,14 @@ class CustomerController extends Controller
             $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
             $customer->load('mikrotikRouters');
             $oldCommissionPercent = (float) $customer->reseller_commission_percent;
-            $activeSubscription = $customer->activeSubscription()->with('package')->lockForUpdate()->first();
-            $customer->setRelation('activeSubscription', $activeSubscription);
-            $oldSnapshot = $recordVersionService->snapshot($customer, ['activeSubscription.package']);
+            $currentSubscription = $customer->activeSubscription()->with('package')->lockForUpdate()->first()
+                ?: $customer->subscriptions()->with('package')->latest('id')->lockForUpdate()->first();
+            $customer->setRelation('activeSubscription', $currentSubscription?->status === 'active' ? $currentSubscription : null);
+            $customer->setRelation('latestSubscription', $currentSubscription);
+            $oldSnapshot = $recordVersionService->snapshot($customer, ['activeSubscription.package', 'latestSubscription.package']);
 
             $newPackageId = ! empty($data['internet_package_id']) ? (int) $data['internet_package_id'] : null;
-            $oldPackageId = $activeSubscription?->internet_package_id ? (int) $activeSubscription->internet_package_id : null;
+            $oldPackageId = $currentSubscription?->internet_package_id ? (int) $currentSubscription->internet_package_id : null;
             $oldRouterIds = $customer->mikrotikRouters->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all();
             if ($oldRouterIds === [] && $customer->mikrotik_router_id) {
                 $oldRouterIds = [(int) $customer->mikrotik_router_id];
@@ -299,27 +313,29 @@ class CustomerController extends Controller
             $customer->mikrotikRouters()->sync($data['mikrotik_router_ids']);
 
             if (! empty($data['internet_package_id'])) {
-                if ($activeSubscription) {
-                    $activeSubscription->update([
+                if ($currentSubscription) {
+                    $currentSubscription->update([
                         'internet_package_id' => $data['internet_package_id'],
                         // A special price belongs to one package; drop it when the
                         // party is moved to a different package.
-                        'custom_price' => (int) $data['internet_package_id'] === (int) $activeSubscription->internet_package_id
-                            ? $activeSubscription->custom_price
+                        'custom_price' => (int) $data['internet_package_id'] === (int) $currentSubscription->internet_package_id
+                            ? $currentSubscription->custom_price
                             : null,
-                        'start_date' => $data['start_date'] ?? $activeSubscription->start_date ?? now()->toDateString(),
-                        'end_date' => null,
+                        'start_date' => $data['start_date'] ?? $currentSubscription->start_date ?? now()->toDateString(),
+                        'status' => $customer->status,
+                        'end_date' => $customer->status === 'inactive' ? now()->toDateString() : null,
                     ]);
                 } else {
                     Subscription::create([
                         'customer_id' => $customer->id,
                         'internet_package_id' => $data['internet_package_id'],
                         'start_date' => $data['start_date'] ?? now()->toDateString(),
-                        'status' => 'active',
+                        'status' => $customer->status,
+                        'end_date' => $customer->status === 'inactive' ? now()->toDateString() : null,
                     ]);
                 }
-            } elseif ($activeSubscription && ! $data['never_suspend']) {
-                $activeSubscription->update([
+            } elseif ($currentSubscription && ! $data['never_suspend']) {
+                $currentSubscription->update([
                     'status' => 'inactive',
                     'end_date' => now()->toDateString(),
                 ]);
@@ -334,7 +350,7 @@ class CustomerController extends Controller
                 $billingSubscription?->update(['custom_price' => $customPriceInput]);
             }
 
-            $newSnapshot = $recordVersionService->snapshot($customer->refresh(), ['activeSubscription.package']);
+            $newSnapshot = $recordVersionService->snapshot($customer->refresh(), ['activeSubscription.package', 'latestSubscription.package']);
             $recordVersionService->recordUpdate($customer, $oldSnapshot, $newSnapshot, [
                 'source' => 'party_edit',
                 'party_name' => $customer->name,
@@ -525,43 +541,49 @@ class CustomerController extends Controller
 
         if ($field === 'package') {
             $packageId = blank($value) ? null : (int) $value;
-            $package = $packageId ? InternetPackage::query()->find($packageId) : null;
 
             DB::transaction(function () use ($customer, $packageId): void {
-                $activeSubscription = $customer->subscriptions()
+                $lockedCustomer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+                $currentSubscription = $lockedCustomer->subscriptions()
                     ->where('status', 'active')
                     ->lockForUpdate()
                     ->latest('id')
-                    ->first();
+                    ->first()
+                    ?: $lockedCustomer->subscriptions()->lockForUpdate()->latest('id')->first();
 
                 if ($packageId) {
-                    if ($activeSubscription) {
-                        $activeSubscription->update([
+                    $serviceIsActive = $lockedCustomer->hasCurrentServiceAccess();
+                    $lockedCustomer->update(['status' => $serviceIsActive ? 'active' : 'inactive']);
+
+                    if ($currentSubscription) {
+                        $currentSubscription->update([
                             'internet_package_id' => $packageId,
                             // Moving to another package drops any special price.
-                            'custom_price' => $packageId === (int) $activeSubscription->internet_package_id
-                                ? $activeSubscription->custom_price
+                            'custom_price' => $packageId === (int) $currentSubscription->internet_package_id
+                                ? $currentSubscription->custom_price
                                 : null,
-                            'start_date' => $activeSubscription->start_date ?: now()->toDateString(),
-                            'end_date' => null,
+                            'start_date' => $currentSubscription->start_date ?: now()->toDateString(),
+                            'status' => $lockedCustomer->status,
+                            'end_date' => $lockedCustomer->status === 'inactive' ? now()->toDateString() : null,
                         ]);
                     } else {
-                        $customer->subscriptions()->create([
+                        $lockedCustomer->subscriptions()->create([
                             'internet_package_id' => $packageId,
                             'start_date' => now()->toDateString(),
-                            'status' => 'active',
+                            'status' => $lockedCustomer->status,
+                            'end_date' => $lockedCustomer->status === 'inactive' ? now()->toDateString() : null,
                         ]);
                     }
-                } elseif ($activeSubscription) {
-                    $activeSubscription->update([
+                } elseif ($currentSubscription) {
+                    $currentSubscription->update([
                         'status' => 'inactive',
                         'end_date' => now()->toDateString(),
                     ]);
                 }
             });
 
-            $freshCustomer = $customer->fresh(['activeSubscription.package']);
-            $currentPackage = $freshCustomer->activeSubscription?->package;
+            $freshCustomer = $customer->fresh(['activeSubscription.package', 'latestSubscription.package']);
+            $currentPackage = ($freshCustomer->activeSubscription ?: $freshCustomer->latestSubscription)?->package;
 
             $sync = $this->syncMikrotikCustomer($freshCustomer);
 
@@ -702,60 +724,15 @@ class CustomerController extends Controller
             ->with('warning', $syncResult['warning']);
     }
 
-    public function activateUntilNextDate(Request $request, Customer $customer, ConcessionLogService $concessionLog)
+    public function activateUntilNextDate(Request $request, Customer $customer)
     {
-        $subscription = $customer->activeSubscription ?: $customer->subscriptions()->with('package')->latest()->first();
-        $data = $request->validate([
+        $request->validate([
             'active_until' => ['nullable', 'date', 'after_or_equal:today'],
         ]);
 
-        if (! $subscription || ! $subscription->package) {
-            return back()->withErrors(['active_until' => 'No package found for this customer to activate.']);
-        }
-
-        $previousValidUntil = $customer->service_valid_until;
-        $nextDate = $data['active_until'] ?? now()->addMonthNoOverflow()->toDateString();
-        $detail = PartyNote::stamp(sprintf(
-            'Activated package to %s via quick-activate action.',
-            Carbon::parse($nextDate)->format('d/m/Y')
-        ));
-
-        DB::transaction(function () use ($customer, $subscription, $nextDate, $detail): void {
-            $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
-            $subscription = Subscription::query()->whereKey($subscription->id)->lockForUpdate()->firstOrFail();
-
-            $customer->update([
-                'status' => 'active',
-                'service_valid_from' => now()->toDateString(),
-                'service_valid_until' => $nextDate,
-                'service_validity_note' => $detail,
-                'notes' => trim(implode("\n", array_filter([$customer->notes, $detail]))),
-                'grace_until' => null,
-                'grace_days' => null,
-                'grace_used_at' => null,
-            ]);
-
-            $subscription->update([
-                'status' => 'active',
-                'end_date' => null,
-            ]);
-        });
-
-        $concessionLog->closeOpenForceActive($customer, now(), 'quick_activate');
-        $concessionLog->recordValidityChange(
-            $customer,
-            $subscription,
-            'quick_activate',
-            $previousValidUntil,
-            Carbon::parse($nextDate),
-            null,
-        );
-
-        $syncResult = $this->syncMikrotikCustomer($customer->refresh());
-
-        return back()
-            ->with('success', 'Package has been activated until '.Carbon::parse($nextDate)->format('d/m/Y').". MikroTik user {$syncResult['status']}.")
-            ->with('warning', $syncResult['warning']);
+        return back()->withErrors([
+            'active_until' => 'Quick activation is disabled. Record a payment or grant a grace period to activate service.',
+        ]);
     }
 
     public function updateServiceValidity(Request $request, Customer $customer, ConcessionLogService $concessionLog)
@@ -1257,7 +1234,9 @@ class CustomerController extends Controller
 
     private function customerQueryForIndex(Request $request, bool $hasImportedSecretTable, bool $onlyDeleted): Builder
     {
-        $query = $onlyDeleted ? Customer::onlyTrashed() : Customer::query();
+        $query = $onlyDeleted
+            ? Customer::onlyTrashed()
+            : Customer::query()->visibleInCustomerList();
         $normalizeDate = static function (mixed $value): ?string {
             $date = trim((string) $value);
             if (! preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $date, $matches)) {
@@ -1275,10 +1254,19 @@ class CustomerController extends Controller
             'in_7_days',
         ], true) ? $request->query('expiry_window') : null;
 
+        $relations = [
+            'activeSubscription.package',
+            'latestSubscription.package',
+            'mikrotikRouters:id,name,status',
+            'mikrotikRouter:id,name,status',
+        ];
+        if ($hasImportedSecretTable) {
+            $relations[] = 'importedSecrets.router:id,name,status';
+        }
+
         $query
-            ->with(['activeSubscription.package', 'latestSubscription.package'])
+            ->with($relations)
             ->withExists('subscriptions')
-            ->withExists('invoices')
             ->withSum('invoices as total_due_amount', 'due_amount')
             ->withMax(['invoices as latest_paid_billing_month' => function ($query) {
                 $query->where('invoice_type', 'service')
@@ -1304,9 +1292,6 @@ class CustomerController extends Controller
             ->when($request->filled('package_id'), fn ($query) => $query->whereHas('activeSubscription', fn ($query) => $query->where('internet_package_id', $request->integer('package_id'))))
             ->when($request->query('due_state') === 'due', fn ($query) => $query->whereHas('invoices', fn ($query) => $query->where('due_amount', '>', 0)))
             ->when($request->query('due_state') === 'advance', fn ($query) => $query->where('account_balance', '>', 0))
-            ->when($hasImportedSecretTable, function ($query) {
-                return $query->withExists('importedSecret');
-            })
             ->when($expiryWindow || $expiringDate || $expiredDate, function ($query) {
                 $query->where('never_suspend', false);
             })

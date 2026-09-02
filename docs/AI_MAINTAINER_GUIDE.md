@@ -1287,8 +1287,8 @@ Read this section before changing billing, bKash SMS, customer status, or MikroT
 
 - Customer `connection_id` is optional for product-only customers who are not ISP subscribers.
 - When assigning an internet package/subscription, `connection_id` is required because it becomes the ISP/MikroTik user ID.
-- Customer `mikrotik_username` is displayed as User ID on `/customers`; if missing, use `connection_id`; if both are missing, treat the customer as product-only.
-- Customers without a fixed IP show their latest dial-up/learned IP beneath the User ID on `/customers`; fixed-IP customers do not show that secondary value.
+- `/customers` displays the MikroTik username (falling back to `connection_id`) and the fixed/latest learned IP together as `MikroTik ID : IP`. The next line lists every router where an imported secret was detected, falling back to the customer's assigned MikroTik targets when no imported snapshot exists.
+- Vendor-only parties are excluded from `/customers`; a party that is both a vendor and a customer/reseller remains visible. Vendor-only records remain available to purchase and warranty workflows.
 - Customer and network location maps open with the Google Roads layer selected by default.
 - `never_suspend` (Special ISP) customers have no validity deadline. Customer lists, filters, summaries, forms, and details must not present an expiry date for them.
 - The `customers` table also acts as the party ledger. Use `is_customer` and `is_vendor` to classify parties as customer, vendor, or both.
@@ -1313,6 +1313,8 @@ account_balance - total_due_amount
   `internet_packages.monthly_price`; already-created invoices are unchanged.
 - For normal customers, current-month service bill is generated when bKash payment SMS is received and matched to that customer.
 - Previous due matters. Do not activate a customer line just because the current month bill is paid. Activate only when total remaining due across all invoices is zero.
+- A normal ISP customer with no paid service month/validity and no current grace period must be inactive, even when its RouterOS secret is enabled. Assigning a package or importing an enabled secret does not activate service.
+- Payment and grace are the normal activation paths. The former quick-activate action is no longer shown and its legacy endpoint rejects activation.
 - Organization settings define the daily window in which the hourly
   `billing:disable-overdue-customers` job may run (default `12:00-17:00`). Both
   the scheduler and command guard the window; an intentional out-of-window

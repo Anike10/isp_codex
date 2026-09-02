@@ -683,6 +683,8 @@ class MikrotikImportService
 
                 $package = $this->packageForProfile($secret->profile, $router);
                 $note = $this->importSourceNote($router, $secret);
+                $activeUntil = $customer?->activeUntil();
+                $hasCurrentAccess = $activeUntil && $activeUntil->gte(now()->startOfDay());
                 $customerData = [
                     'name' => $name,
                     'phone' => $customer?->phone ?: 'Not provided',
@@ -693,7 +695,9 @@ class MikrotikImportService
                     'mikrotik_router_id' => $router?->id,
                     'address' => $customer?->address ?: 'Imported from MikroTik '.($router?->name ?? 'router'),
                     'notes' => $this->appendImportNote($customer?->notes, $note),
-                    'status' => $secret->disabled ? 'inactive' : 'active',
+                    // A live RouterOS secret is not proof of payment. Imported
+                    // normal customers stay inactive until payment or grace.
+                    'status' => (! $secret->disabled && $hasCurrentAccess) ? 'active' : 'inactive',
                     'is_customer' => true,
                     'is_vendor' => $customer?->is_vendor ?? false,
                     'never_suspend' => $neverSuspend,
@@ -711,7 +715,7 @@ class MikrotikImportService
                     $created++;
                 }
 
-                $this->attachSubscription($customer, $package, $secret->disabled && ! $neverSuspend);
+                $this->attachSubscription($customer, $package, $customerData['status'] !== 'active');
                 $secret->update(['customer_id' => $customer->id]);
             }
         });

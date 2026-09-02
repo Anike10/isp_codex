@@ -158,9 +158,9 @@ class UnmanagedRouterUsersTest extends TestCase
 
         $this->assertNotNull($a);
         $this->assertSame('router-user-a', $a->mikrotik_username);
-        $this->assertSame('active', $a->status);
+        $this->assertSame('inactive', $a->status);
         $this->assertSame($a->id, $secretA->fresh()->customer_id);
-        $this->assertTrue($a->subscriptions()->where('status', 'active')->exists());
+        $this->assertTrue($a->subscriptions()->where('status', 'inactive')->exists());
 
         $this->assertNotNull($b);
         $this->assertSame('inactive', $b->status);

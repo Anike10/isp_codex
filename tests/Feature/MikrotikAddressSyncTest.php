@@ -316,7 +316,9 @@ class MikrotikAddressSyncTest extends TestCase
         $this->assertNull($customer->learned_ip_package_id);
         $this->assertNull($customer->last_connected_ip);
         $this->assertNull($customer->last_connected_at);
-        $this->assertSame($newPackage->id, $customer->activeSubscription()->value('internet_package_id'));
+        $this->assertSame('inactive', $customer->status);
+        $this->assertSame($newPackage->id, $customer->latestSubscription()->value('internet_package_id'));
+        $this->assertSame('inactive', $customer->latestSubscription()->value('status'));
     }
 
     public function test_old_profile_session_is_recorded_only_as_last_connection_history(): void

@@ -88,12 +88,13 @@ class Customer extends Model
 
     public function activeUntil(): ?Carbon
     {
-        if ($this->service_valid_until) {
-            return $this->service_valid_until->copy()->endOfDay();
-        }
+        $validityDates = collect([
+            $this->service_valid_until?->copy()->endOfDay(),
+            $this->grace_until?->copy()->endOfDay(),
+        ])->filter();
 
-        if ($this->hasActiveGracePeriod()) {
-            return $this->grace_until->copy()->endOfDay();
+        if ($validityDates->isNotEmpty()) {
+            return $validityDates->sortByDesc(fn (Carbon $date) => $date->getTimestamp())->first();
         }
 
         $earliestUnpaidMonth = $this->earliest_unpaid_billing_month
@@ -117,6 +118,18 @@ class Customer extends Model
         }
 
         return Carbon::createFromFormat('Y-m', $billingMonth)->endOfMonth();
+    }
+
+    public function hasCurrentServiceAccess(?Carbon $onDate = null): bool
+    {
+        if ($this->never_suspend) {
+            return true;
+        }
+
+        $activeUntil = $this->activeUntil();
+
+        return $activeUntil !== null
+            && $activeUntil->gte(($onDate ?: now())->copy()->startOfDay());
     }
 
     public function activeDaysRemaining(): ?int
@@ -205,6 +218,16 @@ class Customer extends Model
     public function mikrotikRouters(): BelongsToMany
     {
         return $this->belongsToMany(MikrotikRouter::class)->withTimestamps();
+    }
+
+    public function scopeVisibleInCustomerList(Builder $query): Builder
+    {
+        return $query->where(function (Builder $query): void {
+            $query->where('is_vendor', false)
+                ->orWhereNull('is_vendor')
+                ->orWhere('is_customer', true)
+                ->orWhere('is_reseller', true);
+        });
     }
 
     public function scopeAssignedToMikrotikRouter(Builder $query, int $routerId): Builder
@@ -319,5 +342,10 @@ class Customer extends Model
     public function importedSecret(): HasOne
     {
         return $this->hasOne(MikrotikImportedSecret::class);
+    }
+
+    public function importedSecrets(): HasMany
+    {
+        return $this->hasMany(MikrotikImportedSecret::class);
     }
 }

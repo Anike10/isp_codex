@@ -542,9 +542,24 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
         })
         ->pluck('id');
 
+    $noPaidMonthCustomerIds = Customer::query()
+        ->where('status', 'active')
+        ->where('never_suspend', false)
+        ->whereNull('service_valid_until')
+        ->where(function ($query) use ($date) {
+            $query->whereNull('grace_until')
+                ->orWhereDate('grace_until', '<', $date);
+        })
+        ->whereHas('subscriptions')
+        ->whereDoesntHave('invoices', fn ($query) => $query
+            ->where('invoice_type', 'service')
+            ->where('due_amount', '<=', 0))
+        ->pluck('id');
+
     $customerIds = $overdueCustomerIds
         ->merge($expiredGraceCustomerIds)
         ->merge($expiredValidityCustomerIds)
+        ->merge($noPaidMonthCustomerIds)
         ->unique()
         ->values();
 

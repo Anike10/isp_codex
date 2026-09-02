@@ -12,7 +12,6 @@
     $authUser = auth()->user();
     $canGrantGrace = (bool) $authUser?->hasPermission('grant_grace_period');
     $canOverrideValidity = (bool) $authUser?->hasPermission('override_service_validity');
-    $canQuickActivate = (bool) $authUser?->hasPermission('quick_activate_service');
     $canForceStatus = (bool) $authUser?->hasPermission('force_service_status');
 
     $isSpecial = (bool) $customer->never_suspend;
