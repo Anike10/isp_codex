@@ -1435,25 +1435,28 @@ PPPoE sync:
   default 10; migration `2026_08_29_000006` replaced the old
   `pppoe_sync_interval_minutes`). The hourly scheduler checks whether each
   router's `last_pppoe_sync_at + interval_days` is past. This is the slow full
-  reconcile; per-party changes still sync immediately on edit/payment, and
-  `mikrotik:sync-active-macs` handles the periodic MAC capture.
+  reconcile; per-party changes still sync immediately on edit/payment, and the
+  per-router PPP listener handles live MAC capture.
 - Imported-secret refresh: `php artisan mikrotik:import-secrets`; the scheduler
   runs it every three hours.
-- Active-connection MAC sync: `php artisan mikrotik:sync-active-macs`. Scheduled
-  hourly and runs for **every** active router on every dispatch — there is no
-  per-router interval any more (`--force` is kept only for backward
-  compatibility; the `mikrotik_routers.active_mac_sync_interval_days` column is
-  retained but unused, and the router form no longer exposes it).
-  `MikrotikCustomerSyncService::syncActiveConnectionMacs()` reads `/ppp/active`
-  (transport-agnostic, via `MikrotikImportService::liveRecords`) and, for every
+- PPP session listener: `php artisan mikrotik:listen-ppp-sessions {router-id}`.
+  Run one Supervisor-managed process per active binary-API router; see
+  `docs/PPP_SESSION_LISTENER.md`. It starts `/ppp/active/listen`, performs one
+  startup reconciliation, then records pushed add/remove events and the final
+  disconnect counters without periodic polling. REST transport cannot stream.
+- Manual active-connection reconciliation: `php artisan
+  mikrotik:sync-active-macs`. This command is no longer scheduled (`--force` is
+  kept only for backward compatibility; the old interval column remains
+  unused). `MikrotikCustomerSyncService::syncActiveConnectionMacs()` reads
+  `/ppp/active` and, for every
   session whose name matches a party's `mikrotik_username` / `connection_id` on
   that router, writes the session `caller-id` to `customers.last_connected_mac`
   (normalised uppercase) plus `last_connected_at` / `last_connected_ip`. Shown as
   "Last device MAC" in the party profile and "Last active MAC sync" on the
-  router. `syncActiveConnectionMacsForCustomer(Customer)` runs the same poll for
+  router. `syncActiveConnectionMacsForCustomer(Customer)` runs the same read for
   just one party's own router(s); `CustomerController::store()` calls it right
   after creating a party so a line that is already online gets its MAC — and so
-  its ONU VLAN / Rx-Tx on the party list — without waiting for the hourly job.
+  its ONU VLAN / Rx-Tx on the party list — without waiting for the next event.
 - The permission-protected `/router-users` page lists **every** imported PPPoE
   secret via `MikrotikImportService::importedSecretsOverview(?routerId)`, which
   decorates each row with `is_unmanaged` and `matched_customer` (the linked
@@ -1715,8 +1718,8 @@ The Router Users page's "Refresh secrets" and "Pull active connections" buttons
 also run `MikrotikCustomerSyncService::syncActiveConnectionMacs()` for every
 active router, so a manual pull immediately writes each live session's
 `caller-id` onto the matching party's `last_connected_mac` (used for the OLT/ONU
-lookup on the parties list). The scheduled `mikrotik:sync-active-macs` keeps it
-fresh between manual pulls.
+lookup on the parties list). The per-router PPP listener keeps it fresh between
+manual pulls.
 
 ONU name editing uses a wide field and allows up to 255 App characters. OLT
 models may accept fewer characters or return a truncated fixed-width name. A

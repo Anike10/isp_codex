@@ -87,4 +87,43 @@ class RouterOsClientTest extends TestCase
         $this->assertSame([], $client->command('/ppp/secret/set', ['.id' => '*A']));
         $this->assertSame([['name' => 'next-record']], $client->command('/ppp/secret/print'));
     }
+
+    public function test_long_running_command_can_read_one_event_without_waiting_for_done(): void
+    {
+        $client = new class extends RouterOsClient
+        {
+            public array $writtenSentences = [];
+
+            public array $incomingSentences = [
+                ['!re', '=.id=*A', '=name=party-a', '=.dead=yes', '=bytes-out=12555'],
+            ];
+
+            protected function writeSentence(array $words): void
+            {
+                $this->writtenSentences[] = $words;
+            }
+
+            protected function readSentence(): array
+            {
+                return array_shift($this->incomingSentences) ?? [];
+            }
+
+            protected function waitForData(int $waitSeconds): bool
+            {
+                return $this->incomingSentences !== [];
+            }
+        };
+
+        $client->startCommand('/ppp/active/listen', ['.proplist' => '.id,name,bytes-out']);
+        $reply = $client->nextReply();
+
+        $this->assertSame([
+            '/ppp/active/listen',
+            '=.proplist=.id,name,bytes-out',
+        ], $client->writtenSentences[0]);
+        $this->assertSame('!re', $reply['type']);
+        $this->assertSame('*A', $reply['data']['.id']);
+        $this->assertSame('yes', $reply['data']['.dead']);
+        $this->assertSame('12555', $reply['data']['bytes-out']);
+    }
 }

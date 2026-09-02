@@ -4,7 +4,7 @@
 <div class="topbar">
     <div>
         <h1>{{ $customer->name }} &mdash; Data Usage</h1>
-        <div class="muted">Download &amp; upload from PPP disconnect logs, {{ $view === 'day' ? 'grouped by day' : 'one row per session' }}.</div>
+        <div class="muted">Download &amp; upload from completed RouterOS PPP sessions, {{ $view === 'day' ? 'grouped by day' : 'one row per session' }}.</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn light" href="{{ route('troubleshoot.data-usage.select', ['view' => $view]) }}">Pick another party</a>

@@ -13,7 +13,7 @@
 <div class="topbar">
     <div>
         <h1>Troubleshoot &mdash; Data Usage Summary</h1>
-        <div class="muted">Every party's total download &amp; upload for the selected window, from PPP disconnect logs. Click a column to sort.</div>
+        <div class="muted">Every party's completed-session download &amp; upload for the selected window, captured from RouterOS events. Click a column to sort.</div>
     </div>
 </div>
 

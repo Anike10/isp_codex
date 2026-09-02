@@ -194,7 +194,12 @@ class OltLiveOutputParser
 
             $records[$current]['raw_live_output'] = trim(($records[$current]['raw_live_output'] ?? '')."\n".$line);
 
-            if (preg_match('/\b([0-9a-f]{2}(?::[0-9a-f]{2}){5})\b/i', $line, $match)) {
+            // Generic rows may carry the ONU MAC directly after the PON/ONU
+            // coordinates. Do not copy an arbitrary MAC from later command
+            // output while the previous ONU is still the active context. GPON
+            // FDB output also contains uplink rows such as "-- <mac> ... GE02";
+            // treating one of those as the ONU serial corrupts future matching.
+            if (preg_match('/^\s*[1-8]\/\d{1,3}\b.*?\b([0-9a-f]{2}(?::[0-9a-f]{2}){5})\b/i', $line, $match)) {
                 $records[$current]['mac_address'] = strtolower($match[1]);
             }
 

@@ -30,14 +30,7 @@ class RouterOsClient
 
     public function command(string $command, array $attributes = []): array
     {
-        $words = [$command];
-
-        foreach ($attributes as $key => $value) {
-            $prefix = str_starts_with((string) $key, '?') ? '' : '=';
-            $words[] = "{$prefix}{$key}={$value}";
-        }
-
-        $this->writeSentence($words);
+        $this->startCommand($command, $attributes);
 
         $responses = [];
         $trapMessage = null;
@@ -85,6 +78,52 @@ class RouterOsClient
         }
     }
 
+    /**
+     * Send a command without waiting for its terminating `!done` reply.
+     *
+     * RouterOS `listen` commands deliberately never finish, so a daemon starts
+     * the command and consumes its replies through {@see nextReply()} instead
+     * of using the request/response-oriented {@see command()} method.
+     */
+    public function startCommand(string $command, array $attributes = []): void
+    {
+        $words = [$command];
+
+        foreach ($attributes as $key => $value) {
+            $prefix = str_starts_with((string) $key, '?') ? '' : '=';
+            $words[] = "{$prefix}{$key}={$value}";
+        }
+
+        $this->writeSentence($words);
+    }
+
+    /**
+     * Read one reply from a long-running command, returning null while idle.
+     *
+     * @return array{type: string, data: array<string, string>}|null
+     */
+    public function nextReply(int $waitSeconds = 1): ?array
+    {
+        if (! $this->waitForData(max(0, $waitSeconds))) {
+            return null;
+        }
+
+        do {
+            $sentence = $this->readSentence();
+        } while ($sentence === [] && $this->waitForData(0));
+
+        if ($sentence === []) {
+            return null;
+        }
+
+        $reply = (string) array_shift($sentence);
+
+        return [
+            'type' => $reply,
+            'data' => $this->parseAttributes($sentence),
+        ];
+    }
+
     public function close(): void
     {
         if (is_resource($this->socket)) {
@@ -114,6 +153,7 @@ class RouterOsClient
 
             if ($reply === '!trap') {
                 $this->plainLoginFailure = $data['message'] ?? null;
+
                 return false;
             }
         }
@@ -200,6 +240,24 @@ class RouterOsClient
 
             $sentence[] = $this->read($length);
         }
+    }
+
+    protected function waitForData(int $waitSeconds): bool
+    {
+        if (! is_resource($this->socket)) {
+            throw new RuntimeException('MikroTik socket is not connected.');
+        }
+
+        $read = [$this->socket];
+        $write = null;
+        $except = null;
+        $ready = @stream_select($read, $write, $except, $waitSeconds);
+
+        if ($ready === false) {
+            throw new RuntimeException('Cannot wait for the RouterOS API event stream.');
+        }
+
+        return $ready > 0;
     }
 
     private function writeLength(int $length): void

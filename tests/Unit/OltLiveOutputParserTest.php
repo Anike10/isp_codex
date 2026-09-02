@@ -18,7 +18,7 @@ ONU Rx optical power(dBm): -18.79
 description: KPI Office
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(3, $records);
         $this->assertSame(1, $records[0]['pon_port']);
@@ -44,7 +44,7 @@ PON/ONU ONU-Name     Mac-address       Temperature  Voltage      Bias         Tx
     1/1 Access krishi bank 00:8d:ff:02:2a:17  43 C      3.22 V        18 mA       1.9296 dBm   -28.2391 dBm
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(1, $records);
         $this->assertSame(1, $records[0]['pon_port']);
@@ -65,7 +65,7 @@ OUTPUT;
  1/14    70:a5:6a:0b:4d:ca Initial   TRUE  FALSE  -                        IBBL_Bank    2/9/24 https
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(1, $records);
         $this->assertSame('IBBL_Bank', $records[0]['name']);
@@ -76,9 +76,9 @@ OUTPUT;
     public function test_it_ignores_invalid_utf8_terminal_bytes(): void
     {
         $output = "1/4     80:d4:a5:4d:6c:cf Online TRUE TRUE 2026/05/17 16:36:27 SonoHome \xE0\n"
-            ."1/4 SonoHome 80:d4:a5:4d:6c:cf 47 C 3.27 V 10 mA 2.1838 dBm -24.8149 dBm";
+            .'1/4 SonoHome 80:d4:a5:4d:6c:cf 47 C 3.27 V 10 mA 2.1838 dBm -24.8149 dBm';
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(1, $records);
         $this->assertSame(1, $records[0]['pon_port']);
@@ -102,7 +102,7 @@ PON/ONU ONU-Name     Mac-address       Temperature  Voltage      Bias         Tx
 1/4 SonoHome     80:d4:a5:4d:6c:cf  47 C      3.27 V        10 mA       2.1838 dBm   -24.8149 dBm
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(2, $records);
         $this->assertSame(4, $records[0]['pon_port']);
@@ -127,7 +127,7 @@ OUTPUT;
 [2026/05/14 19:17:07]  Warning: ONU 1/1 00:8d:ff:02:2a:17 Onu deregister, Reason:Laser out
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(1, $records);
         $this->assertSame('2026-05-18 09:43:48', $records[0]['last_registered_at']->format('Y-m-d H:i:s'));
@@ -142,7 +142,7 @@ OUTPUT;
 [2026/05/18 17:08:05]  Warning: ONT 1/12 XPONa4388257 ONT deregister, Reason:LOS
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(1, $records);
         $this->assertSame(1, $records[0]['pon_port']);
@@ -167,7 +167,7 @@ show port-vlan
 ----------------------------------------------------------------------------------------------------
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(1, $records);
         $this->assertSame(1, $records[0]['pon_port']);
@@ -193,7 +193,7 @@ Total PON mac address learning: 404
  PON02  3         98:25:4a:aa:13:da       1       dynamic   Kpi_Office_huawi
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(2, $records);
         $this->assertSame(1, $records[0]['pon_port']);
@@ -218,7 +218,7 @@ PON/ONU    ONT-SN    Temp Voltage    Bias   Tx power     Rx power     OLT Rx    
     1/0 D0111d106890 41 C 3.34 V   13.05 mA 1.8720 dBm   -13.4500 dBm -inf dBm     tisha_Surovi 13.3
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(2, $records);
         $this->assertSame(1, $records[0]['pon_port']);
@@ -246,7 +246,7 @@ show port-vlan
 ----------------------------------------------------------------------------------------------------
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(1, $records);
         $this->assertSame(1, $records[0]['pon_port']);
@@ -270,7 +270,7 @@ show mac-address all
  39    80:af:ca:ba:ad:f3   21    PON02   3    1     dynamic     KPS_Prijom
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(2, $records);
         $this->assertSame(1, $records[0]['pon_port']);
@@ -284,6 +284,25 @@ OUTPUT;
         $this->assertSame(2, $records[1]['pon_port']);
     }
 
+    public function test_gpon_uplink_fdb_mac_does_not_overwrite_the_ont_serial(): void
+    {
+        $output = <<<'OUTPUT'
+3/18     CDTCafb0494c      Active    Online     normal    Initial                     kist Principal sir
+3/18 CDTCafb0494c 37 C 3.28 V   15.50 mA 1.6160 dBm   -17.7740 dBm kist Principal sir
+33    --   PON03 18  1    --   --   --    --            --    Up    Enable  Auto    --     0
+33    74:da:88:f6:07:47   43    PON03   18   1     dynamic     kist Principal sir
+--    5c:62:8b:b6:00:39   21    GE02    --   --    dynamic     --
+OUTPUT;
+
+        $records = (new OltLiveOutputParser)->parse($output);
+
+        $this->assertCount(1, $records);
+        $this->assertSame('CDTCafb0494c', $records[0]['mac_address']);
+        $this->assertSame([
+            ['mac' => '74:da:88:f6:07:47', 'vlan' => 43, 'type' => 'dynamic', 'onu_name' => 'kist Principal sir', 'service_port' => 33, 'gemport' => 1],
+        ], $records[0]['learned_macs']);
+    }
+
     public function test_gpon_learned_mac_name_fills_a_missing_ont_name(): void
     {
         $output = <<<'OUTPUT'
@@ -292,7 +311,7 @@ show mac-address all
  39    80:af:ca:ba:ad:f3   21    PON02   3    1     dynamic     KPS_Prijom
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(1, $records);
         $this->assertSame(2, $records[0]['pon_port']);
@@ -309,7 +328,7 @@ show mac-address port gpon 1
  41    14:6b:9c:b5:4b:45   41    PON01   0    1     dynamic     tisha_Surovi 13.3
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(1, $records);
         $this->assertSame([41], array_column($records[0]['port_vlans'], 'vlan'));
@@ -331,7 +350,7 @@ show ont-info 3
  Last down cause               : LOS
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(1, $records);
         $this->assertSame(1, $records[0]['pon_port']);
@@ -353,7 +372,7 @@ Number of ETH ports           : 4
 Number of POTS ports          : 0
 OUTPUT;
 
-        $records = (new OltLiveOutputParser())->parse($output);
+        $records = (new OltLiveOutputParser)->parse($output);
 
         $this->assertCount(1, $records);
         $this->assertSame(1, $records[0]['pon_port']);

@@ -222,13 +222,13 @@ class PppWebhookTest extends TestCase
         $this->assertSame('webhook', $log->source);
     }
 
-    public function test_delayed_webhook_enriches_a_recent_snapshot_log_without_replacing_its_bytes(): void
+    public function test_delayed_webhook_enriches_a_recent_listener_log_without_replacing_its_bytes(): void
     {
         $router = $this->restRouter('10.0.0.48');
         $log = PppUsageLog::create([
             'mikrotik_router_id' => $router->id,
             'username' => 'late-hook',
-            'source' => 'snapshot',
+            'source' => 'listener',
             'routeros_session_id' => '*A3',
             'download_bytes' => 12345,
             'upload_bytes' => 6789,
@@ -248,7 +248,7 @@ class PppWebhookTest extends TestCase
 
         $this->assertSame(1, PppUsageLog::count());
         $log->refresh();
-        $this->assertSame('webhook+snapshot', $log->source);
+        $this->assertSame('webhook+listener', $log->source);
         $this->assertSame(12345, $log->download_bytes);
         $this->assertSame(6789, $log->upload_bytes);
         $this->assertSame('peer-request', $log->disconnect_reason);
@@ -313,12 +313,18 @@ class PppWebhookTest extends TestCase
         $this->assertNull(PppUsageLog::firstOrFail()->disconnect_reason);
     }
 
-    public function test_webhook_matches_the_onu_by_a_learned_device_mac(): void
+    public function test_webhook_prefers_a_learned_device_mac_over_a_conflicting_onu_serial(): void
     {
+        OltOnu::create([
+            'pon_port' => 3, 'onu_id' => 18, 'mac_address' => '00:8d:ff:02:2a:17',
+            'rx_power_dbm' => -17.77, 'status' => 'online',
+            'last_live_polled_at' => now(),
+        ]);
         $onu = OltOnu::create([
             'pon_port' => 2, 'onu_id' => 7, 'mac_address' => 'aa:aa:aa:aa:aa:aa',
             'learned_macs' => [['mac' => '00:8d:ff:02:2a:17', 'vlan' => 100]],
             'rx_power_dbm' => -30.00, 'status' => 'online',
+            'last_live_polled_at' => now()->subHour(),
         ]);
         $secret = app(PppWebhookService::class)->secret();
 

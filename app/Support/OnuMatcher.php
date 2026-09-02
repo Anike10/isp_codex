@@ -14,7 +14,7 @@ final class OnuMatcher
 {
     /**
      * @param  iterable<int, string|null>  $macs
-     * @return array<string, OltOnu>  keyed by lowercased MAC
+     * @return array<string, OltOnu> keyed by lowercased MAC
      */
     public static function byMac(iterable $macs): array
     {
@@ -40,13 +40,25 @@ final class OnuMatcher
             ->orderByDesc('last_live_polled_at')
             ->get();
 
+        // A learned MAC is direct forwarding-table evidence that the party's
+        // device is behind this ONU. Prefer it over a matching ONU serial when
+        // both exist. The serial match remains a fallback for ONUs whose own
+        // MAC is used as the PPP caller ID.
         $byMac = [];
         foreach ($onus as $onu) {
-            $keys = [mb_strtolower(trim((string) $onu->mac_address))];
             foreach ((array) $onu->learned_macs as $entry) {
-                $keys[] = mb_strtolower(trim((string) (is_array($entry) ? ($entry['mac'] ?? '') : $entry)));
+                $key = mb_strtolower(trim((string) (is_array($entry) ? ($entry['mac'] ?? '') : $entry)));
+
+                if ($key !== '') {
+                    $byMac[$key] ??= $onu;
+                }
             }
-            foreach (array_filter($keys) as $key) {
+        }
+
+        foreach ($onus as $onu) {
+            $key = mb_strtolower(trim((string) $onu->mac_address));
+
+            if ($key !== '') {
                 $byMac[$key] ??= $onu;
             }
         }

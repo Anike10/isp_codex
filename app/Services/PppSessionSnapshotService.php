@@ -8,16 +8,19 @@ use App\Models\OltOnu;
 use App\Models\PppLiveSession;
 use App\Models\PppUsageLog;
 use App\Support\Mac;
+use App\Support\OnuMatcher;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Turns successive `/ppp/active` reads into durable per-session usage rows.
+ * Turns `/ppp/active` snapshots and listen events into durable usage rows.
  *
  * RouterOS does not consistently expose byte/uptime event variables to PPP
  * profile `on-down` scripts. While a session is live, however, `/ppp/active`
  * exposes those counters reliably. We retain its last observed values and
- * finalise a usage row once the session disappears from a successful poll.
+ * finalise a usage row when RouterOS emits the session's `.dead=yes` event.
+ * A full snapshot is still accepted for listener startup reconciliation and
+ * the manual sync command, but normal collection does not require polling.
  */
 class PppSessionSnapshotService
 {
@@ -26,8 +29,13 @@ class PppSessionSnapshotService
      * @param  Collection<int, array<string, mixed>>  $interfaces
      * @return array{captured: int, finalised: int}
      */
-    public function sync(MikrotikRouter $router, Collection $sessions, Collection $interfaces): array
-    {
+    public function sync(
+        MikrotikRouter $router,
+        Collection $sessions,
+        Collection $interfaces,
+        string $source = 'snapshot',
+        bool $finaliseMissing = true
+    ): array {
         $sessions = $sessions
             ->filter(fn ($row): bool => is_array($row)
                 && filled($row['.id'] ?? null)
@@ -40,7 +48,7 @@ class PppSessionSnapshotService
             ->keyBy(fn ($row): string => mb_strtolower(trim((string) $row['name'])));
         $now = now();
 
-        return DB::transaction(function () use ($router, $sessions, $customersByName, $interfacesByName, $now): array {
+        return DB::transaction(function () use ($router, $sessions, $customersByName, $interfacesByName, $now, $source, $finaliseMissing): array {
             $stored = PppLiveSession::query()
                 ->where('mikrotik_router_id', $router->id)
                 ->lockForUpdate()
@@ -63,7 +71,7 @@ class PppSessionSnapshotService
                 // RouterOS can eventually reuse a short `*AB` id. If it now
                 // belongs to another username, close the old snapshot first.
                 if ($existing && mb_strtolower($existing->username) !== $key) {
-                    $this->finalise($existing);
+                    $this->finalise($existing, $source);
                     $existing->delete();
                     $stored->forget($sessionId);
                     $existing = null;
@@ -73,8 +81,9 @@ class PppSessionSnapshotService
                 // On these RouterOS builds `/ppp/active` supplies identity and
                 // uptime, while the live dynamic `<pppoe-user>` interface owns
                 // the actual counters. Prefer PPP fields if a build has them.
-                $download = $this->counter($row['bytes-out'] ?? $interface['tx-byte'] ?? null);
-                $upload = $this->counter($row['bytes-in'] ?? $interface['rx-byte'] ?? null);
+                [$combinedDownload, $combinedUpload] = $this->combinedCounters($row['bytes'] ?? null);
+                $download = $this->counter($row['bytes-out'] ?? $interface['tx-byte'] ?? $combinedDownload);
+                $upload = $this->counter($row['bytes-in'] ?? $interface['rx-byte'] ?? $combinedUpload);
                 $uptime = $this->cleanString($row['uptime'] ?? null);
                 $callerId = $this->cleanString($row['caller-id'] ?? null);
 
@@ -107,7 +116,7 @@ class PppSessionSnapshotService
             }
 
             // Hundreds of live sessions are normal. A single bulk upsert keeps
-            // a once-per-minute poll cheap enough for the production DB.
+            // startup/manual reconciliation cheap for the production DB.
             if ($upserts !== []) {
                 PppLiveSession::query()->upsert(
                     $upserts,
@@ -126,13 +135,106 @@ class PppSessionSnapshotService
                 true
             ));
 
-            foreach ($missing as $snapshot) {
-                $this->finalise($snapshot);
-                $snapshot->delete();
-                $finalised++;
+            if ($finaliseMissing) {
+                foreach ($missing as $snapshot) {
+                    $this->finalise($snapshot, $source);
+                    $snapshot->delete();
+                    $finalised++;
+                }
             }
 
             return ['captured' => count($seen), 'finalised' => $finalised];
+        });
+    }
+
+    /**
+     * Apply one record emitted by `/ppp/active/listen`.
+     *
+     * The worker merges partial updates in memory before calling this method,
+     * but the persisted payload is merged too so a reconnect or process restart
+     * never turns a sparse `.dead=yes` record into a zero-byte usage row.
+     *
+     * @param  array<string, mixed>  $event
+     * @return 'added'|'updated'|'finalised'|'ignored'
+     */
+    public function applyEvent(MikrotikRouter $router, array $event): string
+    {
+        $sessionId = trim((string) ($event['.id'] ?? ''));
+        if ($sessionId === '') {
+            return 'ignored';
+        }
+
+        return DB::transaction(function () use ($router, $event, $sessionId): string {
+            $snapshot = PppLiveSession::query()
+                ->where('mikrotik_router_id', $router->id)
+                ->where('routeros_session_id', $sessionId)
+                ->lockForUpdate()
+                ->first();
+
+            $previous = is_array($snapshot?->payload)
+                ? (array) ($snapshot->payload['active'] ?? [])
+                : [];
+            $active = array_replace($previous, $event);
+            $username = trim((string) ($active['name'] ?? $snapshot?->username ?? ''));
+            $dead = filter_var($event['.dead'] ?? false, FILTER_VALIDATE_BOOL);
+
+            if ($username === '') {
+                return 'ignored';
+            }
+
+            // RouterOS may eventually reuse a short internal id. Close a stale
+            // row before assigning that id to a different username.
+            if ($snapshot && mb_strtolower($snapshot->username) !== mb_strtolower($username)) {
+                $this->finalise($snapshot, 'listener');
+                $snapshot->delete();
+                $snapshot = null;
+            }
+
+            $customer = $this->customersByName($router, collect([$username]))[mb_strtolower($username)] ?? null;
+            [$combinedDownload, $combinedUpload] = $this->combinedCounters($active['bytes'] ?? null);
+            $download = $this->counter($active['bytes-out'] ?? $active['tx-byte'] ?? $combinedDownload);
+            $upload = $this->counter($active['bytes-in'] ?? $active['rx-byte'] ?? $combinedUpload);
+            $uptime = $this->cleanString($active['uptime'] ?? null);
+            $callerId = $this->cleanString($active['caller-id'] ?? null);
+            $now = now();
+
+            $attributes = [
+                'customer_id' => $customer?->id ?? $snapshot?->customer_id,
+                'username' => $username,
+                'caller_id' => $callerId ?? $snapshot?->caller_id,
+                'uptime' => $uptime ?? $snapshot?->uptime,
+                'uptime_seconds' => $uptime !== null
+                    ? $this->uptimeToSeconds($uptime)
+                    : $snapshot?->uptime_seconds,
+                'download_bytes' => $download === null
+                    ? (int) ($snapshot?->download_bytes ?? 0)
+                    : max($download, (int) ($snapshot?->download_bytes ?? 0)),
+                'upload_bytes' => $upload === null
+                    ? (int) ($snapshot?->upload_bytes ?? 0)
+                    : max($upload, (int) ($snapshot?->upload_bytes ?? 0)),
+                'payload' => ['active' => $active],
+                'last_seen_at' => $now,
+            ];
+
+            $created = $snapshot === null;
+            if ($created) {
+                $snapshot = PppLiveSession::create($attributes + [
+                    'mikrotik_router_id' => $router->id,
+                    'routeros_session_id' => $sessionId,
+                    'first_seen_at' => $now,
+                ]);
+            } else {
+                $snapshot->forceFill($attributes)->save();
+            }
+
+            if (! $dead) {
+                return $created ? 'added' : 'updated';
+            }
+
+            $this->finalise($snapshot, 'listener');
+            $snapshot->delete();
+
+            return 'finalised';
         });
     }
 
@@ -145,14 +247,16 @@ class PppSessionSnapshotService
         return PppUsageLog::query()
             ->where('mikrotik_router_id', $router->id)
             ->whereRaw('lower(username) = ?', [mb_strtolower(trim($username))])
-            ->whereIn('source', ['snapshot', 'webhook+snapshot'])
+            ->whereIn('source', [
+                'snapshot', 'listener', 'webhook+snapshot', 'webhook+listener',
+            ])
             ->where('disconnected_at', '>=', now()->subMinutes(5))
             ->latest('disconnected_at')
             ->latest('id')
             ->first();
     }
 
-    private function finalise(PppLiveSession $snapshot): PppUsageLog
+    private function finalise(PppLiveSession $snapshot, string $source): PppUsageLog
     {
         $since = ($snapshot->last_seen_at ?? now())->copy()->subSeconds(10);
         $log = PppUsageLog::query()
@@ -168,6 +272,14 @@ class PppSessionSnapshotService
 
         $payload = is_array($log?->payload) ? $log->payload : [];
         $payload['ppp_active_snapshot'] = $snapshot->payload;
+        $activePayload = is_array($snapshot->payload)
+            ? (array) ($snapshot->payload['active'] ?? [])
+            : [];
+        $disconnectReason = $this->cleanString(
+            $activePayload['last-disconnect-reason']
+                ?? $activePayload['disconnect-reason']
+                ?? null
+        );
 
         $onu = $this->onuForCallerId($snapshot->caller_id);
         $attributes = [
@@ -176,7 +288,8 @@ class PppSessionSnapshotService
             'olt_onu_id' => $onu?->id ?? $log?->olt_onu_id,
             'username' => $snapshot->username,
             'caller_id' => $snapshot->caller_id ?? $log?->caller_id,
-            'source' => $log ? 'webhook+snapshot' : 'snapshot',
+            'disconnect_reason' => $disconnectReason ?? $log?->disconnect_reason,
+            'source' => $log ? 'webhook+'.$source : $source,
             'routeros_session_id' => $snapshot->routeros_session_id,
             'reported_router_id' => (string) $snapshot->mikrotik_router_id,
             'uptime' => $snapshot->uptime ?? $log?->uptime,
@@ -236,13 +349,7 @@ class PppSessionSnapshotService
             return null;
         }
 
-        return OltOnu::query()
-            ->where(function ($query) use ($mac): void {
-                $query->whereRaw('lower(mac_address) = ?', [$mac])
-                    ->orWhere('learned_macs', 'like', '%"'.$mac.'"%');
-            })
-            ->orderByDesc('last_live_polled_at')
-            ->first();
+        return OnuMatcher::byMac([$mac])[$mac] ?? null;
     }
 
     private function cleanString(mixed $value): ?string
@@ -259,6 +366,28 @@ class PppSessionSnapshotService
         return $value !== null && is_numeric($value)
             ? max(0, (int) round((float) $value))
             : null;
+    }
+
+    /**
+     * RouterOS `print stats` can expose the pair as `bytes=tx/rx` instead of
+     * separate byte fields. From the router's point of view tx is download and
+     * rx is upload for a connected PPP client.
+     *
+     * @return array{0: int|null, 1: int|null}
+     */
+    private function combinedCounters(mixed $value): array
+    {
+        $value = $this->cleanString($value);
+        if ($value === null) {
+            return [null, null];
+        }
+
+        $parts = preg_split('/\s*\/\s*/', $value, 2);
+        if (! is_array($parts) || count($parts) !== 2) {
+            return [null, null];
+        }
+
+        return [$this->counter($parts[0]), $this->counter($parts[1])];
     }
 
     public function uptimeToSeconds(string $uptime): int

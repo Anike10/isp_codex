@@ -4,11 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\MikrotikRouter;
-use App\Models\OltOnu;
 use App\Models\PppUsageLog;
 use App\Services\PppSessionSnapshotService;
 use App\Services\PppWebhookService;
 use App\Support\Mac;
+use App\Support\OnuMatcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -51,13 +51,7 @@ class PppUsageWebhookController extends Controller
 
         // Match the OLT ONU by the client MAC — against its serial ("Serial /
         // MAC") or any address it has learned ("Device MACs").
-        $onu = $callerMac === null ? null : OltOnu::query()
-            ->where(function ($query) use ($callerMac): void {
-                $query->whereRaw('lower(mac_address) = ?', [$callerMac])
-                    ->orWhere('learned_macs', 'like', '%"'.$callerMac.'"%');
-            })
-            ->orderByDesc('last_live_polled_at')
-            ->first();
+        $onu = $callerMac === null ? null : (OnuMatcher::byMac([$callerMac])[$callerMac] ?? null);
 
         $customer = Customer::query()
             ->when($router, fn ($query) => $query->where(function ($q) use ($router): void {
@@ -111,20 +105,21 @@ class PppUsageWebhookController extends Controller
             'disconnected_at' => now(),
         ];
 
-        // A one-minute poll may notice the vanished session just before a
-        // delayed on-down request arrives. Enrich that snapshot row with the
-        // event reason/ONU data instead of inserting the disconnect twice.
+        // The API listener (or a manual snapshot reconciliation) may notice
+        // the vanished session just before a delayed on-down request arrives.
+        // Enrich that collector row instead of inserting the disconnect twice.
         $log = $router ? $this->snapshots->recentSnapshotLog($router, $username) : null;
         if ($log) {
             $payload = is_array($log->payload) ? $log->payload : [];
             $payload['webhook'] = $request->all();
+            $collector = str_contains((string) $log->source, 'listener') ? 'listener' : 'snapshot';
 
             $log->forceFill([
                 'customer_id' => $customer?->id ?? $log->customer_id,
                 'olt_onu_id' => $onu?->id ?? $log->olt_onu_id,
                 'caller_id' => $callerId ?: $log->caller_id,
                 'disconnect_reason' => $attributes['disconnect_reason'] ?? $log->disconnect_reason,
-                'source' => 'webhook+snapshot',
+                'source' => 'webhook+'.$collector,
                 'reported_router_id' => $reportedRouterId ?? $log->reported_router_id,
                 'rx_power_dbm' => $onu?->rx_power_dbm ?? $log->rx_power_dbm,
                 'tx_power_dbm' => $onu?->tx_power_dbm ?? $log->tx_power_dbm,
