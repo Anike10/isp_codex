@@ -74,27 +74,15 @@ class TicketController extends Controller
     {
         $ticket->load(['customer', 'technician', 'replies.user']);
 
-        return view('tickets.show', [
-            'ticket' => $ticket,
-            'technicians' => User::orderBy('name')->get(),
-            'statuses' => SupportTicket::STATUSES,
-        ]);
-    }
-
-    /** Full-page map of the party's service location, with party + ticket details beside it. */
-    public function map(SupportTicket $ticket)
-    {
-        $ticket->load(['customer', 'technician', 'replies.user']);
-
-        $customer = $ticket->customer;
-        $mac = mb_strtolower(trim((string) $customer?->last_connected_mac));
+        $mac = mb_strtolower(trim((string) $ticket->customer?->last_connected_mac));
         $onu = ($mac !== '' && Schema::hasTable('olt_onus'))
             ? (OnuMatcher::byMac([$mac])[$mac] ?? null)
             : null;
 
-        return view('tickets.map', [
+        return view('tickets.show', [
             'ticket' => $ticket,
-            'customer' => $customer,
+            'technicians' => User::orderBy('name')->get(),
+            'statuses' => SupportTicket::STATUSES,
             'onu' => $onu,
         ]);
     }

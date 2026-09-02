@@ -96,7 +96,7 @@ class TicketReplyTest extends TestCase
             ->assertSee('US_EPON - 7/31');
     }
 
-    public function test_ticket_map_page_shows_party_and_ticket_details(): void
+    public function test_ticket_show_page_embeds_the_service_location_map_and_party_details(): void
     {
         $user = User::factory()->create();
         $ticket = $this->ticket();
@@ -108,13 +108,12 @@ class TicketReplyTest extends TestCase
 
         $this->withoutMiddleware(EnsureUserHasPermission::class)
             ->actingAs($user)
-            ->get(route('tickets.map', $ticket))
+            ->get(route('tickets.show', $ticket))
             ->assertOk()
-            ->assertSee('Ticket #'.$ticket->id.' — Map &amp; Details', false)
-            ->assertSee($ticket->subject)
             ->assertSee('01812345678')
+            ->assertSee('OLT / ONU')
             ->assertSee('data-customer-location-map', false)
-            ->assertSee(route('tickets.show', $ticket), false);
+            ->assertSee('data-party-id="'.$ticket->customer_id.'"', false);
     }
 
     public function test_ticket_list_and_details_expose_reply_and_update_controls(): void

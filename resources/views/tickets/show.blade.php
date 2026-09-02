@@ -26,11 +26,30 @@
         </p>
     </section>
     <section class="card">
+        @php
+            $canOpenPartyLedger = auth()->user()?->hasPermission('manage_payment_accounts') || auth()->user()?->hasPermission('manage_customers');
+            $oltOnu = ($onu ?? null)
+                ? trim(($onu->olt_name ?: '—').' - '.($onu->pon_port ?? '—').'/'.($onu->onu_id ?? '—'))
+                : '—';
+        @endphp
         <h2>Party</h2>
-        <p><strong>Name:</strong> {{ $ticket->customer->name }}</p>
-        <p><strong>Phone:</strong> {{ $ticket->customer->phone }}</p>
-        <p><strong>Connection:</strong> {{ $ticket->customer->connection_id }}</p>
+        <p><strong>Name:</strong>
+            @if ($canOpenPartyLedger)
+                <a href="{{ route('accounting.ledger', ['customer_id' => $ticket->customer_id]) }}">{{ $ticket->customer->name }}</a>
+            @else
+                {{ $ticket->customer->name }}
+            @endif
+        </p>
+        <p><strong>Phone:</strong> {{ $ticket->customer->phone ?: '—' }}</p>
+        <p><strong>Connection:</strong> {{ $ticket->customer->connection_id ?: '—' }}</p>
+        <p><strong>MikroTik username:</strong> {{ $ticket->customer->mikrotik_username ?: '—' }}</p>
+        <p><strong>Address:</strong> {{ $ticket->customer->address ?: '—' }}</p>
+        <p><strong>OLT / ONU:</strong> {{ $oltOnu }}</p>
     </section>
+</div>
+
+<div style="margin-top:16px">
+    @include('customers.partials.map_location', ['customer' => $ticket->customer, 'editable' => false])
 </div>
 
 <section class="card" style="margin-top:16px">

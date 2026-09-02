@@ -56,7 +56,7 @@
         <tr data-href="{{ route('tickets.show', $ticket) }}">
             <td><input type="checkbox" class="ticket-bulk-row" name="ids[]" value="{{ $ticket->id }}" form="ticketBulkForm" aria-label="Select ticket {{ $ticket->id }}"></td>
             <td>{{ $tickets->firstItem() + $loop->index }}</td>
-            <td><a href="{{ route('tickets.map', $ticket) }}" title="Open map & details for this ticket">{{ $ticket->customer->name }}</a></td>
+            <td><a href="{{ route('tickets.show', $ticket) }}">{{ $ticket->customer->name }}</a></td>
             <td>{{ $ticket->customer->phone ?: '—' }}</td>
             <td>{{ $oltOnuText($ticket->matched_onu ?? null) }}</td>
             <td>{{ $ticket->technician?->name ?? 'Unassigned' }}</td>
