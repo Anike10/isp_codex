@@ -284,6 +284,35 @@ class CustomerControllerTest extends TestCase
         $this->assertSame('Trashed Party (dupe)', $fresh->name);
     }
 
+    public function test_deleted_party_details_and_history_page_shows_the_party_fields(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        $customer = Customer::create([
+            'name' => 'Gone Party',
+            'phone' => '01710101099',
+            'connection_id' => 'DEL-DETAILS',
+            'address' => 'Kushtia Sadar',
+            'status' => 'inactive',
+            'is_customer' => true,
+            'map_latitude' => 23.9013,
+            'map_longitude' => 89.1220,
+        ]);
+        $customer->delete();
+
+        $this->actingAs($user)->get(route('customers.deleted'))
+            ->assertOk()
+            ->assertSee(route('customers.deleted.history', $customer->id), false);
+
+        $this->actingAs($user)->get(route('customers.deleted.history', $customer->id))
+            ->assertOk()
+            ->assertSee('Party Details')
+            ->assertSee('DEL-DETAILS')
+            ->assertSee('Kushtia Sadar')
+            ->assertSee('23.9013')
+            ->assertSee('Customer Change Log');
+    }
+
     public function test_party_inline_update_changes_active_package(): void
     {
         $user = User::factory()->create();

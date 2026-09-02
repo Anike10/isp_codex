@@ -370,7 +370,7 @@
                 : null;
             $overdueActive = ! $customer->never_suspend && $customer->status === 'active' && $daysRemaining !== null && $daysRemaining < 0;
         @endphp
-        <tr class="{{ $customer->never_suspend ? 'customer-row-special' : ($overdueActive ? 'customer-row-overdue' : '') }}" @if(! $showDeletedCustomers) data-href="{{ route('customers.show', $customer) }}" @endif>
+        <tr class="{{ $customer->never_suspend ? 'customer-row-special' : ($overdueActive ? 'customer-row-overdue' : '') }}" data-href="{{ $showDeletedCustomers ? route('customers.deleted.history', $customer->id) : route('customers.show', $customer) }}">
             @if (! $showDeletedCustomers)
                 <td class="bulk-select-column">
                     <input class="bulk-row-checkbox" type="checkbox" name="customer_ids[]" value="{{ $customer->id }}" form="bulkPaymentSelectionForm" aria-label="Select {{ $customer->name }}">
@@ -577,7 +577,7 @@
                         @csrf
                         <button class="btn secondary" type="submit">Restore</button>
                     </form>
-                    <a class="btn light" href="{{ route('customers.deleted.history', $customer->id) }}">History</a>
+                    <a class="btn light" href="{{ route('customers.deleted.history', $customer->id) }}">Details &amp; History</a>
                 @else
                     <details class="customer-action-menu">
                         <summary class="btn light">Actions</summary>

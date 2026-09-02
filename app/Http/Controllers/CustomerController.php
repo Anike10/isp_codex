@@ -655,7 +655,13 @@ class CustomerController extends Controller
     public function deletedHistory(int $customerId)
     {
         $customer = Customer::withTrashed()->findOrFail($customerId);
-        $customer->load(['activeSubscription.package']);
+        $customer->load([
+            'activeSubscription.package',
+            'latestSubscription.package',
+            'mikrotikRouter',
+            'reseller',
+            'invoices',
+        ]);
         $versions = $customer->versions()->paginate(10, ['*'], 'history_page')->withQueryString();
 
         return view('customers.history', compact('customer', 'versions'));
