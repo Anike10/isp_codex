@@ -2562,6 +2562,19 @@
             .setLngLat(event.lngLat)
             .setHTML(popupHtml(feature))
             .addTo(state.map);
+
+        // Keep the card alive on hover so its Edit / Relocate buttons are usable.
+        const popupEl = state.hoverPopup.getElement();
+        popupEl.addEventListener('mouseenter', clearHoverHideTimer);
+        popupEl.addEventListener('mouseleave', hideHoverDetails);
+        popupEl.querySelector('[data-edit-feature]')?.addEventListener('click', () => {
+            hideHoverDetailsNow();
+            openExistingFeature(featureId);
+        });
+        popupEl.querySelector('[data-relocate-feature]')?.addEventListener('click', () => {
+            hideHoverDetailsNow();
+            startFeatureRelocate(featureId);
+        });
     }
 
     function clearHoverHideTimer() {
