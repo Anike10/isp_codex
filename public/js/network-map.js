@@ -1504,6 +1504,9 @@
         const profileLink = properties.show_url
             ? `<a class="customer-popup-action" href="${escapeHtml(properties.show_url)}">View profile</a>`
             : '';
+        const relocateButton = canEdit
+            ? `<button type="button" class="search-result-action" data-relocate-party="${escapeHtml(String(properties.customer_id))}">Relocate</button>`
+            : '';
         const fiberRemovedButton = properties.fiber_removal_pending
             ? `<button type="button" class="search-result-action search-result-action--danger" data-fiber-removed="${escapeHtml(String(properties.customer_id))}">Fiber removed — hide from map</button>`
             : '';
@@ -1535,7 +1538,7 @@
                         <div class="popup-detail-card popup-detail-card--wide"><dt>Address</dt><dd>${mapPartyInlineFieldHtml('address', properties.customer_id, inlineUpdateUrl, String(properties.address || ''), 'Not provided')}</dd></div>
                         ${siblingSummary ? `<div class="popup-detail-card popup-detail-card--wide"><dt>Multi-port at location</dt><dd>${siblingSummary}</dd></div>` : ''}
                         <div class="popup-detail-card popup-detail-card--wide popup-detail-card--share"><dt>Share</dt><dd><div class="customer-popup-share">${shareControls}</div></dd></div>
-                        <div class="popup-detail-card popup-detail-card--wide popup-detail-card--actions"><dt>Actions</dt><dd><div class="customer-popup-actions">${profileLink}${removeButton}${fiberRemovedButton}</div></dd></div>
+                        <div class="popup-detail-card popup-detail-card--wide popup-detail-card--actions"><dt>Actions</dt><dd><div class="customer-popup-actions">${profileLink}${relocateButton}${removeButton}${fiberRemovedButton}</div></dd></div>
                     </dl>
                 </section>
             `)
@@ -1546,6 +1549,16 @@
             removeButtonElement.addEventListener('click', () => {
                 const customerId = removeButtonElement.dataset.removePartyLocation;
                 removePartyLocation(customerId);
+            });
+        }
+
+        const relocatePartyElement = state.customerPopup.getElement().querySelector('[data-relocate-party]');
+        if (relocatePartyElement) {
+            relocatePartyElement.addEventListener('click', () => {
+                const customerId = relocatePartyElement.dataset.relocateParty;
+                state.customerPopup?.remove();
+                state.customerPopup = null;
+                requestPartyLocationPlacement(customerId);
             });
         }
 
