@@ -16,10 +16,10 @@
         <p><strong>Priority:</strong> {{ ucfirst($ticket->priority) }}</p>
         <p><strong>Status:</strong> <span class="badge {{ $ticket->status }}">{{ $ticket->status }}</span></p>
         <p><strong>Authorized:</strong> {{ $ticket->technician?->name ?? 'Unassigned' }}</p>
-        <p><strong>ONU Rx (dBm):</strong>
-            {{ $ticket->rx_power_on_create === null ? '—' : number_format((float) $ticket->rx_power_on_create, 2) }} at create
-            &middot;
-            {{ $ticket->rx_power_on_update === null ? '—' : number_format((float) $ticket->rx_power_on_update, 2) }} at last update
+        <p><strong>RX/Update (dBm):</strong>
+            {{ $ticket->rx_power_on_create === null ? '—' : number_format((float) $ticket->rx_power_on_create, 2) }}
+            /
+            {{ $ticket->rx_power_on_update === null ? '—' : number_format((float) $ticket->rx_power_on_update, 2) }}
             @if ($ticket->rx_power_updated_at)
                 <span class="muted">({{ $ticket->rx_power_updated_at->format('d/m/Y H:i') }})</span>
             @endif
