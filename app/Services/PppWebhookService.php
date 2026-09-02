@@ -170,12 +170,10 @@ class PppWebhookService
     }
 
     /**
-     * The one reusable RouterOS `on-down` script. Event variables are first
-     * copied to uniquely named locals so hyphenated names such as
-     * $"bytes-in" never break the quoting of the JSON payload.
-     *
-     * Values are sent as JSON strings so an empty counter never produces
-     * malformed JSON; the receiver casts them back to integers.
+     * The one reusable RouterOS `on-down` script. RouterOS only documents
+     * connection identity/address variables for this event, so uptime, byte
+     * counters, and disconnect reason use safe defaults here. The listener
+     * and snapshot collectors enrich those fields independently.
      */
     public function scriptFor(MikrotikRouter $router): string
     {
@@ -193,14 +191,11 @@ class PppWebhookService
         $header = 'Content-Type: application/json,'.self::SECRET_HEADER.': '.$secret;
 
         return ':local webhookUser $user;'
-            .':local webhookUptime $uptime;'
+            .':local webhookUptime "0";'
             .':local webhookCallerId $"caller-id";'
-            .':local webhookReason $"last-disconnect-reason";'
-            .':if ($webhookUptime = "null" || [:len $webhookUptime] = 0) do={:set webhookUptime "0";};'
-            .':local webhookBytesIn $"bytes-in";'
-            .':local webhookBytesOut $"bytes-out";'
-            .':if ([:len $webhookBytesIn] = 0 || $webhookBytesIn = "null") do={:set webhookBytesIn 0};'
-            .':if ([:len $webhookBytesOut] = 0 || $webhookBytesOut = "null") do={:set webhookBytesOut 0};'
+            .':local webhookReason "";'
+            .':local webhookBytesIn 0;'
+            .':local webhookBytesOut 0;'
             .':local webhookPayload '.$body.';'
             .'/tool fetch url="'.$url.'"'
             .' http-method=post'
