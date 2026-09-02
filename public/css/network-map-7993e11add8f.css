@@ -785,6 +785,35 @@
     cursor: default;
 }
 
+.party-username-result[data-deleted] {
+    border-color: #f7bdb6;
+    background: #fef3f2;
+    color: #b42318;
+}
+
+.party-deleted-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #f04438;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.party-list-item.is-deleted {
+    border-color: #f7bdb6;
+    background: #fef3f2;
+}
+
+.popup-fiber-flag {
+    color: #b42318;
+    font-weight: 700;
+}
+
 .map-party-search-results[hidden] {
     display: none;
 }

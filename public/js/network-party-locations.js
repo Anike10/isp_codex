@@ -236,6 +236,11 @@
 
         if (action === 'remove') {
             removePartyLocation(customerId);
+            return;
+        }
+
+        if (action === 'fiber-removed') {
+            markFiberRemoved(customerId);
         }
     }
 
@@ -312,7 +317,7 @@
             type: 'circle',
             source: 'party-locations',
             paint: {
-                'circle-color': '#f97316',
+                'circle-color': ['case', ['==', ['get', 'fiber_removal_pending'], true], '#f04438', '#f97316'],
                 'circle-radius': 14,
                 'circle-opacity': 0.06,
                 'circle-stroke-width': 0,
@@ -325,8 +330,8 @@
             source: 'party-locations',
             paint: {
                 'circle-radius': 7,
-                'circle-color': '#16a34a',
-                'circle-stroke-color': '#ffffff',
+                'circle-color': ['case', ['==', ['get', 'fiber_removal_pending'], true], '#f04438', '#16a34a'],
+                'circle-stroke-color': ['case', ['==', ['get', 'fiber_removal_pending'], true], '#7a271a', '#ffffff'],
                 'circle-stroke-width': 2,
             },
         });
@@ -484,8 +489,8 @@
             ]);
 
             return `
-                <div class="party-list-item ${hasLocation ? 'has-location' : ''} ${String(state.selectedCustomerId) === customerId ? 'is-active' : ''}" data-customer-row="${escapeHtml(customerId)}">
-                    <div class="party-list-title">${escapeHtml(label)}</div>
+                <div class="party-list-item ${hasLocation ? 'has-location' : ''} ${properties.fiber_removal_pending ? 'is-deleted' : ''} ${String(state.selectedCustomerId) === customerId ? 'is-active' : ''}" data-customer-row="${escapeHtml(customerId)}">
+                    <div class="party-list-title">${escapeHtml(label)}${properties.deleted ? ' <span class="party-deleted-tag">deleted</span>' : ''}</div>
                     <div class="party-list-meta">
                         <span>Name: ${inlineFieldHtml('name', customerId, inlineUpdateUrl, nameValue, 'Not provided')}</span>
                         <span><span class="badge ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span></span>
@@ -501,6 +506,7 @@
                         <button type="button" class="search-result-action" data-copy-party="${escapeHtml(customerId)}">Copy</button>
                         <a href="#" class="search-result-action search-result-action--primary" data-whatsapp-share="${escapeHtml(customerId)}" data-share-label="${escapeHtml(label || 'Party')}" ${hasLocation ? '' : 'data-share-disabled=\"1\"'}>Hotspot share</a>
                         ${hasLocation ? `<button type="button" class="search-result-action search-result-action--danger" data-party-action="remove" data-customer-id="${escapeHtml(customerId)}">Delete location</button>` : ''}
+                        ${properties.fiber_removal_pending ? `<button type="button" class="search-result-action search-result-action--danger" data-party-action="fiber-removed" data-customer-id="${escapeHtml(customerId)}">Fiber removed — hide from map</button>` : ''}
                     </div>
                 </div>
             `;
@@ -581,7 +587,8 @@
                 <p class="popup-meta">
                     <span class="popup-meta-id">Party #${escapeHtml(customerId)}</span>
                     <span class="badge-sep">|</span>
-                    <span class="badge ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span>
+                    <span class="badge ${properties.deleted ? 'inactive' : escapeHtml(statusClass)}">${properties.deleted ? 'Deleted' : escapeHtml(statusText)}</span>
+                    ${properties.fiber_removal_pending ? '<span class="badge-sep">|</span><span class="popup-fiber-flag">fiber not removed</span>' : ''}
                 </p>
                 <dl class="popup-details">
                     <div><dt>Name</dt><dd>${inlineFieldHtml('name', customerId, inlineUpdateUrl, String(customerName || ''), 'Not provided')}</dd></div>
@@ -592,7 +599,7 @@
                     <div><dt>Phone</dt><dd>${inlineFieldHtml('phone', customerId, inlineUpdateUrl, phoneValue, 'Not provided')}</dd></div>
                     <div><dt>Address</dt><dd>${escapeHtml(properties.address || 'Not provided')}</dd></div>
                     <div><dt>Share</dt><dd>${shareControls}</dd></div>
-                    <div><dt>Actions</dt><dd><button type="button" class="search-result-action search-result-action--primary" data-popup-action="edit" data-popup-party="${escapeHtml(customerId)}">Edit location</button> <button type="button" class="search-result-action search-result-action--danger" data-popup-action="remove" data-popup-party="${escapeHtml(customerId)}">Delete location</button></dd></div>
+                    <div><dt>Actions</dt><dd><button type="button" class="search-result-action search-result-action--primary" data-popup-action="edit" data-popup-party="${escapeHtml(customerId)}">Edit location</button> <button type="button" class="search-result-action search-result-action--danger" data-popup-action="remove" data-popup-party="${escapeHtml(customerId)}">Delete location</button>${properties.fiber_removal_pending ? ` <button type="button" class="search-result-action search-result-action--danger" data-popup-action="fiber-removed" data-popup-party="${escapeHtml(customerId)}">Fiber removed — hide from map</button>` : ''}</dd></div>
                 </dl>
             `)
             .addTo(state.map);
@@ -600,6 +607,7 @@
         const popupElement = state.popup.getElement();
         const editButton = popupElement.querySelector('[data-popup-action="edit"]');
         const removeButton = popupElement.querySelector('[data-popup-action="remove"]');
+        const fiberRemovedButton = popupElement.querySelector('[data-popup-action="fiber-removed"]');
         const copyButton = popupElement.querySelector('[data-copy-party]');
         const whatsappButton = popupElement.querySelector('[data-whatsapp-share]');
         const copyTarget = findPartyFeature(customerId);
@@ -623,6 +631,12 @@
                     state.popup.remove();
                     state.popup = null;
                 }
+            });
+        }
+
+        if (fiberRemovedButton) {
+            fiberRemovedButton.addEventListener('click', function () {
+                markFiberRemoved(fiberRemovedButton.dataset.popupParty);
             });
         }
 
@@ -740,6 +754,43 @@
         } catch (error) {
             setStatus(error.message);
             return null;
+        }
+    }
+
+    async function markFiberRemoved(customerId) {
+        const feature = state.customers.get(String(customerId));
+        const label = formatPartyLabel(feature || { customer_id: customerId });
+        const url = feature?.properties?.fiber_removed_url
+            || `${config.customersUrl}/${encodeURIComponent(customerId)}/fiber-removed`;
+        if (!confirm(`Confirm the drop fiber for ${label} has been removed?\nThe marker will be taken off the map.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(url, {
+                method: 'PATCH',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': config.csrfToken,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(await responseErrorMessage(response, 'Unable to update this party.'));
+            }
+
+            state.customers.delete(String(customerId));
+            state.allCustomers.delete(String(customerId));
+            renderPartyLocationSource();
+            renderPartyList();
+            updatePartyStats();
+            if (state.popup) {
+                state.popup.remove();
+                state.popup = null;
+            }
+            setStatus(`${label} removed from the map — fiber cleanup recorded.`);
+        } catch (error) {
+            setStatus(error.message);
         }
     }
 

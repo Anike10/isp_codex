@@ -495,8 +495,11 @@
             source: 'customer-locations',
             paint: {
                 'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 16, 9],
-                'circle-color': ['case', ['==', ['get', 'status'], 'active'], '#0f766e', '#667085'],
-                'circle-stroke-color': '#ffffff',
+                'circle-color': ['case',
+                    ['==', ['get', 'fiber_removal_pending'], true], '#f04438',
+                    ['==', ['get', 'status'], 'active'], '#0f766e',
+                    '#667085'],
+                'circle-stroke-color': ['case', ['==', ['get', 'fiber_removal_pending'], true], '#7a271a', '#ffffff'],
                 'circle-stroke-width': 2,
             },
         });
@@ -514,7 +517,10 @@
                 'text-ignore-placement': true,
             },
             paint: {
-                'text-color': ['case', ['==', ['get', 'status'], 'active'], '#075f56', '#475467'],
+                'text-color': ['case',
+                    ['==', ['get', 'fiber_removal_pending'], true], '#b42318',
+                    ['==', ['get', 'status'], 'active'], '#075f56',
+                    '#475467'],
                 'text-halo-color': '#ffffff',
                 'text-halo-width': 3,
             },
@@ -1376,7 +1382,8 @@
             .map((feature) => {
                 const id = String(feature?.properties?.customer_id || '');
                 const userName = formatPartyUserName(feature);
-                return `<button type="button" class="party-username-result" data-focus-customer="${escapeHtml(id)}">${escapeHtml(userName)}</button>`;
+                const deleted = feature?.properties?.deleted;
+                return `<button type="button" class="party-username-result" ${deleted ? 'data-deleted="1"' : ''} data-focus-customer="${escapeHtml(id)}">${escapeHtml(userName)}${deleted ? ' <span class="party-deleted-tag">deleted</span>' : ''}</button>`;
             })
             .join('');
 
@@ -1461,8 +1468,19 @@
             }).join('')
             : '';
         const comment = formatPartyComment(properties);
+        const partyIdLabel = formatPartyLabel(properties);
+        const headTitle = (userName && userName !== 'Not provided' ? userName : '') || displayName || partyIdLabel;
         const removeButton = canEdit
             ? `<button type="button" class="search-result-action search-result-action--danger" data-remove-party-location="${escapeHtml(String(properties.customer_id))}">Remove location</button>`
+            : '';
+        const profileLink = properties.show_url
+            ? `<a class="customer-popup-action" href="${escapeHtml(properties.show_url)}">View profile</a>`
+            : '';
+        const editLink = properties.edit_url
+            ? `<a class="customer-popup-action" href="${escapeHtml(properties.edit_url)}">Edit location</a>`
+            : '';
+        const fiberRemovedButton = properties.fiber_removal_pending
+            ? `<button type="button" class="search-result-action search-result-action--danger" data-fiber-removed="${escapeHtml(String(properties.customer_id))}">Fiber removed — hide from map</button>`
             : '';
 
         state.customerPopup?.remove();
@@ -1476,11 +1494,11 @@
                 <section class="customer-popup-shell">
                     <header class="customer-popup-head">
                         <div>
-                            <span class="customer-popup-eyebrow">Customer location</span>
-                            <p class="popup-title">${escapeHtml(formatPartyLabel(properties))}</p>
-                            <p class="popup-meta">${escapeHtml(userName)}</p>
+                            <span class="customer-popup-eyebrow">${properties.fiber_removal_pending ? 'Deleted party · fiber not removed' : 'Customer location'}</span>
+                            <p class="popup-title">${escapeHtml(headTitle)}</p>
+                            <p class="popup-meta"><span class="popup-meta-id">${escapeHtml(partyIdLabel)}</span></p>
                         </div>
-                        <span class="badge ${formatPartyStatusClass(properties.status)}">${escapeHtml(statusText)}</span>
+                        <span class="badge ${properties.deleted ? 'inactive' : formatPartyStatusClass(properties.status)}">${escapeHtml(properties.deleted ? 'Deleted' : statusText)}</span>
                     </header>
                     <dl class="popup-details">
                         <div class="popup-detail-card popup-detail-card--wide popup-detail-card--name"><dt>Name</dt><dd>${mapPartyInlineFieldHtml('name', properties.customer_id, inlineUpdateUrl, String(displayName || ''), 'Not provided')}</dd></div>
@@ -1492,7 +1510,7 @@
                         <div class="popup-detail-card popup-detail-card--wide"><dt>Address</dt><dd>${mapPartyInlineFieldHtml('address', properties.customer_id, inlineUpdateUrl, String(properties.address || ''), 'Not provided')}</dd></div>
                         ${siblingSummary ? `<div class="popup-detail-card popup-detail-card--wide"><dt>Multi-port at location</dt><dd>${siblingSummary}</dd></div>` : ''}
                         <div class="popup-detail-card popup-detail-card--wide popup-detail-card--share"><dt>Share</dt><dd><div class="customer-popup-share">${shareControls}</div></dd></div>
-                        <div class="popup-detail-card popup-detail-card--wide popup-detail-card--actions"><dt>Actions</dt><dd><div class="customer-popup-actions"><a class="customer-popup-action" href="${escapeHtml(properties.show_url)}">View profile</a><a class="customer-popup-action" href="${escapeHtml(properties.edit_url)}">Edit location</a>${removeButton}</div></dd></div>
+                        <div class="popup-detail-card popup-detail-card--wide popup-detail-card--actions"><dt>Actions</dt><dd><div class="customer-popup-actions">${profileLink}${editLink}${removeButton}${fiberRemovedButton}</div></dd></div>
                     </dl>
                 </section>
             `)
@@ -1503,6 +1521,13 @@
             removeButtonElement.addEventListener('click', () => {
                 const customerId = removeButtonElement.dataset.removePartyLocation;
                 removePartyLocation(customerId);
+            });
+        }
+
+        const fiberRemovedElement = state.customerPopup.getElement().querySelector('[data-fiber-removed]');
+        if (fiberRemovedElement) {
+            fiberRemovedElement.addEventListener('click', () => {
+                markCustomerFiberRemoved(fiberRemovedElement.dataset.fiberRemoved, feature);
             });
         }
 
@@ -1764,6 +1789,45 @@
             state.pendingPartyLocationCustomerId = String(customerId);
             setStatus(error.message);
             return null;
+        }
+    }
+
+    async function markCustomerFiberRemoved(customerId, feature) {
+        if (!customerId) {
+            return;
+        }
+
+        const url = feature?.properties?.fiber_removed_url
+            || `${config.customersUrl}/${encodeURIComponent(customerId)}/fiber-removed`;
+        const label = formatPartyLabel(feature || { properties: { customer_id: customerId } });
+        if (!confirm(`Confirm the drop fiber for ${label} has been removed?\nThe marker will be taken off the map.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(url, {
+                method: 'PATCH',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': config.csrfToken,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(await responseErrorMessage(response, 'Unable to update this party.'));
+            }
+
+            state.customerFeatures.delete(String(customerId));
+            rebuildCustomerLocationSource();
+            renderUnmappedPartyList();
+            refreshStatsFromData();
+            if (state.customerPopup) {
+                state.customerPopup.remove();
+                state.customerPopup = null;
+            }
+            setStatus(`${label} removed from the map — fiber cleanup recorded.`);
+        } catch (error) {
+            setStatus(error.message);
         }
     }
 

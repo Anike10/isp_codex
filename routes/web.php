@@ -238,6 +238,7 @@ Route::middleware('auth')->group(function () {
         Route::get('network-map/customers', [NetworkMapController::class, 'customers'])->name('network-map.customers.index');
         Route::patch('network-map/customers/{customer}/location', [NetworkMapController::class, 'updateCustomerLocation'])->name('network-map.customers.location.update');
         Route::delete('network-map/customers/{customer}/location', [NetworkMapController::class, 'clearCustomerLocation'])->name('network-map.customers.location.destroy');
+        Route::patch('network-map/customers/{customer}/fiber-removed', [NetworkMapController::class, 'markFiberRemoved'])->withTrashed()->name('network-map.customers.fiber-removed');
         Route::get('network-map/features', [NetworkMapController::class, 'index'])->name('network-map.features.index');
         Route::post('network-map/features', [NetworkMapController::class, 'store'])->name('network-map.features.store');
         Route::post('network-map/photos', [NetworkMapController::class, 'uploadPhotos'])->name('network-map.photos.store');

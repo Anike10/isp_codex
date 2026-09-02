@@ -310,6 +310,61 @@ class NetworkMapControllerTest extends TestCase
         return new UploadedFile($path, $name, 'image/png', null, true);
     }
 
+    public function test_soft_deleted_party_stays_on_the_map_until_fiber_removed(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $live = \App\Models\Customer::create([
+            'name' => 'Live Party', 'phone' => '01710000001', 'connection_id' => 'NM-LIVE',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+            'map_latitude' => 23.9, 'map_longitude' => 89.12,
+        ]);
+        $deleted = \App\Models\Customer::create([
+            'name' => 'Gone Party', 'phone' => '01710000002', 'connection_id' => 'NM-GONE',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+            'map_latitude' => 23.91, 'map_longitude' => 89.13,
+        ]);
+        $deleted->delete();
+
+        $features = collect(
+            $this->actingAs($user)->getJson(route('network-map.customers.index'))
+                ->assertOk()->json('features')
+        )->keyBy(fn ($f) => $f['properties']['customer_id']);
+
+        $this->assertFalse($features[$live->id]['properties']['deleted']);
+        $this->assertTrue($features[$deleted->id]['properties']['deleted']);
+        $this->assertTrue($features[$deleted->id]['properties']['fiber_removal_pending']);
+        $this->assertNull($features[$deleted->id]['properties']['show_url']);
+
+        $this->actingAs($user)
+            ->patchJson(route('network-map.customers.fiber-removed', $deleted->id))
+            ->assertOk()->assertJson(['ok' => true]);
+
+        $this->assertNotNull($deleted->fresh()->map_fiber_removed_at);
+
+        $after = collect(
+            $this->actingAs($user)->getJson(route('network-map.customers.index'))->json('features')
+        )->pluck('properties.customer_id');
+        $this->assertTrue($after->contains($live->id));
+        $this->assertFalse($after->contains($deleted->id));
+    }
+
+    public function test_fiber_removed_endpoint_rejects_a_live_party(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $live = \App\Models\Customer::create([
+            'name' => 'Still Here', 'phone' => '01710000003', 'connection_id' => 'NM-STAY',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->patchJson(route('network-map.customers.fiber-removed', $live->id))
+            ->assertNotFound();
+    }
+
     private function routerFeature(string $id, string $name, array $coordinates, array $portLinks): array
     {
         return [

@@ -55,8 +55,19 @@ class NetworkMapController extends Controller
             $request->query('search', $request->query('query', $request->query('customer_id', '')))
         ));
 
-        $features = Customer::query()
+        $features = Customer::withTrashed()
             ->with('importedSecret')
+            // Live parties as before; soft-deleted parties only while their drop
+            // fiber is still in place (has a pin, not yet marked fiber-removed).
+            ->where(function ($query) {
+                $query->whereNull('deleted_at')
+                    ->orWhere(function ($query) {
+                        $query->whereNotNull('deleted_at')
+                            ->whereNotNull('map_latitude')
+                            ->whereNotNull('map_longitude')
+                            ->whereNull('map_fiber_removed_at');
+                    });
+            })
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query->where('name', 'like', "%{$search}%")
@@ -84,6 +95,8 @@ class NetworkMapController extends Controller
                 'notes',
                 'map_latitude',
                 'map_longitude',
+                'map_fiber_removed_at',
+                'deleted_at',
             ])
             ->map(fn (Customer $customer) => $this->customerToFeature($customer))
             ->values();
@@ -117,6 +130,25 @@ class NetworkMapController extends Controller
         ]);
 
         return response()->json($this->customerToFeature($customer->fresh()));
+    }
+
+    /**
+     * Field cleanup done: a soft-deleted party's drop fiber has been pulled, so
+     * stamp `map_fiber_removed_at` and drop it from the map for good.
+     */
+    public function markFiberRemoved(Customer $customer): JsonResponse
+    {
+        abort_unless($customer->trashed(), 404);
+
+        if ($customer->map_fiber_removed_at === null) {
+            $customer->update(['map_fiber_removed_at' => now()]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'customer_id' => $customer->id,
+            'map_fiber_removed_at' => $customer->map_fiber_removed_at?->toIso8601String(),
+        ]);
     }
 
     public function store(Request $request): JsonResponse
@@ -338,6 +370,8 @@ class NetworkMapController extends Controller
         // Prefer the party's own note; fall back to the MikroTik router comment.
         $comment = trim((string) ($customer->notes ?: ($customer->importedSecret?->router_comment ?: '')));
         $hasLocation = ! is_null($customer->map_latitude) && ! is_null($customer->map_longitude);
+        $deleted = $customer->trashed();
+        $fiberRemovalPending = $deleted && $customer->map_fiber_removed_at === null;
 
         return [
             'type' => 'Feature',
@@ -356,9 +390,12 @@ class NetworkMapController extends Controller
                 'mikrotik_username' => $customer->mikrotik_username,
                 'address' => $customer->address,
                 'status' => $customer->status,
+                'deleted' => $deleted,
+                'fiber_removal_pending' => $fiberRemovalPending,
                 'has_map_location' => $hasLocation,
-                'show_url' => route('customers.show', $customer),
-                'edit_url' => route('customers.edit', $customer),
+                'show_url' => $deleted ? null : route('customers.show', $customer),
+                'edit_url' => $deleted ? null : route('customers.edit', $customer),
+                'fiber_removed_url' => $fiberRemovalPending ? route('network-map.customers.fiber-removed', $customer) : null,
             ],
         ];
     }
