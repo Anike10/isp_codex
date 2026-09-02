@@ -218,6 +218,40 @@ class NetworkMapControllerTest extends TestCase
             ->assertJsonCount(2, 'features');
     }
 
+    public function test_fiber_cable_keeps_a_customer_endpoint_reference(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $payload = [
+            'type' => 'FeatureCollection',
+            'features' => [[
+                'type' => 'Feature',
+                'id' => 'fiber-c1',
+                'geometry' => ['type' => 'LineString', 'coordinates' => [[90.41, 23.81], [90.42, 23.82]]],
+                'properties' => [
+                    'id' => 'fiber-c1',
+                    'feature_type' => 'link',
+                    'component_type' => 'fiber_cable',
+                    'fiber_code' => 'DROP-349',
+                    'core_count' => '2F',
+                    'cable_type' => 'Overhead',
+                    'z_end_customer_id' => '349',
+                    'z_end_customer_name' => 'raka_farmacy (Party #349)',
+                    'z_end_device_port' => 'raka_farmacy (Party #349)',
+                    'length_meters' => 42.0,
+                ],
+            ]],
+        ];
+
+        $this->actingAs($user)->postJson(route('network-map.features.store'), $payload)->assertOk();
+
+        $this->actingAs($user)->getJson(route('network-map.features.index'))
+            ->assertOk()
+            ->assertJsonFragment(['z_end_customer_id' => '349'])
+            ->assertJsonFragment(['z_end_customer_name' => 'raka_farmacy (Party #349)']);
+    }
+
     public function test_network_map_photos_can_be_uploaded(): void
     {
         $user = User::factory()->create();

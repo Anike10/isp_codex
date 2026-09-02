@@ -17,6 +17,10 @@
         activeTool: null,
         activeNodeType: null,
         draftLine: [],
+        // Per-vertex customer snap for the fiber tool: same length as draftLine,
+        // each entry is {id, name} when that vertex was placed on a customer pin,
+        // otherwise null.
+        draftLineCustomers: [],
         pathMarkers: [],
         pendingEndpointLink: null,
         draggingNode: null,
@@ -556,6 +560,7 @@
                 state.activeTool = button.dataset.tool;
                 state.activeNodeType = button.dataset.nodeType || null;
                 state.draftLine = [];
+                state.draftLineCustomers = [];
                 clearPathMarkers();
                 updateDraftLine();
                 updatePlacementCursor();
@@ -2255,6 +2260,20 @@
         if (clicked.length) {
             if (clicked[0].layer.id === 'customer-locations-circle' || clicked[0].layer.id === 'customer-locations-label') {
                 const customer = state.customerFeatures.get(String(clicked[0].properties.customer_id));
+
+                // With the fiber tool active, a customer pin is a route endpoint:
+                // snap this vertex onto the pin and remember which party it is.
+                if (state.activeTool === 'fiber' && customer && Array.isArray(customer.geometry?.coordinates)) {
+                    state.draftLine.push(customer.geometry.coordinates.slice());
+                    state.draftLineCustomers.push({
+                        id: String(customer.properties.customer_id),
+                        name: customerEndpointLabel(customer.properties),
+                    });
+                    updateDraftLine();
+                    setStatus(`${state.draftLine.length} fiber vertices added (snapped to ${customerEndpointLabel(customer.properties)}). Double-click or Enter to finish.`);
+                    return;
+                }
+
                 if (customer) {
                     setPartySearchInput(customer.properties.customer_id);
                     focusCustomer(String(customer.properties.customer_id));
@@ -2301,9 +2320,16 @@
 
         if (state.activeTool === 'fiber') {
             state.draftLine.push([event.lngLat.lng, event.lngLat.lat]);
+            state.draftLineCustomers.push(null);
             updateDraftLine();
             setStatus(`${state.draftLine.length} fiber vertices added. Double-click or press Enter to finish.`);
         }
+    }
+
+    function customerEndpointLabel(props = {}) {
+        const id = String(props.customer_id || '').trim();
+        const name = String(props.connection_id || props.mikrotik_username || props.customer_name || '').trim();
+        return name ? `${name} (Party #${id})` : `Party #${id}`;
     }
 
     function finishFiberDraft() {
@@ -2314,6 +2340,19 @@
 
         const id = uuid();
         const lengthMeters = lineLengthMeters(state.draftLine);
+        const aCustomer = state.draftLineCustomers[0] || null;
+        const zCustomer = state.draftLineCustomers[state.draftLineCustomers.length - 1] || null;
+        const endpointProps = {};
+        if (aCustomer) {
+            endpointProps.a_end_customer_id = aCustomer.id;
+            endpointProps.a_end_customer_name = aCustomer.name;
+            endpointProps.a_end_device_port = aCustomer.name;
+        }
+        if (zCustomer) {
+            endpointProps.z_end_customer_id = zCustomer.id;
+            endpointProps.z_end_customer_name = zCustomer.name;
+            endpointProps.z_end_device_port = zCustomer.name;
+        }
         const feature = {
             type: 'Feature',
             id,
@@ -2324,11 +2363,13 @@
                 component_type: 'fiber_cable',
                 ...defaultPropertiesFor('fiber_cable'),
                 length_meters: Number(lengthMeters.toFixed(2)),
+                ...endpointProps,
             },
         };
 
         state.features.set(id, feature);
         state.draftLine = [];
+        state.draftLineCustomers = [];
         updateDraftLine();
         refreshSources();
         selectFeature(id);
@@ -2581,6 +2622,7 @@
         state.activeTool = null;
         state.activeNodeType = null;
         state.draftLine = [];
+        state.draftLineCustomers = [];
         clearPathMarkers();
         clearLinkTarget();
         clearSelection();
@@ -5090,6 +5132,13 @@
             if (feature.geometry.type === 'LineString' && props.fiber_code) {
                 options.push(props.fiber_code);
                 corePalette.forEach(([color]) => options.push(`${props.fiber_code} ${color}`));
+            }
+        });
+
+        // Every mapped customer is a valid fiber endpoint too.
+        state.customerFeatures.forEach((feature) => {
+            if (Array.isArray(feature.geometry?.coordinates)) {
+                options.push(customerEndpointLabel(feature.properties || {}));
             }
         });
 
