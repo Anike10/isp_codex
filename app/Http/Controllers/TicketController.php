@@ -14,8 +14,13 @@ class TicketController extends Controller
 {
     public function index(Request $request)
     {
+        // No status filter chosen => hide closed tickets by default.
+        // `status=all` shows every status; a specific status filters to it.
+        $status = trim((string) $request->query('status', ''));
+
         return view('tickets.index', [
             'tickets' => SupportTicket::with(['customer', 'technician'])
+                ->when($status === '', fn ($query) => $query->where('status', '!=', 'closed'))
                 ->when($request->filled('search'), function ($query) use ($request) {
                     $search = trim((string) $request->query('search'));
                     $query->where(function ($query) use ($search) {
@@ -29,7 +34,7 @@ class TicketController extends Controller
                     });
                 })
                 ->when($request->filled('priority'), fn ($query) => $query->where('priority', $request->query('priority')))
-                ->when($request->filled('status'), fn ($query) => $query->where('status', $request->query('status')))
+                ->when($status !== '' && $status !== 'all', fn ($query) => $query->where('status', $status))
                 ->when($request->filled('assigned'), function ($query) use ($request) {
                     $request->query('assigned') === 'unassigned'
                         ? $query->whereNull('assigned_to')
