@@ -1643,6 +1643,15 @@
     font-size: 12px;
 }
 
+.popup-actions {
+    margin-top: 10px;
+}
+
+.popup-actions .search-result-action {
+    width: 100%;
+    justify-content: center;
+}
+
 .popup-details div {
     display: grid;
     grid-template-columns: 88px minmax(0, 1fr);

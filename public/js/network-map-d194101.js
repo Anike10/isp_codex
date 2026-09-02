@@ -40,6 +40,7 @@
         customerLocationIndex: new Map(),
         partySearchCustomerIds: new Set(),
         customerPopup: null,
+        featurePopup: null,
         pendingPartyLocationCustomerId: null,
         editingFeatureId: null,
         dirty: false,
@@ -222,7 +223,7 @@
         ],
         fiber_cable: [
             input('fiber_code', 'Fiber Code/ID', 'F-OLT-SPL-001', true),
-            select('core_count', 'Core Count', ['4F', '6F', '12F', '24F'], true),
+            select('core_count', 'Core Count', ['1F', '2F', '4F', '6F', '12F', '24F'], true),
             select('cable_type', 'Cable Type', ['Overhead', 'Underground'], true),
             input('a_end_device_port', 'A-End Device/Port', 'OLT-01 PON 1/1'),
             input('a_end_tube_color', 'A-End Tube Color', 'Blue'),
@@ -2294,6 +2295,7 @@
             }
 
             selectMapFeature(featureId);
+            showFeaturePopup(featureId);
             return;
         }
 
@@ -2353,6 +2355,10 @@
             endpointProps.z_end_customer_name = zCustomer.name;
             endpointProps.z_end_device_port = zCustomer.name;
         }
+        // A fiber that lands directly on a customer pin is a drop cable — 2 core.
+        if (aCustomer || zCustomer) {
+            endpointProps.core_count = '2F';
+        }
         const feature = {
             type: 'Feature',
             id,
@@ -2381,11 +2387,7 @@
         if (!id || !state.features.has(id)) return;
         selectMapFeature(id);
         openFeatureForm(id, false);
-        const feature = state.features.get(id);
-        new maplibregl.Popup({ closeButton: false, offset: 12 })
-            .setLngLat(popupCoordinate(feature))
-            .setHTML(popupHtml(feature))
-            .addTo(state.map);
+        showFeaturePopup(id);
     }
 
     function selectMapFeature(featureId) {
@@ -4592,7 +4594,27 @@
             `<p class="popup-title">${escapeHtml(title)}</p>`,
             `<p class="popup-meta">${escapeHtml(componentLabels[props.component_type] || props.component_type)}</p>`,
             rows.length ? `<dl class="popup-details">${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join('')}</dl>` : '',
+            `<div class="popup-actions"><button type="button" class="search-result-action search-result-action--primary" data-edit-feature="${escapeHtml(String(props.id || feature.id))}">Edit details</button></div>`,
         ].join('');
+    }
+
+    /** Info popup for any node/link with a one-click Edit button. */
+    function showFeaturePopup(id) {
+        const feature = state.features.get(id);
+        if (!feature) return;
+
+        state.featurePopup?.remove();
+        state.featurePopup = new maplibregl.Popup({ closeButton: true, offset: 12 })
+            .setLngLat(popupCoordinate(feature))
+            .setHTML(popupHtml(feature))
+            .addTo(state.map);
+
+        const editButton = state.featurePopup.getElement().querySelector('[data-edit-feature]');
+        editButton?.addEventListener('click', () => {
+            state.featurePopup?.remove();
+            state.featurePopup = null;
+            openExistingFeature(id);
+        });
     }
 
     function popupRows(props) {
