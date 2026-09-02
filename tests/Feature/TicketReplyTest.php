@@ -96,6 +96,27 @@ class TicketReplyTest extends TestCase
             ->assertSee('US_EPON - 7/31');
     }
 
+    public function test_ticket_map_page_shows_party_and_ticket_details(): void
+    {
+        $user = User::factory()->create();
+        $ticket = $this->ticket();
+        $ticket->customer->update([
+            'phone' => '01812345678',
+            'map_latitude' => 23.9013,
+            'map_longitude' => 89.1220,
+        ]);
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs($user)
+            ->get(route('tickets.map', $ticket))
+            ->assertOk()
+            ->assertSee('Ticket #'.$ticket->id.' — Map &amp; Details', false)
+            ->assertSee($ticket->subject)
+            ->assertSee('01812345678')
+            ->assertSee('data-customer-location-map', false)
+            ->assertSee(route('tickets.show', $ticket), false);
+    }
+
     public function test_ticket_list_and_details_expose_reply_and_update_controls(): void
     {
         $ticket = $this->ticket();

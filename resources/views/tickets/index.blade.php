@@ -4,7 +4,6 @@
 
 @section('content')
 @php
-    $canOpenPartyLedger = auth()->user()?->hasPermission('manage_payment_accounts') || auth()->user()?->hasPermission('manage_customers');
     $rxText = static fn ($value) => $value === null ? '—' : number_format((float) $value, 2);
     $oltOnuText = static fn ($onu) => $onu
         ? trim(($onu->olt_name ?: '—').' - '.($onu->pon_port ?? '—').'/'.($onu->onu_id ?? '—'))
@@ -51,19 +50,14 @@
 </form>
 
 <table>
-    <thead><tr><th style="width:34px"><input type="checkbox" id="ticketBulkAll" aria-label="Select all tickets on this page"></th><th>#</th><th>Party</th><th>OLT/ONU</th><th>Authorized</th><th class="col-center">RX/Update</th><th>Subject</th><th class="col-center">Status</th><th>Action</th></tr></thead>
+    <thead><tr><th style="width:34px"><input type="checkbox" id="ticketBulkAll" aria-label="Select all tickets on this page"></th><th>#</th><th>Party</th><th>Mobile</th><th>OLT/ONU</th><th>Authorized</th><th class="col-center">RX/Update</th><th>Subject</th><th class="col-center">Status</th><th>Action</th></tr></thead>
     <tbody>
     @forelse ($tickets as $ticket)
         <tr data-href="{{ route('tickets.show', $ticket) }}">
             <td><input type="checkbox" class="ticket-bulk-row" name="ids[]" value="{{ $ticket->id }}" form="ticketBulkForm" aria-label="Select ticket {{ $ticket->id }}"></td>
             <td>{{ $tickets->firstItem() + $loop->index }}</td>
-            <td>
-                @if ($canOpenPartyLedger)
-                    <a href="{{ route('accounting.ledger', ['customer_id' => $ticket->customer_id]) }}">{{ $ticket->customer->name }}</a>
-                @else
-                    {{ $ticket->customer->name }}
-                @endif
-            </td>
+            <td><a href="{{ route('tickets.map', $ticket) }}" title="Open map & details for this ticket">{{ $ticket->customer->name }}</a></td>
+            <td>{{ $ticket->customer->phone ?: '—' }}</td>
             <td>{{ $oltOnuText($ticket->matched_onu ?? null) }}</td>
             <td>{{ $ticket->technician?->name ?? 'Unassigned' }}</td>
             <td class="col-center" @if($ticket->rx_power_updated_at) title="Last update Rx captured {{ $ticket->rx_power_updated_at->format('d/m/Y H:i') }}" @endif>
@@ -74,7 +68,7 @@
             <td><a class="btn light" href="{{ route('tickets.show', $ticket) }}">Reply / Update</a></td>
         </tr>
     @empty
-        <tr><td colspan="9">No tickets found.</td></tr>
+        <tr><td colspan="10">No tickets found.</td></tr>
     @endforelse
     </tbody>
 </table>

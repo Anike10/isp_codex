@@ -81,6 +81,24 @@ class TicketController extends Controller
         ]);
     }
 
+    /** Full-page map of the party's service location, with party + ticket details beside it. */
+    public function map(SupportTicket $ticket)
+    {
+        $ticket->load(['customer', 'technician', 'replies.user']);
+
+        $customer = $ticket->customer;
+        $mac = mb_strtolower(trim((string) $customer?->last_connected_mac));
+        $onu = ($mac !== '' && Schema::hasTable('olt_onus'))
+            ? (OnuMatcher::byMac([$mac])[$mac] ?? null)
+            : null;
+
+        return view('tickets.map', [
+            'ticket' => $ticket,
+            'customer' => $customer,
+            'onu' => $onu,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
