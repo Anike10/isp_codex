@@ -196,6 +196,7 @@
             ...nodeMetaFields(),
         ],
         splitter: [
+            input('name', 'Name', 'SPLITTER-01', true),
             tjBoxSelect('splitter_parent_tj_box_id', 'Inside TJ Box'),
             select('splitter_type', 'Type', ['1:2', '1:4', '1:8', '1:16'], true),
             input('parent_olt_port', 'Parent OLT/Port', 'OLT-01 PON 1/1'),
