@@ -10,9 +10,13 @@
         || auth()->user()?->hasPermission('manage_products');
 
     $authUser = auth()->user();
-    $canGrantGrace = (bool) $authUser?->hasPermission('grant_grace_period');
-    $canOverrideValidity = (bool) $authUser?->hasPermission('override_service_validity');
-    $canForceStatus = (bool) $authUser?->hasPermission('force_service_status');
+    $isDeleted = method_exists($customer, 'trashed') && $customer->trashed();
+    // A soft-deleted party is shown read-only: same layout as a live profile,
+    // but every mutating control is withheld until it is restored.
+    $showActions = ! $isDeleted;
+    $canGrantGrace = $showActions && (bool) $authUser?->hasPermission('grant_grace_period');
+    $canOverrideValidity = $showActions && (bool) $authUser?->hasPermission('override_service_validity');
+    $canForceStatus = $showActions && (bool) $authUser?->hasPermission('force_service_status');
 
     $isSpecial = (bool) $customer->never_suspend;
     $activeUntil = $isSpecial ? null : $customer->activeUntil();
@@ -930,24 +934,39 @@
     <section class="customer-hero">
         <div class="customer-hero__head">
             <div>
-                <p class="customer-hero__label">Customer Profile</p>
+                <p class="customer-hero__label">{{ $isDeleted ? 'Deleted Party Profile' : 'Customer Profile' }}</p>
                 <h1 class="customer-hero__title">{{ $customer->name }}</h1>
                 <p class="customer-hero__meta">
                     {{ $customer->connection_id ?: 'ID not assigned' }} • {{ $customer->phone ?: 'Phone not provided' }}
                 </p>
-                <div class="customer-status {{ $isActive ? '' : 'offline' }}">{{ $isActive ? 'Active' : 'Offline' }}</div>
+                <div class="customer-status {{ $isDeleted ? 'offline' : ($isActive ? '' : 'offline') }}">{{ $isDeleted ? 'Deleted' : ($isActive ? 'Active' : 'Offline') }}</div>
             </div>
             <div class="hero-actions">
-                <a class="btn" href="{{ route('customers.payments.create', $customer) }}">Quick Recharge</a>
-                <a class="btn secondary" href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}">Party Ledger</a>
-                <a class="btn secondary" href="{{ route('customers.edit', $customer) }}">Edit Profile</a>
-                <button class="btn btn--ghost" type="button" id="mikrotik-quick-sync" {{ ! $routerTargetsExists ? 'disabled' : '' }}>
-                    MikroTik Sync
-                </button>
-                <a class="btn secondary" href="{{ route('customers.history', $customer) }}">Edit History</a>
-                <a class="btn light" href="{{ route('customers.index') }}">All Parties</a>
+                @if ($isDeleted)
+                    <form method="post" action="{{ route('customers.restore', $customer->id) }}" onsubmit="return confirm('Restore this party to the active list?');">
+                        @csrf
+                        <button class="btn" type="submit">Restore Party</button>
+                    </form>
+                    <a class="btn secondary" href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}">Party Ledger</a>
+                    <a class="btn secondary" href="{{ route('customers.deleted.history', $customer->id) }}">Change Log</a>
+                    <a class="btn light" href="{{ route('customers.deleted') }}">Deleted Parties</a>
+                @else
+                    <a class="btn" href="{{ route('customers.payments.create', $customer) }}">Quick Recharge</a>
+                    <a class="btn secondary" href="{{ route('accounting.ledger', ['customer_id' => $customer->id]) }}">Party Ledger</a>
+                    <a class="btn secondary" href="{{ route('customers.edit', $customer) }}">Edit Profile</a>
+                    <button class="btn btn--ghost" type="button" id="mikrotik-quick-sync" {{ ! $routerTargetsExists ? 'disabled' : '' }}>
+                        MikroTik Sync
+                    </button>
+                    <a class="btn secondary" href="{{ route('customers.history', $customer) }}">Edit History</a>
+                    <a class="btn light" href="{{ route('customers.index') }}">All Parties</a>
+                @endif
             </div>
         </div>
+        @if ($isDeleted)
+            <div class="customer-hero__banner" style="margin-top:12px;padding:10px 14px;border:1px solid #f4bcbc;border-radius:10px;background:#fdecec;color:#b42318;font-weight:600">
+                This party was deleted{{ $customer->deleted_at ? ' on '.$customer->deleted_at->format('d/m/Y H:i') : '' }}. All history below is read-only — Restore the party to make changes.
+            </div>
+        @endif
         @php
             $overdueActive = $isActive && ! $isSpecial && $daysRemaining !== null && $daysRemaining < 0;
             $syncRouter = $assignedRouters->first();
@@ -1145,7 +1164,7 @@
                 </div>
             @endif
 
-            @if ($servicePackage && (float) $customer->account_balance >= $serviceEffectivePrice && $serviceEffectivePrice > 0)
+            @if ($showActions && $servicePackage && (float) $customer->account_balance >= $serviceEffectivePrice && $serviceEffectivePrice > 0)
                 <div class="form-panel">
                     <h3 class="form-panel__title">Extend from advance balance</h3>
                     <form method="post" action="{{ route('customers.advance-renewal.store', $customer) }}">
@@ -1235,6 +1254,7 @@
                 </dd>
             </dl>
 
+            @if ($showActions)
             <div class="customer-routers">
                 <h3 class="form-panel__title" style="margin:0 0 8px;">MikroTik targets</h3>
                 <p class="muted">Selecting routers will sync PPPoE user to each selected MikroTik router on save.</p>
@@ -1267,6 +1287,7 @@
                     </div>
                 </form>
             </div>
+            @endif
 
             <div class="form-panel" style="margin-top:10px;">
                 <h3 class="form-panel__title">Reseller</h3>
@@ -1288,6 +1309,7 @@
         </article>
     </section>
 
+    @if ($showActions)
     @php
         $qrAccountsByMethod = $paymentAccounts
             ->groupBy('payment_method')
@@ -1377,6 +1399,7 @@
             sync();
         })();
     </script>
+    @endif
 
     <section class="customer-activity" id="party-activity">
         <div class="customer-activity__head">
@@ -1727,7 +1750,7 @@
             @include('customers._onu_signal_chart', ['samples' => $onuHistory ?? collect(), 'showRx' => $onuHistoryShowRx ?? true, 'showTx' => $onuHistoryShowTx ?? false, 'showLegend' => false])
         </section>
 
-    @include('customers.partials.map_location', ['editable' => false])
+    @include('customers.partials.map_location', ['editable' => false, 'showEditAction' => $showActions])
 </div>
 
 <script>

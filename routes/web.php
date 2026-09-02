@@ -102,7 +102,7 @@ Route::middleware('auth')->group(function () {
         Route::get('customers/deleted/{customer}/history', [CustomerController::class, 'deletedHistory'])->name('customers.deleted.history');
         Route::delete('customers/{customer}', [CustomerController::class, 'destroy'])->name('customers.destroy');
         Route::post('customers/{customer}/restore', [CustomerController::class, 'restore'])->name('customers.restore');
-        Route::resource('customers', CustomerController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+        Route::resource('customers', CustomerController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update'])->withTrashed(['show']);
     });
 
     Route::middleware('permission:manage_packages')->group(function () {

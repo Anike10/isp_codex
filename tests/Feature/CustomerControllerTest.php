@@ -284,6 +284,32 @@ class CustomerControllerTest extends TestCase
         $this->assertSame('Trashed Party (dupe)', $fresh->name);
     }
 
+    public function test_deleted_party_profile_opens_read_only(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::whereIn('name', ['manage_customers', 'force_service_status', 'manage_invoices'])->get());
+        $customer = Customer::create([
+            'name' => 'Read Only Party',
+            'phone' => '01710101055',
+            'connection_id' => 'DEL-RO',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+        $customer->delete();
+
+        $this->actingAs($user)->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Deleted Party Profile')
+            ->assertSee('This party was deleted')
+            ->assertSee(route('customers.restore', $customer->id), false)
+            // mutating controls are withheld for a trashed party
+            ->assertDontSee(route('customers.payments.store', $customer), false)
+            ->assertDontSee(route('customers.mikrotik-targets.update', $customer), false)
+            ->assertDontSee(route('customers.force-inactive', $customer), false)
+            ->assertDontSee(route('customers.edit', $customer), false);
+    }
+
     public function test_deleted_party_details_and_history_page_shows_the_party_fields(): void
     {
         $user = User::factory()->create();

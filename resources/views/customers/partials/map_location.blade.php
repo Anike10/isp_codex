@@ -1,5 +1,6 @@
 @php
     $editable = (bool) ($editable ?? false);
+    $showEditAction = (bool) ($showEditAction ?? true);
     $latitude = $editable ? old('map_latitude', $customer->map_latitude) : $customer->map_latitude;
     $longitude = $editable ? old('map_longitude', $customer->map_longitude) : $customer->map_longitude;
     $hasLocation = is_numeric($latitude) && is_numeric($longitude);
@@ -39,7 +40,7 @@
             <a class="btn light" href="{{ route('network-map.index', ['customer_id' => $customer->id]) }}">Open Network Map</a>
             @if ($editable)
                 <button class="btn light" data-clear-location type="button">Clear Location</button>
-            @else
+            @elseif ($showEditAction)
                 <a class="btn secondary" href="{{ route('customers.edit', $customer) }}#party-location-title-{{ $customer->id }}">Edit Location</a>
             @endif
         </div>
