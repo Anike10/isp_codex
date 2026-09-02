@@ -5,7 +5,6 @@
 @php
     $showDeletedCustomers = $showDeletedCustomers ?? false;
     $mayGrantGrace = (bool) auth()->user()?->hasPermission('grant_grace_period');
-    $mayQuickActivate = (bool) auth()->user()?->hasPermission('quick_activate_service');
     $maySpecial = (bool) auth()->user()?->hasPermission('mark_special_customer');
     $maySetSpecialPrice = (bool) auth()->user()?->hasPermission('set_special_package_price');
 @endphp
@@ -177,8 +176,8 @@
         font-size: 11px;
         text-align: right;
     }
-    .userid-assignment { margin-top: 3px; white-space: nowrap; }
-    .last-ip-cell { white-space: nowrap; }
+    .userid-primary { white-space: nowrap; }
+    .userid-routers { margin-top: 4px; white-space: normal; font-size: 11px; }
     .customer-list-toolbar {
         display: flex;
         align-items: center;
@@ -269,7 +268,21 @@
         content: 'Add note';
         color: #98a2b3;
     }
-    td.note-cell textarea { width: 100%; font: inherit; font-size: 12px; }
+    td.note-cell textarea { width: 100%; font: inherit; font-size: 12px; min-width: 280px; }
+    /* Keep inline live-edit fields comfortably wide, even when the column
+       is sized to short content like a phone number. The :has() rule lets
+       the note column expand only while its editor is open. */
+    td[data-inline-field] input[type="text"],
+    td[data-inline-field] select {
+        width: 100%;
+        min-width: 220px;
+        box-sizing: border-box;
+        font: inherit;
+        font-size: 13px;
+        padding: 4px 6px;
+    }
+    td[data-inline-field="name"] input[type="text"] { min-width: 260px; }
+    td.note-cell:has(textarea) { max-width: none; }
     .onu-sub { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #dbe2ec; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; line-height: 1.35; }
     .onu-sub__loc { font-weight: 700; color: #475467; }
     .onu-sub__vlan { font-weight: 700; color: #175cd3; }
@@ -285,7 +298,7 @@
 </style>
 
 <div class="topbar">
-    <div><h1>{{ $showDeletedCustomers ? 'Deleted Parties' : 'Parties' }}</h1><div class="muted">{{ $showDeletedCustomers ? 'Soft-deleted parties kept with all history' : 'Customers, vendors, resellers, and product-only buyers' }}</div></div>
+    <div><h1>{{ $showDeletedCustomers ? 'Deleted Parties' : 'Customers' }}</h1><div class="muted">{{ $showDeletedCustomers ? 'Soft-deleted parties kept with all history' : 'Customers, resellers, and product-only buyers' }}</div></div>
     <div class="actions" style="gap:8px">
         @if (! $showDeletedCustomers)
             <a class="btn" href="{{ route('customers.create') }}">Add Party</a>
@@ -297,7 +310,7 @@
 
 <form method="get" class="card customer-filter-form" style="margin-bottom:16px">
     <div><label>Search</label><input name="search" value="{{ request('search') }}" placeholder="Search by name, phone, connection ID, MikroTik username"></div>
-    <div><label>Role</label><select name="role"><option value="">All roles</option><option value="customer" @selected(request('role') === 'customer')>Customer</option><option value="vendor" @selected(request('role') === 'vendor')>Vendor</option><option value="reseller" @selected(request('role') === 'reseller')>Reseller</option></select></div>
+    <div><label>Role</label><select name="role"><option value="">All roles</option><option value="customer" @selected(request('role') === 'customer')>Customer</option><option value="reseller" @selected(request('role') === 'reseller')>Reseller</option></select></div>
     <div><label>Status</label><select name="status"><option value="">All statuses</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>
     <div><label>Package</label><select name="package_id"><option value="">All packages</option>@foreach($packages as $package)<option value="{{ $package->id }}" @selected((int) request('package_id') === $package->id)>{{ $package->name }}</option>@endforeach</select></div>
     <div><label>Balance</label><select name="due_state"><option value="">All balances</option><option value="due" @selected(request('due_state') === 'due')>Has due</option><option value="advance" @selected(request('due_state') === 'advance')>Has advance</option></select></div>
@@ -341,7 +354,7 @@
 </div>
 
 <table class="customer-table">
-    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Last connected IP</th><th class="col-center">Package</th><th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th><th>Note</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
+    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>MikroTik ID : IP</th><th class="col-center">Package</th><th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th><th>Note</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
         @php
@@ -355,8 +368,6 @@
             $inactiveDays = $inactiveSince
                 ? (int) $inactiveSince->diffInDays(now()->startOfDay())
                 : null;
-            $nextActiveDate = now()->addMonthNoOverflow()->toDateString();
-            $canQuickActivate = ($hasImportedSecretTable ?? false) && ($customer->imported_secret_exists ?? false) && ! ($customer->invoices_exists ?? false);
             $overdueActive = ! $customer->never_suspend && $customer->status === 'active' && $daysRemaining !== null && $daysRemaining < 0;
         @endphp
         <tr class="{{ $customer->never_suspend ? 'customer-row-special' : ($overdueActive ? 'customer-row-overdue' : '') }}" @if(! $showDeletedCustomers) data-href="{{ route('customers.show', $customer) }}" @endif>
@@ -416,24 +427,27 @@
             </td>
             @php
                 $hasConnection = $customer->mikrotik_username || $customer->connection_id;
+                $mikrotikId = $customer->mikrotik_username ?: $customer->connection_id;
+                $displayIp = $customer->use_fixed_ip
+                    ? $customer->fixed_ip_address
+                    : ($customer->last_connected_ip ?: $customer->learned_ip_address);
+                $importedRouterNames = $customer->relationLoaded('importedSecrets')
+                    ? $customer->importedSecrets->pluck('router.name')->filter()->unique()->values()
+                    : collect();
+                $assignedRouterNames = $customer->mikrotikRouters->pluck('name')->filter()->unique()->values();
+                if ($assignedRouterNames->isEmpty() && $customer->mikrotikRouter) {
+                    $assignedRouterNames = collect([$customer->mikrotikRouter->name]);
+                }
+                $routerNames = $importedRouterNames->isNotEmpty() ? $importedRouterNames : $assignedRouterNames;
             @endphp
             <td class="userid-cell">
-                {{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}
                 @if ($hasConnection)
-                    <div class="muted userid-assignment">
-                        <strong>IP assignment:</strong>
-                        {{ $customer->use_fixed_ip ? 'Fixed: '.($customer->fixed_ip_address ?: 'Not set') : 'Dynamic (profile pool)' }}
+                    <span class="userid-primary"><strong>{{ $mikrotikId }}</strong>: <code>{{ $displayIp ?: '—' }}</code></span>
+                    <div class="muted userid-routers">
+                        <strong>MikroTik:</strong> {{ $routerNames->isNotEmpty() ? $routerNames->implode(', ') : 'Not detected' }}
                     </div>
-                @endif
-            </td>
-            <td class="col-center last-ip-cell">
-                @if ($hasConnection && $customer->last_connected_ip)
-                    <code>{{ $customer->last_connected_ip }}</code>
-                    @if ($customer->last_connected_at)
-                        <div class="muted">{{ $customer->last_connected_at->diffForHumans() }}</div>
-                    @endif
                 @else
-                    <span class="muted">—</span>
+                    Product-only
                 @endif
             </td>
             @php
@@ -524,25 +538,16 @@
                             <a class="btn light" style="margin-top:6px" href="{{ route('customers.edit', $customer) }}">Assign package for grace</a>
                         @endif
                     @endif
-                @elseif ($customer->status === 'active')
-                    <span class="muted">No paid month</span>
-                    @if ($customer->subscriptions_exists && $canQuickActivate && $mayQuickActivate)
-                        <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
-                            @csrf
-                            <input type="date" name="active_until" value="{{ $nextActiveDate }}" min="{{ now()->toDateString() }}" style="width:165px">
-                            <button class="btn secondary" type="submit">Activate until</button>
-                        </form>
-                    @endif
                 @elseif ($customer->subscriptions_exists && $activeUntil === null)
                     <span class="muted">No paid month</span>
                     @if ($customer->grace_used_at)
                         <div class="muted" style="font-size:12px;">Grace already used</div>
                     @endif
-                    @if ($customer->subscriptions_exists && $canQuickActivate && $mayQuickActivate)
-                        <form method="post" action="{{ route('customers.activate-next-date', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
+                    @if (! $customer->grace_used_at && $mayGrantGrace)
+                        <form method="post" action="{{ route('customers.grace-period', $customer) }}" class="actions" style="gap:6px;margin-top:6px">
                             @csrf
-                            <input type="date" name="active_until" value="{{ $nextActiveDate }}" min="{{ now()->toDateString() }}" style="width:165px">
-                            <button class="btn secondary" type="submit">Activate until</button>
+                            <input type="number" name="grace_days" min="1" max="365" placeholder="Days" style="width:78px" required>
+                            <button class="btn secondary" type="submit">Grace</button>
                         </form>
                     @endif
                 @elseif ($customer->subscriptions_exists)
