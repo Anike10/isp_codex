@@ -2,11 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\AppIpPool;
 use App\Models\Customer;
-use App\Models\InternetPackage;
 use App\Models\MikrotikRouter;
 use App\Observers\RecordVersionObserver;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
@@ -14,8 +13,6 @@ use Throwable;
 class MikrotikCustomerSyncService
 {
     public const DEFAULT_PASSWORD = '4321';
-
-    private array $poolRangesCache = [];
 
     public function sync(Customer $customer): string
     {
@@ -184,6 +181,116 @@ class MikrotikCustomerSyncService
     }
 
     /**
+     * Remove app-generated fixed remote addresses from every dynamic party on
+     * one router. Affected live sessions are dropped once so RouterOS can hand
+     * out another currently-free address from the profile pool.
+     *
+     * @return array{managed: int, released: int, already_dynamic: int, missing: int, failed: int, messages: array<int, string>}
+     */
+    public function releaseDynamicAddresses(MikrotikRouter $router, ?RouterOsClient $client = null): array
+    {
+        $ownsClient = $client === null;
+        $client ??= new RouterOsClient;
+        $summary = [
+            'managed' => 0,
+            'released' => 0,
+            'already_dynamic' => 0,
+            'missing' => 0,
+            'failed' => 0,
+            'messages' => [],
+        ];
+
+        try {
+            if ($ownsClient) {
+                $client->connect($router->ip_address, $router->api_port, $router->username, $router->apiPassword());
+            }
+
+            $usernames = Customer::query()
+                ->assignedToMikrotikRouter($router->id)
+                ->where('use_fixed_ip', false)
+                ->get(['connection_id', 'mikrotik_username'])
+                ->map(fn (Customer $customer) => trim((string) ($customer->mikrotik_username ?: $customer->connection_id)))
+                ->filter()
+                ->unique(fn (string $username) => mb_strtolower($username))
+                ->values();
+
+            $summary['managed'] = $usernames->count();
+            if ($usernames->isEmpty()) {
+                return $summary;
+            }
+
+            $managed = $usernames->mapWithKeys(fn (string $username) => [mb_strtolower($username) => $username]);
+            $secrets = collect($client->command('/ppp/secret/print', [
+                '.proplist' => '.id,name,remote-address',
+            ]))->filter(fn (array $secret) => $managed->has(mb_strtolower(trim((string) ($secret['name'] ?? '')))))
+                ->groupBy(fn (array $secret) => mb_strtolower(trim((string) $secret['name'])));
+
+            foreach ($managed as $key => $username) {
+                $matches = $secrets->get($key, collect());
+                if ($matches->isEmpty()) {
+                    $summary['missing']++;
+
+                    continue;
+                }
+                if ($matches->count() !== 1) {
+                    if ($matches->every(fn (array $secret) => $this->normalizeRemoteAddress($secret['remote-address'] ?? null) === null)) {
+                        $summary['already_dynamic']++;
+                        $summary['messages'][] = "{$username}: duplicate PPP secrets found, but none has a fixed remote address";
+                    } else {
+                        $summary['failed']++;
+                        $summary['messages'][] = "{$username}: duplicate PPP secret with a fixed remote address; skipped";
+                    }
+
+                    continue;
+                }
+
+                $secret = $matches->first();
+                if ($this->normalizeRemoteAddress($secret['remote-address'] ?? null) === null) {
+                    $summary['already_dynamic']++;
+
+                    continue;
+                }
+                if (empty($secret['.id'])) {
+                    $summary['failed']++;
+                    $summary['messages'][] = "{$username}: invalid PPP secret; skipped";
+
+                    continue;
+                }
+
+                try {
+                    $client->command('/ppp/secret/set', [
+                        '.id' => $secret['.id'],
+                        'remote-address' => '0.0.0.0',
+                    ]);
+                    $summary['released']++;
+                    $this->disconnectActiveSession($client, $username);
+                } catch (Throwable $exception) {
+                    $summary['failed']++;
+                    $summary['messages'][] = "{$username}: ".$exception->getMessage();
+                }
+            }
+
+            Customer::query()
+                ->assignedToMikrotikRouter($router->id)
+                ->where('use_fixed_ip', false)
+                ->where(function ($query): void {
+                    $query->whereNotNull('learned_ip_address')
+                        ->orWhereNotNull('learned_ip_package_id');
+                })
+                ->update([
+                    'learned_ip_address' => null,
+                    'learned_ip_package_id' => null,
+                ]);
+        } finally {
+            if ($ownsClient) {
+                $client->close();
+            }
+        }
+
+        return $summary;
+    }
+
+    /**
      * Poll `/ppp/active` and copy each session's device MAC (`caller-id`) onto
      * the party it belongs to (`last_connected_mac` in the party info), plus
      * the live IP / timestamp. Read-only, transport-agnostic, and far lighter
@@ -218,6 +325,23 @@ class MikrotikCustomerSyncService
         // were present on the preceding poll.
         app(PppSessionSnapshotService::class)->sync($router, $sessions, $interfaces);
 
+        return $this->updateActiveConnectionData($router, $sessions);
+    }
+
+    /**
+     * Copy active-session MAC/IP data onto matching parties without reading the
+     * router. The event-stream worker uses this for add/change notifications;
+     * the manual sync command feeds it a complete read.
+     *
+     * @param  Collection<int, array<string, mixed>>  $sessions
+     * @return array{sessions: int, no_mac: int, matched: int, unmatched: int, updated: int}
+     */
+    public function updateActiveConnectionData(MikrotikRouter $router, Collection $sessions): array
+    {
+        $sessions = $sessions
+            ->filter(fn ($session) => is_array($session) && ! blank($session['name'] ?? null))
+            ->values();
+
         if ($sessions->isEmpty()) {
             return ['sessions' => 0, 'no_mac' => 0, 'matched' => 0, 'unmatched' => 0, 'updated' => 0];
         }
@@ -249,15 +373,6 @@ class MikrotikCustomerSyncService
         $noMac = 0;
 
         foreach ($sessions as $session) {
-            $mac = $this->normalizeMacAddress(trim((string) ($session['caller-id'] ?? '')) ?: null);
-            // Only real MACs — some PPP services put an IP or interface name in
-            // caller-id, and that must not land in last_connected_mac.
-            if (! $mac || ! preg_match('/^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/i', $mac)) {
-                $noMac++;
-
-                continue;
-            }
-
             $customer = $byName[mb_strtolower(trim((string) $session['name']))] ?? null;
             if (! $customer) {
                 $unmatched++;
@@ -266,13 +381,21 @@ class MikrotikCustomerSyncService
             }
 
             $matched++;
+            $mac = $this->normalizeMacAddress(trim((string) ($session['caller-id'] ?? '')) ?: null);
+            // Only real MACs — some PPP services put an IP or interface name in
+            // caller-id, and that must not land in last_connected_mac.
+            if (! $mac || ! preg_match('/^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/i', $mac)) {
+                $noMac++;
+                $mac = null;
+            }
+
             $ipAddress = trim((string) ($session['address'] ?? '')) ?: null;
             $updates = ['last_connected_at' => now()];
-            if ($customer->last_connected_mac !== $mac) {
+            if ($mac && $customer->last_connected_mac !== $mac) {
                 $updates['last_connected_mac'] = $mac;
                 $updated++;
             }
-            if (! $customer->use_fixed_ip && $ipAddress !== null && $customer->last_connected_ip !== $ipAddress) {
+            if ($ipAddress !== null && $customer->last_connected_ip !== $ipAddress) {
                 $updates['last_connected_ip'] = $ipAddress;
             }
 
@@ -294,10 +417,10 @@ class MikrotikCustomerSyncService
      * Poll `/ppp/active` on this party's own router(s) right now and copy device
      * MACs onto the matching parties. Called right after a party is created or
      * its connection changes so the ONU match on the party list does not have to
-     * wait for the scheduled {@see syncActiveConnectionMacs()} run.
+     * wait for a future listener event.
      *
      * Best effort: a router that is unreachable now is skipped silently — the
-     * hourly job will catch up.
+     * listener will catch the party's next session.
      *
      * @return array{sessions: int, no_mac: int, matched: int, unmatched: int, updated: int}
      */
@@ -337,87 +460,7 @@ class MikrotikCustomerSyncService
             return 0;
         }
 
-        $names = $sessions->pluck('name')->map(fn ($name) => trim((string) $name))->filter()->unique()->values();
-        $customers = Customer::query()
-            ->with('activeSubscription.package')
-            ->assignedToMikrotikRouter($router->id)
-            ->where(function ($query) use ($names): void {
-                $query->whereIn('mikrotik_username', $names)
-                    ->orWhereIn('connection_id', $names);
-            })
-            ->get();
-
-        $customersByUsername = collect();
-        foreach ($customers as $customer) {
-            foreach (array_unique(array_filter([$customer->mikrotik_username, $customer->connection_id])) as $username) {
-                $customersByUsername->put((string) $username, $customer);
-            }
-        }
-
-        $captured = 0;
-        foreach ($sessions as $session) {
-            $username = trim((string) $session['name']);
-            /** @var Customer|null $customer */
-            $customer = $customersByUsername->get($username);
-            if (! $customer) {
-                continue;
-            }
-
-            $ipAddress = trim((string) ($session['address'] ?? '')) ?: null;
-            $callerId = trim((string) ($session['caller-id'] ?? '')) ?: null;
-            $package = $customer->activeSubscription?->package;
-            $expectedProfile = $package?->mikrotik_profile ?: $package?->name;
-            $sessionProfile = trim((string) ($session['profile'] ?? '')) ?: null;
-            $isCurrentPackageSession = $package
-                && (! $sessionProfile || $sessionProfile === $expectedProfile);
-            $ipMatchesPackagePool = $this->ipMatchesConfiguredPackagePool($package, $ipAddress, $router->id);
-
-            $updates = [];
-            if ($customer->use_fixed_ip || $isCurrentPackageSession) {
-                $updates['last_connected_at'] = now();
-                if ($ipAddress) {
-                    $updates['last_connected_ip'] = $ipAddress;
-                }
-                if ($callerId) {
-                    $updates['last_connected_mac'] = $this->normalizeMacAddress($callerId);
-                }
-            }
-
-            if (! $customer->use_fixed_ip && $isCurrentPackageSession && $ipAddress && $ipMatchesPackagePool) {
-                $updates['learned_ip_address'] = $ipAddress;
-                $updates['learned_ip_package_id'] = $package->id;
-            } elseif (! $customer->use_fixed_ip && $isCurrentPackageSession && $ipAddress) {
-                $updates['learned_ip_address'] = null;
-                $updates['learned_ip_package_id'] = null;
-            }
-
-            if ($updates !== []) {
-                $customer->forceFill($updates)->save();
-            }
-
-            $remoteAddress = $customer->use_fixed_ip
-                ? $customer->fixed_ip_address
-                : ($isCurrentPackageSession && $ipMatchesPackagePool ? $ipAddress : null);
-
-            if ($remoteAddress) {
-                $secret = $client->command('/ppp/secret/print', [
-                    '?name' => $username,
-                    '.proplist' => '.id,name,remote-address',
-                ]);
-                $this->assertSingleExactSecret($secret, $username);
-
-                if (($secret[0]['remote-address'] ?? null) !== $remoteAddress) {
-                    $client->command('/ppp/secret/set', [
-                        '.id' => $secret[0]['.id'],
-                        'remote-address' => $remoteAddress,
-                    ]);
-                }
-            }
-
-            $captured++;
-        }
-
-        return $captured;
+        return $this->updateActiveConnectionData($router, $sessions)['matched'];
     }
 
     private function syncPppSecret(RouterOsClient $client, Customer $customer, MikrotikRouter $router): string
@@ -441,22 +484,14 @@ class MikrotikCustomerSyncService
             $inactive = $customer->status !== 'active' || ! $subscription || $subscription->status !== 'active' || ! $package;
         }
         $profile = $inactive ? $router->inactive_pppoe_profile : ($package?->mikrotik_profile ?: $package?->name);
-        $learnedIpMatchesPackagePool = $this->ipMatchesConfiguredPackagePool(
-            $package,
-            $customer->learned_ip_address,
-            $router->id,
-        );
-        if (! $customer->use_fixed_ip && $customer->learned_ip_address && ! $learnedIpMatchesPackagePool) {
+        if (! $customer->use_fixed_ip
+            && ($customer->learned_ip_address !== null || $customer->learned_ip_package_id !== null)) {
             $customer->forceFill([
                 'learned_ip_address' => null,
                 'learned_ip_package_id' => null,
             ])->saveQuietly();
         }
-        $remoteAddress = $this->remoteAddressFor($customer, $package, $router->id);
-        $activeSessionPoolMismatch = ! $customer->use_fixed_ip
-            && ! $inactive
-            && $customer->last_connected_ip
-            && ! $this->ipMatchesConfiguredPackagePool($package, $customer->last_connected_ip, $router->id);
+        $remoteAddress = $customer->use_fixed_ip ? ($customer->fixed_ip_address ?: null) : null;
 
         if (! $inactive && strcasecmp(trim((string) $profile), trim((string) $router->inactive_pppoe_profile)) === 0) {
             throw new RuntimeException("Package {$package->name} uses the reserved inactive PPPoE profile.");
@@ -527,7 +562,7 @@ class MikrotikCustomerSyncService
         $remoteAddressChanged = $this->normalizeRemoteAddress($oldRemoteAddress)
             !== $this->normalizeRemoteAddress($remoteAddress);
 
-        if ($profileChanged || $this->routerBoolean($oldDisabled) || (! $inactive && $remoteAddressChanged) || $activeSessionPoolMismatch) {
+        if ($profileChanged || $this->routerBoolean($oldDisabled) || (! $inactive && $remoteAddressChanged)) {
             $this->disconnectActiveSession($client, $username);
         }
 
@@ -570,132 +605,6 @@ class MikrotikCustomerSyncService
             $attributes['rate-limit'] = $rateLimit;
         }
         $client->command('/ppp/profile/add', $attributes);
-    }
-
-    private function remoteAddressFor(Customer $customer, ?InternetPackage $package, ?int $routerId): ?string
-    {
-        if ($customer->use_fixed_ip) {
-            return $customer->fixed_ip_address ?: null;
-        }
-
-        if ($package
-            && (int) $customer->learned_ip_package_id === $package->id
-            && $this->ipMatchesConfiguredPackagePool($package, $customer->learned_ip_address, $routerId)) {
-            return $customer->learned_ip_address ?: null;
-        }
-
-        return null;
-    }
-
-    private function ipMatchesConfiguredPackagePool(
-        ?InternetPackage $package,
-        ?string $ipAddress,
-        ?int $routerId,
-    ): bool {
-        if (! $ipAddress || ! filter_var($ipAddress, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            return false;
-        }
-
-        $poolName = trim((string) ($package?->default_ip_pool ?? ''));
-        if ($poolName === '') {
-            return true;
-        }
-
-        $cacheKey = ($routerId ?: 'global').'|'.$poolName;
-        if (! array_key_exists($cacheKey, $this->poolRangesCache)) {
-            $query = AppIpPool::query()->where('name', $poolName);
-            if ($routerId) {
-                $query->where(function ($query) use ($routerId): void {
-                    $query->where('mikrotik_router_id', $routerId)
-                        ->orWhereNull('mikrotik_router_id');
-                });
-            }
-
-            $ranges = $query->pluck('ranges')->filter()->values()->all();
-            if ($ranges === [] && $routerId) {
-                $ranges = AppIpPool::query()
-                    ->where('name', $poolName)
-                    ->pluck('ranges')
-                    ->filter()
-                    ->values()
-                    ->all();
-            }
-
-            $this->poolRangesCache[$cacheKey] = $ranges;
-        }
-
-        $ranges = $this->poolRangesCache[$cacheKey];
-        if ($ranges === []) {
-            return true;
-        }
-
-        $hasUsableRange = false;
-        foreach ($ranges as $rangeList) {
-            foreach (preg_split('/[\s,;]+/', trim((string) $rangeList), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $range) {
-                $matches = $this->ipv4MatchesRange($ipAddress, $range);
-                if ($matches === null) {
-                    continue;
-                }
-
-                $hasUsableRange = true;
-                if ($matches) {
-                    return true;
-                }
-            }
-        }
-
-        return ! $hasUsableRange;
-    }
-
-    private function ipv4MatchesRange(string $ipAddress, string $range): ?bool
-    {
-        $ip = $this->ipv4ToUnsignedInteger($ipAddress);
-        if ($ip === null) {
-            return null;
-        }
-
-        if (str_contains($range, '/')) {
-            [$network, $prefix] = array_pad(explode('/', $range, 2), 2, null);
-            $network = $this->ipv4ToUnsignedInteger(trim((string) $network));
-            if ($network === null || ! ctype_digit((string) $prefix)) {
-                return null;
-            }
-
-            $prefix = (int) $prefix;
-            if ($prefix < 0 || $prefix > 32) {
-                return null;
-            }
-
-            $mask = $prefix === 0 ? 0 : ((0xFFFFFFFF << (32 - $prefix)) & 0xFFFFFFFF);
-
-            return ($ip & $mask) === ($network & $mask);
-        }
-
-        if (str_contains($range, '-')) {
-            [$start, $end] = array_pad(explode('-', $range, 2), 2, null);
-            $start = $this->ipv4ToUnsignedInteger(trim((string) $start));
-            $end = $this->ipv4ToUnsignedInteger(trim((string) $end));
-            if ($start === null || $end === null) {
-                return null;
-            }
-
-            return $ip >= min($start, $end) && $ip <= max($start, $end);
-        }
-
-        $single = $this->ipv4ToUnsignedInteger(trim($range));
-
-        return $single === null ? null : $ip === $single;
-    }
-
-    private function ipv4ToUnsignedInteger(string $ipAddress): ?int
-    {
-        if (! filter_var($ipAddress, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            return null;
-        }
-
-        $value = ip2long($ipAddress);
-
-        return $value === false ? null : (int) sprintf('%u', $value);
     }
 
     private function rateLimitFromSpeed(?string $speed): ?string

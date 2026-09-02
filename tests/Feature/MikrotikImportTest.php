@@ -380,7 +380,7 @@ class MikrotikImportTest extends TestCase
 
         $noc = MikrotikImportedSecret::where('mikrotik_router_id', $router->id)->where('name', 'noc')->firstOrFail();
         $this->assertSame('realpass', $noc->password, 'A real secret password must never be overwritten.');
-        $this->assertSame('10.9.0.5', $noc->remote_address);
+        $this->assertNull($noc->remote_address, 'A live session IP must not overwrite the PPP secret assignment.');
         $this->assertSame('AA:BB:CC:00:00:01', $noc->device_mac);
         $this->assertSame(1, MikrotikImportedSecret::where('mikrotik_router_id', $router->id)->where('name', 'noc')->count());
         $this->assertDatabaseMissing('mikrotik_imported_secrets', [

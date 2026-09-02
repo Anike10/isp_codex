@@ -41,12 +41,12 @@
             <input id="use-fixed-ip" type="checkbox" name="use_fixed_ip" value="1" @checked(old('use_fixed_ip')) style="width:auto;">
             Always use a fixed IP
         </label>
-        <span class="muted">Otherwise the first IP learned after each package change will be saved automatically.</span>
+        <span class="muted">Otherwise MikroTik assigns a free IP from the profile pool. The live IP is kept only as Last connected IP history.</span>
     </div>
     <div>
         <label>Fixed IP Address</label>
         <input id="fixed-ip-address" name="fixed_ip_address" value="{{ old('fixed_ip_address') }}" placeholder="Example: 10.10.10.25">
-        <span class="muted">Required only when Fixed IP is selected.</span>
+        <span class="muted">Required only when Fixed IP is selected. It must be unique and reserved outside every dynamic pool.</span>
     </div>
     <div class="full"><label>Address</label><textarea name="address">{{ old('address') }}</textarea></div>
     <div class="full"><label>Note</label><textarea name="notes">{{ old('notes') }}</textarea></div>

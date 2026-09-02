@@ -175,7 +175,7 @@
                     <div class="toggle-line">
                         <div>
                             <strong>Fixed IP Assignment</strong>
-                            <small>Keep one IP instead of learning a dynamic address.</small>
+                            <small>Use only an address reserved outside every dynamic pool.</small>
                         </div>
                         <label class="switch-control">
                             <input id="use-fixed-ip" type="checkbox" name="use_fixed_ip" value="1" @checked(old('use_fixed_ip', $customer->use_fixed_ip))>
@@ -185,7 +185,7 @@
                     <label class="edit-field">
                         <span>Fixed IP Address</span>
                         <input id="fixed-ip-address" name="fixed_ip_address" value="{{ old('fixed_ip_address', $customer->fixed_ip_address) }}" placeholder="Example: 10.10.10.25">
-                        <small>Required only while Fixed IP is enabled.</small>
+                        <small>Must be unique and must not belong to any active dynamic pool.</small>
                     </label>
                 </div>
 

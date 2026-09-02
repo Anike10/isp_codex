@@ -1210,9 +1210,12 @@
                     @if ($customer->use_fixed_ip)
                         Fixed: {{ $customer->fixed_ip_address ?: 'Not set' }}
                     @else
-                        Dynamic: {{ $customer->last_connected_ip ?: $customer->learned_ip_address ?: 'Not learned yet' }}
+                        Dynamic (profile pool)
                     @endif
                 </dd>
+
+                <dt class="kv-grid__label">Last connected IP</dt>
+                <dd class="kv-grid__value">{{ $customer->last_connected_ip ?: 'Not connected yet' }}</dd>
 
                 <dt class="kv-grid__label">MAC</dt>
                 <dd class="kv-grid__value">{{ $customer->last_connected_mac ?: 'Not learned yet' }}</dd>

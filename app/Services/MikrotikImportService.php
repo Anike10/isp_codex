@@ -298,7 +298,8 @@ class MikrotikImportService
      * the secret lives on another box), so the operator supplies one shared
      * password that is applied to every active user that does not already have
      * an imported secret. A real secret is never overwritten — for those we
-     * only refresh the live remote address.
+     * only refresh live MAC/profile metadata. A live address is session
+     * history, never the PPP secret's fixed remote-address assignment.
      *
      * The return breakdown explains any gap between what RouterOS shows under
      * PPP > Active Connections and what lands in the list: `seen` is every raw
@@ -349,10 +350,10 @@ class MikrotikImportService
                 ->first();
 
             // A real /ppp/secret row already carries the correct password and
-            // disabled flag; only pull the live address / MAC onto it.
+            // disabled flag and remote-address assignment; only pull live MAC
+            // and missing metadata onto it.
             if ($existing) {
                 $existing->update([
-                    'remote_address' => $record['address'] ?? $existing->remote_address,
                     'device_mac' => $deviceMac ?: $existing->device_mac,
                     'profile' => $existing->profile ?: ($record['profile'] ?? null),
                     'password' => $existing->password ?: $password,

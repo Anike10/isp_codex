@@ -79,7 +79,8 @@
                                 <th>Device MAC</th>
                                 <th>Profile</th>
                                 <th>Service</th>
-                                <th>Remote address</th>
+                                <th>IP assignment</th>
+                                <th>Last connected IP</th>
                                 <th>Status at last refresh</th>
                                 <th>Cleanup</th>
                             </tr>
@@ -102,7 +103,9 @@
                                         @endif
                                     </td>
                                     <td>
-                                        @php($deviceMac = $secret->device_mac ?: $secret->matched_customer?->last_connected_mac)
+                                        @php
+                                            $deviceMac = $secret->device_mac ?: $secret->matched_customer?->last_connected_mac;
+                                        @endphp
                                         @if ($deviceMac)
                                             <code>{{ $deviceMac }}</code>
                                             @if ($secret->device_mac)
@@ -117,12 +120,30 @@
                                     <td>{{ $secret->profile ?: '—' }}</td>
                                     <td>{{ $secret->service ?: '—' }}</td>
                                     <td>
-                                        @php($addr = $secret->remote_address ?: $secret->matched_customer?->last_connected_ip)
-                                        @if ($addr)
-                                            <code>{{ $addr }}</code>
-                                            @unless ($secret->remote_address)
-                                                <div class="muted">party live IP</div>
-                                            @endunless
+                                        @php
+                                            $remoteAddress = in_array(trim((string) $secret->remote_address), ['', '0.0.0.0'], true)
+                                                ? null
+                                                : $secret->remote_address;
+                                            $fixedAddress = $secret->matched_customer?->use_fixed_ip
+                                                ? $secret->matched_customer?->fixed_ip_address
+                                                : null;
+                                        @endphp
+                                        @if ($fixedAddress || (! $secret->matched_customer && ! $secret->isActiveSessionOnly() && $remoteAddress))
+                                            <code>{{ $fixedAddress ?: $remoteAddress }}</code>
+                                            <div class="muted">Fixed</div>
+                                        @elseif ($secret->matched_customer || $secret->isActiveSessionOnly())
+                                            <span class="muted">Dynamic (profile pool)</span>
+                                        @else
+                                            <span class="muted">—</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @php
+                                            $lastIp = $secret->matched_customer?->last_connected_ip
+                                                ?: ($secret->isActiveSessionOnly() ? $remoteAddress : null);
+                                        @endphp
+                                        @if ($lastIp)
+                                            <code>{{ $lastIp }}</code>
                                         @else
                                             <span class="muted">—</span>
                                         @endif

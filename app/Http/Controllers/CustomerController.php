@@ -2,24 +2,29 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppIpPool;
 use App\Models\Customer;
+use App\Models\CustomerOnuPowerSample;
 use App\Models\InternetPackage;
 use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
-use App\Models\OltOnu;
 use App\Models\PaymentAccount;
 use App\Models\ResellerCommissionHistory;
 use App\Models\Subscription;
 use App\Observers\RecordVersionObserver;
 use App\Services\ConcessionLogService;
 use App\Services\MikrotikCustomerSyncService;
+use App\Services\OnuPowerHistoryService;
 use App\Services\PaymentAccountPreferenceService;
 use App\Services\RecordVersionService;
+use App\Support\Ipv4Range;
+use App\Support\OnuMatcher;
 use App\Support\PartyNote;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -143,6 +148,7 @@ class CustomerController extends Controller
             $data['status'] = 'active';
         }
         $this->normalizeIpMode($data);
+        $this->ensureFixedIpIsAvailable($data);
 
         $customer = Customer::create(Arr::except($data, ['mikrotik_router_ids']));
         $customer->mikrotikRouters()->sync($data['mikrotik_router_ids']);
@@ -175,12 +181,12 @@ class CustomerController extends Controller
 
         // Populate last_connected_mac now (if the line is already online) so the
         // party list can match its ONU — VLAN, Rx/Tx — without waiting for the
-        // scheduled mikrotik:sync-active-macs run.
+        // next event on the persistent PPP listener.
         if ($customer->mikrotik_username || $customer->connection_id) {
             try {
                 app(MikrotikCustomerSyncService::class)->syncActiveConnectionMacsForCustomer($customer->refresh());
             } catch (Throwable) {
-                // Best effort only; the hourly job will catch up.
+                // Best effort only; the listener will catch the next session.
             }
         }
 
@@ -260,6 +266,7 @@ class CustomerController extends Controller
             $data['status'] = 'active';
         }
         $this->normalizeIpMode($data);
+        $this->ensureFixedIpIsAvailable($data);
 
         DB::transaction(function () use (&$customer, $data, $recordVersionService, $customPriceInput): void {
             $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
@@ -403,12 +410,12 @@ class CustomerController extends Controller
         $onuHistoryShowRx = true;
         $onuHistoryShowTx = false;
         if (Schema::hasTable('customer_onu_power_samples')) {
-            $history = app(\App\Services\OnuPowerHistoryService::class);
+            $history = app(OnuPowerHistoryService::class);
             $onuHistoryDays = $history->retentionDays();
             $onuHistoryIntervalHours = $history->intervalHours();
             $onuHistoryShowRx = $history->showRx();
             $onuHistoryShowTx = $history->showTx();
-            $onuHistory = \App\Models\CustomerOnuPowerSample::query()
+            $onuHistory = CustomerOnuPowerSample::query()
                 ->where('customer_id', $customer->id)
                 ->where('sampled_at', '>=', now()->subDays($onuHistoryDays))
                 ->orderBy('sampled_at')
@@ -433,7 +440,7 @@ class CustomerController extends Controller
      * Which series the ONU Signal History graph draws. This is a global display
      * preference, toggled from inside that card on the party page.
      */
-    public function updateOnuSignalVisibility(Request $request, \App\Services\OnuPowerHistoryService $history)
+    public function updateOnuSignalVisibility(Request $request, OnuPowerHistoryService $history)
     {
         $history->setShowRx($request->boolean('show_rx'));
         $history->setShowTx($request->boolean('show_tx'));
@@ -1011,11 +1018,8 @@ class CustomerController extends Controller
         return back()->with('success', $successMessage);
     }
 
-    /**
-     * One double-click IP control from the party list:
-     *  - Auto (dynamic) party with a learned IP  -> pin that live IP as fixed.
-     *  - Fixed party                             -> release it back to Auto.
-     */
+    /** Release an existing fixed assignment. Dynamic session IPs are history
+     * only and can never be promoted to a fixed address from this endpoint. */
     public function assignLiveIp(Request $request, Customer $customer)
     {
         $wantsJson = $request->wantsJson();
@@ -1023,7 +1027,7 @@ class CustomerController extends Controller
         if ($customer->use_fixed_ip) {
             $customer->update(['use_fixed_ip' => false, 'fixed_ip_address' => null]);
             $sync = $this->syncMikrotikCustomer($customer->refresh());
-            $liveIp = $customer->last_connected_ip ?: $customer->learned_ip_address;
+            $liveIp = $customer->last_connected_ip;
 
             $message = 'IP released. This party is back on Auto (pool) addressing. MikroTik user '.$sync['status'].'.';
 
@@ -1032,32 +1036,11 @@ class CustomerController extends Controller
                 : back()->with('success', $message)->with('warning', $sync['warning']);
         }
 
-        $liveIp = $customer->last_connected_ip ?: $customer->learned_ip_address;
-
-        if (! $liveIp) {
-            $message = 'No learned IP for this party yet, so there is nothing to pin.';
-
-            return $wantsJson
-                ? response()->json(['message' => $message], 422)
-                : back()->withErrors(['fixed_ip_address' => $message]);
-        }
-
-        if (Customer::query()->where('fixed_ip_address', $liveIp)->whereKeyNot($customer->id)->exists()) {
-            $message = "The IP {$liveIp} is already pinned to another party.";
-
-            return $wantsJson
-                ? response()->json(['message' => $message], 422)
-                : back()->withErrors(['fixed_ip_address' => $message]);
-        }
-
-        $customer->update(['use_fixed_ip' => true, 'fixed_ip_address' => $liveIp]);
-        $sync = $this->syncMikrotikCustomer($customer->refresh());
-
-        $message = "IP {$liveIp} pinned as this party's fixed address. MikroTik user ".$sync['status'].'.';
+        $message = 'A dynamic session IP cannot be pinned. Reserve an address outside every dynamic pool, then enter it as Fixed IP on the Edit page.';
 
         return $wantsJson
-            ? response()->json(['message' => $message, 'is_fixed' => true, 'ip' => $liveIp, 'warning' => $sync['warning']])
-            : back()->with('success', $message)->with('warning', $sync['warning']);
+            ? response()->json(['message' => $message], 422)
+            : back()->withErrors(['fixed_ip_address' => $message]);
     }
 
     private function syncMikrotikCustomer(Customer $customer): array
@@ -1174,6 +1157,40 @@ class CustomerController extends Controller
             : null;
     }
 
+    private function ensureFixedIpIsAvailable(array $data): void
+    {
+        if (! ($data['use_fixed_ip'] ?? false) || blank($data['fixed_ip_address'] ?? null)) {
+            return;
+        }
+
+        $ipAddress = trim((string) $data['fixed_ip_address']);
+        $routerIds = collect($data['mikrotik_router_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        $pools = AppIpPool::query()
+            ->where('status', 'active')
+            ->when($routerIds->isNotEmpty(), function (Builder $query) use ($routerIds): void {
+                $query->where(function (Builder $query) use ($routerIds): void {
+                    $query->whereNull('mikrotik_router_id')
+                        ->orWhereIn('mikrotik_router_id', $routerIds);
+                });
+            })
+            ->get(['name', 'ranges']);
+
+        $conflictingPool = $pools->first(
+            fn (AppIpPool $pool): bool => Ipv4Range::contains((string) $pool->ranges, $ipAddress)
+        );
+
+        if ($conflictingPool) {
+            throw ValidationException::withMessages([
+                'fixed_ip_address' => "The IP {$ipAddress} belongs to dynamic pool {$conflictingPool->name}. Reserve/exclude it from that pool before assigning it as fixed.",
+            ]);
+        }
+    }
+
     private function ensurePartyHasRole(array $data): void
     {
         if (! $data['is_customer'] && ! $data['is_vendor'] && ! $data['is_reseller']) {
@@ -1216,15 +1233,15 @@ class CustomerController extends Controller
      * to — matched on the ONU serial or one of its learned MACs — so the list
      * can show the OLT / port and the last optical power reading by the name.
      *
-     * @param  \Illuminate\Support\Collection<int, Customer>  $customers
+     * @param  Collection<int, Customer>  $customers
      */
-    private function attachOnuInfo(\Illuminate\Support\Collection $customers): void
+    private function attachOnuInfo(Collection $customers): void
     {
         if (! Schema::hasTable('olt_onus')) {
             return;
         }
 
-        $byMac = \App\Support\OnuMatcher::byMac($customers->pluck('last_connected_mac'));
+        $byMac = OnuMatcher::byMac($customers->pluck('last_connected_mac'));
 
         if ($byMac === []) {
             return;
@@ -1234,7 +1251,7 @@ class CustomerController extends Controller
             $key = mb_strtolower(trim((string) $customer->last_connected_mac));
             $onu = $byMac[$key] ?? null;
             $customer->matched_onu = $onu;
-            $customer->matched_onu_vlan = $onu ? \App\Support\OnuMatcher::vlanFor($onu, $customer->last_connected_mac) : null;
+            $customer->matched_onu_vlan = $onu ? OnuMatcher::vlanFor($onu, $customer->last_connected_mac) : null;
         });
     }
 

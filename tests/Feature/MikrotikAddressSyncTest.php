@@ -19,7 +19,7 @@ class MikrotikAddressSyncTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_active_session_saves_ip_and_mac_and_pins_dynamic_secret_address(): void
+    public function test_active_session_saves_last_ip_and_mac_without_pinning_dynamic_secret_address(): void
     {
         $router = $this->router();
         $package = $this->package('Home 20', 'home-20', '20 Mbps');
@@ -40,21 +40,14 @@ class MikrotikAddressSyncTest extends TestCase
             '.id' => '*A1', 'name' => 'party-20', 'address' => '10.20.0.25',
             'caller-id' => 'aa:bb:cc:dd:ee:ff', 'profile' => 'home-20', 'service' => 'pppoe',
         ]]);
-        $client->shouldReceive('command')->once()->with('/ppp/secret/print', [
-            '?name' => 'party-20', '.proplist' => '.id,name,remote-address',
-        ])->andReturn([['.id' => '*S1', 'name' => 'party-20', 'remote-address' => '']]);
-        $client->shouldReceive('command')->once()->with('/ppp/secret/set', [
-            '.id' => '*S1', 'remote-address' => '10.20.0.25',
-        ])->andReturn([]);
-
         $captured = app(MikrotikCustomerSyncService::class)->captureActiveSessions($client, $router);
 
         $this->assertSame(1, $captured);
         $customer->refresh();
         $this->assertSame('10.20.0.25', $customer->last_connected_ip);
         $this->assertSame('AA:BB:CC:DD:EE:FF', $customer->last_connected_mac);
-        $this->assertSame('10.20.0.25', $customer->learned_ip_address);
-        $this->assertSame($package->id, $customer->learned_ip_package_id);
+        $this->assertNull($customer->learned_ip_address);
+        $this->assertNull($customer->learned_ip_package_id);
         $this->assertNotNull($customer->last_connected_at);
     }
 
@@ -137,8 +130,7 @@ class MikrotikAddressSyncTest extends TestCase
             'remote-address' => 'kpi-all',
             'rate-limit' => '50M/50M',
         ]]);
-        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) =>
-            $payload['.id'] === '*STALE' && $payload['remote-address'] === '0.0.0.0'
+        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) => $payload['.id'] === '*STALE' && $payload['remote-address'] === '0.0.0.0'
         ))->andReturn([]);
         $client->shouldReceive('command')->once()->with('/ppp/active/print', [
             '?name' => 'party-stale-pool',
@@ -178,8 +170,7 @@ class MikrotikAddressSyncTest extends TestCase
         $client->shouldReceive('command')->once()->with('/ppp/profile/set', [
             '.id' => '*P50', 'rate-limit' => '50M/50M',
         ])->andReturn([]);
-        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) =>
-            $payload['.id'] === '*S50'
+        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) => $payload['.id'] === '*S50'
             && $payload['profile'] === 'home-50'
             && $payload['remote-address'] === '10.50.0.10'
         ))->andReturn([]);
@@ -218,8 +209,7 @@ class MikrotikAddressSyncTest extends TestCase
         $client->shouldReceive('command')->once()->with('/ppp/profile/print', [
             '?name' => 'home-30', '.proplist' => '.id,name,remote-address,rate-limit',
         ])->andReturn([['.id' => '*P30', 'name' => 'home-30', 'rate-limit' => '30M/30M']]);
-        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) =>
-            $payload['.id'] === '*SS'
+        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) => $payload['.id'] === '*SS'
             && $payload['profile'] === 'home-30'
             && $payload['remote-address'] === '10.30.0.9'
         ))->andReturn([]);
@@ -306,7 +296,7 @@ class MikrotikAddressSyncTest extends TestCase
         $this->assertSame($newPackage->id, $customer->activeSubscription()->value('internet_package_id'));
     }
 
-    public function test_old_profile_session_does_not_restore_dynamic_ip_after_package_change(): void
+    public function test_old_profile_session_is_recorded_only_as_last_connection_history(): void
     {
         $router = $this->router();
         $newPackage = $this->package('New 50', 'new-50', '50 Mbps');
@@ -329,10 +319,89 @@ class MikrotikAddressSyncTest extends TestCase
 
         $this->assertSame(1, $captured);
         $customer->refresh();
-        $this->assertNull($customer->last_connected_ip);
-        $this->assertNull($customer->last_connected_at);
+        $this->assertSame('10.20.0.99', $customer->last_connected_ip);
+        $this->assertNotNull($customer->last_connected_at);
         $this->assertNull($customer->learned_ip_address);
         $this->assertNull($customer->learned_ip_package_id);
+    }
+
+    public function test_dynamic_address_cleanup_releases_secret_and_reconnects_session(): void
+    {
+        $router = $this->router();
+        $customer = $this->customer($router, 'party-auto', [
+            'use_fixed_ip' => false,
+            'learned_ip_address' => '10.99.3.254',
+            'last_connected_ip' => '10.99.3.254',
+        ]);
+
+        $client = Mockery::mock(RouterOsClient::class);
+        $client->shouldReceive('command')->once()->with('/ppp/secret/print', [
+            '.proplist' => '.id,name,remote-address',
+        ])->andReturn([[
+            '.id' => '*AUTO', 'name' => 'party-auto', 'remote-address' => '10.99.3.254',
+        ]]);
+        $client->shouldReceive('command')->once()->with('/ppp/secret/set', [
+            '.id' => '*AUTO', 'remote-address' => '0.0.0.0',
+        ])->andReturn([]);
+        $client->shouldReceive('command')->once()->with('/ppp/active/print', [
+            '?name' => 'party-auto', '.proplist' => '.id',
+        ])->andReturn([['.id' => '*ACTIVE']]);
+        $client->shouldReceive('command')->once()->with('/ppp/active/remove', [
+            '.id' => '*ACTIVE',
+        ])->andReturn([]);
+
+        $summary = app(MikrotikCustomerSyncService::class)->releaseDynamicAddresses($router, $client);
+
+        $this->assertSame(1, $summary['managed']);
+        $this->assertSame(1, $summary['released']);
+        $this->assertSame(0, $summary['failed']);
+        $customer->refresh();
+        $this->assertNull($customer->learned_ip_address);
+        $this->assertSame('10.99.3.254', $customer->last_connected_ip);
+    }
+
+    public function test_dynamic_address_cleanup_accepts_an_already_dynamic_secret_without_an_id(): void
+    {
+        $router = $this->router();
+        $this->customer($router, 'party-already-dynamic', [
+            'use_fixed_ip' => false,
+        ]);
+
+        $client = Mockery::mock(RouterOsClient::class);
+        $client->shouldReceive('command')->once()->with('/ppp/secret/print', [
+            '.proplist' => '.id,name,remote-address',
+        ])->andReturn([[
+            'name' => 'party-already-dynamic',
+        ]]);
+
+        $summary = app(MikrotikCustomerSyncService::class)->releaseDynamicAddresses($router, $client);
+
+        $this->assertSame(1, $summary['managed']);
+        $this->assertSame(1, $summary['already_dynamic']);
+        $this->assertSame(0, $summary['failed']);
+    }
+
+    public function test_dynamic_address_cleanup_reports_duplicate_dynamic_secrets_without_failing(): void
+    {
+        $router = $this->router();
+        $this->customer($router, 'party-duplicate-dynamic', [
+            'use_fixed_ip' => false,
+        ]);
+
+        $client = Mockery::mock(RouterOsClient::class);
+        $client->shouldReceive('command')->once()->with('/ppp/secret/print', [
+            '.proplist' => '.id,name,remote-address',
+        ])->andReturn([
+            ['name' => 'party-duplicate-dynamic'],
+            ['name' => "party-duplicate-dynamic\n"],
+        ]);
+
+        $summary = app(MikrotikCustomerSyncService::class)->releaseDynamicAddresses($router, $client);
+
+        $this->assertSame(1, $summary['managed']);
+        $this->assertSame(1, $summary['already_dynamic']);
+        $this->assertSame(0, $summary['failed']);
+        $this->assertStringContainsString('duplicate PPP secrets', $summary['messages'][0]);
     }
 
     public function test_dynamic_secret_has_no_remote_address_before_new_package_ip_is_learned(): void
@@ -354,8 +423,7 @@ class MikrotikAddressSyncTest extends TestCase
         $client->shouldReceive('command')->once()->with('/ppp/profile/print', [
             '?name' => 'new-30', '.proplist' => '.id,name,remote-address,rate-limit',
         ])->andReturn([['.id' => '*PN', 'name' => 'new-30', 'rate-limit' => '30M/30M']]);
-        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) =>
-            $payload['.id'] === '*SN'
+        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) => $payload['.id'] === '*SN'
             && ! array_key_exists('profile', $payload)
             && array_key_exists('remote-address', $payload)
             && $payload['remote-address'] === '0.0.0.0'
@@ -385,8 +453,7 @@ class MikrotikAddressSyncTest extends TestCase
         $client->shouldReceive('command')->once()->with('/ppp/profile/print', [
             '?name' => 'home-30', '.proplist' => '.id,name,remote-address,rate-limit',
         ])->andReturn([['.id' => '*PNR', 'name' => 'home-30', 'rate-limit' => '30M/30M']]);
-        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) =>
-            $payload['.id'] === '*SNR'
+        $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) => $payload['.id'] === '*SNR'
             && ! array_key_exists('profile', $payload)
             && ! array_key_exists('remote-address', $payload)
         ))->andReturn([]);

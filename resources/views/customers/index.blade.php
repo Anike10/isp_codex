@@ -177,9 +177,8 @@
         font-size: 11px;
         text-align: right;
     }
-    .userid-ip { cursor: pointer; }
-    .userid-ip .ip-auto { color: #98a2b3; font-weight: 600; margin-left: 3px; }
-    .userid-ip.is-busy { opacity: .5; }
+    .userid-assignment { margin-top: 3px; white-space: nowrap; }
+    .last-ip-cell { white-space: nowrap; }
     .customer-list-toolbar {
         display: flex;
         align-items: center;
@@ -342,7 +341,7 @@
 </div>
 
 <table class="customer-table">
-    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Package</th><th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th><th>Note</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
+    <thead><tr>@if(! $showDeletedCustomers)<th class="bulk-select-column"><input class="bulk-row-checkbox" type="checkbox" id="bulkHeaderCheckbox" aria-label="Select all parties"></th>@endif<th>#</th><th>Name</th><th>Phone</th><th class="col-center">Role</th><th>User ID</th><th class="col-center">Last connected IP</th><th class="col-center">Package</th><th class="col-center">Balance</th><th class="col-center">Status</th><th class="col-center">Active Until</th><th>Note</th>@if($showDeletedCustomers)<th>Deleted At</th>@endif<th></th></tr></thead>
     <tbody>
     @forelse ($customers as $customer)
         @php
@@ -416,17 +415,25 @@
                 @endif
             </td>
             @php
-                $liveIp = $customer->last_connected_ip ?: $customer->learned_ip_address ?: null;
-                $shownIp = $customer->use_fixed_ip ? ($customer->fixed_ip_address ?: null) : $liveIp;
                 $hasConnection = $customer->mikrotik_username || $customer->connection_id;
             @endphp
-            <td class="userid-cell"
-                data-ip-url="{{ route('customers.assign-live-ip', $customer) }}" data-live-ip="{{ $customer->use_fixed_ip ? '' : $liveIp }}" data-is-fixed="{{ $customer->use_fixed_ip ? 1 : 0 }}">
+            <td class="userid-cell">
                 {{ $customer->mikrotik_username ?? $customer->connection_id ?? 'Product-only' }}
                 @if ($hasConnection)
-                    <div class="muted userid-ip" title="Double-click to {{ $customer->use_fixed_ip ? 'release this IP back to Auto' : 'pin the current live IP as fixed' }}">
-                        <span data-ip-text>{{ $shownIp ?: 'No IP yet' }}</span><span data-ip-auto>@if (! $customer->use_fixed_ip && $shownIp) <span class="ip-auto">(Auto)</span>@endif</span>
+                    <div class="muted userid-assignment">
+                        <strong>IP assignment:</strong>
+                        {{ $customer->use_fixed_ip ? 'Fixed: '.($customer->fixed_ip_address ?: 'Not set') : 'Dynamic (profile pool)' }}
                     </div>
+                @endif
+            </td>
+            <td class="col-center last-ip-cell">
+                @if ($hasConnection && $customer->last_connected_ip)
+                    <code>{{ $customer->last_connected_ip }}</code>
+                    @if ($customer->last_connected_at)
+                        <div class="muted">{{ $customer->last_connected_at->diffForHumans() }}</div>
+                    @endif
+                @else
+                    <span class="muted">—</span>
                 @endif
             </td>
             @php
@@ -584,7 +591,7 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="12">No parties found.</td></tr>
+        <tr><td colspan="13">No parties found.</td></tr>
     @endforelse
     </tbody>
 </table>
@@ -814,64 +821,6 @@ document.querySelectorAll('.sp-inline').forEach((chip) => {
             if (keyEvent.key === 'Enter') { keyEvent.preventDefault(); save(); }
             if (keyEvent.key === 'Escape') { keyEvent.preventDefault(); cancel(); }
         });
-    });
-});
-
-// User ID cell: double-click the IP line to pin the live IP as fixed, or to
-// release a fixed IP back to Auto.
-document.querySelectorAll('.userid-cell[data-ip-url]').forEach((cell) => {
-    const ipLine = cell.querySelector('.userid-ip');
-    if (!ipLine) return;
-
-    cell.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    });
-
-    ipLine.addEventListener('dblclick', async function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (ipLine.classList.contains('is-busy')) return;
-
-        const isFixed = cell.dataset.isFixed === '1';
-        const liveIp = (cell.dataset.liveIp || '').trim();
-
-        if (!isFixed && !liveIp) {
-            alert('No learned IP for this party yet, so there is nothing to pin.');
-            return;
-        }
-        if (!window.confirm(isFixed
-            ? 'Release this fixed IP and put the party back on Auto (pool) addressing?'
-            : 'Pin the current live IP (' + liveIp + ') as this party’s fixed address?')) {
-            return;
-        }
-
-        ipLine.classList.add('is-busy');
-        try {
-            const response = await fetch(cell.dataset.ipUrl, {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': customerCsrfToken,
-                },
-                body: '{}',
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'Could not update the IP.');
-
-            cell.dataset.isFixed = data.is_fixed ? '1' : '0';
-            const textNode = ipLine.querySelector('[data-ip-text]');
-            const autoNode = ipLine.querySelector('[data-ip-auto]');
-            if (textNode) textNode.textContent = data.ip || 'No IP yet';
-            if (autoNode) autoNode.innerHTML = (!data.is_fixed && data.ip) ? ' <span class="ip-auto">(Auto)</span>' : '';
-            ipLine.title = data.is_fixed ? 'Double-click to release this IP back to Auto' : 'Double-click to pin the current live IP as fixed';
-            if (data.warning) alert(data.warning);
-        } catch (error) {
-            alert(error.message);
-        } finally {
-            ipLine.classList.remove('is-busy');
-        }
     });
 });
 

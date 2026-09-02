@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppIpPool;
 use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\Invoice;
 use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
+use App\Models\OltOnu;
 use App\Models\Permission;
 use App\Models\Subscription;
 use App\Models\User;
@@ -279,7 +281,7 @@ class CustomerControllerTest extends TestCase
         $this->assertNull($customer->last_connected_at);
     }
 
-    public function test_parties_list_shows_the_current_ip_with_auto_marker_for_dynamic_users(): void
+    public function test_parties_list_separates_ip_assignment_from_last_connected_ip(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
@@ -310,10 +312,11 @@ class CustomerControllerTest extends TestCase
             ->assertOk()
             ->assertSee('DYNAMIC-IP-USER')
             ->assertSee('10.55.0.25')
-            ->assertSee('(Auto)')
+            ->assertSee('Dynamic (profile pool)')
+            ->assertSee('Last connected IP')
             ->assertSee('FIXED-IP-USER')
             ->assertSee('10.66.0.10')
-            ->assertDontSee('10.66.0.99');
+            ->assertSee('10.66.0.99');
     }
 
     public function test_parties_list_shows_the_olt_onu_and_optical_power_next_to_the_name(): void
@@ -322,7 +325,7 @@ class CustomerControllerTest extends TestCase
         $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
 
         // matched on the ONU serial / MAC
-        \App\Models\OltOnu::create([
+        OltOnu::create([
             'olt_name' => 'Kushtia-OLT-1', 'pon_port' => 3, 'onu_id' => 12, 'status' => 'online',
             'mac_address' => '00:8d:ff:02:2a:17', 'rx_power_dbm' => -21.40, 'tx_power_dbm' => 2.10,
             'port_vlans' => [['port' => 1, 'vlan' => 842]],
@@ -334,7 +337,7 @@ class CustomerControllerTest extends TestCase
         ]);
 
         // matched on a learned MAC entry
-        \App\Models\OltOnu::create([
+        OltOnu::create([
             'olt_name' => 'Kushtia-OLT-2', 'pon_port' => 1, 'onu_id' => 4, 'status' => 'online',
             'mac_address' => 'aa:bb:cc:dd:ee:ff', 'rx_power_dbm' => -27.90,
             'learned_macs' => [['mac' => 'e4:8d:8c:11:22:33', 'vlan' => 100]],
@@ -372,6 +375,39 @@ class CustomerControllerTest extends TestCase
         // -27.90 (weaker than -25) is red, -21.40 (-25..-15) is green
         $this->assertMatchesRegularExpression('#badge failed">-27\.90#', $body);
         $this->assertMatchesRegularExpression('#badge active">-21\.40#', $body);
+    }
+
+    public function test_parties_list_prefers_a_learned_device_mac_over_a_conflicting_onu_serial(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+
+        OltOnu::create([
+            'olt_name' => 'US_GPON', 'pon_port' => 3, 'onu_id' => 18, 'status' => 'online',
+            'mac_address' => '5c:62:8b:b6:00:39', 'rx_power_dbm' => -17.77,
+            'port_vlans' => [['port' => 1, 'vlan' => 43]],
+            'last_live_polled_at' => now(),
+        ]);
+        OltOnu::create([
+            'olt_name' => 'US_EPON', 'pon_port' => 3, 'onu_id' => 13, 'status' => 'online',
+            'mac_address' => '00:d3:9e:76:7f:20', 'rx_power_dbm' => -22.29,
+            'learned_macs' => [['mac' => '5c:62:8b:b6:00:39', 'vlan' => 21]],
+            'last_live_polled_at' => now()->subHour(),
+        ]);
+        Customer::create([
+            'name' => 'Shohan Saddam', 'phone' => 'Not provided', 'connection_id' => 'shohan_saddam',
+            'mikrotik_username' => 'shohan_saddam', 'address' => 'Kushtia', 'status' => 'active',
+            'is_customer' => true, 'last_connected_mac' => '5C:62:8B:B6:00:39',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('customers.index', ['search' => 'shohan_saddam']))
+            ->assertOk()
+            ->assertSee('US_EPON')
+            ->assertSee('3/13')
+            ->assertSee('VLAN 21')
+            ->assertDontSee('US_GPON')
+            ->assertDontSee('VLAN 43');
     }
 
     public function test_customer_show_activity_table_lists_the_admin_who_took_a_payment(): void
@@ -1492,7 +1528,7 @@ class CustomerControllerTest extends TestCase
         }
     }
 
-    public function test_live_ip_can_be_pinned_and_released_from_the_party_list(): void
+    public function test_dynamic_live_ip_cannot_be_pinned_but_a_fixed_ip_can_be_released(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
@@ -1508,16 +1544,15 @@ class CustomerControllerTest extends TestCase
             'last_connected_ip' => '10.77.0.42',
         ]);
 
-        // Pin the live IP.
         $this->actingAs($user)
             ->postJson(route('customers.assign-live-ip', $customer))
-            ->assertOk()
-            ->assertJson(['is_fixed' => true, 'ip' => '10.77.0.42']);
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'A dynamic session IP cannot be pinned. Reserve an address outside every dynamic pool, then enter it as Fixed IP on the Edit page.');
         $customer->refresh();
-        $this->assertTrue((bool) $customer->use_fixed_ip);
-        $this->assertSame('10.77.0.42', $customer->fixed_ip_address);
+        $this->assertFalse((bool) $customer->use_fixed_ip);
+        $this->assertNull($customer->fixed_ip_address);
 
-        // Double-click again releases it back to Auto.
+        $customer->update(['use_fixed_ip' => true, 'fixed_ip_address' => '10.77.1.42']);
         $this->actingAs($user)
             ->postJson(route('customers.assign-live-ip', $customer))
             ->assertOk()
@@ -1527,30 +1562,42 @@ class CustomerControllerTest extends TestCase
         $this->assertNull($customer->fixed_ip_address);
     }
 
-    public function test_pinning_a_live_ip_needs_a_learned_ip_and_a_free_address(): void
+    public function test_manual_fixed_ip_must_be_unique_and_outside_dynamic_pools(): void
     {
         $user = User::factory()->create();
         $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
-
-        $noIp = Customer::create([
-            'name' => 'No IP Party', 'phone' => '01710000189', 'connection_id' => 'NOIP-1',
-            'mikrotik_username' => 'NOIP-1', 'address' => 'x', 'status' => 'active', 'is_customer' => true,
-            'use_fixed_ip' => false,
-        ]);
-        $this->actingAs($user)->postJson(route('customers.assign-live-ip', $noIp))->assertStatus(422);
 
         Customer::create([
             'name' => 'Holder', 'phone' => '01710000190', 'connection_id' => 'HOLD-1', 'address' => 'x',
             'status' => 'active', 'is_customer' => true, 'use_fixed_ip' => true, 'fixed_ip_address' => '10.88.0.5',
         ]);
-        $clash = Customer::create([
+
+        $base = [
             'name' => 'Clash Party', 'phone' => '01710000191', 'connection_id' => 'CLASH-1',
-            'mikrotik_username' => 'CLASH-1', 'address' => 'x', 'status' => 'active', 'is_customer' => true,
-            'use_fixed_ip' => false, 'last_connected_ip' => '10.88.0.5',
+            'address' => 'x', 'status' => 'active', 'is_customer' => '1', 'use_fixed_ip' => '1',
+            'fixed_ip_address' => '10.88.0.5',
+        ];
+        $this->actingAs($user)->post(route('customers.store'), $base)
+            ->assertSessionHasErrors('fixed_ip_address');
+
+        $router = MikrotikRouter::create([
+            'name' => 'Pool Router', 'ip_address' => '10.0.0.88', 'api_port' => 8728,
+            'pppoe_sync_interval_minutes' => 60, 'inactive_pppoe_profile' => 'inactive',
+            'username' => 'api', 'password' => 'secret', 'status' => 'active',
         ]);
-        $this->actingAs($user)->postJson(route('customers.assign-live-ip', $clash))
-            ->assertStatus(422)
-            ->assertJson(['message' => 'The IP 10.88.0.5 is already pinned to another party.']);
+        AppIpPool::create([
+            'mikrotik_router_id' => $router->id,
+            'name' => 'customer-pool',
+            'ranges' => '10.99.3.0/24',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($user)->post(route('customers.store'), [
+            ...$base,
+            'connection_id' => 'POOL-CLASH-1',
+            'fixed_ip_address' => '10.99.3.254',
+            'mikrotik_router_ids' => [$router->id],
+        ])->assertSessionHasErrors('fixed_ip_address');
     }
 
     public function test_special_customer_cannot_be_force_inactivated(): void

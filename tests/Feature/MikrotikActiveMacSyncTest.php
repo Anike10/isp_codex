@@ -9,6 +9,7 @@ use App\Models\PppLiveSession;
 use App\Models\PppUsageLog;
 use App\Models\User;
 use App\Services\MikrotikCustomerSyncService;
+use App\Services\PppSessionSnapshotService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
@@ -38,6 +39,7 @@ class MikrotikActiveMacSyncTest extends TestCase
                 ['.id' => '*1', 'name' => 'pppoe-1', 'caller-id' => '00:8D:FF:02:2A:17', 'address' => '10.9.0.5'],
                 ['.id' => '*2', 'name' => 'ghost-9', 'caller-id' => 'aa:bb:cc:dd:ee:ff'],
             ], 200),
+            '10.0.0.40:8181/rest/interface' => Http::response([], 200),
         ]);
 
         $customer = Customer::create([
@@ -68,6 +70,7 @@ class MikrotikActiveMacSyncTest extends TestCase
             '10.0.0.41:8181/rest/ppp/active' => Http::response([
                 ['.id' => '*1', 'name' => 'pppoe-2', 'caller-id' => '00:11:22:33:44:55'],
             ], 200),
+            '10.0.0.41:8181/rest/interface' => Http::response([], 200),
         ]);
 
         Customer::create([
@@ -92,6 +95,7 @@ class MikrotikActiveMacSyncTest extends TestCase
             '10.0.0.44:8181/rest/ppp/active' => Http::response([
                 ['.id' => '*1', 'name' => 'l2tp-1', 'caller-id' => '203.0.113.7', 'address' => '10.9.0.1'],
             ], 200),
+            '10.0.0.44:8181/rest/interface' => Http::response([], 200),
         ]);
 
         $customer = Customer::create([
@@ -104,7 +108,7 @@ class MikrotikActiveMacSyncTest extends TestCase
 
         $this->assertSame(0, $summary['updated']);
         $this->assertNull($customer->refresh()->last_connected_mac);
-        $this->assertNull($customer->last_connected_ip, 'A non-MAC session must not touch the party at all.');
+        $this->assertSame('10.9.0.1', $customer->last_connected_ip, 'IP history must update even when caller-id is not a MAC.');
     }
 
     public function test_router_edit_form_no_longer_exposes_an_active_mac_sync_interval(): void
@@ -144,6 +148,7 @@ class MikrotikActiveMacSyncTest extends TestCase
 
         Http::fake([
             '10.0.0.43:8181/rest/ppp/active' => Http::response([], 200),
+            '10.0.0.43:8181/rest/interface' => Http::response([], 200),
         ]);
 
         Artisan::call('mikrotik:sync-active-macs');
@@ -165,6 +170,7 @@ class MikrotikActiveMacSyncTest extends TestCase
             '10.0.0.45:8181/rest/ppp/active' => Http::response([
                 ['.id' => '*1', 'name' => 'pppoe-new', 'caller-id' => '00:8D:FF:02:2A:99', 'address' => '10.9.0.7'],
             ], 200),
+            '10.0.0.45:8181/rest/interface' => Http::response([], 200),
         ]);
 
         $customer = Customer::create([
@@ -261,5 +267,55 @@ class MikrotikActiveMacSyncTest extends TestCase
         $this->assertSame('webhook+snapshot', $log->source);
         $this->assertSame(9000, $log->download_bytes);
         $this->assertSame(2000, $log->upload_bytes);
+    }
+
+    public function test_listener_dead_event_uses_its_exact_final_byte_counters(): void
+    {
+        MikrotikRouter::query()->update(['status' => 'inactive']);
+        $router = $this->restRouter('10.0.0.49');
+        $service = app(PppSessionSnapshotService::class);
+
+        $this->assertSame('added', $service->applyEvent($router, [
+            '.id' => '*A4',
+            'name' => 'stream-usage',
+            'uptime' => '10m',
+            'bytes' => '10000/2000',
+        ]));
+
+        $this->assertSame('finalised', $service->applyEvent($router, [
+            '.id' => '*A4',
+            '.dead' => 'yes',
+            'name' => 'stream-usage',
+            'uptime' => '10m8s',
+            'bytes-out' => '12555',
+            'bytes-in' => '2444',
+            'last-disconnect-reason' => 'peer-request',
+        ]));
+
+        $this->assertSame(0, PppLiveSession::count());
+        $log = PppUsageLog::firstOrFail();
+        $this->assertSame('listener', $log->source);
+        $this->assertSame('*A4', $log->routeros_session_id);
+        $this->assertSame(12555, $log->download_bytes);
+        $this->assertSame(2444, $log->upload_bytes);
+        $this->assertSame(608, $log->uptime_seconds);
+        $this->assertSame('peer-request', $log->disconnect_reason);
+    }
+
+    public function test_sparse_listener_dead_event_retains_the_last_complete_record(): void
+    {
+        MikrotikRouter::query()->update(['status' => 'inactive']);
+        $router = $this->restRouter('10.0.0.50');
+        $service = app(PppSessionSnapshotService::class);
+
+        $service->applyEvent($router, [
+            '.id' => '*A5', 'name' => 'sparse-dead',
+            'bytes-out' => '9000', 'bytes-in' => '1500',
+        ]);
+        $service->applyEvent($router, ['.id' => '*A5', '.dead' => 'yes']);
+
+        $log = PppUsageLog::firstOrFail();
+        $this->assertSame(9000, $log->download_bytes);
+        $this->assertSame(1500, $log->upload_bytes);
     }
 }
