@@ -182,4 +182,65 @@ class TicketReplyTest extends TestCase
             ->post(route('tickets.replies.store', $ticket), ['body' => ''])
             ->assertSessionHasErrors('body');
     }
+
+    public function test_bulk_status_update_sets_status_and_logs_each_change(): void
+    {
+        $user = User::factory()->create();
+
+        $open = $this->ticket();
+        $customer = $open->customer;
+        $alsoOpen = SupportTicket::create([
+            'customer_id' => $customer->id,
+            'subject' => 'Second issue',
+            'description' => 'Also down',
+            'priority' => 'normal',
+            'status' => 'open',
+        ]);
+        $alreadyResolved = SupportTicket::create([
+            'customer_id' => $customer->id,
+            'subject' => 'Old issue',
+            'description' => 'Fixed last week',
+            'priority' => 'low',
+            'status' => 'resolved',
+        ]);
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs($user)
+            ->patch(route('tickets.bulk-status.update'), [
+                'ids' => [$open->id, $alsoOpen->id, $alreadyResolved->id],
+                'status' => 'resolved',
+                'note' => 'Batch resolved after area maintenance',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame('resolved', $open->fresh()->status);
+        $this->assertSame('resolved', $alsoOpen->fresh()->status);
+
+        // The two that changed get a status-change reply; all three get the note.
+        $this->assertDatabaseHas('ticket_replies', [
+            'support_ticket_id' => $open->id,
+            'old_status' => 'open',
+            'new_status' => 'resolved',
+            'body' => 'Batch resolved after area maintenance',
+        ]);
+        $this->assertSame(1, $alreadyResolved->replies()->count());
+        $this->assertNull($alreadyResolved->replies()->first()->new_status);
+        $this->assertSame('Batch resolved after area maintenance', $alreadyResolved->replies()->first()->body);
+    }
+
+    public function test_bulk_status_update_requires_ids_and_a_valid_status(): void
+    {
+        $user = User::factory()->create();
+        $ticket = $this->ticket();
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs($user)
+            ->patch(route('tickets.bulk-status.update'), ['status' => 'resolved'])
+            ->assertSessionHasErrors('ids');
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs($user)
+            ->patch(route('tickets.bulk-status.update'), ['ids' => [$ticket->id], 'status' => 'nope'])
+            ->assertSessionHasErrors('status');
+    }
 }

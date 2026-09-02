@@ -207,6 +207,50 @@ class TicketController extends Controller
         return redirect()->route('tickets.show', $ticket)->with('success', 'Ticket updated.');
     }
 
+    /**
+     * Set the same status on several tickets at once from the list page. Each
+     * ticket whose status actually changes gets a status-change reply (plus the
+     * optional shared note) and a fresh ONU Rx snapshot, exactly like a single
+     * status update.
+     */
+    public function bulkUpdateStatus(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+            'status' => ['required', Rule::in(SupportTicket::STATUSES)],
+            'note' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        $tickets = SupportTicket::whereIn('id', $data['ids'])->get();
+        $changed = 0;
+
+        foreach ($tickets as $ticket) {
+            $oldStatus = $ticket->status;
+            $statusChanged = $oldStatus !== $data['status'];
+
+            if ($statusChanged) {
+                $ticket->update(['status' => $data['status']]);
+                $this->refreshOnuRx($ticket);
+                $changed++;
+            }
+
+            if ($statusChanged || filled($data['note'])) {
+                $ticket->replies()->create([
+                    'user_id' => $request->user()->id,
+                    'body' => $data['note'] ?? null,
+                    'old_status' => $statusChanged ? $oldStatus : null,
+                    'new_status' => $statusChanged ? $data['status'] : null,
+                ]);
+            }
+        }
+
+        return redirect()->back()->with(
+            'success',
+            "Bulk update: {$changed} of {$tickets->count()} ticket(s) set to {$data['status']}."
+        );
+    }
+
     private function createView(array $ticketDefaults = [], ?string $backUrl = null)
     {
         return view('tickets.create', [
