@@ -25,7 +25,7 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>#</th><th>Party</th><th>Authorized</th><th>Rx create / update <span class="muted">dBm</span></th><th>Subject</th><th class="col-center">Status</th><th>Action</th></tr></thead>
+    <thead><tr><th>#</th><th>Party</th><th>Authorized</th><th class="col-center">RX/Update</th><th>Subject</th><th class="col-center">Status</th><th>Action</th></tr></thead>
     <tbody>
     @forelse ($tickets as $ticket)
         <tr data-href="{{ route('tickets.show', $ticket) }}">
