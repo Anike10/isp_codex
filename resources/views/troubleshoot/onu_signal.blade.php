@@ -132,15 +132,15 @@
         </select>
     </div>
     <div>
-        <label>Swing threshold (dB)</label>
+        <label>Swing (dB)</label>
         <input type="number" name="swing" min="0.1" max="40" step="0.1" value="{{ $swing + 0 }}">
     </div>
     <div>
-        <label>Latest Rx less than (dBm)</label>
+        <label>Rx &lt; (dBm)</label>
         <input type="number" name="power_lt" min="-40" max="5" step="0.1" placeholder="no limit" value="{{ $powerLt !== null ? $powerLt + 0 : '' }}">
     </div>
     <div>
-        <label>Latest Rx greater than (dBm)</label>
+        <label>Rx &gt; (dBm)</label>
         <input type="number" name="power_gt" min="-40" max="5" step="0.1" placeholder="no limit" value="{{ $powerGt !== null ? $powerGt + 0 : '' }}">
     </div>
     <div class="actions">
