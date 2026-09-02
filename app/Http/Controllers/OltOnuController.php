@@ -7,6 +7,7 @@ use App\Models\OltDevice;
 use App\Models\OltOnu;
 use App\Models\OltProtocolProfile;
 use App\Models\OltRefreshRun;
+use App\Services\NightlyLiveSyncService;
 use App\Services\OltLiveOutputParser;
 use App\Services\OltSnmpClient;
 use App\Services\OltSshClient;
@@ -135,8 +136,17 @@ class OltOnuController extends Controller
         $powerHistory = app(\App\Services\OnuPowerHistoryService::class);
         $powerHistoryIntervalHours = $powerHistory->intervalHours();
         $powerHistoryRetentionDays = $powerHistory->retentionDays();
+        $nightlySync = app(NightlyLiveSyncService::class);
+        $nightlyLiveSync = [
+            'enabled' => $nightlySync->enabled(),
+            'run_time' => $nightlySync->runTime(),
+            'last_started_at' => $nightlySync->lastStartedAt(),
+            'last_completed_at' => $nightlySync->lastCompletedAt(),
+            'last_status' => $nightlySync->lastStatus(),
+            'last_summary' => $nightlySync->lastSummary(),
+        ];
 
-        return view('olt_onus.index', compact('onus', 'stats', 'ponPorts', 'oltPonPorts', 'oltPonSummaries', 'oltCommandWarnings', 'oltDevices', 'perPageDefault', 'perPageOptions', 'perPage', 'protocolProfiles', 'powerHistoryIntervalHours', 'powerHistoryRetentionDays'));
+        return view('olt_onus.index', compact('onus', 'stats', 'ponPorts', 'oltPonPorts', 'oltPonSummaries', 'oltCommandWarnings', 'oltDevices', 'perPageDefault', 'perPageOptions', 'perPage', 'protocolProfiles', 'powerHistoryIntervalHours', 'powerHistoryRetentionDays', 'nightlyLiveSync'));
     }
 
     /** Sampling interval + retention for the party-page ONU signal graph. */
@@ -158,6 +168,23 @@ class OltOnuController extends Controller
         }
 
         return back()->with('success', 'ONU signal history settings saved.');
+    }
+
+    public function updateNightlyLiveSyncSettings(Request $request, NightlyLiveSyncService $nightlySync)
+    {
+        $data = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'run_time' => ['required', 'regex:/^(?:[01]?\d|2[0-3]):[0-5]\d$/'],
+        ]);
+
+        $nightlySync->setSchedule((bool) $data['enabled'], (string) $data['run_time']);
+
+        $time = (string) $data['run_time'];
+        $message = $data['enabled']
+            ? "Nightly live-data sync enabled for {$time} (Asia/Dhaka)."
+            : 'Nightly live-data sync disabled.';
+
+        return back()->with('success', $message);
     }
 
     public function createOlt()

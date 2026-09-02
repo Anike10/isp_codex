@@ -10,7 +10,9 @@ use App\Models\User;
 use App\Services\BkashSmsRetentionService;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\MikrotikImportService;
+use App\Services\NightlyLiveSyncService;
 use App\Services\OnuPowerHistoryService;
+use App\Services\PppSessionListenerService;
 use App\Services\PppWebhookService;
 use App\Support\BillingWindow;
 use Carbon\Carbon;
@@ -169,6 +171,105 @@ Artisan::command('mikrotik:sync-active-macs {--force : Kept for compatibility; e
     return $failed === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Copy live /ppp/active device MACs onto matching parties for every active router');
 
+Artisan::command(
+    'mikrotik:listen-ppp-sessions
+        {router : MikroTik router database ID}
+        {--once : Exit instead of reconnecting when the event stream fails}
+        {--retry=5 : Seconds to wait before reconnecting}',
+    function (PppSessionListenerService $listenerService) {
+        $routerId = (int) $this->argument('router');
+        $retrySeconds = max(1, (int) $this->option('retry'));
+        $stop = false;
+
+        if (function_exists('pcntl_async_signals') && defined('SIGTERM') && defined('SIGINT')) {
+            pcntl_async_signals(true);
+            pcntl_signal(SIGTERM, function () use (&$stop): void {
+                $stop = true;
+            });
+            pcntl_signal(SIGINT, function () use (&$stop): void {
+                $stop = true;
+            });
+        }
+
+        while (! $stop) {
+            $router = MikrotikRouter::find($routerId);
+            if (! $router) {
+                $this->error("MikroTik router {$routerId} does not exist.");
+
+                return self::FAILURE;
+            }
+
+            if ($router->usesRestTransport()) {
+                $this->error("{$router->name}: PPP listen requires the binary API transport, not REST.");
+
+                return self::FAILURE;
+            }
+
+            if ($router->status !== 'active') {
+                $this->warn("{$router->name}: router is inactive; listener stopped.");
+
+                return self::SUCCESS;
+            }
+
+            try {
+                $this->info("{$router->name}: connecting to /ppp/active/listen...");
+                $listenerService->run(
+                    $router,
+                    function () use (&$stop): bool {
+                        return $stop;
+                    },
+                    function (string $event, array $stats) use ($router): void {
+                        if ($event === 'ready') {
+                            $text = "listener connected: active={$stats['active']}, recovered={$stats['finalised']}";
+                            $router->forceFill([
+                                'last_active_mac_sync_at' => now(),
+                                'last_active_mac_sync_summary' => $text,
+                            ])->save();
+                            $this->info("{$router->name}: {$text}");
+
+                            return;
+                        }
+
+                        if ($event === 'added' || $event === 'finalised') {
+                            $this->line(
+                                "{$router->name}: {$event}; active={$stats['active']}, events={$stats['events']}"
+                            );
+                        }
+                    }
+                );
+            } catch (Throwable $exception) {
+                if ($stop) {
+                    break;
+                }
+
+                $message = trim(preg_replace('/\s+/', ' ', $exception->getMessage()));
+                $router->forceFill([
+                    'last_active_mac_sync_at' => now(),
+                    'last_active_mac_sync_summary' => 'listener failed: '.$message,
+                ])->save();
+                $this->error("{$router->name}: listener failed - {$message}");
+
+                if ($this->option('once')) {
+                    return self::FAILURE;
+                }
+            }
+
+            if ($stop) {
+                break;
+            }
+
+            $this->warn("Reconnecting in {$retrySeconds} second(s)...");
+            for ($elapsed = 0; $elapsed < $retrySeconds && ! $stop; $elapsed++) {
+                sleep(1);
+            }
+        }
+
+        $this->info('PPP session listener stopped.');
+
+        return self::SUCCESS;
+    }
+)->purpose('Listen for exact RouterOS PPP session add/remove usage events');
+
 Artisan::command('mikrotik:import-secrets', function (MikrotikImportService $importService) {
     $summary = $importService->refreshActiveRouterSecrets();
 
@@ -188,6 +289,30 @@ Artisan::command('mikrotik:import-secrets', function (MikrotikImportService $imp
 
     return $summary['failed'] === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Re-pull PPPoE secrets from active routers so the "router users not in app" list stays fresh');
+
+Artisan::command('mikrotik:import-ip-pools', function (MikrotikImportService $importService) {
+    $imported = 0;
+    $failed = 0;
+
+    MikrotikRouter::query()
+        ->where('status', 'active')
+        ->orderBy('id')
+        ->get()
+        ->each(function (MikrotikRouter $router) use ($importService, &$imported, &$failed): void {
+            try {
+                $count = $importService->importIpPools($router, true);
+                $imported += $count;
+                $this->line("{$router->name}: {$count} IP pool(s) read.");
+            } catch (Throwable $exception) {
+                $failed++;
+                $this->error("{$router->name}: IP-pool import failed - {$exception->getMessage()}");
+            }
+        });
+
+    $this->info("Router IP-pool refresh finished. Read: {$imported}. Failed routers: {$failed}.");
+
+    return $failed === 0 ? self::SUCCESS : self::FAILURE;
+})->purpose('Re-pull IP pools from every active MikroTik router into the live cache and app pool table');
 
 Artisan::command('olt:auto-refresh {--force : Refresh the most-overdue OLT now, ignoring interval and the idle check}', function () {
     // Never run alongside a manual or background refresh — the app should
@@ -245,7 +370,7 @@ Artisan::command('olt:sync-all {--force : Run even while another OLT refresh is 
     // Nightly whole-fleet sync: full-refresh EVERY active OLT (power, VLAN, MAC,
     // status -> olt_onus), then snapshot each party's ONU Rx/Tx so the party
     // page and the Troubleshoot ONU Signal History are current the next morning.
-    // The party <-> ONU MAC link is refreshed hourly by mikrotik:sync-active-macs.
+    // The party <-> ONU MAC link is refreshed by the persistent PPP listener.
     if (! $this->option('force') && OltRefreshRun::query()->whereIn('status', ['queued', 'running'])->exists()) {
         $this->info('Skipped: an OLT refresh is already running.');
 
@@ -295,6 +420,34 @@ Artisan::command('olt:sync-all {--force : Run even while another OLT refresh is 
 
     return $failed === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Nightly full refresh of every active OLT, then snapshot party ONU power for the signal history');
+
+Artisan::command('network:nightly-live-sync {--force : Run now even when disabled or outside the selected time}', function (NightlyLiveSyncService $nightlySync) {
+    if (! $this->option('force') && ! $nightlySync->enabled()) {
+        $this->info('Skipped: nightly live-data sync is disabled.');
+
+        return self::SUCCESS;
+    }
+
+    if (! $this->option('force') && ! $nightlySync->isDue()) {
+        $time = $nightlySync->runTime();
+        $this->info("Skipped: nightly live-data sync is scheduled for {$time} Asia/Dhaka or already ran today.");
+
+        return self::SUCCESS;
+    }
+
+    $result = $nightlySync->run(
+        fn (string $command, array $parameters): int => $this->call($command, $parameters)
+    );
+
+    foreach ($result['results'] as $step) {
+        $line = $step['label'].': '.$step['message'];
+        $step['success'] ? $this->line($line) : $this->error($line);
+    }
+
+    $this->info($result['summary']);
+
+    return $result['status'] === 'success' ? self::SUCCESS : self::FAILURE;
+})->purpose('Refresh every live MikroTik and OLT/ONU cache once during the configured quiet-window time');
 
 Artisan::command('onu:capture-power-history {--force : Capture now, ignoring the interval}', function (OnuPowerHistoryService $history) {
     if (! $this->option('force') && ! $history->isDue()) {
@@ -435,12 +588,6 @@ Schedule::command('mikrotik:sync-router-users')
     ->hourly()
     ->withoutOverlapping();
 
-// Polls /ppp/active once a minute. Besides refreshing each party's device MAC,
-// the last byte/uptime snapshot becomes its usage row when a session vanishes.
-Schedule::command('mikrotik:sync-active-macs')
-    ->everyMinute()
-    ->withoutOverlapping();
-
 Schedule::command('mikrotik:import-secrets')
     ->everyThreeHours()
     ->withoutOverlapping();
@@ -449,14 +596,15 @@ Schedule::command('mikrotik:import-secrets')
 // auto_refresh_interval_hours; skips itself while any manual refresh runs.
 Schedule::command('olt:auto-refresh')
     ->hourly()
+    ->between('06:00', '23:00')
     ->withoutOverlapping();
 
-// Whole fleet once a day in the quiet early-morning window: every active OLT
-// gets a full refresh and every party's ONU power is re-sampled, so the party
-// page and Troubleshoot ONU Signal History are complete each morning.
-Schedule::command('olt:sync-all')
-    ->dailyAt('02:00')
-    ->withoutOverlapping();
+// The command reads its enabled/time settings from app_settings. Checking every
+// ten minutes lets a delayed scheduler invocation still run inside the chosen minute
+// window, while its daily marker prevents duplicate runs.
+Schedule::command('network:nightly-live-sync')
+    ->everyTenMinutes()
+    ->withoutOverlapping(360);
 
 // Hourly dispatcher; the command itself only samples when the configured
 // onu_power_history.interval_hours has elapsed, then prunes to retention.

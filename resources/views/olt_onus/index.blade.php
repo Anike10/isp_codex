@@ -203,6 +203,62 @@
     </div>
 @endif
 
+@php
+    $nightlyStatus = $nightlyLiveSync['last_status'] ?? null;
+    $nightlyStatusClass = $nightlyStatus === 'success'
+        ? 'active'
+        : (in_array($nightlyStatus, ['failed'], true) ? 'failed' : 'pending');
+@endphp
+<form method="post" action="{{ route('olt-onus.nightly-live-sync-settings.update') }}" class="card" style="margin-bottom:16px">
+    @csrf
+    @method('patch')
+    <div class="actions" style="justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap">
+        <div style="flex:1 1 520px">
+            <div class="actions" style="gap:8px;flex-wrap:wrap">
+                <h2 style="margin:0">Nightly Full Live-Data Sync</h2>
+                @if ($nightlyStatus)
+                    <span class="badge {{ $nightlyStatusClass }}">Last run: {{ ucfirst($nightlyStatus) }}</span>
+                @endif
+            </div>
+            <div class="muted" style="margin-top:7px;line-height:1.6">
+                প্রতিদিন ফাঁকা সময়ে MikroTik profile, PPP secret, IP pool, active MAC/IP/session এবং সব OLT/ONU name, status, power, VLAN, MAC ও signal history live source থেকে refresh করবে। Invoice, payment বা হাতে লেখা customer data পরিবর্তন করবে না।
+            </div>
+            @if ($nightlyLiveSync['last_started_at'] || $nightlyLiveSync['last_summary'])
+                <div class="muted" style="margin-top:7px;font-size:13px">
+                    @if ($nightlyLiveSync['last_started_at'])
+                        Started: {{ $nightlyLiveSync['last_started_at']->format('d/m/Y H:i:s') }}
+                    @endif
+                    @if ($nightlyLiveSync['last_completed_at'])
+                        · Completed: {{ $nightlyLiveSync['last_completed_at']->format('d/m/Y H:i:s') }}
+                    @endif
+                    @if ($nightlyLiveSync['last_summary'])
+                        · {{ $nightlyLiveSync['last_summary'] }}
+                    @endif
+                </div>
+            @endif
+        </div>
+        <div class="actions" style="align-items:end;gap:12px;flex-wrap:wrap">
+            <input type="hidden" name="enabled" value="0">
+            <label style="display:flex;align-items:center;gap:7px;padding-bottom:9px">
+                <input type="checkbox" name="enabled" value="1" @checked($nightlyLiveSync['enabled']) style="width:auto">
+                <span>প্রতিদিন চালু</span>
+            </label>
+            <div>
+                <label for="nightly-live-sync-hour" class="muted" style="display:block;font-size:12px">শুরুর সময় (Asia/Dhaka)</label>
+                <input
+                    id="nightly-live-sync-hour"
+                    type="time"
+                    name="run_time"
+                    style="min-width:125px"
+                    value="{{ $nightlyLiveSync['run_time'] }}"
+                    step="60"
+                >
+            </div>
+            <button class="btn" type="submit">Save Schedule</button>
+        </div>
+    </div>
+</form>
+
 <div class="grid stats" style="margin-bottom:16px">
     <div class="card stat"><span class="muted">Total ONU</span><strong>{{ $stats['total'] }}</strong></div>
     <div class="card stat"><span class="muted">With Live Power</span><strong>{{ $stats['with_power'] }}</strong></div>
