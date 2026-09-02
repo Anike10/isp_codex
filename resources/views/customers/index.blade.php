@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('main_class', 'olt-onus-wide')
+
 @section('content')
 <meta name="csrf-token" content="{{ csrf_token() }}">
 @php
@@ -177,6 +179,7 @@
         text-align: right;
     }
     .userid-primary { white-space: nowrap; }
+    .userid-ip { margin-top: 2px; white-space: nowrap; }
     .userid-routers { margin-top: 4px; white-space: normal; font-size: 11px; }
     .customer-list-toolbar {
         display: flex;
@@ -438,14 +441,15 @@
                 if ($assignedRouterNames->isEmpty() && $customer->mikrotikRouter) {
                     $assignedRouterNames = collect([$customer->mikrotikRouter->name]);
                 }
-                $routerNames = $importedRouterNames->isNotEmpty() ? $importedRouterNames : $assignedRouterNames;
+                // Show every router this party touches — detected (imported secret)
+                // and assigned targets combined.
+                $routerNames = $importedRouterNames->merge($assignedRouterNames)->filter()->unique()->values();
             @endphp
             <td class="userid-cell">
                 @if ($hasConnection)
-                    <span class="userid-primary"><strong>{{ $mikrotikId }}</strong>: <code>{{ $displayIp ?: '—' }}</code></span>
-                    <div class="muted userid-routers">
-                        <strong>MikroTik:</strong> {{ $routerNames->isNotEmpty() ? $routerNames->implode(', ') : 'Not detected' }}
-                    </div>
+                    <div class="userid-primary"><strong>{{ $mikrotikId }}</strong></div>
+                    <div class="userid-ip"><code>{{ $displayIp ?: '—' }}</code></div>
+                    <div class="muted userid-routers">{{ $routerNames->isNotEmpty() ? $routerNames->implode(', ') : 'Not detected' }}</div>
                 @else
                     Product-only
                 @endif
