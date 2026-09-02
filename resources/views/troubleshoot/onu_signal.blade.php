@@ -117,16 +117,12 @@
         <input type="number" name="swing" min="0.1" max="40" step="0.1" value="{{ $swing + 0 }}">
     </div>
     <div>
-        <label>Latest Rx power</label>
-        <select name="power_op">
-            <option value="">Any</option>
-            <option value="lt" @selected($powerOp === 'lt')>Less than (&lt;)</option>
-            <option value="gt" @selected($powerOp === 'gt')>Greater than (&gt;)</option>
-        </select>
+        <label>Latest Rx less than (dBm)</label>
+        <input type="number" name="power_lt" min="-40" max="5" step="0.1" placeholder="no limit" value="{{ $powerLt !== null ? $powerLt + 0 : '' }}">
     </div>
     <div>
-        <label>Rx power value (dBm)</label>
-        <input type="number" name="power_dbm" min="-40" max="5" step="0.1" placeholder="-25" value="{{ $powerValue !== null ? $powerValue + 0 : '' }}">
+        <label>Latest Rx greater than (dBm)</label>
+        <input type="number" name="power_gt" min="-40" max="5" step="0.1" placeholder="no limit" value="{{ $powerGt !== null ? $powerGt + 0 : '' }}">
     </div>
     <div class="full actions">
         <button class="btn secondary" type="submit">Search</button>
@@ -135,7 +131,7 @@
 </form>
 
 <div class="onu-allsig__bar">
-    <span class="muted">Showing {{ $pagination?->firstItem() ?? 0 }}–{{ $pagination?->lastItem() ?? 0 }} of {{ $pagination?->total() ?? 0 }} parties@if ($unstableOnly) · not stable@endif @if ($powerActive) · latest Rx {{ $powerOp === 'lt' ? '<' : '>' }} {{ $powerValue + 0 }} dBm @endif</span>
+    <span class="muted">Showing {{ $pagination?->firstItem() ?? 0 }}–{{ $pagination?->lastItem() ?? 0 }} of {{ $pagination?->total() ?? 0 }} parties@if ($unstableOnly) · not stable@endif @if ($powerActive) · latest Rx {{ trim(($powerGt !== null ? '> '.($powerGt + 0) : '').($powerGt !== null && $powerLt !== null ? ' and ' : '').($powerLt !== null ? '< '.($powerLt + 0) : '')) }} dBm @endif</span>
     <form method="post" action="{{ route('onu-signal.visibility.update') }}" class="onu-signal__show">
         @csrf
         @method('patch')

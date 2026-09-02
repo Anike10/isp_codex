@@ -464,6 +464,36 @@ class OnuPowerHistoryTest extends TestCase
             ->assertSee('Bob Karim')->assertDontSee('Alice Rahman');
     }
 
+    public function test_troubleshoot_page_filters_by_latest_rx_range(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'view_network_diagnostics')->firstOrFail());
+
+        $weak = $this->party('AA:BB:CC:DD:EE:31', 'WEAK');
+        $weak->update(['name' => 'Weak Party']);
+        CustomerOnuPowerSample::create(['customer_id' => $weak->id, 'rx_power_dbm' => -28, 'sampled_at' => now()->subHour(), 'created_at' => now()]);
+
+        $normal = $this->party('AA:BB:CC:DD:EE:32', 'NORMAL');
+        $normal->update(['name' => 'Normal Party']);
+        CustomerOnuPowerSample::create(['customer_id' => $normal->id, 'rx_power_dbm' => -20, 'sampled_at' => now()->subHour(), 'created_at' => now()]);
+
+        $hot = $this->party('AA:BB:CC:DD:EE:33', 'HOT');
+        $hot->update(['name' => 'Hot Party']);
+        CustomerOnuPowerSample::create(['customer_id' => $hot->id, 'rx_power_dbm' => -8, 'sampled_at' => now()->subHour(), 'created_at' => now()]);
+
+        // Only "less than" set: the other side is unbounded.
+        $this->actingAs($user)->get(route('troubleshoot.onu-signal', ['power_lt' => -25]))
+            ->assertOk()->assertSee('Weak Party')->assertDontSee('Normal Party')->assertDontSee('Hot Party');
+
+        // Only "greater than" set.
+        $this->actingAs($user)->get(route('troubleshoot.onu-signal', ['power_gt' => -10]))
+            ->assertSee('Hot Party')->assertDontSee('Normal Party')->assertDontSee('Weak Party');
+
+        // Both bounds set: a band around normal.
+        $this->actingAs($user)->get(route('troubleshoot.onu-signal', ['power_gt' => -25, 'power_lt' => -12]))
+            ->assertSee('Normal Party')->assertDontSee('Weak Party')->assertDontSee('Hot Party');
+    }
+
     public function test_troubleshoot_page_can_show_only_unstable_parties(): void
     {
         $user = User::factory()->create();

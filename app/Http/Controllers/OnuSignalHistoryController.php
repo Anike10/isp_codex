@@ -39,9 +39,11 @@ class OnuSignalHistoryController extends Controller
         $unstableOnly = $request->query('stability') === 'unstable';
         $swing = max(0.1, (float) $request->query('swing', self::DEFAULT_SWING_DB));
 
-        $powerOp = in_array($request->query('power_op'), ['lt', 'gt'], true) ? $request->query('power_op') : '';
-        $powerValue = is_numeric($request->query('power_dbm')) ? (float) $request->query('power_dbm') : null;
-        $powerActive = $powerOp !== '' && $powerValue !== null;
+        // Latest-Rx range filter: two independent bounds. Filling only one
+        // leaves the other side unbounded; filling neither disables the filter.
+        $powerLt = is_numeric($request->query('power_lt')) ? (float) $request->query('power_lt') : null;
+        $powerGt = is_numeric($request->query('power_gt')) ? (float) $request->query('power_gt') : null;
+        $powerActive = $powerLt !== null || $powerGt !== null;
 
         $perPageDefault = 20;
         $perPageOptions = [10, 20, 50, 100, 200];
@@ -68,7 +70,7 @@ class OnuSignalHistoryController extends Controller
                     });
                 })
                 ->when($unstableOnly, fn ($q) => $q->whereIn('id', $unstableIds))
-                ->when($powerActive, fn ($q) => $q->whereIn('id', $this->powerFilteredPartyIds($from, $to, $powerOp, $powerValue)))
+                ->when($powerActive, fn ($q) => $q->whereIn('id', $this->powerFilteredPartyIds($from, $to, $powerLt, $powerGt)))
                 ->orderBy('name')
                 ->paginate($perPage)
                 ->withQueryString();
@@ -106,7 +108,7 @@ class OnuSignalHistoryController extends Controller
             'parties', 'pagination', 'retentionDays', 'intervalHours', 'showRx', 'showTx',
             'perPage', 'perPageDefault', 'perPageOptions',
             'from', 'to', 'search', 'unstableOnly', 'swing', 'unstableCount',
-            'powerOp', 'powerValue', 'powerActive'
+            'powerLt', 'powerGt', 'powerActive'
         ));
     }
 
@@ -177,26 +179,37 @@ class OnuSignalHistoryController extends Controller
     }
 
     /**
-     * Parties whose most recent Rx reading in the window is below ($op = 'lt')
-     * or above ($op = 'gt') $value dBm. "Most recent" is the latest sample by
+     * Parties whose most recent Rx reading in the window falls within the given
+     * bounds: below $lt dBm (when set) and/or above $gt dBm (when set). A null
+     * bound is "no limit" on that side. "Most recent" is the latest sample by
      * sampled_at (id breaks ties), matching the reading shown on each card.
      *
      * @return Collection<int, int>
      */
-    private function powerFilteredPartyIds(Carbon $from, Carbon $to, string $op, float $value)
+    private function powerFilteredPartyIds(Carbon $from, Carbon $to, ?float $lt, ?float $gt)
     {
         return CustomerOnuPowerSample::query()
-            ->selectRaw('customer_id, SUBSTRING_INDEX(GROUP_CONCAT(rx_power_dbm ORDER BY sampled_at DESC, id DESC), ",", 1) AS latest_rx')
             ->whereBetween('sampled_at', [$from, $to])
             ->whereNotNull('rx_power_dbm')
+            ->orderBy('sampled_at')
+            ->orderBy('id')
+            ->get(['customer_id', 'rx_power_dbm'])
             ->groupBy('customer_id')
-            ->get()
-            ->filter(function (CustomerOnuPowerSample $row) use ($op, $value): bool {
-                $rx = (float) $row->latest_rx;
+            ->filter(function (Collection $rows) use ($lt, $gt): bool {
+                $rx = (float) $rows->last()->rx_power_dbm;
 
-                return $op === 'lt' ? $rx < $value : $rx > $value;
+                if ($lt !== null && $rx >= $lt) {
+                    return false;
+                }
+
+                if ($gt !== null && $rx <= $gt) {
+                    return false;
+                }
+
+                return true;
             })
-            ->map(fn (CustomerOnuPowerSample $row) => (int) $row->customer_id)
+            ->keys()
+            ->map(fn ($id) => (int) $id)
             ->values();
     }
 
