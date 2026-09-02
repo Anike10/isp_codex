@@ -577,11 +577,11 @@
         state.popup = new maplibregl.Popup({ offset: 16 })
             .setLngLat(feature.geometry.coordinates)
             .setHTML(`
-                <p class="popup-title">${escapeHtml(`Party #${customerId}`)}</p>
+                <p class="popup-title">${escapeHtml((userName && userName !== 'Not provided' ? userName : '') || customerName || `Party #${customerId}`)}</p>
                 <p class="popup-meta">
-                    <span class="badge ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span>
+                    <span class="popup-meta-id">Party #${escapeHtml(customerId)}</span>
                     <span class="badge-sep">|</span>
-                    <span>${escapeHtml(userName)}</span>
+                    <span class="badge ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span>
                 </p>
                 <dl class="popup-details">
                     <div><dt>Name</dt><dd>${inlineFieldHtml('name', customerId, inlineUpdateUrl, String(customerName || ''), 'Not provided')}</dd></div>
