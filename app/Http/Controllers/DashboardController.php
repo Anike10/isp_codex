@@ -32,7 +32,7 @@ class DashboardController extends Controller
             'openTickets' => SupportTicket::whereIn('status', ['open', 'processing'])->count(),
             'lowStockProducts' => Product::whereColumn('stock_quantity', '<=', 'low_stock_alert')->count(),
             'recentInvoices' => Invoice::with('customer')->latest()->limit(5)->get(),
-            'recentTickets' => SupportTicket::with('customer')->latest()->limit(5)->get(),
+            'recentTickets' => SupportTicket::with('customer')->where('status', '!=', 'closed')->latest()->limit(5)->get(),
             'unmanagedRouterUsers' => $unmanagedRouterUsers,
             'unmanagedRouterUsersCheckedAt' => $unmanagedRouterUsersCheckedAt,
         ]);
