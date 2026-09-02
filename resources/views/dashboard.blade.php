@@ -4,8 +4,24 @@
 @php
     $canOpenInvoices = auth()->user()?->hasPermission('manage_invoices');
     $canOpenTickets = auth()->user()?->hasPermission('manage_tickets');
+    $canOpenCustomers = auth()->user()?->hasPermission('manage_customers');
+    $canOpenProducts = auth()->user()?->hasPermission('manage_products');
     $canSeeRouterUsers = auth()->user()?->hasPermission('view_unmanaged_router_users');
+
+    $statBlocks = [
+        ['label' => 'Parties', 'value' => $totalCustomers, 'href' => $canOpenCustomers ? route('customers.index') : null],
+        ['label' => 'Active', 'value' => $activeCustomers, 'href' => $canOpenCustomers ? route('customers.index', ['status' => 'active']) : null],
+        ['label' => 'Income', 'value' => number_format($monthlyIncome), 'href' => $canOpenInvoices ? route('invoices.index', ['billing_month' => now()->format('Y-m')]) : null],
+        ['label' => 'Due', 'value' => number_format($totalDue), 'href' => $canOpenInvoices ? route('invoices.index', ['due_only' => 1]) : null],
+        ['label' => 'Open Tickets', 'value' => $openTickets, 'href' => $canOpenTickets ? route('tickets.index') : null],
+        ['label' => 'Low Stock', 'value' => $lowStockProducts, 'href' => $canOpenProducts ? route('products.index', ['stock_state' => 'low']) : null],
+    ];
 @endphp
+<style>
+    .grid.stats a.stat { text-decoration: none; color: inherit; transition: transform .12s ease, box-shadow .12s ease; }
+    .grid.stats a.stat:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15, 23, 42, .10); }
+    .grid.stats a.stat:focus-visible { outline: 2px solid #159a70; outline-offset: 2px; }
+</style>
 <div class="topbar">
     <div>
         <h1>Dashboard</h1>
@@ -26,12 +42,13 @@
 </div>
 
 <div class="grid stats">
-    <div class="card stat"><span class="muted">Parties</span><strong>{{ $totalCustomers }}</strong></div>
-    <div class="card stat"><span class="muted">Active</span><strong>{{ $activeCustomers }}</strong></div>
-    <div class="card stat"><span class="muted">Income</span><strong>{{ number_format($monthlyIncome) }}</strong></div>
-    <div class="card stat"><span class="muted">Due</span><strong>{{ number_format($totalDue) }}</strong></div>
-    <div class="card stat"><span class="muted">Open Tickets</span><strong>{{ $openTickets }}</strong></div>
-    <div class="card stat"><span class="muted">Low Stock</span><strong>{{ $lowStockProducts }}</strong></div>
+    @foreach ($statBlocks as $stat)
+        @if ($stat['href'])
+            <a class="card stat" href="{{ $stat['href'] }}"><span class="muted">{{ $stat['label'] }}</span><strong>{{ $stat['value'] }}</strong></a>
+        @else
+            <div class="card stat"><span class="muted">{{ $stat['label'] }}</span><strong>{{ $stat['value'] }}</strong></div>
+        @endif
+    @endforeach
 </div>
 
 @if ($canSeeRouterUsers)
