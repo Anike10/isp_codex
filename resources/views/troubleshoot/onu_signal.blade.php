@@ -90,9 +90,21 @@
         .onu-allsig__metric--wide { grid-column: span 1; }
         .onu-ticket__button { width: 100%; justify-content: center; }
     }
+    /* Keep every filter on one row; scroll sideways on small screens. */
+    .filter-form.onu-filter-row {
+        display: flex; flex-wrap: nowrap; align-items: flex-end; gap: 10px;
+        overflow-x: auto;
+    }
+    .filter-form.onu-filter-row > div { flex: 0 0 auto; margin: 0; }
+    .filter-form.onu-filter-row > div.full { flex: 1 1 200px; min-width: 180px; }
+    .filter-form.onu-filter-row label { white-space: nowrap; }
+    .filter-form.onu-filter-row input[type="date"] { min-width: 138px; }
+    .filter-form.onu-filter-row input[type="number"] { width: 108px; }
+    .filter-form.onu-filter-row select { min-width: 128px; }
+    .filter-form.onu-filter-row .actions { align-self: flex-end; }
 </style>
 
-<form method="get" class="card filter-form" style="margin-bottom:16px">
+<form method="get" class="card filter-form onu-filter-row" style="margin-bottom:16px">
     <div class="full">
         <label>Party name / username</label>
         <input name="q" value="{{ $search }}" placeholder="Name, connection ID, MikroTik username, phone or MAC">
@@ -124,7 +136,7 @@
         <label>Latest Rx greater than (dBm)</label>
         <input type="number" name="power_gt" min="-40" max="5" step="0.1" placeholder="no limit" value="{{ $powerGt !== null ? $powerGt + 0 : '' }}">
     </div>
-    <div class="full actions">
+    <div class="actions">
         <button class="btn secondary" type="submit">Search</button>
         <a class="btn light" href="{{ route('troubleshoot.onu-signal') }}">Reset</a>
     </div>
