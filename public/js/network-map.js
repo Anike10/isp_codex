@@ -27,6 +27,7 @@
         nodeDragJustFinished: false,
         relocatingFeatureId: null,
         hoverPopup: null,
+        hoverHideTimer: null,
         placementPreview: null,
         selectedFeatureId: null,
         selectedBendPoint: null,
@@ -1504,9 +1505,6 @@
         const profileLink = properties.show_url
             ? `<a class="customer-popup-action" href="${escapeHtml(properties.show_url)}">View profile</a>`
             : '';
-        const relocateButton = canEdit
-            ? `<button type="button" class="search-result-action" data-relocate-party="${escapeHtml(String(properties.customer_id))}">Relocate</button>`
-            : '';
         const fiberRemovedButton = properties.fiber_removal_pending
             ? `<button type="button" class="search-result-action search-result-action--danger" data-fiber-removed="${escapeHtml(String(properties.customer_id))}">Fiber removed — hide from map</button>`
             : '';
@@ -1538,7 +1536,7 @@
                         <div class="popup-detail-card popup-detail-card--wide"><dt>Address</dt><dd>${mapPartyInlineFieldHtml('address', properties.customer_id, inlineUpdateUrl, String(properties.address || ''), 'Not provided')}</dd></div>
                         ${siblingSummary ? `<div class="popup-detail-card popup-detail-card--wide"><dt>Multi-port at location</dt><dd>${siblingSummary}</dd></div>` : ''}
                         <div class="popup-detail-card popup-detail-card--wide popup-detail-card--share"><dt>Share</dt><dd><div class="customer-popup-share">${shareControls}</div></dd></div>
-                        <div class="popup-detail-card popup-detail-card--wide popup-detail-card--actions"><dt>Actions</dt><dd><div class="customer-popup-actions">${profileLink}${relocateButton}${removeButton}${fiberRemovedButton}</div></dd></div>
+                        <div class="popup-detail-card popup-detail-card--wide popup-detail-card--actions"><dt>Actions</dt><dd><div class="customer-popup-actions">${profileLink}${removeButton}${fiberRemovedButton}</div></dd></div>
                     </dl>
                 </section>
             `)
@@ -1549,16 +1547,6 @@
             removeButtonElement.addEventListener('click', () => {
                 const customerId = removeButtonElement.dataset.removePartyLocation;
                 removePartyLocation(customerId);
-            });
-        }
-
-        const relocatePartyElement = state.customerPopup.getElement().querySelector('[data-relocate-party]');
-        if (relocatePartyElement) {
-            relocatePartyElement.addEventListener('click', () => {
-                const customerId = relocatePartyElement.dataset.relocateParty;
-                state.customerPopup?.remove();
-                state.customerPopup = null;
-                requestPartyLocationPlacement(customerId);
             });
         }
 
@@ -2565,7 +2553,7 @@
         const feature = state.features.get(featureId);
         if (!feature) return;
 
-        hideHoverDetails();
+        hideHoverDetailsNow();
         if (state.pendingEndpointLink && feature.properties.component_type === 'tj_box') {
             state.linkTargetFeatureId = featureId;
             updateLinkTargetSource();
@@ -2576,15 +2564,23 @@
             .addTo(state.map);
     }
 
+    function clearHoverHideTimer() {
+        if (state.hoverHideTimer) {
+            clearTimeout(state.hoverHideTimer);
+            state.hoverHideTimer = null;
+        }
+    }
+
     function showCustomerHoverSummary(event) {
         if (state.activeTool) return;
+        clearHoverHideTimer();
 
         const renderedFeature = event.features?.[0];
         const customerId = String(renderedFeature?.properties?.customer_id || '');
         const feature = state.customerFeatures.get(customerId) || renderedFeature;
         if (!feature) return;
 
-        hideHoverDetails();
+        hideHoverDetailsNow();
         state.map.getCanvas().style.cursor = 'pointer';
 
         const properties = feature.properties || {};
@@ -2593,6 +2589,7 @@
         const name = formatPartyDisplayName(properties) || 'Not provided';
         const userId = properties.connection_id || properties.mikrotik_username || 'Not assigned';
         const phone = properties.phone || 'Not provided';
+        const canRelocate = customerHasLocation(feature);
 
         state.hoverPopup = new maplibregl.Popup({
             closeButton: false,
@@ -2613,13 +2610,29 @@
                         <div><dt>User ID</dt><dd>${escapeHtml(userId)}</dd></div>
                         <div><dt>Phone</dt><dd>${escapeHtml(phone)}</dd></div>
                     </dl>
-                    <small>Click for full details</small>
+                    ${canRelocate ? `<button type="button" class="search-result-action" data-relocate-party="${escapeHtml(customerId)}">Relocate</button>` : ''}
+                    <small>Click pin for full details</small>
                 </article>
             `)
             .addTo(state.map);
+
+        // Keep the card alive while the pointer is on it so its button is usable.
+        const popupEl = state.hoverPopup.getElement();
+        popupEl.addEventListener('mouseenter', clearHoverHideTimer);
+        popupEl.addEventListener('mouseleave', hideHoverDetails);
+        popupEl.querySelector('[data-relocate-party]')?.addEventListener('click', () => {
+            hideHoverDetailsNow();
+            requestPartyLocationPlacement(customerId);
+        });
     }
 
     function hideHoverDetails() {
+        clearHoverHideTimer();
+        state.hoverHideTimer = setTimeout(hideHoverDetailsNow, 180);
+    }
+
+    function hideHoverDetailsNow() {
+        clearHoverHideTimer();
         if (!state.activeTool) {
             state.map.getCanvas().style.cursor = '';
         }

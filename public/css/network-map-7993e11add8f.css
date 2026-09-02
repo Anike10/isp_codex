@@ -1940,6 +1940,12 @@
     font-weight: 750;
 }
 
+.customer-hover-summary .search-result-action {
+    width: calc(100% - 22px);
+    margin: 8px 11px 0;
+    justify-content: center;
+}
+
 @media (max-width: 620px) {
     .customer-map-popup {
         width: min(350px, calc(100vw - 28px));
