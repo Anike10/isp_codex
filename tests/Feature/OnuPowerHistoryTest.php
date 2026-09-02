@@ -592,8 +592,7 @@ class OnuPowerHistoryTest extends TestCase
             ->assertSee('লেজার পাওয়ার অনেক কম')
             ->assertSee('লেজার পাওয়ার ওঠানামা করছে')
             ->assertSee('Rx সর্বনিম্ন/সর্বোচ্চ: -32.00 dBm / -26.00 dBm')
-            ->assertSee('OLT: KST-OLT-01')
-            ->assertSee('PON/ONU: 7/12')
+            ->assertSee('OLT/ONU: KST-OLT-01 - 7/12')
             ->assertSee('ফাইবারে টান বা অতিরিক্ত বেন্ড')
             ->assertSee('Save Ticket');
         $this->assertDatabaseCount('support_tickets', 0);

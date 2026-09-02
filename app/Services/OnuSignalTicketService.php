@@ -86,8 +86,7 @@ final class OnuSignalTicketService
             'Rx ওঠানামা: '.($rxValues->count() > 1 ? number_format($rxSwing, 2).' dB' : 'পর্যাপ্ত নমুনা নেই')
                 .' (সীমা: '.number_format($swingThreshold, 2).' dB)',
             'ONU সিরিয়াল: '.($onu?->mac_address ?: 'পাওয়া যায়নি'),
-            'OLT: '.($onu?->olt_name ?: 'পাওয়া যায়নি'),
-            'PON/ONU: '.$this->ponOnuValue($onu?->pon_port, $onu?->onu_id),
+            'OLT/ONU: '.$this->oltOnuValue($onu),
             'ONU অবস্থা: '.($latestStatus ?: ($onu?->status ?: 'পাওয়া যায়নি')),
             '',
             'করণীয়: '.implode(' ', $recommendations),
@@ -191,5 +190,19 @@ final class OnuSignalTicketService
         }
 
         return ($ponPort ?? '—').'/'.($onuId ?? '—');
+    }
+
+    /** One-line "OLT - PON/ONU", e.g. "US_EPON - 7/31". */
+    private function oltOnuValue(mixed $onu): string
+    {
+        $olt = trim((string) ($onu?->olt_name ?? ''));
+        $pon = $onu?->pon_port;
+        $onuId = $onu?->onu_id;
+
+        if ($olt === '' && $pon === null && $onuId === null) {
+            return $this->powerValue(null);
+        }
+
+        return ($olt !== '' ? $olt : '-').' - '.($pon ?? '-').'/'.($onuId ?? '-');
     }
 }
