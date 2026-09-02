@@ -44,6 +44,9 @@
         pendingPartyLocationCustomerId: null,
         editingFeatureId: null,
         dirty: false,
+        history: [],
+        historyIndex: -1,
+        restoringHistory: false,
     };
 
     const nodeColors = {
@@ -574,6 +577,8 @@
 
         document.getElementById('cancelDraft').addEventListener('click', cancelDrawing);
         document.getElementById('saveTopology').addEventListener('click', persistTopology);
+        document.getElementById('undoTopology')?.addEventListener('click', undoTopology);
+        document.getElementById('redoTopology')?.addEventListener('click', redoTopology);
         document.getElementById('exportGeojson').addEventListener('click', toggleGeoJsonPreview);
         document.getElementById('customerSearch').addEventListener('submit', searchCustomer);
         document.getElementById('customerIdQuery').addEventListener('input', (event) => {
@@ -609,6 +614,20 @@
         document.addEventListener('keydown', function (event) {
             if (isTypingTarget(event.target)) {
                 return;
+            }
+
+            if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+                const key = event.key.toLowerCase();
+                if (key === 'z' && !event.shiftKey) {
+                    event.preventDefault();
+                    undoTopology();
+                    return;
+                }
+                if (key === 'y' || (key === 'z' && event.shiftKey)) {
+                    event.preventDefault();
+                    redoTopology();
+                    return;
+                }
             }
 
             if (event.key === 'Escape') {
@@ -2203,12 +2222,80 @@
             } else {
                 setStatus('Topology loaded. Map centered on Kushtia district.');
             }
+            // Baseline for undo/redo.
+            state.history = [topologySnapshot()];
+            state.historyIndex = 0;
+            updateHistoryButtons();
         } catch (error) {
             setStatus(error.message);
         }
     }
 
+    const HISTORY_LIMIT = 60;
+
+    function topologySnapshot() {
+        return JSON.stringify(toFeatureCollection());
+    }
+
+    function pushHistory() {
+        if (state.restoringHistory) return;
+        const snap = topologySnapshot();
+        if (state.history[state.historyIndex] === snap) return;
+        state.history = state.history.slice(0, state.historyIndex + 1);
+        state.history.push(snap);
+        while (state.history.length > HISTORY_LIMIT) {
+            state.history.shift();
+        }
+        state.historyIndex = state.history.length - 1;
+        updateHistoryButtons();
+    }
+
+    function updateHistoryButtons() {
+        const undo = document.getElementById('undoTopology');
+        const redo = document.getElementById('redoTopology');
+        if (undo) undo.disabled = state.historyIndex <= 0;
+        if (redo) redo.disabled = state.historyIndex >= state.history.length - 1;
+    }
+
+    async function applyHistorySnapshot(snapJson) {
+        state.restoringHistory = true;
+        try {
+            const collection = JSON.parse(snapJson);
+            const activePathFeatureId = currentPathFeatureId();
+            state.features = new Map((collection.features || []).map((feature) => [feature.properties.id || feature.id, feature]));
+            clearSelection();
+            clearPathMarkers();
+            closeFiberCorePanel();
+            closeOltPortPanel();
+            closeFeatureForm();
+            refreshSources();
+            if (activePathFeatureId && state.features.has(activePathFeatureId)) {
+                showPathMarkers(activePathFeatureId);
+            }
+            state.dirty = true;
+            await persistTopology();
+        } finally {
+            state.restoringHistory = false;
+        }
+        updateHistoryButtons();
+    }
+
+    async function undoTopology() {
+        if (state.historyIndex <= 0) return;
+        state.historyIndex -= 1;
+        await applyHistorySnapshot(state.history[state.historyIndex]);
+        setStatus('Undo applied.');
+    }
+
+    async function redoTopology() {
+        if (state.historyIndex >= state.history.length - 1) return;
+        state.historyIndex += 1;
+        await applyHistorySnapshot(state.history[state.historyIndex]);
+        setStatus('Redo applied.');
+    }
+
     async function persistTopology() {
+        pushHistory();
         const button = document.getElementById('saveTopology');
         button.disabled = true;
         setStatus('Saving topology...');

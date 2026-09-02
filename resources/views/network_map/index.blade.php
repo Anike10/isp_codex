@@ -94,6 +94,10 @@
             </div>
 
             <div class="map-actions">
+                <div class="tool-grid">
+                    <button type="button" class="btn light" id="undoTopology" disabled title="Undo (Ctrl+Z)">Undo</button>
+                    <button type="button" class="btn light" id="redoTopology" disabled title="Redo (Ctrl+Y)">Redo</button>
+                </div>
                 <button type="button" class="btn" id="saveTopology">Save Network</button>
                 <button type="button" class="btn light" id="exportGeojson">Show GeoJSON</button>
                 <button type="button" class="btn light" id="cancelDraft">Cancel Draw</button>
@@ -149,5 +153,5 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map-d194101.js') }}?v=20260903-5"></script>
+    <script src="{{ asset('js/network-map-d194101.js') }}?v=20260903-6"></script>
 @endsection
