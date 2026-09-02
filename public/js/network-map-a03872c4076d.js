@@ -2317,6 +2317,15 @@
             refreshSources();
             selectFeature(feature.id);
             openFeatureForm(feature.id, true);
+
+            // One node per tool pick: deactivate so the next map click does not
+            // drop another. Re-select the tool to add more nodes.
+            const placedLabel = componentLabels[feature.properties.component_type] || 'Node';
+            state.activeTool = null;
+            state.activeNodeType = null;
+            document.querySelectorAll('.map-tool').forEach((item) => item.classList.remove('active'));
+            updatePlacementCursor();
+            setStatus(`${placedLabel} placed. Pick a node tool again to add another.`);
             return;
         }
 
