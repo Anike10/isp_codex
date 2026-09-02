@@ -25,6 +25,7 @@
         pendingEndpointLink: null,
         draggingNode: null,
         nodeDragJustFinished: false,
+        relocatingFeatureId: null,
         hoverPopup: null,
         placementPreview: null,
         selectedFeatureId: null,
@@ -1503,9 +1504,6 @@
         const profileLink = properties.show_url
             ? `<a class="customer-popup-action" href="${escapeHtml(properties.show_url)}">View profile</a>`
             : '';
-        const editLink = properties.edit_url
-            ? `<a class="customer-popup-action" href="${escapeHtml(properties.edit_url)}">Edit location</a>`
-            : '';
         const fiberRemovedButton = properties.fiber_removal_pending
             ? `<button type="button" class="search-result-action search-result-action--danger" data-fiber-removed="${escapeHtml(String(properties.customer_id))}">Fiber removed — hide from map</button>`
             : '';
@@ -1537,7 +1535,7 @@
                         <div class="popup-detail-card popup-detail-card--wide"><dt>Address</dt><dd>${mapPartyInlineFieldHtml('address', properties.customer_id, inlineUpdateUrl, String(properties.address || ''), 'Not provided')}</dd></div>
                         ${siblingSummary ? `<div class="popup-detail-card popup-detail-card--wide"><dt>Multi-port at location</dt><dd>${siblingSummary}</dd></div>` : ''}
                         <div class="popup-detail-card popup-detail-card--wide popup-detail-card--share"><dt>Share</dt><dd><div class="customer-popup-share">${shareControls}</div></dd></div>
-                        <div class="popup-detail-card popup-detail-card--wide popup-detail-card--actions"><dt>Actions</dt><dd><div class="customer-popup-actions">${profileLink}${editLink}${removeButton}${fiberRemovedButton}</div></dd></div>
+                        <div class="popup-detail-card popup-detail-card--wide popup-detail-card--actions"><dt>Actions</dt><dd><div class="customer-popup-actions">${profileLink}${removeButton}${fiberRemovedButton}</div></dd></div>
                     </dl>
                 </section>
             `)
@@ -2342,6 +2340,22 @@
             return;
         }
 
+        if (state.relocatingFeatureId) {
+            const feature = state.features.get(state.relocatingFeatureId);
+            state.relocatingFeatureId = null;
+            state.map.getCanvas().style.cursor = '';
+            if (feature && feature.geometry.type === 'Point') {
+                feature.geometry.coordinates = [event.lngLat.lng, event.lngLat.lat];
+                moveLinkedFiberEndpoints(feature);
+                refreshSources();
+                selectFeature(feature.properties.id || feature.id);
+                state.dirty = true;
+                persistTopology();
+                setStatus(`${featureDisplayName(feature)} moved to the new location.`);
+            }
+            return;
+        }
+
         const clicked = state.map.queryRenderedFeatures(event.point, {
             layers: ['customer-locations-label', 'customer-locations-circle', 'network-nodes-circle', 'network-links-line-hit'],
         });
@@ -2722,6 +2736,10 @@
         state.activeNodeType = null;
         state.draftLine = [];
         state.draftLineCustomers = [];
+        if (state.relocatingFeatureId) {
+            state.relocatingFeatureId = null;
+            state.map.getCanvas().style.cursor = '';
+        }
         clearPathMarkers();
         clearLinkTarget();
         clearSelection();
@@ -4691,8 +4709,20 @@
             `<p class="popup-title">${escapeHtml(title)}</p>`,
             `<p class="popup-meta">${escapeHtml(componentLabels[props.component_type] || props.component_type)}</p>`,
             rows.length ? `<dl class="popup-details">${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join('')}</dl>` : '',
-            `<div class="popup-actions"><button type="button" class="search-result-action search-result-action--primary" data-edit-feature="${escapeHtml(String(props.id || feature.id))}">Edit details</button></div>`,
+            `<div class="popup-actions"><button type="button" class="search-result-action search-result-action--primary" data-edit-feature="${escapeHtml(String(props.id || feature.id))}">Edit details</button>${feature.geometry.type === 'Point' ? `<button type="button" class="search-result-action" data-relocate-feature="${escapeHtml(String(props.id || feature.id))}">Relocate</button>` : ''}</div>`,
         ].join('');
+    }
+
+    /** Arm "click the map to move this node". */
+    function startFeatureRelocate(id) {
+        const feature = state.features.get(id);
+        if (!feature || feature.geometry.type !== 'Point') return;
+        state.featurePopup?.remove();
+        state.featurePopup = null;
+        closeFeatureForm();
+        state.relocatingFeatureId = id;
+        state.map.getCanvas().style.cursor = 'crosshair';
+        setStatus(`Relocating ${featureDisplayName(feature)} — click the map to set the new location (Esc to cancel).`);
     }
 
     /** Info popup for any node/link with a one-click Edit button. */
@@ -4706,11 +4736,14 @@
             .setHTML(popupHtml(feature))
             .addTo(state.map);
 
-        const editButton = state.featurePopup.getElement().querySelector('[data-edit-feature]');
-        editButton?.addEventListener('click', () => {
+        const popupEl = state.featurePopup.getElement();
+        popupEl.querySelector('[data-edit-feature]')?.addEventListener('click', () => {
             state.featurePopup?.remove();
             state.featurePopup = null;
             openExistingFeature(id);
+        });
+        popupEl.querySelector('[data-relocate-feature]')?.addEventListener('click', () => {
+            startFeatureRelocate(id);
         });
     }
 
