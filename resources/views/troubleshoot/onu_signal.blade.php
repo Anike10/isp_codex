@@ -90,18 +90,25 @@
         .onu-allsig__metric--wide { grid-column: span 1; }
         .onu-ticket__button { width: 100%; justify-content: center; }
     }
-    /* Keep every filter on one row; scroll sideways on small screens. */
-    .filter-form.onu-filter-row {
-        display: flex; flex-wrap: nowrap; align-items: flex-end; gap: 10px;
+    /* Keep every filter on one row; the theme's default filter bar wraps.
+       Selectors mirror the theme prefix + .onu-filter-row so they win. */
+    .app-theme .main form.card.filter-form.onu-filter-row {
+        flex-wrap: nowrap;
         overflow-x: auto;
+        gap: 10px 12px;
     }
-    .filter-form.onu-filter-row > div { flex: 0 0 auto; margin: 0; }
-    .filter-form.onu-filter-row > div.full { flex: 1 1 200px; min-width: 180px; }
-    .filter-form.onu-filter-row label { white-space: nowrap; }
-    .filter-form.onu-filter-row input[type="date"] { min-width: 138px; }
-    .filter-form.onu-filter-row input[type="number"] { width: 108px; }
-    .filter-form.onu-filter-row select { min-width: 128px; }
-    .filter-form.onu-filter-row .actions { align-self: flex-end; }
+    .app-theme .main form.card.filter-form.onu-filter-row > div:not(.actions) {
+        flex: 0 0 auto;
+    }
+    .app-theme .main form.card.filter-form.onu-filter-row > div:has(input[name="q"]) {
+        flex: 1 1 170px;
+        min-width: 150px;
+    }
+    .app-theme .main form.card.filter-form.onu-filter-row > div:has(> input[type="date"]) { flex: 0 0 148px; }
+    .app-theme .main form.card.filter-form.onu-filter-row > div:has(> input[type="number"]) { flex: 0 0 114px; }
+    .app-theme .main form.card.filter-form.onu-filter-row > div:has(> select) { flex: 0 0 150px; }
+    .app-theme .main form.card.filter-form.onu-filter-row > .actions { flex: 0 0 auto; align-self: flex-end; }
+    .app-theme .main form.card.filter-form.onu-filter-row label { white-space: nowrap; }
 </style>
 
 <form method="get" class="card filter-form onu-filter-row" style="margin-bottom:16px">
