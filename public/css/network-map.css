@@ -1404,6 +1404,16 @@
     font-weight: 800;
 }
 
+/* Splitter IN row: set apart from the OUT ports. */
+.splitter-map-table .core-map-row[data-port="IN"] {
+    background: #eaf3ff;
+    box-shadow: inset 3px 0 #2d83c8;
+}
+
+.splitter-map-table .core-map-row[data-port="IN"] > span:first-child {
+    color: #175cd3;
+}
+
 .core-map-row input {
     min-height: 34px;
     padding: 7px 8px;

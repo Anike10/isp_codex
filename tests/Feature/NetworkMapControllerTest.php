@@ -252,6 +252,35 @@ class NetworkMapControllerTest extends TestCase
             ->assertJsonFragment(['z_end_customer_name' => 'raka_farmacy (Party #349)']);
     }
 
+    public function test_fiber_cable_keeps_the_auto_drop_source_marker(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $payload = [
+            'type' => 'FeatureCollection',
+            'features' => [[
+                'type' => 'Feature',
+                'id' => 'auto-drop-1',
+                'geometry' => ['type' => 'LineString', 'coordinates' => [[90.41, 23.81], [90.42, 23.82]]],
+                'properties' => [
+                    'id' => 'auto-drop-1',
+                    'feature_type' => 'link',
+                    'component_type' => 'fiber_cable',
+                    'fiber_code' => 'DROP-SPL01-OUT-01',
+                    'core_count' => '2F',
+                    'cable_type' => 'Overhead',
+                    'auto_drop_source' => 'spl-01|OUT-01',
+                ],
+            ]],
+        ];
+
+        $this->actingAs($user)->postJson(route('network-map.features.store'), $payload)->assertOk();
+        $this->actingAs($user)->getJson(route('network-map.features.index'))
+            ->assertOk()
+            ->assertJsonFragment(['auto_drop_source' => 'spl-01|OUT-01']);
+    }
+
     public function test_network_map_photos_can_be_uploaded(): void
     {
         $user = User::factory()->create();

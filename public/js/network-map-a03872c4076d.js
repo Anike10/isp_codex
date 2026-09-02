@@ -2736,6 +2736,7 @@
             syncSplitterParent(feature);
             if (feature.properties.component_type === 'splitter') {
                 repairLegacySplitterLinks();
+                autoDrawSplitterDropFibers(feature);
             }
             if (feature.geometry.type === 'Point') {
                 moveLinkedFiberEndpoints(feature);
@@ -3686,6 +3687,98 @@
         });
 
         return repaired;
+    }
+
+    /**
+     * For each splitter OUT row that points at an endpoint which is not another
+     * port-link device (e.g. a customer pin), draw a 2-core drop fiber from the
+     * splitter to that endpoint automatically, and remove the auto drops whose
+     * row was cleared or retargeted.
+     */
+    function autoDrawSplitterDropFibers(splitter) {
+        if (!splitter || splitter.geometry?.type !== 'Point' || splitter.properties.component_type !== 'splitter') return;
+
+        const splitterId = String(splitter.properties.id || splitter.id);
+        const splitterCoords = splitter.geometry.coordinates;
+
+        const endpointCoords = new Map();
+        state.customerFeatures.forEach((feature) => {
+            if (Array.isArray(feature.geometry?.coordinates)) {
+                endpointCoords.set(customerEndpointLabel(feature.properties || {}).toLowerCase(), {
+                    coords: feature.geometry.coordinates.slice(),
+                    customer: feature.properties || {},
+                });
+            }
+        });
+        state.features.forEach((feature) => {
+            if (feature.geometry?.type === 'Point' && feature !== splitter && isPortLinkDevice(feature)) {
+                // Port-link devices are handled by repairLegacySplitterLinks; skip.
+                endpointCoords.delete(devicePortLabel(feature, '').trim().toLowerCase());
+            }
+        });
+
+        const rows = buildSplitterRowsForFeature(splitter);
+        const wantedPorts = new Map();
+        rows.forEach((row) => {
+            if (row.port === 'IN') return;
+            const label = String(row.connected_fiber || '').trim();
+            if (!label) return;
+            const match = endpointCoords.get(label.toLowerCase());
+            if (match) {
+                wantedPorts.set(row.port, { row, ...match });
+            }
+        });
+
+        // Drop stale auto fibers for this splitter.
+        [...state.features.values()].forEach((feature) => {
+            const src = feature.properties?.auto_drop_source;
+            if (typeof src !== 'string' || !src.startsWith(`${splitterId}|`)) return;
+            const port = src.slice(splitterId.length + 1);
+            if (!wantedPorts.has(port)) {
+                state.features.delete(feature.properties.id || feature.id);
+            }
+        });
+
+        wantedPorts.forEach(({ row, coords, customer }, port) => {
+            const source = `${splitterId}|${port}`;
+            let fiber = [...state.features.values()].find((feature) => feature.properties?.auto_drop_source === source);
+            const coreColor = row.connected_core || row.color_name || 'Blue';
+            const aLabel = `${featureDisplayName(splitter)} ${port}`;
+
+            if (fiber) {
+                fiber.geometry.coordinates = [splitterCoords.slice(), coords.slice()];
+                fiber.properties.a_end_device_port = aLabel;
+                fiber.properties.z_end_device_port = row.connected_fiber;
+                fiber.properties.length_meters = Number(lineLengthMeters(fiber.geometry.coordinates).toFixed(2));
+                return;
+            }
+
+            const id = uuid();
+            fiber = {
+                type: 'Feature',
+                id,
+                geometry: { type: 'LineString', coordinates: [splitterCoords.slice(), coords.slice()] },
+                properties: {
+                    id,
+                    feature_type: 'link',
+                    component_type: 'fiber_cable',
+                    ...defaultPropertiesFor('fiber_cable'),
+                    fiber_code: `DROP-${featureDisplayName(splitter)}-${port}`.replace(/\s+/g, ''),
+                    core_count: '2F',
+                    cable_type: 'Overhead',
+                    a_end_device_port: aLabel,
+                    a_end_core_color: coreColor,
+                    z_end_device_port: row.connected_fiber,
+                    z_end_core_color: coreColor,
+                    z_end_customer_id: customer.customer_id ? String(customer.customer_id) : undefined,
+                    z_end_customer_name: customer.customer_id ? row.connected_fiber : undefined,
+                    auto_drop_source: source,
+                    length_meters: Number(lineLengthMeters([splitterCoords, coords]).toFixed(2)),
+                    note: `Auto drop from ${aLabel}`,
+                },
+            };
+            state.features.set(id, fiber);
+        });
     }
 
     function mediumLinkColor(medium) {

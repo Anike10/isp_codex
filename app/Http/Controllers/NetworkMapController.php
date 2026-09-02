@@ -334,6 +334,7 @@ class NetworkMapController extends Controller
             'a_end_customer_name',
             'z_end_customer_id',
             'z_end_customer_name',
+            'auto_drop_source',
             'splitter_input_port',
             'splitter_output_port',
             'splitter_output_core_color',
