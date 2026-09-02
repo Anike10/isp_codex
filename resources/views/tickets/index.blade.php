@@ -6,6 +6,9 @@
 @php
     $canOpenPartyLedger = auth()->user()?->hasPermission('manage_payment_accounts') || auth()->user()?->hasPermission('manage_customers');
     $rxText = static fn ($value) => $value === null ? '—' : number_format((float) $value, 2);
+    $oltOnuText = static fn ($onu) => $onu
+        ? trim(($onu->olt_name ?: '—').' - '.($onu->pon_port ?? '—').'/'.($onu->onu_id ?? '—'))
+        : '—';
 @endphp
 <div class="topbar">
     <div><h1>Support Tickets</h1><div class="muted">Party complaints and authorized staff work</div></div>
@@ -25,7 +28,7 @@
 @include('partials.per_page')
 
 <table>
-    <thead><tr><th>#</th><th>Party</th><th>Authorized</th><th class="col-center">RX/Update</th><th>Subject</th><th class="col-center">Status</th><th>Action</th></tr></thead>
+    <thead><tr><th>#</th><th>Party</th><th>OLT/ONU</th><th>Authorized</th><th class="col-center">RX/Update</th><th>Subject</th><th class="col-center">Status</th><th>Action</th></tr></thead>
     <tbody>
     @forelse ($tickets as $ticket)
         <tr data-href="{{ route('tickets.show', $ticket) }}">
@@ -37,6 +40,7 @@
                     {{ $ticket->customer->name }}
                 @endif
             </td>
+            <td>{{ $oltOnuText($ticket->matched_onu ?? null) }}</td>
             <td>{{ $ticket->technician?->name ?? 'Unassigned' }}</td>
             <td class="col-center" @if($ticket->rx_power_updated_at) title="Last update Rx captured {{ $ticket->rx_power_updated_at->format('d/m/Y H:i') }}" @endif>
                 {{ $rxText($ticket->rx_power_on_create) }} <span class="muted">/</span> {{ $rxText($ticket->rx_power_on_update) }}
@@ -46,7 +50,7 @@
             <td><a class="btn light" href="{{ route('tickets.show', $ticket) }}">Reply / Update</a></td>
         </tr>
     @empty
-        <tr><td colspan="7">No tickets found.</td></tr>
+        <tr><td colspan="8">No tickets found.</td></tr>
     @endforelse
     </tbody>
 </table>

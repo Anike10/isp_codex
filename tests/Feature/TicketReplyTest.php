@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\EnsureUserHasPermission;
 use App\Models\Customer;
+use App\Models\OltOnu;
 use App\Models\SupportTicket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -55,6 +56,44 @@ class TicketReplyTest extends TestCase
             ->get(route('tickets.show', $ticket))
             ->assertOk()
             ->assertSee('Technician dispatched');
+    }
+
+    public function test_ticket_list_shows_the_party_olt_onu_in_one_column(): void
+    {
+        $user = User::factory()->create();
+
+        $customer = Customer::create([
+            'name' => 'Onu Party',
+            'phone' => '01700000009',
+            'connection_id' => 'TKT-ONU',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+            'last_connected_mac' => 'AA:BB:CC:DD:EE:77',
+        ]);
+
+        OltOnu::query()->create([
+            'olt_name' => 'US_EPON',
+            'pon_port' => 7,
+            'onu_id' => 31,
+            'mac_address' => 'AA:BB:CC:DD:EE:77',
+            'status' => 'online',
+            'last_live_polled_at' => now(),
+        ]);
+
+        SupportTicket::create([
+            'customer_id' => $customer->id,
+            'subject' => 'Weak signal',
+            'description' => 'Rx dropping',
+            'priority' => 'high',
+            'status' => 'open',
+        ]);
+
+        $this->withoutMiddleware(EnsureUserHasPermission::class)
+            ->actingAs($user)
+            ->get(route('tickets.index'))
+            ->assertOk()
+            ->assertSee('US_EPON - 7/31');
     }
 
     public function test_ticket_list_and_details_expose_reply_and_update_controls(): void

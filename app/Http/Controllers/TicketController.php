@@ -7,8 +7,10 @@ use App\Models\CustomerOnuPowerSample;
 use App\Models\SupportTicket;
 use App\Models\User;
 use App\Services\OnuSignalTicketService;
+use App\Support\OnuMatcher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class TicketController extends Controller
@@ -19,8 +21,7 @@ class TicketController extends Controller
         // `status=all` shows every status; a specific status filters to it.
         $status = trim((string) $request->query('status', ''));
 
-        return view('tickets.index', [
-            'tickets' => SupportTicket::with(['customer', 'technician'])
+        $tickets = SupportTicket::with(['customer', 'technician'])
                 ->when($status === '', fn ($query) => $query->where('status', '!=', 'closed'))
                 ->when($request->filled('search'), function ($query) use ($request) {
                     $search = trim((string) $request->query('search'));
@@ -45,7 +46,21 @@ class TicketController extends Controller
                 ->when($request->filled('to'), fn ($query) => $query->whereDate('created_at', '<=', $request->date('to')))
                 ->latest()
                 ->paginate($this->perPage($request))
-                ->appends($request->query()),
+                ->appends($request->query());
+
+        // Resolve the OLT ONU each listed party currently maps to (by learned
+        // device MAC), for the "OLT/ONU" column.
+        $onuByMac = Schema::hasTable('olt_onus')
+            ? OnuMatcher::byMac($tickets->getCollection()->pluck('customer.last_connected_mac'))
+            : [];
+
+        $tickets->getCollection()->each(function (SupportTicket $ticket) use ($onuByMac): void {
+            $mac = mb_strtolower(trim((string) $ticket->customer?->last_connected_mac));
+            $ticket->matched_onu = $mac === '' ? null : ($onuByMac[$mac] ?? null);
+        });
+
+        return view('tickets.index', [
+            'tickets' => $tickets,
             'technicians' => User::orderBy('name')->get(),
         ]);
     }
