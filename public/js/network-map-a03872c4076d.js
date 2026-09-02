@@ -1458,7 +1458,8 @@
         const canEdit = customerHasLocation(feature);
         const displayName = formatPartyDisplayName(properties);
         const userName = formatPartyUserName(properties);
-        const statusText = formatPartyStatus(properties.status);
+        const statusText = properties.deleted ? 'Deleted' : formatPartyStatus(properties.status);
+        const statusClass = properties.deleted ? 'inactive' : formatPartyStatusClass(properties.status);
         const inlineUpdateUrl = mapPartyInlineUpdateUrl(feature);
         const shareControls = mapPartyShareButtonsMarkup(feature);
         const userId = properties.connection_id || properties.mikrotik_username || '';
@@ -1498,13 +1499,13 @@
                             <p class="popup-title">${escapeHtml(headTitle)}</p>
                             <p class="popup-meta"><span class="popup-meta-id">${escapeHtml(partyIdLabel)}</span></p>
                         </div>
-                        <span class="badge ${properties.deleted ? 'inactive' : formatPartyStatusClass(properties.status)}">${escapeHtml(properties.deleted ? 'Deleted' : statusText)}</span>
+                        <span class="badge ${statusClass}">${escapeHtml(statusText)}</span>
                     </header>
                     <dl class="popup-details">
                         <div class="popup-detail-card popup-detail-card--wide popup-detail-card--name"><dt>Name</dt><dd>${mapPartyInlineFieldHtml('name', properties.customer_id, inlineUpdateUrl, String(displayName || ''), 'Not provided')}</dd></div>
                         <div class="popup-detail-card"><dt>Party ID</dt><dd>${escapeHtml(formatPartyLabel(properties) || 'N/A')}</dd></div>
                         <div class="popup-detail-card"><dt>User Name</dt><dd>${mapPartyInlineFieldHtml('connection_id', properties.customer_id, inlineUpdateUrl, String(userId || ''), 'Not assigned')}</dd></div>
-                        <div class="popup-detail-card"><dt>Active Status</dt><dd><span class="badge ${formatPartyStatusClass(properties.status)}">${escapeHtml(statusText)}</span></dd></div>
+                        <div class="popup-detail-card"><dt>Active Status</dt><dd><span class="badge ${statusClass}">${escapeHtml(statusText)}</span></dd></div>
                         <div class="popup-detail-card"><dt>Phone</dt><dd>${mapPartyInlineFieldHtml('phone', properties.customer_id, inlineUpdateUrl, String(properties.phone || ''), 'Not provided')}</dd></div>
                         <div class="popup-detail-card popup-detail-card--wide"><dt>Comment</dt><dd>${mapPartyInlineFieldHtml('comment', properties.customer_id, inlineUpdateUrl, String(comment || ''), 'Not provided')}</dd></div>
                         <div class="popup-detail-card popup-detail-card--wide"><dt>Address</dt><dd>${mapPartyInlineFieldHtml('address', properties.customer_id, inlineUpdateUrl, String(properties.address || ''), 'Not provided')}</dd></div>
@@ -2117,7 +2118,7 @@
         const name = formatPartyDisplayName(feature) || 'Not provided';
         const phone = properties.phone || 'Not provided';
         const userId = properties.connection_id || properties.mikrotik_username || 'Not assigned';
-        const statusText = formatPartyStatus(properties.status);
+        const statusText = properties.deleted ? 'Deleted' : formatPartyStatus(properties.status);
         const mapUrl = buildMapPartyMapUrl(feature);
         const address = properties.address || 'Not provided';
         const customerLabel = formatPartyLabel(feature) || `Party #${properties.customer_id || 'Unknown'}`;
@@ -2420,7 +2421,8 @@
         state.map.getCanvas().style.cursor = 'pointer';
 
         const properties = feature.properties || {};
-        const statusText = formatPartyStatus(properties.status);
+        const statusText = properties.deleted ? 'Deleted' : formatPartyStatus(properties.status);
+        const statusClass = properties.deleted ? 'inactive' : formatPartyStatusClass(properties.status);
         const name = formatPartyDisplayName(properties) || 'Not provided';
         const userId = properties.connection_id || properties.mikrotik_username || 'Not assigned';
         const phone = properties.phone || 'Not provided';
@@ -2437,7 +2439,7 @@
                 <article class="customer-hover-summary">
                     <header>
                         <span>${escapeHtml(formatPartyLabel(properties))}</span>
-                        <span class="badge ${formatPartyStatusClass(properties.status)}">${escapeHtml(statusText)}</span>
+                        <span class="badge ${statusClass}">${escapeHtml(statusText)}</span>
                     </header>
                     <strong>${escapeHtml(name)}</strong>
                     <dl>
