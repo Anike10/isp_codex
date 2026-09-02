@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Customer;
 use App\Models\AppIpPool;
+use App\Models\Customer;
 use App\Models\InternetPackage;
 use App\Models\MikrotikImportedIpPool;
-use App\Models\MikrotikImportedProfile;
-use App\Models\MikrotikImportedSecret;
 use App\Models\MikrotikRouter;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\MikrotikImportService;
@@ -63,6 +61,7 @@ class MikrotikRouterDataController extends Controller
                 foreach ($entries as $entry) {
                     if ($data['name'] === $oldName) {
                         $entry->update(['ranges' => $data['ranges']]);
+
                         continue;
                     }
 
@@ -234,6 +233,7 @@ class MikrotikRouterDataController extends Controller
         }
 
         app(MikrotikImportService::class)->importIpPools($mikrotikRouter);
+
         return back()->with('success', 'IP pool exported to MikroTik and re-imported for comparison.');
     }
 
@@ -288,13 +288,21 @@ class MikrotikRouterDataController extends Controller
 
         if ($data['type'] === 'profile') {
             abort_unless($data['field'] === 'name', 422);
-            if ($data['app_id']) InternetPackage::findOrFail($data['app_id'])->update(['mikrotik_profile' => $data['value']]);
-            if ($data['routeros_id']) $service->write($mikrotikRouter, '/ppp/profile/set', ['.id' => $data['routeros_id'], 'name' => $data['value']]);
+            if ($data['app_id']) {
+                InternetPackage::findOrFail($data['app_id'])->update(['mikrotik_profile' => $data['value']]);
+            }
+            if ($data['routeros_id']) {
+                $service->write($mikrotikRouter, '/ppp/profile/set', ['.id' => $data['routeros_id'], 'name' => $data['value']]);
+            }
             $service->importProfiles($mikrotikRouter);
         } elseif ($data['type'] === 'pool') {
             $pool = $data['app_id'] ? AppIpPool::whereKey($data['app_id'])->where('mikrotik_router_id', $mikrotikRouter->id)->firstOrFail() : null;
-            if ($pool) $pool->update([$data['field'] === 'name' ? 'name' : 'ranges' => $data['value']]);
-            if ($data['routeros_id']) $service->write($mikrotikRouter, '/ip/pool/set', ['.id' => $data['routeros_id'], $data['field'] => $data['value']]);
+            if ($pool) {
+                $pool->update([$data['field'] === 'name' ? 'name' : 'ranges' => $data['value']]);
+            }
+            if ($data['routeros_id']) {
+                $service->write($mikrotikRouter, '/ip/pool/set', ['.id' => $data['routeros_id'], $data['field'] => $data['value']]);
+            }
             $service->importIpPools($mikrotikRouter);
         } else {
             abort_unless($data['field'] === 'name', 422);
@@ -302,7 +310,9 @@ class MikrotikRouterDataController extends Controller
                 $customer = Customer::whereKey($data['app_id'])->where('mikrotik_router_id', $mikrotikRouter->id)->firstOrFail();
                 $customer->update(['connection_id' => $data['value'], 'mikrotik_username' => $data['value']]);
             }
-            if ($data['routeros_id']) $service->write($mikrotikRouter, '/ppp/secret/set', ['.id' => $data['routeros_id'], 'name' => $data['value']]);
+            if ($data['routeros_id']) {
+                $service->write($mikrotikRouter, '/ppp/secret/set', ['.id' => $data['routeros_id'], 'name' => $data['value']]);
+            }
             $service->importSecrets($mikrotikRouter);
         }
 
@@ -381,7 +391,10 @@ class MikrotikRouterDataController extends Controller
         $name = $package->mikrotik_profile ?: $package->name;
         try {
             $live = collect($service->liveRecords($mikrotikRouter, '/ppp/profile/print'))->firstWhere('name', $name);
-            $attributes = ['name' => $name];
+            $attributes = [
+                'name' => $name,
+                'use-ipv6' => 'no',
+            ];
 
             if ($package->default_ip_pool) {
                 $poolExists = collect($service->liveRecords($mikrotikRouter, '/ip/pool/print'))
@@ -418,6 +431,7 @@ class MikrotikRouterDataController extends Controller
             $customer->update(['mikrotik_router_id' => $mikrotikRouter->id]);
         }
         $service->sync($customer);
+
         return back()->with('success', "PPPoE user {$customer->connection_id} exported to MikroTik.");
     }
 
@@ -469,8 +483,7 @@ class MikrotikRouterDataController extends Controller
                     return "Pool {$oldName} was not found on router {$router->name}. Refresh/import that router first, or use App-only mode.";
                 }
                 if ($checkNewName && $newName !== $oldName) {
-                    $nameConflict = $livePools->first(fn (array $pool) =>
-                        ($pool['name'] ?? null) === $newName && ($pool['.id'] ?? null) !== $live['.id']);
+                    $nameConflict = $livePools->first(fn (array $pool) => ($pool['name'] ?? null) === $newName && ($pool['.id'] ?? null) !== $live['.id']);
                     if ($nameConflict) {
                         return "Pool {$newName} already exists on router {$router->name}. Choose another name.";
                     }

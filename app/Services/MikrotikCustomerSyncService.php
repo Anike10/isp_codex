@@ -573,7 +573,7 @@ class MikrotikCustomerSyncService
     {
         $existing = $client->command('/ppp/profile/print', [
             '?name' => $profile,
-            '.proplist' => '.id,name,remote-address,rate-limit',
+            '.proplist' => '.id,name,remote-address,rate-limit,use-ipv6',
         ]);
 
         if ($existing !== []) {
@@ -588,6 +588,9 @@ class MikrotikCustomerSyncService
             if ($rateLimit && ($existing[0]['rate-limit'] ?? null) !== $rateLimit) {
                 $changes['rate-limit'] = $rateLimit;
             }
+            if (mb_strtolower(trim((string) ($existing[0]['use-ipv6'] ?? ''))) !== 'no') {
+                $changes['use-ipv6'] = 'no';
+            }
             if ($changes !== []) {
                 $client->command('/ppp/profile/set', ['.id' => $existing[0]['.id'], ...$changes]);
             }
@@ -597,6 +600,7 @@ class MikrotikCustomerSyncService
 
         $attributes = [
             'name' => $profile,
+            'use-ipv6' => 'no',
         ];
         if ($defaultIpPool) {
             $attributes['remote-address'] = $defaultIpPool;

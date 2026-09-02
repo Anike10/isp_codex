@@ -628,6 +628,7 @@ class MikrotikImportTest extends TestCase
         $service->shouldReceive('write')->once()->withArgs(fn ($givenRouter, $command, $attributes) => $givenRouter->id === $router->id
             && $command === '/ppp/profile/set'
             && $attributes['.id'] === '*P1'
+            && $attributes['use-ipv6'] === 'no'
             && $attributes['remote-address'] === 'customer-pool')
             ->andReturn([]);
         $service->shouldReceive('importProfiles')->once()->andReturn(1);
@@ -657,6 +658,7 @@ class MikrotikImportTest extends TestCase
         $service->shouldReceive('write')->once()->withArgs(fn ($givenRouter, $command, $attributes) => $command === '/ppp/profile/set'
             && $attributes['.id'] === '*P2'
             && $attributes['name'] === 'home100'
+            && $attributes['use-ipv6'] === 'no'
             && ! array_key_exists('remote-address', $attributes))
             ->andThrow(new RuntimeException('RouterOS rejected this profile value'));
 

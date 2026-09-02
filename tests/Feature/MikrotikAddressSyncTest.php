@@ -123,12 +123,13 @@ class MikrotikAddressSyncTest extends TestCase
         ]]);
         $client->shouldReceive('command')->once()->with('/ppp/profile/print', [
             '?name' => 'kpi-50',
-            '.proplist' => '.id,name,remote-address,rate-limit',
+            '.proplist' => '.id,name,remote-address,rate-limit,use-ipv6',
         ])->andReturn([[
             '.id' => '*KPI',
             'name' => 'kpi-50',
             'remote-address' => 'kpi-all',
             'rate-limit' => '50M/50M',
+            'use-ipv6' => 'no',
         ]]);
         $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) => $payload['.id'] === '*STALE' && $payload['remote-address'] === '0.0.0.0'
         ))->andReturn([]);
@@ -165,10 +166,10 @@ class MikrotikAddressSyncTest extends TestCase
             '?name' => 'party-50', '.proplist' => '.id,name,password,profile,service,comment,disabled,remote-address',
         ])->andReturn([['.id' => '*S50', 'name' => 'party-50', 'profile' => 'old-profile', 'disabled' => 'false', 'remote-address' => '10.1.1.1']]);
         $client->shouldReceive('command')->once()->with('/ppp/profile/print', [
-            '?name' => 'home-50', '.proplist' => '.id,name,remote-address,rate-limit',
-        ])->andReturn([['.id' => '*P50', 'name' => 'home-50', 'rate-limit' => '20M/20M']]);
+            '?name' => 'home-50', '.proplist' => '.id,name,remote-address,rate-limit,use-ipv6',
+        ])->andReturn([['.id' => '*P50', 'name' => 'home-50', 'rate-limit' => '20M/20M', 'use-ipv6' => 'yes']]);
         $client->shouldReceive('command')->once()->with('/ppp/profile/set', [
-            '.id' => '*P50', 'rate-limit' => '50M/50M',
+            '.id' => '*P50', 'rate-limit' => '50M/50M', 'use-ipv6' => 'no',
         ])->andReturn([]);
         $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) => $payload['.id'] === '*S50'
             && $payload['profile'] === 'home-50'
@@ -182,6 +183,28 @@ class MikrotikAddressSyncTest extends TestCase
         $status = $method->invoke(app(MikrotikCustomerSyncService::class), $client, $customer, $router);
 
         $this->assertSame('updated', $status);
+    }
+
+    public function test_new_ppp_profile_is_created_with_ipv6_disabled(): void
+    {
+        $client = Mockery::mock(RouterOsClient::class);
+        $client->shouldReceive('command')->once()->with('/ppp/profile/print', [
+            '?name' => 'new-ipv4-only',
+            '.proplist' => '.id,name,remote-address,rate-limit,use-ipv6',
+        ])->andReturn([]);
+        $client->shouldReceive('command')->once()->with('/ppp/profile/add', [
+            'name' => 'new-ipv4-only',
+            'use-ipv6' => 'no',
+            'remote-address' => 'customer-pool',
+            'rate-limit' => '50M/50M',
+        ])->andReturn([]);
+
+        app(MikrotikCustomerSyncService::class)->ensurePppProfile(
+            $client,
+            'new-ipv4-only',
+            'customer-pool',
+            '50M/50M'
+        );
     }
 
     public function test_special_customer_is_reconnected_to_the_service_profile_even_when_inactive(): void
@@ -207,8 +230,8 @@ class MikrotikAddressSyncTest extends TestCase
             '?name' => 'party-special', '.proplist' => '.id,name,password,profile,service,comment,disabled,remote-address',
         ])->andReturn([['.id' => '*SS', 'name' => 'party-special', 'profile' => 'inactive', 'disabled' => 'false', 'remote-address' => '0.0.0.0']]);
         $client->shouldReceive('command')->once()->with('/ppp/profile/print', [
-            '?name' => 'home-30', '.proplist' => '.id,name,remote-address,rate-limit',
-        ])->andReturn([['.id' => '*P30', 'name' => 'home-30', 'rate-limit' => '30M/30M']]);
+            '?name' => 'home-30', '.proplist' => '.id,name,remote-address,rate-limit,use-ipv6',
+        ])->andReturn([['.id' => '*P30', 'name' => 'home-30', 'rate-limit' => '30M/30M', 'use-ipv6' => 'no']]);
         $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) => $payload['.id'] === '*SS'
             && $payload['profile'] === 'home-30'
             && $payload['remote-address'] === '10.30.0.9'
@@ -421,8 +444,8 @@ class MikrotikAddressSyncTest extends TestCase
             '?name' => 'party-new-package', '.proplist' => '.id,name,password,profile,service,comment,disabled,remote-address',
         ])->andReturn([['.id' => '*SN', 'name' => 'party-new-package', 'profile' => 'new-30', 'disabled' => 'false', 'remote-address' => '10.20.0.40']]);
         $client->shouldReceive('command')->once()->with('/ppp/profile/print', [
-            '?name' => 'new-30', '.proplist' => '.id,name,remote-address,rate-limit',
-        ])->andReturn([['.id' => '*PN', 'name' => 'new-30', 'rate-limit' => '30M/30M']]);
+            '?name' => 'new-30', '.proplist' => '.id,name,remote-address,rate-limit,use-ipv6',
+        ])->andReturn([['.id' => '*PN', 'name' => 'new-30', 'rate-limit' => '30M/30M', 'use-ipv6' => 'no']]);
         $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) => $payload['.id'] === '*SN'
             && ! array_key_exists('profile', $payload)
             && array_key_exists('remote-address', $payload)
@@ -451,8 +474,8 @@ class MikrotikAddressSyncTest extends TestCase
             '?name' => 'party-no-remote', '.proplist' => '.id,name,password,profile,service,comment,disabled,remote-address',
         ])->andReturn([['.id' => '*SNR', 'name' => 'party-no-remote', 'profile' => 'home-30', 'disabled' => 'false']]);
         $client->shouldReceive('command')->once()->with('/ppp/profile/print', [
-            '?name' => 'home-30', '.proplist' => '.id,name,remote-address,rate-limit',
-        ])->andReturn([['.id' => '*PNR', 'name' => 'home-30', 'rate-limit' => '30M/30M']]);
+            '?name' => 'home-30', '.proplist' => '.id,name,remote-address,rate-limit,use-ipv6',
+        ])->andReturn([['.id' => '*PNR', 'name' => 'home-30', 'rate-limit' => '30M/30M', 'use-ipv6' => 'no']]);
         $client->shouldReceive('command')->once()->with('/ppp/secret/set', Mockery::on(fn (array $payload) => $payload['.id'] === '*SNR'
             && ! array_key_exists('profile', $payload)
             && ! array_key_exists('remote-address', $payload)
