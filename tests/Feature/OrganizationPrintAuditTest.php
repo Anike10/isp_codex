@@ -30,7 +30,7 @@ class OrganizationPrintAuditTest extends TestCase
 
         $this->actingAs($user)->get(route('invoices.invoice', ['invoice' => $invoice, 'organization_id' => $organization->id]))
             ->assertOk()
-            ->assertSee('PRINT-1 July 2026')
+            ->assertSee('Test Party July 2026')
             ->assertSee(route('invoices.pdf', ['invoice' => $invoice, 'organization_id' => $organization->id]), false)
             ->assertSee('<h1>Second Company</h1>', false)
             ->assertSee('01900000000')
@@ -42,7 +42,7 @@ class OrganizationPrintAuditTest extends TestCase
             ->assertSee('Test Bank')->assertSee('123456789')->assertSee('987654');
 
         $pdf = $this->actingAs($user)->get(route('invoices.pdf', ['invoice' => $invoice, 'organization_id' => $organization->id]));
-        $pdf->assertOk()->assertDownload('PRINT-1 July 2026.pdf');
+        $pdf->assertOk()->assertDownload('Test Party July 2026.pdf');
         $this->assertStringStartsWith('%PDF-', $pdf->getContent());
 
         // The PDF download is recorded in the print history like a print.

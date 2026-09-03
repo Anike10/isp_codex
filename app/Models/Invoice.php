@@ -83,7 +83,7 @@ class Invoice extends Model
 
     public function getPdfFilenameBaseAttribute(): string
     {
-        $party = trim((string) ($this->customer?->connection_id ?: $this->customer?->name ?: 'Invoice'));
+        $party = trim((string) ($this->customer?->name ?: $this->customer?->connection_id ?: 'Invoice'));
         $month = trim($this->formatted_billing_month ?: (string) $this->invoice_no);
         $filename = trim($party.' '.$month);
         $filename = preg_replace('/[\x00-\x1F\x7F<>:"\/\\\\|?*]+/u', '-', $filename) ?? '';
