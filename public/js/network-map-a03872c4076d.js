@@ -203,7 +203,7 @@
             tjBoxSelect('splitter_parent_tj_box_id', 'Inside TJ Box'),
             ...nodeCoordFields(),
             advancedDivider(),
-            input('parent_olt_port', 'Parent OLT/Port', 'OLT-01 PON 1/1', false, 'text', false, { description: 'Which OLT PON port ultimately feeds this splitter.' }),
+            nodeRef('parent_olt_port', 'Parent OLT/Port', 'Pick the OLT that feeds this splitter, then add the PON port, e.g. "OLT-01 PON 1/1".'),
             input('splitter_input_fiber_code', 'Input Fiber Code/ID', 'F-CO-OLT-001', false, 'text', false, { description: 'Code of the feeder fibre landing on the splitter IN.' }),
             color('splitter_input_tube_color', 'Input Tube Color', false, 'Tube colour of the feeder fibre at the IN port.'),
             color('splitter_input_core_color', 'Input Core Color', false, 'Core colour spliced to the splitter IN.'),
@@ -218,7 +218,7 @@
             advancedDivider(),
             input('address', 'Address', 'Road 12, Block C'),
             color('fiber_core_color', 'Fiber Core Color', false, 'Core colour of the fibre arriving at this box.'),
-            input('connected_port', 'Connected Port', 'Splitter 1:8 Port 03', false, 'text', false, { description: 'Upstream device and port that feeds this box.' }),
+            nodeRef('connected_port', 'Connected Port', 'Pick the upstream device that feeds this box, then add its port.'),
             textarea('note', 'Note', 'Add installation notes, splice notes, or field remarks', false, D.note),
         ],
         onu: [
@@ -227,7 +227,7 @@
             advancedDivider(),
             input('address', 'Address', 'House 10, Road 12'),
             color('fiber_core_color', 'Fiber Core Color', false, 'Core colour of the drop fibre into this ONU.'),
-            input('connected_port', 'Connected Port', 'TJ-BOX-041 Port 02', false, 'text', false, { description: 'TJ box / splitter output that feeds this ONU.' }),
+            nodeRef('connected_port', 'Connected Port', 'Pick the TJ box / splitter that feeds this ONU, then add its port.'),
             textarea('note', 'Note', 'Add installation notes, splice notes, or field remarks', false, D.note),
         ],
         fiber_cable: [
@@ -236,10 +236,10 @@
             select('cable_type', 'Cable Type', ['Overhead', 'Underground'], true),
             input('length_meters', 'Length (meters)', 'Auto-calculated', true, 'number', true, { description: 'Measured along the route you drew - read only.' }),
             advancedDivider(),
-            input('a_end_device_port', 'A-End Device/Port', 'OLT-01 PON 1/1', false, 'text', false, { description: 'Where the cable STARTS - device and port (e.g. the OLT PON port).' }),
+            nodeRef('a_end_device_port', 'A-End Device/Port', 'Where the cable STARTS. Pick the device, then add the port after it, e.g. "OLT-01 PON 1/1".'),
             color('a_end_tube_color', 'A-End Tube Color', false, 'Tube colour used at the A end.'),
             color('a_end_core_color', 'A-End Core Color', false, 'Core colour used at the A end.'),
-            input('z_end_device_port', 'Z-End Device/Port', 'Splitter SP-01 IN', false, 'text', false, { description: 'Where the cable ENDS - device and port (e.g. the splitter IN).' }),
+            nodeRef('z_end_device_port', 'Z-End Device/Port', 'Where the cable ENDS. Pick the device, then add the port after it, e.g. "SP-01 IN".'),
             color('z_end_tube_color', 'Z-End Tube Color', false, 'Tube colour used at the Z end.'),
             color('z_end_core_color', 'Z-End Core Color', false, 'Core colour used at the Z end.'),
             input('splitter_input_port', 'Splitter Input Port', 'SP-01 IN', false, 'text', false, { description: 'Fill only if this cable feeds a splitter IN.' }),
@@ -5330,12 +5330,15 @@
             return `<label class="${full}">${escapeHtml(field.label)}${tjBoxSelectHtml(field.name, safeValue)}${help}</label>`;
         }
 
-        if (field.type === 'select' || field.type === 'color') {
+        if (field.type === 'select' || field.type === 'color' || field.type === 'node_ref') {
+            const prompt = field.type === 'color'
+                ? `Type or pick ${field.label.toLowerCase()}`
+                : field.type === 'node_ref'
+                    ? 'Pick a device or type it'
+                    : `Type or choose ${field.label.toLowerCase()}`;
             return `<label class="${full}">${escapeHtml(field.label)}${searchableDropdownHtml(
                 field.name,
-                field.type === 'color'
-                    ? `Type or pick ${field.label.toLowerCase()}`
-                    : `Type or choose ${field.label.toLowerCase()}`,
+                prompt,
                 String(safeValue),
                 String(safeValue),
                 field.required
@@ -5361,6 +5364,13 @@
     // typeahead list. allowCustom keeps any legacy free-text value intact.
     function color(name, label, required = false, description = '') {
         return { type: 'color', name, label, required, description };
+    }
+
+    // Typeahead over the devices already on the map. allowCustom means you can
+    // still type "OLT-01 PON 1/1" freehand, and legacy free-text values show
+    // unchanged - the stored value stays a plain string.
+    function nodeRef(name, label, description = '') {
+        return { type: 'node_ref', name, label, description };
     }
 
     function textarea(name, label, placeholder, required = false, description = '') {
@@ -5425,7 +5435,7 @@
 
     function hydrateSearchableFormLists(container, schema) {
         schema.forEach((field) => {
-            if (!['select', 'tj_box_select', 'color'].includes(field.type)) {
+            if (!['select', 'tj_box_select', 'color', 'node_ref'].includes(field.type)) {
                 return;
             }
 
@@ -5438,6 +5448,9 @@
             } else if (field.type === 'color') {
                 options = corePalette.map(([label, hex]) => ({ value: label, label, search: label, color_hex: hex }));
                 placeholder = `Type or pick ${field.label.toLowerCase()}`;
+            } else if (field.type === 'node_ref') {
+                options = nodeRefDropdownOptions();
+                placeholder = 'Pick a device or type it';
             } else {
                 options = tjBoxDropdownOptions();
                 placeholder = 'Type TJ Box name';
@@ -5448,9 +5461,25 @@
                 options,
                 placeholder,
                 null,
-                { allowCustom: field.type === 'select' || field.type === 'color' }
+                { allowCustom: ['select', 'color', 'node_ref'].includes(field.type) }
             );
         });
+    }
+
+    // Every device currently on the map, for the fibre A/Z-end pickers.
+    function nodeRefDropdownOptions() {
+        return [...state.features.values()]
+            .filter((feature) => feature.geometry.type === 'Point')
+            .map((feature) => {
+                const name = featureDisplayName(feature) || 'Device';
+                const kind = componentLabels[feature.properties.component_type] || 'Device';
+                return {
+                    value: name,
+                    label: `${name} — ${kind}`,
+                    search: compactJoin([name, kind, feature.properties.ip_address]),
+                };
+            })
+            .sort((first, second) => first.label.localeCompare(second.label, undefined, { numeric: true, sensitivity: 'base' }));
     }
 
     function linkedEndpointHtml(value) {
