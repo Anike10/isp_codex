@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PaymentAccount;
+use App\Models\PrintLog;
 use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\Quotation;
@@ -1025,6 +1026,20 @@ class InvoiceController extends Controller
         $context['showBankInformation'] = $request->has('show_bank_information')
             ? $request->boolean('show_bank_information')
             : (bool) $context['selectedOrganization']->show_bank_info_on_invoice;
+
+        // Record the PDF download in the print history, same as pressing Print.
+        PrintLog::create([
+            'organization_id' => $context['selectedOrganization']->id,
+            'printable_type' => Invoice::class,
+            'printable_id' => $invoice->id,
+            'document_type' => 'invoice_pdf',
+            'document_no' => $invoice->invoice_no,
+            'user_id' => $request->user()?->id,
+            'user_name' => $request->user()?->name,
+            'printed_at' => now(),
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 2000),
+        ]);
 
         return Pdf::loadView('invoices.pdf', $context)
             ->setPaper('a4')

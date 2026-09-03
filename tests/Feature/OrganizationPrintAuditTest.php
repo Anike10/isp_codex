@@ -45,6 +45,16 @@ class OrganizationPrintAuditTest extends TestCase
         $pdf->assertOk()->assertDownload('PRINT-1 July 2026.pdf');
         $this->assertStringStartsWith('%PDF-', $pdf->getContent());
 
+        // The PDF download is recorded in the print history like a print.
+        $this->assertDatabaseHas('print_logs', [
+            'organization_id' => $organization->id,
+            'printable_type' => Invoice::class,
+            'printable_id' => $invoice->id,
+            'document_type' => 'invoice_pdf',
+            'document_no' => 'INV-PRINT-1',
+            'user_id' => $user->id,
+        ]);
+
         $this->actingAs($user)->postJson(route('print-logs.store'), ['organization_id' => $organization->id, 'document_type' => 'invoice', 'printable_id' => $invoice->id])->assertOk();
 
         $this->assertDatabaseHas('print_logs', ['organization_id' => $organization->id, 'printable_type' => Invoice::class, 'printable_id' => $invoice->id, 'document_type' => 'invoice', 'document_no' => 'INV-PRINT-1', 'user_id' => $user->id, 'user_name' => 'Print Operator']);
