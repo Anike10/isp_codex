@@ -4,7 +4,7 @@
 
 @section('content')
     <link rel="stylesheet" href="{{ asset('css/maplibre-gl.css') }}?v=4.7.1">
-    <link rel="stylesheet" href="{{ asset('css/network-map-7993e11add8f.css') }}?v=20260904-4">
+    <link rel="stylesheet" href="{{ asset('css/network-map-7993e11add8f.css') }}?v=20260904-8">
 
     <section class="network-map-page">
         <aside class="network-sidebar">
@@ -212,7 +212,7 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map-d194101.js') }}?v=20260904-7"></script>
+    <script src="{{ asset('js/network-map-d194101.js') }}?v=20260904-8"></script>
     <script>
         (function () {
             // Switch the active network map by reloading with ?map=<slug>.

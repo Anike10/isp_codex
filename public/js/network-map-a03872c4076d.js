@@ -182,35 +182,27 @@
         note: 'Free field for installation notes, splice notes or field remarks.',
     };
 
+    const deviceSchema = (namePlaceholder, brandPlaceholder, portsLabel, portsHint) => [
+        input('name', 'Name', namePlaceholder, true),
+        ...nodeCoordFields(),
+        advancedDivider(),
+        input('brand', 'Brand', brandPlaceholder),
+        input('ip_address', 'IP Address', '10.10.10.1'),
+        input('total_ports', portsLabel, '24', false, 'number', false, { description: portsHint }),
+        input('available_ports', 'Available Ports', '6', false, 'number', false, { description: D.availablePorts }),
+        textarea('note', 'Note', 'Add installation notes, splice notes, or field remarks', false, D.note),
+    ];
+
     const formSchemas = {
-        router: [
-            input('name', 'Name', 'Core Router 01', true),
-            input('brand', 'Brand', 'MikroTik'),
-            input('ip_address', 'IP Address', '10.10.10.1'),
-            input('total_ports', 'Total Ports', '24', false, 'number', false, { description: D.totalPorts }),
-            input('available_ports', 'Available Ports', '6', false, 'number', false, { description: D.availablePorts }),
-            ...nodeMetaFields(),
-        ],
-        switch: [
-            input('name', 'Name', 'Distribution Switch 01', true),
-            input('brand', 'Brand', 'Cisco'),
-            input('ip_address', 'IP Address', '10.10.20.1'),
-            input('total_ports', 'Total Ports', '24', false, 'number', false, { description: D.totalPorts }),
-            input('available_ports', 'Available Ports', '8', false, 'number', false, { description: D.availablePorts }),
-            ...nodeMetaFields(),
-        ],
-        olt: [
-            input('name', 'Name', 'OLT Central Office', true),
-            input('brand', 'Brand', 'Huawei'),
-            input('ip_address', 'IP Address', '10.10.30.1'),
-            input('total_ports', 'Total PON Ports', '16', false, 'number', false, { description: 'Number of PON ports on the OLT.' }),
-            input('available_ports', 'Available PON Ports', '4', false, 'number', false, { description: D.availablePorts }),
-            ...nodeMetaFields(),
-        ],
+        router: deviceSchema('Core Router 01', 'MikroTik', 'Total Ports', D.totalPorts),
+        switch: deviceSchema('Distribution Switch 01', 'Cisco', 'Total Ports', D.totalPorts),
+        olt: deviceSchema('OLT Central Office', 'Huawei', 'Total PON Ports', 'Number of PON ports on the OLT.'),
         splitter: [
             input('name', 'Name', 'SPLITTER-01', true, 'text', false, { description: 'A unique label for this splitter.' }),
-            tjBoxSelect('splitter_parent_tj_box_id', 'Inside TJ Box'),
             select('splitter_type', 'Type', ['1:2', '1:4', '1:8', '1:16'], true, 'Split ratio: 1 input to this many outputs.'),
+            tjBoxSelect('splitter_parent_tj_box_id', 'Inside TJ Box'),
+            ...nodeCoordFields(),
+            advancedDivider(),
             input('parent_olt_port', 'Parent OLT/Port', 'OLT-01 PON 1/1', false, 'text', false, { description: 'Which OLT PON port ultimately feeds this splitter.' }),
             input('splitter_input_fiber_code', 'Input Fiber Code/ID', 'F-CO-OLT-001', false, 'text', false, { description: 'Code of the feeder fibre landing on the splitter IN.' }),
             color('splitter_input_tube_color', 'Input Tube Color', false, 'Tube colour of the feeder fibre at the IN port.'),
@@ -218,26 +210,32 @@
             dynamicMap('splitter_ports', 'Splitter IN/OUT Color Map', 'splitter_port_map'),
             textarea('splitter_output_map', 'Output Port/Core Notes', 'OUT-01 -> Drop cable DC-001, Tube Blue, Core Orange\nOUT-02 -> Drop cable DC-002, Tube Blue, Core Green', false, 'One line per output port: which drop cable and core it goes to.'),
             textarea('splice_details', 'Splice Details', 'Input core blue spliced to splitter IN; outputs mapped by port.'),
-            ...nodeMetaFields(),
+            textarea('note', 'Note', 'Add installation notes, splice notes, or field remarks', false, D.note),
         ],
         tj_box: [
             input('box_name', 'Box Name', 'TJ-BOX-041', true, 'text', false, { description: 'Unique label for the joint/termination box.' }),
+            ...nodeCoordFields(),
+            advancedDivider(),
             input('address', 'Address', 'Road 12, Block C'),
             color('fiber_core_color', 'Fiber Core Color', false, 'Core colour of the fibre arriving at this box.'),
             input('connected_port', 'Connected Port', 'Splitter 1:8 Port 03', false, 'text', false, { description: 'Upstream device and port that feeds this box.' }),
-            ...nodeMetaFields(),
+            textarea('note', 'Note', 'Add installation notes, splice notes, or field remarks', false, D.note),
         ],
         onu: [
             input('client_name', 'Client Name', 'Customer Name', true, 'text', false, { description: 'The subscriber this ONU serves.' }),
+            ...nodeCoordFields(),
+            advancedDivider(),
             input('address', 'Address', 'House 10, Road 12'),
             color('fiber_core_color', 'Fiber Core Color', false, 'Core colour of the drop fibre into this ONU.'),
             input('connected_port', 'Connected Port', 'TJ-BOX-041 Port 02', false, 'text', false, { description: 'TJ box / splitter output that feeds this ONU.' }),
-            ...nodeMetaFields(),
+            textarea('note', 'Note', 'Add installation notes, splice notes, or field remarks', false, D.note),
         ],
         fiber_cable: [
             input('fiber_code', 'Fiber Code/ID', 'F-OLT-SPL-001', true, 'text', false, { description: 'Unique code for this cable. Used to cross-reference splices and drops.' }),
             select('core_count', 'Core Count', ['1F', '2F', '4F', '6F', '12F', '24F'], true, 'Total fibre cores in this cable.'),
             select('cable_type', 'Cable Type', ['Overhead', 'Underground'], true),
+            input('length_meters', 'Length (meters)', 'Auto-calculated', true, 'number', true, { description: 'Measured along the route you drew - read only.' }),
+            advancedDivider(),
             input('a_end_device_port', 'A-End Device/Port', 'OLT-01 PON 1/1', false, 'text', false, { description: 'Where the cable STARTS - device and port (e.g. the OLT PON port).' }),
             color('a_end_tube_color', 'A-End Tube Color', false, 'Tube colour used at the A end.'),
             color('a_end_core_color', 'A-End Core Color', false, 'Core colour used at the A end.'),
@@ -249,7 +247,6 @@
             color('splitter_output_core_color', 'Splitter Output Core Color', false, 'Core colour on the splitter OUT side.'),
             input('connected_fiber_code', 'Connected Fiber/Drop Code', 'DC-ONU-001', false, 'text', false, { description: 'Code of the next cable/drop this one splices into.' }),
             color('connected_fiber_core_color', 'Connected Fiber Core Color', false, 'Core colour of that connected cable.'),
-            input('length_meters', 'Length (meters)', 'Auto-calculated', true, 'number', true, { description: 'Measured along the route you drew - read only.' }),
             linkEndpoints('endpoint_links', 'Linked Endpoints'),
             dynamicMap('core_mappings', 'Fiber Core IN/OUT Color Map', 'fiber_core_map'),
             textarea('splice_details', 'Core/Splice Notes', 'A Blue/Blue -> Splitter IN\nSplitter OUT-01 Orange -> Drop DC-ONU-001 Green'),
@@ -2822,8 +2819,30 @@
 
     function renderFields(componentType, properties) {
         const target = document.getElementById('featureFields');
-        const schema = [...(formSchemas[componentType] || []), photoField];
-        target.innerHTML = schema.map((field) => fieldHtml(field, properties[field.name])).join('');
+        const fullSchema = [...(formSchemas[componentType] || []), photoField];
+        const dividerAt = fullSchema.findIndex((field) => field.type === 'advanced_divider');
+        const primary = dividerAt === -1 ? fullSchema : fullSchema.slice(0, dividerAt);
+        const advanced = dividerAt === -1 ? [] : fullSchema.slice(dividerAt + 1);
+
+        const hasValue = (field) => {
+            const value = properties[field.name];
+            if (value === undefined || value === null || value === '') return false;
+            if (Array.isArray(value)) return value.length > 0;
+            if (typeof value === 'object') return Object.keys(value).length > 0;
+            return true;
+        };
+
+        let html = primary.map((field) => fieldHtml(field, properties[field.name])).join('');
+        if (advanced.length) {
+            const openAttr = advanced.some(hasValue) ? ' open' : '';
+            html += `<details class="advanced-fields full"${openAttr}>`
+                + `<summary>More details &amp; optional fields</summary>`
+                + `<div class="advanced-grid">${advanced.map((field) => fieldHtml(field, properties[field.name])).join('')}</div>`
+                + `</details>`;
+        }
+        target.innerHTML = html;
+
+        const schema = fullSchema.filter((field) => field.type !== 'advanced_divider');
         hydrateSearchableFormLists(target, schema);
         hydrateDynamicMaps(target, properties);
         bindEndpointUnlinkButtons(target);
@@ -5270,12 +5289,17 @@
         return { type: 'textarea', name, label, placeholder, required, description };
     }
 
-    function nodeMetaFields() {
+    function nodeCoordFields() {
         return [
             input('latitude', 'Latitude', '23.901300', true, 'number', false, { step: '0.000001', min: -90, max: 90, description: D.latLong }),
             input('longitude', 'Longitude', '89.122000', true, 'number', false, { step: '0.000001', min: -180, max: 180, description: D.latLong }),
-            textarea('note', 'Note', 'Add installation notes, splice notes, or field remarks', false, D.note),
         ];
+    }
+
+    // Marks where the feature form splits: fields after it go into a collapsed
+    // "More details" section so the first screen shows only the essentials.
+    function advancedDivider() {
+        return { type: 'advanced_divider' };
     }
 
     function dynamicMap(name, label, type) {
