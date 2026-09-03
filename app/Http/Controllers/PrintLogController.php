@@ -13,7 +13,7 @@ use Illuminate\Validation\Rule;
 
 class PrintLogController extends Controller
 {
-    private const TYPES = ['invoice' => Invoice::class, 'invoice_pdf' => Invoice::class, 'delivery_challan' => Invoice::class, 'invoice_quotation' => Invoice::class, 'quotation' => Quotation::class, 'payment_voucher' => Payment::class, 'payment_thermal_voucher' => Payment::class, 'expense_voucher' => Expense::class];
+    private const TYPES = ['invoice' => Invoice::class, 'invoice_pdf' => Invoice::class, 'delivery_challan' => Invoice::class, 'delivery_challan_pdf' => Invoice::class, 'invoice_quotation' => Invoice::class, 'quotation' => Quotation::class, 'payment_voucher' => Payment::class, 'payment_thermal_voucher' => Payment::class, 'expense_voucher' => Expense::class];
 
     public function index(Request $request)
     {

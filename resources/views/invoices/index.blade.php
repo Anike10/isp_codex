@@ -456,6 +456,8 @@
                             @endif
                             <a class="btn light" href="{{ route('invoices.invoice', $invoice) }}" target="_blank">Print Bill</a>
                             <a class="btn light" href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank">Challan</a>
+                            <a class="btn light" href="{{ route('invoices.pdf', $invoice) }}">Download PDF Invoice</a>
+                            <a class="btn light" href="{{ route('invoices.delivery-challan.pdf', $invoice) }}">Download PDF Challan</a>
                             @if ($canManageInvoices)
                                 <form method="post" action="{{ route('invoices.copy-next-month', $invoice) }}" onsubmit="return confirm('Copy this invoice for next month with same items and prices?');">
                                     @csrf

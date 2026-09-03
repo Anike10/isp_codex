@@ -128,6 +128,7 @@ Route::middleware('auth')->group(function () {
         Route::get('invoices/{invoice}/challan', fn ($invoice) => redirect()->route('invoices.invoice', $invoice))->name('invoices.challan');
         Route::get('invoices/{invoice}/quotation', [InvoiceController::class, 'quotation'])->name('invoices.quotation');
         Route::get('invoices/{invoice}/delivery-challan', [InvoiceController::class, 'deliveryChallan'])->name('invoices.delivery-challan');
+        Route::get('invoices/{invoice}/delivery-challan.pdf', [InvoiceController::class, 'downloadDeliveryChallanPdf'])->name('invoices.delivery-challan.pdf');
         Route::resource('sale-returns', SaleReturnController::class)->only(['index', 'create', 'store', 'show']);
     });
 

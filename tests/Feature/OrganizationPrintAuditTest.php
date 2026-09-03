@@ -99,6 +99,43 @@ class OrganizationPrintAuditTest extends TestCase
         $this->assertStringNotContainsString('55554444', $flipped);
     }
 
+    public function test_delivery_challan_pdf_downloads_and_is_audited(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $organization = Organization::create(['name' => 'Challan Co', 'address' => 'Dhaka', 'mobile' => '01944444444', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Challan Party', 'phone' => '01700000004', 'connection_id' => 'CHL-1', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true, 'is_vendor' => false]);
+        $invoice = Invoice::create(['customer_id' => $customer->id, 'invoice_no' => 'INV-CHL-1', 'billing_month' => '2026-07', 'invoice_type' => 'service', 'subtotal' => 100, 'discount' => 0, 'vat' => 0, 'total' => 100, 'paid_amount' => 0, 'due_amount' => 100, 'status' => 'unpaid']);
+
+        $pdf = $this->actingAs($user)->get(route('invoices.delivery-challan.pdf', ['invoice' => $invoice, 'organization_id' => $organization->id]));
+        $pdf->assertOk()->assertDownload('Challan Party July 2026 Challan.pdf');
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+
+        $this->assertDatabaseHas('print_logs', [
+            'organization_id' => $organization->id,
+            'printable_type' => Invoice::class,
+            'printable_id' => $invoice->id,
+            'document_type' => 'delivery_challan_pdf',
+            'document_no' => 'INV-CHL-1',
+            'user_id' => $user->id,
+        ]);
+    }
+
+    public function test_invoices_index_more_menu_has_pdf_download_links(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create(['name' => 'Menu Party', 'phone' => '01700000005', 'connection_id' => 'MNU-1', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true, 'is_vendor' => false]);
+        $invoice = Invoice::create(['customer_id' => $customer->id, 'invoice_no' => 'INV-MNU-1', 'billing_month' => '2026-07', 'invoice_type' => 'service', 'subtotal' => 100, 'discount' => 0, 'vat' => 0, 'total' => 100, 'paid_amount' => 0, 'due_amount' => 100, 'status' => 'unpaid']);
+
+        $this->actingAs($user)->get(route('invoices.index'))
+            ->assertOk()
+            ->assertSee('Download PDF Invoice')
+            ->assertSee('Download PDF Challan')
+            ->assertSee(route('invoices.pdf', $invoice), false)
+            ->assertSee(route('invoices.delivery-challan.pdf', $invoice), false);
+    }
+
     public function test_invoice_pdf_route_honours_the_without_signature_query_flag(): void
     {
         $user = User::factory()->create();

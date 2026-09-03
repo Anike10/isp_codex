@@ -1083,6 +1083,39 @@ class InvoiceController extends Controller
         return view('invoices.delivery_challan', array_merge(compact('invoice'), $printContext->for($request)));
     }
 
+    public function downloadDeliveryChallanPdf(Request $request, Invoice $invoice, PrintContextService $printContext)
+    {
+        $invoice->load(['customer', 'items']);
+        $context = array_merge(compact('invoice'), $printContext->for($request));
+
+        $context['withoutSignature'] = $request->has('without_signature')
+            ? $request->boolean('without_signature')
+            : (bool) $context['selectedOrganization']->default_without_signature;
+
+        PrintLog::create([
+            'organization_id' => $context['selectedOrganization']->id,
+            'printable_type' => Invoice::class,
+            'printable_id' => $invoice->id,
+            'document_type' => 'delivery_challan_pdf',
+            'document_no' => $invoice->invoice_no,
+            'user_id' => $request->user()?->id,
+            'user_name' => $request->user()?->name,
+            'printed_at' => now(),
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 2000),
+        ]);
+
+        // Streamed from memory, same as the invoice PDF - nothing is written to disk.
+        $pdf = Pdf::loadView('invoices.delivery_challan_pdf', $context)->setPaper('a4')->output();
+
+        $this->purgeStrayInvoicePdfs();
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.str_replace('"', '', $invoice->pdf_filename_base.' Challan').'.pdf"',
+        ]);
+    }
+
     public function generate(Request $request, BillingService $billingService)
     {
         $data = $request->validate([
