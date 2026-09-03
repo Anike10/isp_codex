@@ -81,6 +81,23 @@ class Invoice extends Model
         }
     }
 
+    public function getPdfFilenameBaseAttribute(): string
+    {
+        $party = trim((string) ($this->customer?->connection_id ?: $this->customer?->name ?: 'Invoice'));
+        $month = trim($this->formatted_billing_month ?: (string) $this->invoice_no);
+        $filename = trim($party.' '.$month);
+        $filename = preg_replace('/[\x00-\x1F\x7F<>:"\/\\\\|?*]+/u', '-', $filename) ?? '';
+        $filename = preg_replace('/\s+/u', ' ', trim($filename)) ?? '';
+        $filename = trim($filename, ' .');
+
+        return $filename !== '' ? $filename : 'Invoice-'.($this->invoice_no ?: $this->getKey());
+    }
+
+    public function getPdfFilenameAttribute(): string
+    {
+        return $this->pdf_filename_base.'.pdf';
+    }
+
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);

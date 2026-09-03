@@ -22,6 +22,7 @@ use App\Services\PrintContextService;
 use App\Services\RecordVersionService;
 use App\Services\ResellerCommissionService;
 use App\Support\SerialNumberParser;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -1008,6 +1009,17 @@ class InvoiceController extends Controller
         $paymentNote = $this->paymentNoteForInvoice($invoice);
 
         return view('invoices.challan', array_merge(compact('invoice', 'paymentNote'), $printContext->for($request)));
+    }
+
+    public function downloadPdf(Request $request, Invoice $invoice, PrintContextService $printContext)
+    {
+        $invoice->load(['customer', 'items']);
+        $paymentNote = $this->paymentNoteForInvoice($invoice);
+        $context = array_merge(compact('invoice', 'paymentNote'), $printContext->for($request));
+
+        return Pdf::loadView('invoices.pdf', $context)
+            ->setPaper('a4')
+            ->download($invoice->pdf_filename);
     }
 
     public function quotation(Request $request, Invoice $invoice, PrintContextService $printContext)

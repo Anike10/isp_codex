@@ -5,14 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     {{-- Browsers use document.title as the default "Save as PDF" file name. --}}
     @php
-        $pdfName = trim(
-            ($invoice->customer->connection_id ?: $invoice->customer->name ?: 'Invoice')
-            .' '
-            .($invoice->formatted_billing_month ?: $invoice->invoice_no)
-        );
-        // Strip characters Chrome drops from a download name (which can blank it out).
-        $pdfName = preg_replace('/\s+/', ' ', trim(str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '-', $pdfName)));
-        $pdfName = $pdfName !== '' ? $pdfName : ('Invoice-'.$invoice->invoice_no);
+        $pdfName = $invoice->pdf_filename_base;
     @endphp
     <title>{{ $pdfName }}</title>
     <link rel="stylesheet" href="{{ asset('css/page-help.css') }}?v=20260811-1">
@@ -575,6 +568,7 @@
         @include('partials.organization_print_selector')
         <button onclick="recordPrint('invoice', {{ $invoice->id }})" class="btn">Print Bill</button>
         <a href="{{ route('invoices.delivery-challan', ['invoice' => $invoice, 'organization_id' => $selectedOrganization->id, 'print' => 1]) }}" target="_blank" class="btn">Print Challan</a>
+        <a href="{{ route('invoices.pdf', ['invoice' => $invoice, 'organization_id' => $selectedOrganization->id]) }}" class="btn secondary">Download PDF</a>
         <a href="{{ route('invoices.show', $invoice) }}" class="btn light">Back to Invoice</a>
     </div>
 
