@@ -287,6 +287,14 @@
         margin-top: -2px;
     }
 
+    .line-sl-value {
+        display: inline-flex;
+        align-items: center;
+        min-height: 36px;
+        font-weight: 700;
+        color: #233252;
+    }
+
     .amount-pair {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 110px;
@@ -296,7 +304,7 @@
 
     .line-table-head {
         display: grid;
-        grid-template-columns: minmax(220px, 2.2fr) minmax(150px, 1.2fr) 90px 110px 110px 100px 70px;
+        grid-template-columns: 40px minmax(220px, 2.2fr) minmax(150px, 1.2fr) 90px 110px 110px 100px 70px;
         gap: 10px;
         padding: 0 10px 8px;
         color: #667085;
@@ -308,7 +316,7 @@
 
     .line-item-row {
         display: grid;
-        grid-template-columns: minmax(220px, 2.2fr) minmax(150px, 1.2fr) 90px 110px 110px 100px 70px;
+        grid-template-columns: 40px minmax(220px, 2.2fr) minmax(150px, 1.2fr) 90px 110px 110px 100px 70px;
         gap: 10px;
         align-items: start;
         padding: 10px;
@@ -691,6 +699,7 @@
                     </div>
                     <div class="section-body">
                         <div class="line-table-head">
+                            <div>#</div>
                             <div>Product</div>
                             <div>Serial</div>
                             <div>Qty</div>
@@ -779,6 +788,10 @@
 
 <template id="line-item-template">
     <div class="line-item-row">
+        <div class="line-field line-sl-field">
+            <label>#</label>
+            <span class="line-sl-value">1</span>
+        </div>
         <div class="line-field">
             <label>Product <span class="required">*</span></label>
             <input type="hidden" class="line-product-id">
@@ -1052,6 +1065,8 @@
     function syncRowNames() {
         const rows = lineTotals();
         rows.forEach((row, index) => {
+            const slValue = row.querySelector('.line-sl-value');
+            if (slValue) slValue.textContent = String(index + 1);
             row.querySelector('.line-product-id').name = `items[${index}][product_id]`;
             row.querySelector('.line-product-search').name = `items[${index}][product_name]`;
             row.querySelector('.line-qty').name = `items[${index}][quantity]`;
