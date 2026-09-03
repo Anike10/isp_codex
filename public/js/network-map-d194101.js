@@ -631,6 +631,7 @@
         document.getElementById('hideAllMapItems').addEventListener('click', () => setAllMapVisibility(false));
         document.getElementById('closeFeatureForm').addEventListener('click', closeFeatureForm);
         document.getElementById('deleteFeature').addEventListener('click', deleteCurrentFeature);
+        document.getElementById('duplicateFeature')?.addEventListener('click', duplicateCurrentFeature);
         document.getElementById('featureForm').addEventListener('submit', saveFeatureForm);
 
         document.addEventListener('keydown', function (event) {
@@ -2734,6 +2735,8 @@
         document.getElementById('formMode').textContent = isNew ? 'New feature' : 'Edit feature';
         document.getElementById('formTitle').textContent = componentLabels[componentType] || 'Infrastructure Details';
         document.getElementById('deleteFeature').hidden = isNew;
+        const duplicateButton = document.getElementById('duplicateFeature');
+        if (duplicateButton) duplicateButton.hidden = isNew;
         renderFields(componentType, formPropertiesFor(feature));
         document.getElementById('featureModal').hidden = false;
     }
@@ -2834,6 +2837,51 @@
         if (deleteFeatureById(state.editingFeatureId)) {
             closeFeatureForm();
         }
+    }
+
+    // Make a copy of the feature being edited: same type and every property
+    // except identity, with a fresh suggested name and nudged a little off the
+    // original so it's visible. Opens the copy's form so it can be adjusted.
+    function duplicateCurrentFeature() {
+        const source = state.features.get(state.editingFeatureId);
+        if (!source) return;
+
+        const componentType = source.properties.component_type;
+        const id = uuid();
+        const properties = { ...source.properties, id };
+        delete properties.endpoint_links;
+        delete properties.a_end_customer_id;
+        delete properties.a_end_customer_name;
+        delete properties.z_end_customer_id;
+        delete properties.z_end_customer_name;
+
+        const suggestedName = suggestedNodeName(componentType);
+        properties[nodeNameKey(componentType)] = suggestedName;
+
+        let geometry;
+        if (source.geometry.type === 'Point') {
+            const point = state.map.project(source.geometry.coordinates);
+            const moved = state.map.unproject([point.x + 36, point.y + 36]);
+            geometry = { type: 'Point', coordinates: [moved.lng, moved.lat] };
+        } else {
+            const shift = 0.00006;
+            geometry = {
+                type: 'LineString',
+                coordinates: source.geometry.coordinates.map(([lng, lat]) => [lng + shift, lat + shift]),
+            };
+            properties.length_meters = Number(lineLengthMeters(geometry.coordinates).toFixed(2));
+        }
+
+        const copy = { type: 'Feature', id, geometry, properties };
+        state.features.set(id, copy);
+        state.dirty = true;
+        refreshSources();
+        selectFeature(id);
+        if (geometry.type === 'LineString') {
+            showPathMarkers(id);
+        }
+        openFeatureForm(id, true);
+        setStatus(`Copied to "${suggestedName}". Adjust the name/details and drag it into place.`);
     }
 
     function closeFeatureForm() {
