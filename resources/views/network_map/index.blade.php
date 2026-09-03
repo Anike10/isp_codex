@@ -197,7 +197,7 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map-d194101.js') }}?v=20260904-1"></script>
+    <script src="{{ asset('js/network-map-d194101.js') }}?v=20260904-2"></script>
     <script>
         (function () {
             // Switch the active network map by reloading with ?map=<slug>.

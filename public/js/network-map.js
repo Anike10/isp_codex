@@ -175,74 +175,81 @@
         },
     };
 
+    const D = {
+        totalPorts: 'How many ports the device physically has.',
+        availablePorts: 'How many are still free to connect.',
+        latLong: 'Set automatically from where you dropped the pin. Paste survey/GPS coordinates here to move it exactly.',
+        note: 'Free field for installation notes, splice notes or field remarks.',
+    };
+
     const formSchemas = {
         router: [
             input('name', 'Name', 'Core Router 01', true),
             input('brand', 'Brand', 'MikroTik'),
             input('ip_address', 'IP Address', '10.10.10.1'),
-            input('total_ports', 'Total Ports', '24', false, 'number'),
-            input('available_ports', 'Available Ports', '6', false, 'number'),
+            input('total_ports', 'Total Ports', '24', false, 'number', false, { description: D.totalPorts }),
+            input('available_ports', 'Available Ports', '6', false, 'number', false, { description: D.availablePorts }),
             ...nodeMetaFields(),
         ],
         switch: [
             input('name', 'Name', 'Distribution Switch 01', true),
             input('brand', 'Brand', 'Cisco'),
             input('ip_address', 'IP Address', '10.10.20.1'),
-            input('total_ports', 'Total Ports', '24', false, 'number'),
-            input('available_ports', 'Available Ports', '8', false, 'number'),
+            input('total_ports', 'Total Ports', '24', false, 'number', false, { description: D.totalPorts }),
+            input('available_ports', 'Available Ports', '8', false, 'number', false, { description: D.availablePorts }),
             ...nodeMetaFields(),
         ],
         olt: [
             input('name', 'Name', 'OLT Central Office', true),
             input('brand', 'Brand', 'Huawei'),
             input('ip_address', 'IP Address', '10.10.30.1'),
-            input('total_ports', 'Total Ports', '16', false, 'number'),
-            input('available_ports', 'Available Ports', '4', false, 'number'),
+            input('total_ports', 'Total PON Ports', '16', false, 'number', false, { description: 'Number of PON ports on the OLT.' }),
+            input('available_ports', 'Available PON Ports', '4', false, 'number', false, { description: D.availablePorts }),
             ...nodeMetaFields(),
         ],
         splitter: [
-            input('name', 'Name', 'SPLITTER-01', true),
+            input('name', 'Name', 'SPLITTER-01', true, 'text', false, { description: 'A unique label for this splitter.' }),
             tjBoxSelect('splitter_parent_tj_box_id', 'Inside TJ Box'),
-            select('splitter_type', 'Type', ['1:2', '1:4', '1:8', '1:16'], true),
-            input('parent_olt_port', 'Parent OLT/Port', 'OLT-01 PON 1/1'),
-            input('splitter_input_fiber_code', 'Input Fiber Code/ID', 'F-CO-OLT-001'),
-            color('splitter_input_tube_color', 'Input Tube Color'),
-            color('splitter_input_core_color', 'Input Core Color'),
+            select('splitter_type', 'Type', ['1:2', '1:4', '1:8', '1:16'], true, 'Split ratio: 1 input to this many outputs.'),
+            input('parent_olt_port', 'Parent OLT/Port', 'OLT-01 PON 1/1', false, 'text', false, { description: 'Which OLT PON port ultimately feeds this splitter.' }),
+            input('splitter_input_fiber_code', 'Input Fiber Code/ID', 'F-CO-OLT-001', false, 'text', false, { description: 'Code of the feeder fibre landing on the splitter IN.' }),
+            color('splitter_input_tube_color', 'Input Tube Color', false, 'Tube colour of the feeder fibre at the IN port.'),
+            color('splitter_input_core_color', 'Input Core Color', false, 'Core colour spliced to the splitter IN.'),
             dynamicMap('splitter_ports', 'Splitter IN/OUT Color Map', 'splitter_port_map'),
-            textarea('splitter_output_map', 'Output Port/Core Notes', 'OUT-01 -> Drop cable DC-001, Tube Blue, Core Orange\nOUT-02 -> Drop cable DC-002, Tube Blue, Core Green'),
+            textarea('splitter_output_map', 'Output Port/Core Notes', 'OUT-01 -> Drop cable DC-001, Tube Blue, Core Orange\nOUT-02 -> Drop cable DC-002, Tube Blue, Core Green', false, 'One line per output port: which drop cable and core it goes to.'),
             textarea('splice_details', 'Splice Details', 'Input core blue spliced to splitter IN; outputs mapped by port.'),
             ...nodeMetaFields(),
         ],
         tj_box: [
-            input('box_name', 'Box Name', 'TJ-BOX-041', true),
+            input('box_name', 'Box Name', 'TJ-BOX-041', true, 'text', false, { description: 'Unique label for the joint/termination box.' }),
             input('address', 'Address', 'Road 12, Block C'),
-            color('fiber_core_color', 'Fiber Core Color'),
-            input('connected_port', 'Connected Port', 'Splitter 1:8 Port 03'),
+            color('fiber_core_color', 'Fiber Core Color', false, 'Core colour of the fibre arriving at this box.'),
+            input('connected_port', 'Connected Port', 'Splitter 1:8 Port 03', false, 'text', false, { description: 'Upstream device and port that feeds this box.' }),
             ...nodeMetaFields(),
         ],
         onu: [
-            input('client_name', 'Client Name', 'Customer Name', true),
+            input('client_name', 'Client Name', 'Customer Name', true, 'text', false, { description: 'The subscriber this ONU serves.' }),
             input('address', 'Address', 'House 10, Road 12'),
-            color('fiber_core_color', 'Fiber Core Color'),
-            input('connected_port', 'Connected Port', 'TJ-BOX-041 Port 02'),
+            color('fiber_core_color', 'Fiber Core Color', false, 'Core colour of the drop fibre into this ONU.'),
+            input('connected_port', 'Connected Port', 'TJ-BOX-041 Port 02', false, 'text', false, { description: 'TJ box / splitter output that feeds this ONU.' }),
             ...nodeMetaFields(),
         ],
         fiber_cable: [
-            input('fiber_code', 'Fiber Code/ID', 'F-OLT-SPL-001', true),
-            select('core_count', 'Core Count', ['1F', '2F', '4F', '6F', '12F', '24F'], true),
+            input('fiber_code', 'Fiber Code/ID', 'F-OLT-SPL-001', true, 'text', false, { description: 'Unique code for this cable. Used to cross-reference splices and drops.' }),
+            select('core_count', 'Core Count', ['1F', '2F', '4F', '6F', '12F', '24F'], true, 'Total fibre cores in this cable.'),
             select('cable_type', 'Cable Type', ['Overhead', 'Underground'], true),
-            input('a_end_device_port', 'A-End Device/Port', 'OLT-01 PON 1/1'),
-            color('a_end_tube_color', 'A-End Tube Color'),
-            color('a_end_core_color', 'A-End Core Color'),
-            input('z_end_device_port', 'Z-End Device/Port', 'Splitter SP-01 IN'),
-            color('z_end_tube_color', 'Z-End Tube Color'),
-            color('z_end_core_color', 'Z-End Core Color'),
-            input('splitter_input_port', 'Splitter Input Port', 'SP-01 IN'),
-            input('splitter_output_port', 'Splitter Output Port', 'OUT-01'),
-            color('splitter_output_core_color', 'Splitter Output Core Color'),
-            input('connected_fiber_code', 'Connected Fiber/Drop Code', 'DC-ONU-001'),
-            color('connected_fiber_core_color', 'Connected Fiber Core Color'),
-            input('length_meters', 'Length (meters)', 'Auto-calculated', true, 'number', true),
+            input('a_end_device_port', 'A-End Device/Port', 'OLT-01 PON 1/1', false, 'text', false, { description: 'Where the cable STARTS - device and port (e.g. the OLT PON port).' }),
+            color('a_end_tube_color', 'A-End Tube Color', false, 'Tube colour used at the A end.'),
+            color('a_end_core_color', 'A-End Core Color', false, 'Core colour used at the A end.'),
+            input('z_end_device_port', 'Z-End Device/Port', 'Splitter SP-01 IN', false, 'text', false, { description: 'Where the cable ENDS - device and port (e.g. the splitter IN).' }),
+            color('z_end_tube_color', 'Z-End Tube Color', false, 'Tube colour used at the Z end.'),
+            color('z_end_core_color', 'Z-End Core Color', false, 'Core colour used at the Z end.'),
+            input('splitter_input_port', 'Splitter Input Port', 'SP-01 IN', false, 'text', false, { description: 'Fill only if this cable feeds a splitter IN.' }),
+            input('splitter_output_port', 'Splitter Output Port', 'OUT-01', false, 'text', false, { description: 'Fill only if this cable leaves a splitter OUT port.' }),
+            color('splitter_output_core_color', 'Splitter Output Core Color', false, 'Core colour on the splitter OUT side.'),
+            input('connected_fiber_code', 'Connected Fiber/Drop Code', 'DC-ONU-001', false, 'text', false, { description: 'Code of the next cable/drop this one splices into.' }),
+            color('connected_fiber_core_color', 'Connected Fiber Core Color', false, 'Core colour of that connected cable.'),
+            input('length_meters', 'Length (meters)', 'Auto-calculated', true, 'number', true, { description: 'Measured along the route you drew - read only.' }),
             linkEndpoints('endpoint_links', 'Linked Endpoints'),
             dynamicMap('core_mappings', 'Fiber Core IN/OUT Color Map', 'fiber_core_map'),
             textarea('splice_details', 'Core/Splice Notes', 'A Blue/Blue -> Splitter IN\nSplitter OUT-01 Orange -> Drop DC-ONU-001 Green'),
@@ -5034,6 +5041,7 @@
         const step = field.step ? `step="${escapeHtml(field.step)}"` : '';
         const min = field.min !== undefined ? `min="${escapeHtml(String(field.min))}"` : '';
         const max = field.max !== undefined ? `max="${escapeHtml(String(field.max))}"` : '';
+        const help = field.description ? `<small>${escapeHtml(field.description)}</small>` : '';
 
         if (field.type === 'fiber_core_map' || field.type === 'splitter_port_map') {
             return `<section class="dynamic-map ${full}" data-map-type="${escapeHtml(field.type)}" data-property="${escapeHtml(field.name)}"><div class="dynamic-map-title">${escapeHtml(field.label)}</div><div class="dynamic-map-body"></div></section>`;
@@ -5053,7 +5061,7 @@
         }
 
         if (field.type === 'tj_box_select') {
-            return `<label class="${full}">${escapeHtml(field.label)}${tjBoxSelectHtml(field.name, safeValue)}</label>`;
+            return `<label class="${full}">${escapeHtml(field.label)}${tjBoxSelectHtml(field.name, safeValue)}${help}</label>`;
         }
 
         if (field.type === 'select' || field.type === 'color') {
@@ -5065,39 +5073,39 @@
                 String(safeValue),
                 String(safeValue),
                 field.required
-            )}</label>`;
+            )}${help}</label>`;
         }
 
         if (field.type === 'textarea') {
-            return `<label class="${full}">${escapeHtml(field.label)}<textarea name="${escapeHtml(field.name)}" placeholder="${escapeHtml(field.placeholder || '')}" ${required}>${escapeHtml(String(safeValue))}</textarea></label>`;
+            return `<label class="${full}">${escapeHtml(field.label)}<textarea name="${escapeHtml(field.name)}" placeholder="${escapeHtml(field.placeholder || '')}" ${required}>${escapeHtml(String(safeValue))}</textarea>${help}</label>`;
         }
 
-        return `<label class="${full}">${escapeHtml(field.label)}<input name="${escapeHtml(field.name)}" type="${escapeHtml(field.type || 'text')}" value="${escapeHtml(String(safeValue))}" placeholder="${escapeHtml(field.placeholder || '')}" ${required} ${disabled} ${step} ${min} ${max}></label>`;
+        return `<label class="${full}">${escapeHtml(field.label)}<input name="${escapeHtml(field.name)}" type="${escapeHtml(field.type || 'text')}" value="${escapeHtml(String(safeValue))}" placeholder="${escapeHtml(field.placeholder || '')}" ${required} ${disabled} ${step} ${min} ${max}>${help}</label>`;
     }
 
     function input(name, label, placeholder, required = false, type = 'text', disabled = false, options = {}) {
         return { type, name, label, placeholder, required, disabled, ...options };
     }
 
-    function select(name, label, options, required = false) {
-        return { type: 'select', name, label, options, required };
+    function select(name, label, options, required = false, description = '') {
+        return { type: 'select', name, label, options, required, description };
     }
 
     // Fibre tube / core colour picker: the 12 standard colours as a swatched,
     // typeahead list. allowCustom keeps any legacy free-text value intact.
-    function color(name, label, required = false) {
-        return { type: 'color', name, label, required };
+    function color(name, label, required = false, description = '') {
+        return { type: 'color', name, label, required, description };
     }
 
-    function textarea(name, label, placeholder, required = false) {
-        return { type: 'textarea', name, label, placeholder, required };
+    function textarea(name, label, placeholder, required = false, description = '') {
+        return { type: 'textarea', name, label, placeholder, required, description };
     }
 
     function nodeMetaFields() {
         return [
-            input('latitude', 'Latitude', '23.901300', true, 'number', false, { step: '0.000001', min: -90, max: 90 }),
-            input('longitude', 'Longitude', '89.122000', true, 'number', false, { step: '0.000001', min: -180, max: 180 }),
-            textarea('note', 'Note', 'Add installation notes, splice notes, or field remarks'),
+            input('latitude', 'Latitude', '23.901300', true, 'number', false, { step: '0.000001', min: -90, max: 90, description: D.latLong }),
+            input('longitude', 'Longitude', '89.122000', true, 'number', false, { step: '0.000001', min: -180, max: 180, description: D.latLong }),
+            textarea('note', 'Note', 'Add installation notes, splice notes, or field remarks', false, D.note),
         ];
     }
 
