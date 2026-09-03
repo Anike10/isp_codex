@@ -10,6 +10,9 @@
             .' '
             .($invoice->formatted_billing_month ?: $invoice->invoice_no)
         );
+        // Strip characters Chrome drops from a download name (which can blank it out).
+        $pdfName = preg_replace('/\s+/', ' ', trim(str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '-', $pdfName)));
+        $pdfName = $pdfName !== '' ? $pdfName : ('Invoice-'.$invoice->invoice_no);
     @endphp
     <title>{{ $pdfName }}</title>
     <link rel="stylesheet" href="{{ asset('css/page-help.css') }}?v=20260811-1">
@@ -716,6 +719,10 @@
     </main>
 
     <script>
+        // Re-assert the title right before any print so the Save-as-PDF name sticks.
+        document.title = @json($pdfName);
+        window.addEventListener('beforeprint', function () { document.title = @json($pdfName); });
+
         const noSignatureOption = document.getElementById('noSignatureOption');
 
         noSignatureOption.addEventListener('change', function () {
