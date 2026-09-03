@@ -117,6 +117,34 @@ class OrganizationPrintAuditTest extends TestCase
         $this->assertStringStartsWith('%PDF-', $pdf->getContent());
     }
 
+    public function test_invoice_pdf_download_sweeps_stray_files_from_output_pdf(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $organization = Organization::create(['name' => 'Sweep Co', 'address' => 'Dhaka', 'mobile' => '01933333333', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Sweep Party', 'phone' => '01700000003', 'connection_id' => 'SWP-1', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true, 'is_vendor' => false]);
+        $invoice = Invoice::create(['customer_id' => $customer->id, 'invoice_no' => 'INV-SWP-1', 'billing_month' => '2026-07', 'invoice_type' => 'service', 'subtotal' => 100, 'discount' => 0, 'vat' => 0, 'total' => 100, 'paid_amount' => 0, 'due_amount' => 100, 'status' => 'unpaid']);
+
+        $dir = base_path('output/pdf');
+        @mkdir($dir, 0755, true);
+        file_put_contents($dir.'/old-invoice.pdf', '%PDF-stale');
+        file_put_contents($dir.'/keep.txt', 'not a pdf');
+
+        try {
+            $this->actingAs($user)
+                ->get(route('invoices.pdf', ['invoice' => $invoice, 'organization_id' => $organization->id]))
+                ->assertOk();
+
+            $this->assertFileDoesNotExist($dir.'/old-invoice.pdf');
+            $this->assertFileExists($dir.'/keep.txt');
+        } finally {
+            @unlink($dir.'/old-invoice.pdf');
+            @unlink($dir.'/keep.txt');
+            @rmdir($dir);
+            @rmdir(base_path('output'));
+        }
+    }
+
     public function test_only_one_organization_is_default_after_update(): void
     {
         $user = User::factory()->create();

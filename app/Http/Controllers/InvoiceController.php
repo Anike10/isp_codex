@@ -1041,9 +1041,32 @@ class InvoiceController extends Controller
             'user_agent' => substr((string) $request->userAgent(), 0, 2000),
         ]);
 
-        return Pdf::loadView('invoices.pdf', $context)
-            ->setPaper('a4')
-            ->download($invoice->pdf_filename);
+        // Build the document in memory and stream it as the response body — the
+        // PDF is never written to the server's disk, so nothing is left behind
+        // after the download. Also sweep any strays a previous build may have
+        // saved under output/pdf.
+        $pdf = Pdf::loadView('invoices.pdf', $context)->setPaper('a4')->output();
+
+        $this->purgeStrayInvoicePdfs();
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.str_replace('"', '', $invoice->pdf_filename).'"',
+        ]);
+    }
+
+    /** Remove any invoice PDFs an earlier implementation left under output/pdf. */
+    private function purgeStrayInvoicePdfs(): void
+    {
+        $directory = base_path('output/pdf');
+
+        if (! is_dir($directory)) {
+            return;
+        }
+
+        foreach (glob($directory.'/*.pdf') ?: [] as $file) {
+            @unlink($file);
+        }
     }
 
     public function quotation(Request $request, Invoice $invoice, PrintContextService $printContext)
