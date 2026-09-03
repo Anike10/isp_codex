@@ -2846,6 +2846,75 @@
         hydrateSearchableFormLists(target, schema);
         hydrateDynamicMaps(target, properties);
         bindEndpointUnlinkButtons(target);
+
+        const form = document.getElementById('featureForm');
+        form.removeEventListener('input', refreshFormWarnings);
+        form.addEventListener('input', refreshFormWarnings);
+        refreshFormWarnings();
+    }
+
+    // Non-blocking sanity checks shown as a yellow note in the form. They never
+    // stop a save - field data is often filled in over several visits.
+    function featureWarnings(componentType, props) {
+        const warnings = [];
+        const value = (key) => String(props[key] || '').trim();
+
+        if (componentType === 'fiber_cable') {
+            const hasEndpoint = value('a_end_device_port') || value('z_end_device_port')
+                || value('a_end_customer_id') || value('z_end_customer_id')
+                || (props.endpoint_links && (props.endpoint_links.a || props.endpoint_links.z));
+            if (!hasEndpoint) {
+                warnings.push('No A-End or Z-End recorded for this fibre.');
+            }
+        }
+        if (componentType === 'splitter' && !value('splitter_parent_tj_box_id') && !value('parent_olt_port')) {
+            warnings.push('Splitter is not linked to a TJ box or an OLT/PON port.');
+        }
+        if (componentType === 'tj_box' && !value('connected_port')) {
+            warnings.push('TJ box has no upstream "Connected Port" recorded.');
+        }
+
+        const nameKey = nodeNameKey(componentType);
+        const myName = value(nameKey).toLowerCase();
+        if (myName) {
+            const clash = [...state.features.values()].some((feature) =>
+                feature.properties.id !== props.id
+                && feature.properties.component_type === componentType
+                && String(feature.properties[nameKey] || '').trim().toLowerCase() === myName);
+            if (clash) {
+                warnings.push(`"${value(nameKey)}" is already used by another ${componentLabels[componentType] || 'item'}.`);
+            }
+        }
+
+        return warnings;
+    }
+
+    function currentFormProperties() {
+        const form = document.getElementById('featureForm');
+        const feature = state.features.get(state.editingFeatureId);
+        if (!form || !feature) return null;
+
+        const props = { ...feature.properties };
+        new FormData(form).forEach((fieldValue, key) => {
+            if (!['photo_files'].includes(key)) props[key] = fieldValue;
+        });
+        return props;
+    }
+
+    function refreshFormWarnings() {
+        const box = document.getElementById('formWarnings');
+        const feature = state.features.get(state.editingFeatureId);
+        if (!box || !feature) return;
+
+        const props = currentFormProperties() || feature.properties;
+        const warnings = featureWarnings(feature.properties.component_type, props);
+        if (warnings.length) {
+            box.innerHTML = warnings.map((text) => `<span>⚠ ${escapeHtml(text)}</span>`).join('');
+            box.hidden = false;
+        } else {
+            box.hidden = true;
+            box.innerHTML = '';
+        }
     }
 
     async function saveFeatureForm(event) {
@@ -2889,10 +2958,14 @@
 
             state.features.set(feature.properties.id || feature.id, feature);
             state.dirty = true;
+            const warnings = featureWarnings(feature.properties.component_type, feature.properties);
             closeFeatureForm();
             refreshSources();
             updateGeoJsonPreview();
             await persistTopology();
+            if (warnings.length) {
+                setStatus(`Saved — check: ${warnings.join(' ')}`);
+            }
         } catch (error) {
             setStatus(error.message);
         } finally {
@@ -2954,6 +3027,11 @@
 
     function closeFeatureForm() {
         document.getElementById('featureModal').hidden = true;
+        const warnings = document.getElementById('formWarnings');
+        if (warnings) {
+            warnings.hidden = true;
+            warnings.innerHTML = '';
+        }
         state.editingFeatureId = null;
     }
 
