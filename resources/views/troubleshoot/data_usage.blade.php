@@ -25,7 +25,7 @@
         {{-- Override the app-wide compact "search box" look so this field matches
              the enhanced selects sitting next to it on this filter row. --}}
         <input type="text" name="search" value="{{ $search }}" placeholder="pppoe-100"
-               style="width:100%;min-height:45px;padding:10px;border-color:#cedae5;background-color:#fff;background-image:none;box-shadow:none;font-size:16px">
+               style="width:100%;height:45px;padding:10px;border:1px solid #cedae5;border-radius:6px;background-color:#fff;background-image:none;box-shadow:inset 0 1px 2px rgba(16,42,67,.024);font-size:16px;line-height:1.45">
     </div>
     <div style="min-width:180px">
         <label class="muted" style="display:block;font-size:12px">MikroTik</label>
