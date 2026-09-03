@@ -3,7 +3,15 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Invoice - {{ $invoice->invoice_no }}</title>
+    {{-- Browsers use document.title as the default "Save as PDF" file name. --}}
+    @php
+        $pdfName = trim(
+            ($invoice->customer->connection_id ?: $invoice->customer->name ?: 'Invoice')
+            .' '
+            .($invoice->formatted_billing_month ?: $invoice->invoice_no)
+        );
+    @endphp
+    <title>{{ $pdfName }}</title>
     <link rel="stylesheet" href="{{ asset('css/page-help.css') }}?v=20260811-1">
     <style>
         :root {
