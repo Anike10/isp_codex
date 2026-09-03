@@ -239,6 +239,46 @@
     margin: 0;
 }
 
+.save-state {
+    display: block;
+    padding: 4px 2px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.save-state.is-saved { color: #067647; }
+.save-state.is-saving { color: #475467; }
+.save-state.is-unsaved { color: #b54708; }
+.save-state.is-error { color: #b42318; }
+
+.map-legend {
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+    color: #344054;
+}
+
+.legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 12px;
+    border: 1px solid rgba(16, 24, 40, .25);
+    border-radius: 50%;
+}
+
+.legend-line {
+    width: 18px;
+    height: 3px;
+    flex: 0 0 18px;
+    border-radius: 2px;
+}
+
 .basemap-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

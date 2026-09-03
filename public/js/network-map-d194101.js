@@ -614,6 +614,19 @@
         document.getElementById('cancelPartyPlacementBtn').addEventListener('click', cancelPartyLocationPlacement);
         syncDefaultViewInputs(loadDefaultView());
         renderVisibilityControls();
+        renderLegend();
+        updateSaveState('saved');
+        window.setInterval(() => {
+            if (state.dirty && state.saveState !== 'saving' && state.saveState !== 'error') {
+                updateSaveState('unsaved');
+            }
+        }, 400);
+        window.addEventListener('beforeunload', (event) => {
+            if (state.dirty) {
+                event.preventDefault();
+                event.returnValue = '';
+            }
+        });
         document.getElementById('showAllMapItems').addEventListener('click', () => setAllMapVisibility(true));
         document.getElementById('hideAllMapItems').addEventListener('click', () => setAllMapVisibility(false));
         document.getElementById('closeFeatureForm').addEventListener('click', closeFeatureForm);
@@ -657,6 +670,47 @@
                 finishFiberDraft();
             }
         });
+    }
+
+    // Small always-visible key so operators know what the dots and lines mean.
+    function renderLegend() {
+        const host = document.getElementById('mapLegend');
+        if (!host) return;
+
+        const dot = (color, label) =>
+            `<span class="legend-row"><i class="legend-dot" style="background:${color}"></i>${escapeHtml(label)}</span>`;
+        const line = (color, label) =>
+            `<span class="legend-row"><i class="legend-line" style="background:${color}"></i>${escapeHtml(label)}</span>`;
+
+        host.innerHTML = [
+            dot(nodeColors.router, 'Router'),
+            dot(nodeColors.switch, 'Switch'),
+            dot(nodeColors.olt, 'OLT'),
+            dot(nodeColors.splitter, 'Splitter'),
+            dot(nodeColors.tj_box, 'TJ Box'),
+            dot(nodeColors.onu, 'ONU'),
+            dot('#0f766e', 'Party (active)'),
+            dot('#f04438', 'Party — drop to be removed'),
+            line(multiPonFiberColor, 'Fibre on 2+ PONs'),
+            line(ponLinePalette[0], 'Fibre (colour = PON group)'),
+            line('#f79009', 'Draft / selected route'),
+        ].join('');
+    }
+
+    function updateSaveState(nextState) {
+        state.saveState = nextState;
+        const badge = document.getElementById('saveState');
+        if (!badge) return;
+
+        const map = {
+            saved: ['is-saved', 'All changes saved'],
+            saving: ['is-saving', 'Saving…'],
+            unsaved: ['is-unsaved', 'Unsaved — click Save Network'],
+            error: ['is-error', 'Save failed — click Save Network to retry'],
+        };
+        const [cls, text] = map[nextState] || map.saved;
+        badge.className = `save-state ${cls}`;
+        badge.textContent = text;
     }
 
     function setBasemap(basemapKey) {
@@ -2304,6 +2358,7 @@
         pushHistory();
         const button = document.getElementById('saveTopology');
         button.disabled = true;
+        updateSaveState('saving');
         setStatus('Saving topology...');
 
         try {
@@ -2329,8 +2384,10 @@
             if (activePathFeatureId) {
                 showPathMarkers(activePathFeatureId);
             }
+            updateSaveState('saved');
             setStatus('Network topology saved.');
         } catch (error) {
+            updateSaveState('error');
             setStatus(error.message);
         } finally {
             button.disabled = false;

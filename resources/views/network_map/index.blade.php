@@ -4,7 +4,7 @@
 
 @section('content')
     <link rel="stylesheet" href="{{ asset('css/maplibre-gl.css') }}?v=4.7.1">
-    <link rel="stylesheet" href="{{ asset('css/network-map-7993e11add8f.css') }}?v=20260904-3">
+    <link rel="stylesheet" href="{{ asset('css/network-map-7993e11add8f.css') }}?v=20260904-4">
 
     <section class="network-map-page">
         <aside class="network-sidebar">
@@ -144,8 +144,14 @@
 
             <div class="map-actions">
                 <button type="button" class="btn" id="saveTopology">Save Network</button>
+                <span class="save-state is-saved" id="saveState" role="status">All changes saved</span>
                 <button type="button" class="btn light" id="exportGeojson">Show GeoJSON</button>
                 <button type="button" class="btn light" id="cancelDraft">Cancel Draw</button>
+            </div>
+
+            <div class="tool-section">
+                <h2>Legend</h2>
+                <div class="map-legend" id="mapLegend"></div>
             </div>
 
             <div class="tool-section">
@@ -200,7 +206,7 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map-d194101.js') }}?v=20260904-3"></script>
+    <script src="{{ asset('js/network-map-d194101.js') }}?v=20260904-4"></script>
     <script>
         (function () {
             // Switch the active network map by reloading with ?map=<slug>.
