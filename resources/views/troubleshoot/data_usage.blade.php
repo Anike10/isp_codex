@@ -20,11 +20,14 @@
 <form method="get" class="card" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
     <input type="hidden" name="sort" value="{{ $sort }}">
     <input type="hidden" name="dir" value="{{ $dir }}">
-    <div>
+    <div style="min-width:200px">
         <label class="muted" style="display:block;font-size:12px">Username contains</label>
-        <input type="text" name="search" value="{{ $search }}" placeholder="pppoe-100" style="width:200px">
+        {{-- Override the app-wide compact "search box" look so this field matches
+             the enhanced selects sitting next to it on this filter row. --}}
+        <input type="text" name="search" value="{{ $search }}" placeholder="pppoe-100"
+               style="width:100%;min-height:45px;padding:10px;border-color:#cedae5;background-color:#fff;background-image:none;box-shadow:none;font-size:16px">
     </div>
-    <div>
+    <div style="min-width:180px">
         <label class="muted" style="display:block;font-size:12px">MikroTik</label>
         <select name="router_id">
             <option value="">All routers</option>
