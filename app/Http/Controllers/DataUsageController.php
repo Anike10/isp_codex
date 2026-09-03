@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\MikrotikRouter;
 use App\Models\PppUsageLog;
 use App\Services\PppWebhookService;
 use Illuminate\Database\Eloquent\Collection;
@@ -31,7 +32,7 @@ class DataUsageController extends Controller
     public function index(Request $request)
     {
         $saved = $request->session()->get('troubleshoot.data_usage_defaults', []);
-        $sortable = ['username', 'sessions', 'download_bytes', 'upload_bytes', 'total_bytes', 'last_at'];
+        $sortable = ['username', 'router_name', 'sessions', 'download_bytes', 'upload_bytes', 'total_bytes', 'last_at'];
 
         $requestedSort = $request->query('sort', $saved['sort'] ?? null);
         $sort = in_array($requestedSort, $sortable, true) ? $requestedSort : 'total_bytes';
@@ -39,21 +40,44 @@ class DataUsageController extends Controller
         $search = trim((string) $request->query('search', $request->has('search') ? '' : ($saved['search'] ?? '')));
         $perPage = max(10, min(200, (int) $request->query('per_page', 50)));
 
+        $requestedRouter = $request->query('router_id', $request->has('router_id') ? '' : ($saved['router_id'] ?? ''));
+        $routerId = is_numeric($requestedRouter) ? (int) $requestedRouter : null;
+
         $window = $this->resolveWindow($request, $saved);
 
         $this->rememberDefaults($request, 'troubleshoot.data_usage_defaults', [
             'sort' => $sort,
             'dir' => $dir,
             'search' => $search,
+            'router_id' => $routerId,
             'days' => $window['days'],
             'from' => $window['from']?->toDateString(),
             'to' => $window['to']?->toDateString(),
         ]);
 
+        // A username's sessions can span routers; attribute the row to the router
+        // of its most recent session in the window. Correlated subquery so it
+        // works the same on MySQL and SQLite and can be sorted on.
+        $routerNameBindings = [$window['since']];
+        $routerNameFilters = '';
+        if ($window['until']) {
+            $routerNameFilters .= ' and l2.disconnected_at <= ?';
+            $routerNameBindings[] = $window['until'];
+        }
+        if ($routerId) {
+            $routerNameFilters .= ' and l2.mikrotik_router_id = ?';
+            $routerNameBindings[] = $routerId;
+        }
+        $routerNameSql = "(select r2.name from ppp_usage_logs l2"
+            ." join mikrotik_routers r2 on r2.id = l2.mikrotik_router_id"
+            ." where l2.username = ppp_usage_logs.username and l2.disconnected_at >= ?{$routerNameFilters}"
+            ." order by l2.disconnected_at desc limit 1) as router_name";
+
         $rows = PppUsageLog::query()
             ->where('disconnected_at', '>=', $window['since'])
             ->when($window['until'], fn ($query) => $query->where('disconnected_at', '<=', $window['until']))
             ->when($search !== '', fn ($query) => $query->where('username', 'like', "%{$search}%"))
+            ->when($routerId, fn ($query) => $query->where('mikrotik_router_id', $routerId))
             ->groupBy('username')
             ->select('username')
             ->selectRaw('count(*) as sessions')
@@ -61,6 +85,7 @@ class DataUsageController extends Controller
             ->selectRaw('sum(upload_bytes) as upload_bytes')
             ->selectRaw('sum(download_bytes + upload_bytes) as total_bytes')
             ->selectRaw('max(disconnected_at) as last_at')
+            ->selectRaw($routerNameSql, $routerNameBindings)
             ->orderBy($sort, $dir)
             ->orderBy('username')
             ->paginate($perPage)
@@ -73,6 +98,8 @@ class DataUsageController extends Controller
             'sort' => $sort,
             'dir' => $dir,
             'search' => $search,
+            'routerId' => $routerId,
+            'routers' => MikrotikRouter::orderBy('name')->get(['id', 'name']),
             'days' => $window['days'],
             'from' => $window['from'],
             'to' => $window['to'],

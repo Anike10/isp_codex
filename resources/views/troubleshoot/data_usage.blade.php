@@ -25,6 +25,15 @@
         <input type="text" name="search" value="{{ $search }}" placeholder="pppoe-100" style="width:200px">
     </div>
     <div>
+        <label class="muted" style="display:block;font-size:12px">MikroTik</label>
+        <select name="router_id">
+            <option value="">All routers</option>
+            @foreach ($routers as $router)
+                <option value="{{ $router->id }}" @selected($routerId === $router->id)>{{ $router->name }}</option>
+            @endforeach
+        </select>
+    </div>
+    <div>
         <label class="muted" style="display:block;font-size:12px">Window</label>
         <select name="days" @disabled($rangeActive)>
             @foreach ([1 => 'Last 24 hours', 7 => 'Last 7 days', 30 => 'Last 30 days', 90 => 'Last 90 days', 365 => 'Last year'] as $val => $lbl)
@@ -64,6 +73,7 @@
         <thead>
             <tr>
                 @php([$u, $ua] = $sortLink('username'))
+                @php([$rt, $rta] = $sortLink('router_name'))
                 @php([$se, $sea] = $sortLink('sessions'))
                 @php([$dl, $dla] = $sortLink('download_bytes'))
                 @php([$ul, $ula] = $sortLink('upload_bytes'))
@@ -71,6 +81,7 @@
                 @php([$la, $laa] = $sortLink('last_at'))
                 <th><a href="{{ $u }}">Username{{ $ua }}</a></th>
                 <th>Party</th>
+                <th><a href="{{ $rt }}">MikroTik{{ $rta }}</a></th>
                 <th class="col-center"><a href="{{ $se }}">Sessions{{ $sea }}</a></th>
                 <th class="col-center"><a href="{{ $dl }}">Download{{ $dla }}</a></th>
                 <th class="col-center"><a href="{{ $ul }}">Upload{{ $ula }}</a></th>
@@ -89,6 +100,7 @@
                             <span class="muted">Not in app</span>
                         @endif
                     </td>
+                    <td>{{ $row->router_name ?: '—' }}</td>
                     <td class="col-center">{{ (int) $row->sessions }}</td>
                     <td class="col-center">@include('troubleshoot._bytes', ['bytes' => $row->download_bytes])</td>
                     <td class="col-center">@include('troubleshoot._bytes', ['bytes' => $row->upload_bytes])</td>
@@ -96,7 +108,7 @@
                     <td>{{ $row->last_at ? \Illuminate\Support\Carbon::parse($row->last_at)->format('d/m/Y H:i:s') : '—' }}</td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="muted">No usage logged in this window.</td></tr>
+                <tr><td colspan="8" class="muted">No usage logged in this window.</td></tr>
             @endforelse
         </tbody>
     </table>
