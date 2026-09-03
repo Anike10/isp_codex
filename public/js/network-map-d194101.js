@@ -2428,14 +2428,20 @@
             selectFeature(feature.id);
             openFeatureForm(feature.id, true);
 
-            // One node per tool pick: deactivate so the next map click does not
-            // drop another. Re-select the tool to add more nodes.
+            // By default one node per tool pick, so the next map click does not
+            // drop another. With "Keep tool active" ticked the tool stays armed
+            // so you can place several of the same type in a row.
             const placedLabel = componentLabels[feature.properties.component_type] || 'Node';
-            state.activeTool = null;
-            state.activeNodeType = null;
-            document.querySelectorAll('.map-tool').forEach((item) => item.classList.remove('active'));
-            updatePlacementCursor();
-            setStatus(`${placedLabel} placed. Pick a node tool again to add another.`);
+            const keepActive = document.getElementById('keepToolActive')?.checked;
+            if (!keepActive) {
+                state.activeTool = null;
+                state.activeNodeType = null;
+                document.querySelectorAll('.map-tool').forEach((item) => item.classList.remove('active'));
+                updatePlacementCursor();
+                setStatus(`${placedLabel} placed. Pick a node tool again to add another.`);
+            } else {
+                setStatus(`${placedLabel} placed. Click the map to add another, or press Esc to stop.`);
+            }
             return;
         }
 
