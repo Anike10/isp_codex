@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\NetworkMap;
 use App\Models\NetworkMapFeature;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -20,10 +22,86 @@ class NetworkMapController extends Controller
 
     public function show(Request $request): View
     {
+        $activeMap = $this->resolveActiveMap($request);
+
         return view('network_map.index', [
             'title' => 'FTTX Network Map',
             'initialCustomerId' => $request->integer('customer_id') ?: null,
+            'activeMap' => $activeMap,
+            'networkMaps' => NetworkMap::query()
+                ->with('customer:id,name')
+                ->orderByDesc('is_default')
+                ->orderBy('name')
+                ->get(),
         ]);
+    }
+
+    public function storeMap(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+            'is_test' => ['sometimes', 'boolean'],
+        ]);
+
+        $base = Str::slug($validated['name']) ?: 'map';
+        $slug = $base;
+        $suffix = 2;
+        while (NetworkMap::query()->where('slug', $slug)->exists()) {
+            $slug = $base.'-'.$suffix++;
+        }
+
+        $map = NetworkMap::create([
+            'name' => $validated['name'],
+            'slug' => $slug,
+            'customer_id' => $validated['customer_id'] ?? null,
+            'is_test' => (bool) ($validated['is_test'] ?? false),
+            'is_default' => false,
+            'entry_by' => $request->user()?->id,
+        ]);
+
+        return redirect()
+            ->route('network-map.index', ['map' => $map->slug])
+            ->with('success', "Network map \"{$map->name}\" created.");
+    }
+
+    public function destroyMap(NetworkMap $networkMap): RedirectResponse
+    {
+        if ($networkMap->is_default) {
+            return back()->with('warning', 'The default network map cannot be deleted.');
+        }
+
+        $networkMap->features()->delete();
+        $networkMap->delete();
+
+        return redirect()
+            ->route('network-map.index')
+            ->with('success', "Network map \"{$networkMap->name}\" deleted.");
+    }
+
+    private function resolveActiveMap(Request $request): NetworkMap
+    {
+        $key = trim((string) $request->query('map', ''));
+
+        if ($key !== '') {
+            $map = NetworkMap::query()
+                ->where('slug', $key)
+                ->when(ctype_digit($key), fn ($query) => $query->orWhere('id', (int) $key))
+                ->first();
+
+            if ($map) {
+                return $map;
+            }
+        }
+
+        return NetworkMap::query()
+            ->orderByDesc('is_default')
+            ->orderBy('id')
+            ->firstOr(fn () => NetworkMap::create([
+                'name' => 'Main Network',
+                'slug' => 'main',
+                'is_default' => true,
+            ]));
     }
 
     public function partyLocations(Request $request): View
@@ -34,9 +112,12 @@ class NetworkMapController extends Controller
         ]);
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $mapId = $this->resolveActiveMap($request)->id;
+
         $features = NetworkMapFeature::query()
+            ->where('network_map_id', $mapId)
             ->latest('updated_at')
             ->get()
             ->map(fn (NetworkMapFeature $feature) => $feature->toGeoJsonFeature())
@@ -166,22 +247,23 @@ class NetworkMapController extends Controller
             'features.*.properties.feature_type' => ['nullable', Rule::in(['node', 'link'])],
         ]);
         $features = $request->input('features', []);
+        $mapId = $this->resolveActiveMap($request)->id;
 
-        $saved = DB::transaction(function () use ($features, $request) {
+        $saved = DB::transaction(function () use ($features, $request, $mapId) {
             $incomingIds = collect($features)
                 ->map(fn (array $feature) => (string) ($feature['id'] ?? Arr::get($feature, 'properties.id', '')))
                 ->filter()
                 ->values();
 
+            $scoped = NetworkMapFeature::query()->where('network_map_id', $mapId);
+
             if ($incomingIds->isNotEmpty()) {
-                NetworkMapFeature::query()
-                    ->whereNotIn('feature_uuid', $incomingIds)
-                    ->delete();
+                $scoped->whereNotIn('feature_uuid', $incomingIds)->delete();
             } else {
-                NetworkMapFeature::query()->delete();
+                $scoped->delete();
             }
 
-            return collect($features)->map(function (array $feature) use ($request) {
+            return collect($features)->map(function (array $feature) use ($request, $mapId) {
                 $geometry = $feature['geometry'];
                 $componentType = Str::of(Arr::get($feature, 'properties.component_type'))->lower()->snake()->toString();
                 $featureType = $geometry['type'] === 'Point' ? 'node' : 'link';
@@ -197,6 +279,7 @@ class NetworkMapController extends Controller
                 $model = NetworkMapFeature::updateOrCreate(
                     ['feature_uuid' => $featureUuid],
                     [
+                        'network_map_id' => $mapId,
                         'entry_by' => $request->user()?->id,
                         'feature_type' => $featureType,
                         'component_type' => $componentType,

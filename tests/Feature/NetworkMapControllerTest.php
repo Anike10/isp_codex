@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Customer;
+use App\Models\NetworkMap;
 use App\Models\NetworkMapFeature;
 use App\Models\Permission;
 use App\Models\User;
@@ -361,6 +363,107 @@ class NetworkMapControllerTest extends TestCase
             ->assertStatus(422);
 
         $this->assertSame(0, NetworkMapFeature::count());
+    }
+
+    public function test_features_are_scoped_to_the_active_network_map(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $node = fn (string $id, array $coordinates) => [
+            'type' => 'Feature',
+            'id' => $id,
+            'geometry' => ['type' => 'Point', 'coordinates' => $coordinates],
+            'properties' => ['id' => $id, 'feature_type' => 'node', 'component_type' => 'router', 'name' => $id],
+        ];
+
+        // Draw on the default map...
+        $this->actingAs($user)->postJson(route('network-map.features.store'), [
+            'type' => 'FeatureCollection',
+            'features' => [$node('main-router', [90.41, 23.81])],
+        ])->assertOk();
+
+        // ...and something different on the test map.
+        $this->actingAs($user)->postJson(route('network-map.features.store', ['map' => 'test']), [
+            'type' => 'FeatureCollection',
+            'features' => [$node('test-router', [90.42, 23.82])],
+        ])->assertOk();
+
+        $this->actingAs($user)->getJson(route('network-map.features.index'))
+            ->assertOk()
+            ->assertJsonCount(1, 'features')
+            ->assertJsonFragment(['name' => 'main-router'])
+            ->assertJsonMissing(['name' => 'test-router']);
+
+        $this->actingAs($user)->getJson(route('network-map.features.index', ['map' => 'test']))
+            ->assertOk()
+            ->assertJsonCount(1, 'features')
+            ->assertJsonFragment(['name' => 'test-router']);
+    }
+
+    public function test_a_named_map_can_be_created_and_linked_to_a_customer(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $customer = Customer::create([
+            'name' => 'Zone Anchor', 'phone' => '01710000009', 'connection_id' => 'NM-ZONE',
+            'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('network-map.maps.store'), [
+                'name' => 'Kibria Bazar Zone',
+                'customer_id' => $customer->id,
+                'is_test' => '1',
+            ])
+            ->assertRedirect(route('network-map.index', ['map' => 'kibria-bazar-zone']));
+
+        $this->assertDatabaseHas('network_maps', [
+            'name' => 'Kibria Bazar Zone',
+            'slug' => 'kibria-bazar-zone',
+            'customer_id' => $customer->id,
+            'is_test' => true,
+            'is_default' => false,
+        ]);
+    }
+
+    public function test_the_default_map_cannot_be_deleted(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $default = NetworkMap::where('is_default', true)->firstOrFail();
+
+        $this->actingAs($user)
+            ->delete(route('network-map.maps.destroy', $default))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('network_maps', ['id' => $default->id]);
+    }
+
+    public function test_deleting_a_map_removes_its_features(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $map = NetworkMap::create(['name' => 'Scratch', 'slug' => 'scratch']);
+        NetworkMapFeature::create([
+            'network_map_id' => $map->id,
+            'feature_uuid' => 'scratch-node',
+            'feature_type' => 'node',
+            'component_type' => 'router',
+            'name' => 'Scratch Node',
+            'properties' => ['id' => 'scratch-node'],
+            'geometry' => ['type' => 'Point', 'coordinates' => [90.4, 23.8]],
+        ]);
+
+        $this->actingAs($user)
+            ->delete(route('network-map.maps.destroy', $map))
+            ->assertRedirect(route('network-map.index'));
+
+        $this->assertDatabaseMissing('network_maps', ['id' => $map->id]);
+        $this->assertSame(0, NetworkMapFeature::where('feature_uuid', 'scratch-node')->count());
     }
 
     private function fakePng(string $name): UploadedFile

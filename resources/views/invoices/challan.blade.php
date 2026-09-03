@@ -574,7 +574,7 @@
         @endif
         @include('partials.organization_print_selector')
         <button onclick="recordPrint('invoice', {{ $invoice->id }})" class="btn">Print Bill</button>
-        <a href="{{ route('invoices.delivery-challan', ['invoice' => $invoice, 'organization_id' => $selectedOrganization->id]) }}" target="_blank" class="btn secondary">Challan</a>
+        <a href="{{ route('invoices.delivery-challan', ['invoice' => $invoice, 'organization_id' => $selectedOrganization->id, 'print' => 1]) }}" target="_blank" class="btn">Print Challan</a>
         <a href="{{ route('invoices.show', $invoice) }}" class="btn light">Back to Invoice</a>
     </div>
 

@@ -223,5 +223,13 @@
         });
     </script>
     @include('partials.print_audit_script')
+    <script>
+        // Opened from the invoice "Print Challan" button: go straight to the print dialog.
+        if (new URLSearchParams(window.location.search).get('print') === '1') {
+            window.addEventListener('load', function () {
+                setTimeout(function () { recordPrint('delivery_challan', {{ $invoice->id }}); }, 250);
+            });
+        }
+    </script>
 </body>
 </html>

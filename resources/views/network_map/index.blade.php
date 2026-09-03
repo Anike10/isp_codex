@@ -4,10 +4,51 @@
 
 @section('content')
     <link rel="stylesheet" href="{{ asset('css/maplibre-gl.css') }}?v=4.7.1">
-    <link rel="stylesheet" href="{{ asset('css/network-map-7993e11add8f.css') }}?v=20260903-11">
+    <link rel="stylesheet" href="{{ asset('css/network-map-7993e11add8f.css') }}?v=20260903-12">
 
     <section class="network-map-page">
         <aside class="network-sidebar">
+            <div class="tool-section map-picker-section">
+                <h2>Network Map</h2>
+                <label class="sr-only" for="mapPicker">Choose network map</label>
+                <select id="mapPicker" class="map-picker-select">
+                    @foreach ($networkMaps as $map)
+                        <option value="{{ route('network-map.index', ['map' => $map->slug]) }}" @selected($map->id === $activeMap->id)>
+                            {{ $map->name }}@if ($map->is_test) &nbsp;(test)@endif @if ($map->customer) &mdash; {{ $map->customer->name }}@endif
+                        </option>
+                    @endforeach
+                </select>
+
+                <details class="map-picker-new">
+                    <summary class="btn light">+ New map</summary>
+                    <form method="post" action="{{ route('network-map.maps.store') }}" class="map-picker-new-form" autocomplete="off">
+                        @csrf
+                        <label>Map name
+                            <input type="text" name="name" maxlength="120" required placeholder="e.g. Kibria Bazar Zone">
+                        </label>
+                        <label>Link to customer (optional)
+                            <input type="search" id="newMapCustomerSearch" placeholder="Search party by name or ID">
+                        </label>
+                        <input type="hidden" name="customer_id" id="newMapCustomerId">
+                        <div class="search-results" id="newMapCustomerResults" hidden></div>
+                        <p class="hint" id="newMapCustomerPicked" hidden></p>
+                        <label class="map-picker-check">
+                            <input type="checkbox" name="is_test" value="1"> Test map (scratch / experiments)
+                        </label>
+                        <button type="submit" class="btn secondary">Create map</button>
+                    </form>
+                </details>
+
+                @if (! $activeMap->is_default)
+                    <form method="post" action="{{ route('network-map.maps.destroy', $activeMap) }}"
+                          onsubmit="return confirm('Delete the map &quot;{{ $activeMap->name }}&quot; and everything drawn on it? This cannot be undone.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn light danger map-picker-delete">Delete this map</button>
+                    </form>
+                @endif
+            </div>
+
             <div class="tool-grid" id="historyTools">
                 <button type="button" class="btn light" id="undoTopology" disabled title="Undo (Ctrl+Z)">Undo</button>
                 <button type="button" class="btn light" id="redoTopology" disabled title="Redo (Ctrl+Y)">Redo</button>
@@ -145,14 +186,97 @@
 
     <script>
         window.NETWORK_MAP_CONFIG = {
-            indexUrl: @json(route('network-map.features.index')),
+            indexUrl: @json(route('network-map.features.index', ['map' => $activeMap->slug])),
             customersUrl: @json(route('network-map.customers.index')),
-            storeUrl: @json(route('network-map.features.store')),
+            storeUrl: @json(route('network-map.features.store', ['map' => $activeMap->slug])),
             photoUploadUrl: @json(route('network-map.photos.store')),
             initialCustomerId: @json($initialCustomerId),
+            activeMapId: @json($activeMap->id),
+            activeMapName: @json($activeMap->name),
             csrfToken: @json(csrf_token()),
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
     <script src="{{ asset('js/network-map-d194101.js') }}?v=20260903-11"></script>
+    <script>
+        (function () {
+            // Switch the active network map by reloading with ?map=<slug>.
+            const picker = document.getElementById('mapPicker');
+            if (picker) {
+                picker.addEventListener('change', function () {
+                    if (this.value) window.location.href = this.value;
+                });
+            }
+
+            // Lightweight typeahead to link a new map to a customer.
+            const search = document.getElementById('newMapCustomerSearch');
+            const hiddenId = document.getElementById('newMapCustomerId');
+            const results = document.getElementById('newMapCustomerResults');
+            const picked = document.getElementById('newMapCustomerPicked');
+            if (!search || !hiddenId || !results) return;
+
+            const customersUrl = window.NETWORK_MAP_CONFIG.customersUrl;
+            let timer = null;
+
+            function clearPick() {
+                hiddenId.value = '';
+                picked.hidden = true;
+                picked.textContent = '';
+            }
+
+            function renderResults(features) {
+                results.innerHTML = '';
+                if (!features.length) {
+                    results.hidden = true;
+                    return;
+                }
+                features.slice(0, 20).forEach(function (feature) {
+                    const props = feature.properties || {};
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'search-result';
+                    item.textContent = '#' + props.customer_id + ' — ' + (props.customer_name || 'Unnamed');
+                    item.addEventListener('click', function () {
+                        hiddenId.value = props.customer_id;
+                        search.value = props.customer_name || ('#' + props.customer_id);
+                        picked.hidden = false;
+                        picked.textContent = 'Linked to ' + item.textContent;
+                        results.hidden = true;
+                    });
+                    results.appendChild(item);
+                });
+                results.hidden = false;
+            }
+
+            search.addEventListener('input', function () {
+                clearPick();
+                const q = search.value.trim();
+                window.clearTimeout(timer);
+                if (q.length < 2) {
+                    results.hidden = true;
+                    return;
+                }
+                timer = window.setTimeout(async function () {
+                    try {
+                        const url = new URL(customersUrl, window.location.origin);
+                        url.searchParams.set('q', q);
+                        const response = await fetch(url, { headers: { Accept: 'application/json' } });
+                        if (!response.ok) return;
+                        const collection = await response.json();
+                        renderResults((collection.features || []).filter(function (f) {
+                            return f.properties && f.properties.customer_id;
+                        }));
+                    } catch (error) {
+                        results.hidden = true;
+                    }
+                }, 250);
+            });
+
+            document.addEventListener('click', function (event) {
+                if (!results.contains(event.target) && event.target !== search) {
+                    results.hidden = true;
+                }
+            });
+        })();
+    </script>
 @endsection

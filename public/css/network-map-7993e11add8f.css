@@ -2169,3 +2169,75 @@
         flex-direction: column-reverse;
     }
 }
+
+/* Multi-map picker (sidebar) */
+.map-picker-section {
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e4e9f2;
+}
+
+.map-picker-select {
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 1px solid #d8dee9;
+    border-radius: 6px;
+    background: #fff;
+    color: #172033;
+    font: inherit;
+}
+
+.map-picker-new {
+    margin-top: 2px;
+}
+
+.map-picker-new > summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    list-style: none;
+    width: 100%;
+}
+
+.map-picker-new > summary::-webkit-details-marker {
+    display: none;
+}
+
+.map-picker-new-form {
+    display: grid;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 10px;
+    border: 1px solid #e4e9f2;
+    border-radius: 6px;
+    background: #f8fafc;
+}
+
+.map-picker-new-form label {
+    display: grid;
+    gap: 4px;
+    font-size: 13px;
+    color: #475467;
+}
+
+.map-picker-new-form input[type="text"],
+.map-picker-new-form input[type="search"] {
+    min-height: 36px;
+    padding: 7px 9px;
+    border: 1px solid #d8dee9;
+    border-radius: 6px;
+    font: inherit;
+}
+
+.map-picker-check {
+    flex-direction: row !important;
+    align-items: center;
+    gap: 8px !important;
+}
+
+.map-picker-delete {
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+}

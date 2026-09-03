@@ -4,12 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class NetworkMapFeature extends Model
 {
     use HasFactory;
 
     protected $fillable = [
+        'network_map_id',
         'entry_by',
         'feature_uuid',
         'feature_type',
@@ -31,6 +33,11 @@ class NetworkMapFeature extends Model
             'longitude' => 'decimal:8',
             'length_meters' => 'decimal:2',
         ];
+    }
+
+    public function networkMap(): BelongsTo
+    {
+        return $this->belongsTo(NetworkMap::class);
     }
 
     public function toGeoJsonFeature(): array

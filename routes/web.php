@@ -234,6 +234,8 @@ Route::middleware('auth')->group(function () {
         Route::patch('ip-pools/{appIpPool}', [MikrotikRouterDataController::class, 'updateGlobalPool'])->name('ip-pools.update');
         Route::delete('ip-pools/{appIpPool}', [MikrotikRouterDataController::class, 'deleteGlobalPool'])->name('ip-pools.destroy');
         Route::get('network-map', [NetworkMapController::class, 'show'])->name('network-map.index');
+        Route::post('network-map/maps', [NetworkMapController::class, 'storeMap'])->name('network-map.maps.store');
+        Route::delete('network-map/maps/{networkMap}', [NetworkMapController::class, 'destroyMap'])->name('network-map.maps.destroy');
         Route::get('network-map/party-locations', [NetworkMapController::class, 'partyLocations'])->name('network-map.party-locations.index');
         Route::get('network-map/customers', [NetworkMapController::class, 'customers'])->name('network-map.customers.index');
         Route::patch('network-map/customers/{customer}/location', [NetworkMapController::class, 'updateCustomerLocation'])->name('network-map.customers.location.update');
