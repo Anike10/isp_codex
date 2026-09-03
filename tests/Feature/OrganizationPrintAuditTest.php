@@ -136,6 +136,21 @@ class OrganizationPrintAuditTest extends TestCase
             ->assertSee(route('invoices.delivery-challan.pdf', $invoice), false);
     }
 
+    public function test_invoice_detail_page_has_pdf_download_buttons(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $customer = Customer::create(['name' => 'Detail Party', 'phone' => '01700000006', 'connection_id' => 'DTL-1', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true, 'is_vendor' => false]);
+        $invoice = Invoice::create(['customer_id' => $customer->id, 'invoice_no' => 'INV-DTL-1', 'billing_month' => '2026-07', 'invoice_type' => 'service', 'subtotal' => 100, 'discount' => 0, 'vat' => 0, 'total' => 100, 'paid_amount' => 0, 'due_amount' => 100, 'status' => 'unpaid']);
+
+        $this->actingAs($user)->get(route('invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('Download PDF Invoice')
+            ->assertSee('Download PDF Challan')
+            ->assertSee(route('invoices.pdf', $invoice), false)
+            ->assertSee(route('invoices.delivery-challan.pdf', $invoice), false);
+    }
+
     public function test_invoice_pdf_route_honours_the_without_signature_query_flag(): void
     {
         $user = User::factory()->create();
