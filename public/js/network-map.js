@@ -4620,52 +4620,61 @@
     }
 
     function defaultPropertiesFor(componentType) {
-        const sequence = nextSequence(componentType);
+        const name = suggestedNodeName(componentType);
 
         if (componentType === 'fiber_cable') {
-            return {
-                fiber_code: `FIBER-${sequence}`,
-                core_count: '4F',
-                cable_type: 'Overhead',
-            };
+            return { fiber_code: name, core_count: '4F', cable_type: 'Overhead' };
         }
-
         if (componentType === 'tj_box') {
-            return {
-                box_name: `TJ-BOX-${sequence}`,
-            };
+            return { box_name: name };
         }
-
         if (componentType === 'splitter') {
-            return {
-                name: `SPLITTER-${sequence}`,
-                splitter_type: '1:8',
-            };
+            return { name, splitter_type: '1:8' };
         }
-
         if (componentType === 'onu') {
-            return {
-                client_name: `ONU-${sequence}`,
-            };
+            return { client_name: name };
         }
-
-        const prefixes = {
-            router: 'ROUTER',
-            switch: 'SWITCH',
-            olt: 'OLT',
-        };
-
-        return {
-            name: `${prefixes[componentType] || componentType.toUpperCase()}-${sequence}`,
-        };
+        return { name };
     }
 
-    function nextSequence(componentType) {
-        const count = [...state.features.values()].filter((feature) => {
-            return feature.properties.component_type === componentType;
-        }).length + 1;
+    function nodeNameKey(componentType) {
+        return componentType === 'tj_box' ? 'box_name'
+            : componentType === 'onu' ? 'client_name'
+            : componentType === 'fiber_cable' ? 'fiber_code'
+            : 'name';
+    }
 
-        return String(count).padStart(3, '0');
+    // Suggest the next name by continuing whatever the existing same-type
+    // features on this map are called: keep their prefix and zero-padding,
+    // take the highest trailing number and add one (never below the count,
+    // so a deleted middle entry can't cause a collision).
+    function suggestedNodeName(componentType) {
+        const defaults = {
+            router: 'ROUTER', switch: 'SWITCH', olt: 'OLT', splitter: 'SPLITTER',
+            tj_box: 'TJ-BOX', onu: 'ONU', fiber_cable: 'FIBER',
+        };
+        const key = nodeNameKey(componentType);
+        const peers = [...state.features.values()]
+            .filter((feature) => feature.properties.component_type === componentType);
+
+        let best = null;
+        peers.forEach((feature) => {
+            const raw = String(feature.properties[key] || '').trim();
+            const match = raw.match(/^(.*?)(\d+)\s*$/);
+            if (match) {
+                const num = parseInt(match[2], 10);
+                if (!best || num > best.num) {
+                    best = { prefix: match[1], num, width: match[2].length };
+                }
+            }
+        });
+
+        if (best) {
+            const nextNum = Math.max(best.num + 1, peers.length + 1);
+            return `${best.prefix}${String(nextNum).padStart(best.width, '0')}`;
+        }
+
+        return `${defaults[componentType] || componentType.toUpperCase()}-${String(peers.length + 1).padStart(3, '0')}`;
     }
 
     function startNodeDrag(event) {
