@@ -206,8 +206,8 @@
             select('splitter_type', 'Type', ['1:2', '1:4', '1:8', '1:16'], true),
             input('parent_olt_port', 'Parent OLT/Port', 'OLT-01 PON 1/1'),
             input('splitter_input_fiber_code', 'Input Fiber Code/ID', 'F-CO-OLT-001'),
-            input('splitter_input_tube_color', 'Input Tube Color', 'Blue'),
-            input('splitter_input_core_color', 'Input Core Color', 'Blue'),
+            color('splitter_input_tube_color', 'Input Tube Color'),
+            color('splitter_input_core_color', 'Input Core Color'),
             dynamicMap('splitter_ports', 'Splitter IN/OUT Color Map', 'splitter_port_map'),
             textarea('splitter_output_map', 'Output Port/Core Notes', 'OUT-01 -> Drop cable DC-001, Tube Blue, Core Orange\nOUT-02 -> Drop cable DC-002, Tube Blue, Core Green'),
             textarea('splice_details', 'Splice Details', 'Input core blue spliced to splitter IN; outputs mapped by port.'),
@@ -216,14 +216,14 @@
         tj_box: [
             input('box_name', 'Box Name', 'TJ-BOX-041', true),
             input('address', 'Address', 'Road 12, Block C'),
-            input('fiber_core_color', 'Fiber Core Color', 'Blue'),
+            color('fiber_core_color', 'Fiber Core Color'),
             input('connected_port', 'Connected Port', 'Splitter 1:8 Port 03'),
             ...nodeMetaFields(),
         ],
         onu: [
             input('client_name', 'Client Name', 'Customer Name', true),
             input('address', 'Address', 'House 10, Road 12'),
-            input('fiber_core_color', 'Fiber Core Color', 'Green'),
+            color('fiber_core_color', 'Fiber Core Color'),
             input('connected_port', 'Connected Port', 'TJ-BOX-041 Port 02'),
             ...nodeMetaFields(),
         ],
@@ -232,16 +232,16 @@
             select('core_count', 'Core Count', ['1F', '2F', '4F', '6F', '12F', '24F'], true),
             select('cable_type', 'Cable Type', ['Overhead', 'Underground'], true),
             input('a_end_device_port', 'A-End Device/Port', 'OLT-01 PON 1/1'),
-            input('a_end_tube_color', 'A-End Tube Color', 'Blue'),
-            input('a_end_core_color', 'A-End Core Color', 'Blue'),
+            color('a_end_tube_color', 'A-End Tube Color'),
+            color('a_end_core_color', 'A-End Core Color'),
             input('z_end_device_port', 'Z-End Device/Port', 'Splitter SP-01 IN'),
-            input('z_end_tube_color', 'Z-End Tube Color', 'Blue'),
-            input('z_end_core_color', 'Z-End Core Color', 'Blue'),
+            color('z_end_tube_color', 'Z-End Tube Color'),
+            color('z_end_core_color', 'Z-End Core Color'),
             input('splitter_input_port', 'Splitter Input Port', 'SP-01 IN'),
             input('splitter_output_port', 'Splitter Output Port', 'OUT-01'),
-            input('splitter_output_core_color', 'Splitter Output Core Color', 'Orange'),
+            color('splitter_output_core_color', 'Splitter Output Core Color'),
             input('connected_fiber_code', 'Connected Fiber/Drop Code', 'DC-ONU-001'),
-            input('connected_fiber_core_color', 'Connected Fiber Core Color', 'Green'),
+            color('connected_fiber_core_color', 'Connected Fiber Core Color'),
             input('length_meters', 'Length (meters)', 'Auto-calculated', true, 'number', true),
             linkEndpoints('endpoint_links', 'Linked Endpoints'),
             dynamicMap('core_mappings', 'Fiber Core IN/OUT Color Map', 'fiber_core_map'),
@@ -5056,10 +5056,12 @@
             return `<label class="${full}">${escapeHtml(field.label)}${tjBoxSelectHtml(field.name, safeValue)}</label>`;
         }
 
-        if (field.type === 'select') {
+        if (field.type === 'select' || field.type === 'color') {
             return `<label class="${full}">${escapeHtml(field.label)}${searchableDropdownHtml(
                 field.name,
-                `Type or choose ${field.label.toLowerCase()}`,
+                field.type === 'color'
+                    ? `Type or pick ${field.label.toLowerCase()}`
+                    : `Type or choose ${field.label.toLowerCase()}`,
                 String(safeValue),
                 String(safeValue),
                 field.required
@@ -5079,6 +5081,12 @@
 
     function select(name, label, options, required = false) {
         return { type: 'select', name, label, options, required };
+    }
+
+    // Fibre tube / core colour picker: the 12 standard colours as a swatched,
+    // typeahead list. allowCustom keeps any legacy free-text value intact.
+    function color(name, label, required = false) {
+        return { type: 'color', name, label, required };
     }
 
     function textarea(name, label, placeholder, required = false) {
@@ -5138,21 +5146,30 @@
 
     function hydrateSearchableFormLists(container, schema) {
         schema.forEach((field) => {
-            if (!['select', 'tj_box_select'].includes(field.type)) {
+            if (!['select', 'tj_box_select', 'color'].includes(field.type)) {
                 return;
             }
 
             const dropdown = container.querySelector(`[data-searchable-dropdown="${field.name}"]`);
-            const options = field.type === 'select'
-                ? field.options.map((option) => ({ value: String(option), label: String(option), search: String(option) }))
-                : tjBoxDropdownOptions();
+            let options;
+            let placeholder;
+            if (field.type === 'select') {
+                options = field.options.map((option) => ({ value: String(option), label: String(option), search: String(option) }));
+                placeholder = `Type or choose ${field.label.toLowerCase()}`;
+            } else if (field.type === 'color') {
+                options = corePalette.map(([label, hex]) => ({ value: label, label, search: label, color_hex: hex }));
+                placeholder = `Type or pick ${field.label.toLowerCase()}`;
+            } else {
+                options = tjBoxDropdownOptions();
+                placeholder = 'Type TJ Box name';
+            }
 
             setupSearchableDropdown(
                 dropdown,
                 options,
-                field.type === 'select' ? `Type or choose ${field.label.toLowerCase()}` : 'Type TJ Box name',
+                placeholder,
                 null,
-                { allowCustom: field.type === 'select' }
+                { allowCustom: field.type === 'select' || field.type === 'color' }
             );
         });
     }
