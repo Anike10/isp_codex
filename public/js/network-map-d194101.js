@@ -602,6 +602,7 @@
             }, 300);
         });
         document.getElementById('locationSearch').addEventListener('submit', searchLocation);
+        document.getElementById('coordSearch')?.addEventListener('submit', goToCoordinates);
         document.getElementById('defaultViewForm').addEventListener('submit', applyDefaultViewForm);
         document.getElementById('useCurrentView').addEventListener('click', saveCurrentDefaultView);
         document.getElementById('startPartyPlacementBtn').addEventListener('click', () => {
@@ -1171,6 +1172,11 @@
             zoom: Math.max(state.map.getZoom(), 15),
             duration: 850,
         });
+
+        if (state.activeTool === 'node' && state.activeNodeType) {
+            placeNodeAt(lng, lat);
+            return;
+        }
         setStatus(`Location selected: ${result.display_name}`);
     }
 
@@ -2468,38 +2474,7 @@
         }
 
         if (state.activeTool === 'node' && state.activeNodeType) {
-            const feature = {
-                type: 'Feature',
-                id: uuid(),
-                geometry: { type: 'Point', coordinates: [event.lngLat.lng, event.lngLat.lat] },
-                properties: {
-                    id: uuid(),
-                    feature_type: 'node',
-                    component_type: state.activeNodeType,
-                    ...defaultPropertiesFor(state.activeNodeType),
-                },
-            };
-            feature.id = feature.properties.id;
-            state.features.set(feature.id, feature);
-            clearPathMarkers();
-            refreshSources();
-            selectFeature(feature.id);
-            openFeatureForm(feature.id, true);
-
-            // By default one node per tool pick, so the next map click does not
-            // drop another. With "Keep tool active" ticked the tool stays armed
-            // so you can place several of the same type in a row.
-            const placedLabel = componentLabels[feature.properties.component_type] || 'Node';
-            const keepActive = document.getElementById('keepToolActive')?.checked;
-            if (!keepActive) {
-                state.activeTool = null;
-                state.activeNodeType = null;
-                document.querySelectorAll('.map-tool').forEach((item) => item.classList.remove('active'));
-                updatePlacementCursor();
-                setStatus(`${placedLabel} placed. Pick a node tool again to add another.`);
-            } else {
-                setStatus(`${placedLabel} placed. Click the map to add another, or press Esc to stop.`);
-            }
+            placeNodeAt(event.lngLat.lng, event.lngLat.lat);
             return;
         }
 
@@ -2508,6 +2483,80 @@
             state.draftLineCustomers.push(null);
             updateDraftLine();
             setStatus(`${state.draftLine.length} fiber vertices added. Double-click or press Enter to finish.`);
+        }
+    }
+
+    // Drop the currently-armed node type at an exact position. Shared by the
+    // map click, the coordinate box and the location-search results.
+    function placeNodeAt(lng, lat) {
+        if (!(state.activeTool === 'node' && state.activeNodeType)) return false;
+
+        const id = uuid();
+        const feature = {
+            type: 'Feature',
+            id,
+            geometry: { type: 'Point', coordinates: [lng, lat] },
+            properties: {
+                id,
+                feature_type: 'node',
+                component_type: state.activeNodeType,
+                ...defaultPropertiesFor(state.activeNodeType),
+            },
+        };
+        state.features.set(id, feature);
+        clearPathMarkers();
+        refreshSources();
+        selectFeature(id);
+        openFeatureForm(id, true);
+
+        const placedLabel = componentLabels[feature.properties.component_type] || 'Node';
+        const keepActive = document.getElementById('keepToolActive')?.checked;
+        if (!keepActive) {
+            state.activeTool = null;
+            state.activeNodeType = null;
+            document.querySelectorAll('.map-tool').forEach((item) => item.classList.remove('active'));
+            updatePlacementCursor();
+            setStatus(`${placedLabel} placed. Pick a node tool again to add another.`);
+        } else {
+            setStatus(`${placedLabel} placed. Click the map to add another, or press Esc to stop.`);
+        }
+        return true;
+    }
+
+    // Pull "lat, lng" out of free text: "23.9, 89.1", "23.9 89.1", or a
+    // Google/OSM map URL containing @lat,lng or ?q=lat,lng / mlat=/mlon=.
+    function parseLatLng(text) {
+        const raw = String(text || '').trim();
+        if (!raw) return null;
+
+        const atMatch = raw.match(/@(-?\d{1,3}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)/);
+        const mlatMatch = raw.match(/mlat=(-?\d{1,3}(?:\.\d+)?).*?mlon=(-?\d{1,3}(?:\.\d+)?)/);
+        const plainMatch = raw.match(/(-?\d{1,2}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)/);
+        const hit = atMatch || mlatMatch || plainMatch;
+        if (!hit) return null;
+
+        const lat = Number(hit[1]);
+        const lng = Number(hit[2]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+        return { lat, lng };
+    }
+
+    function goToCoordinates(event) {
+        event.preventDefault();
+        const input = document.getElementById('coordQuery');
+        const parsed = parseLatLng(input.value);
+        if (!parsed) {
+            setStatus('Enter coordinates as "lat, long" (e.g. 23.9013, 89.1220) or paste a map link.');
+            return;
+        }
+
+        state.map.flyTo({ center: [parsed.lng, parsed.lat], zoom: Math.max(state.map.getZoom(), 17), duration: 700 });
+
+        if (state.activeTool === 'node' && state.activeNodeType) {
+            placeNodeAt(parsed.lng, parsed.lat);
+        } else {
+            setStatus(`Centred on ${parsed.lat.toFixed(6)}, ${parsed.lng.toFixed(6)}. Pick a node tool to drop one here.`);
         }
     }
 

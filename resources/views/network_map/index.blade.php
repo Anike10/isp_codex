@@ -119,6 +119,11 @@
                     <button type="submit" class="btn secondary">Search</button>
                 </form>
                 <div class="search-results" id="searchResults" hidden></div>
+                <form class="location-search" id="coordSearch">
+                    <input type="search" id="coordQuery" placeholder="lat, long  or  paste a map link">
+                    <button type="submit" class="btn secondary">Go</button>
+                </form>
+                <p class="hint">Recentres here. If a node tool is active it also drops that node at these coordinates.</p>
             </div>
 
             <div class="tool-section">
@@ -207,7 +212,7 @@
         };
     </script>
     <script src="{{ asset('js/maplibre-gl.js') }}?v=4.7.1"></script>
-    <script src="{{ asset('js/network-map-d194101.js') }}?v=20260904-6"></script>
+    <script src="{{ asset('js/network-map-d194101.js') }}?v=20260904-7"></script>
     <script>
         (function () {
             // Switch the active network map by reloading with ?map=<slug>.
