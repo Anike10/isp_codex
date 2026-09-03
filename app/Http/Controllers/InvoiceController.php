@@ -1017,6 +1017,15 @@ class InvoiceController extends Controller
         $paymentNote = $this->paymentNoteForInvoice($invoice);
         $context = array_merge(compact('invoice', 'paymentNote'), $printContext->for($request));
 
+        // Honour the print toolbar toggles when they are passed through; otherwise
+        // fall back to the organisation defaults.
+        $context['withoutSignature'] = $request->has('without_signature')
+            ? $request->boolean('without_signature')
+            : (bool) $context['selectedOrganization']->default_without_signature;
+        $context['showBankInformation'] = $request->has('show_bank_information')
+            ? $request->boolean('show_bank_information')
+            : (bool) $context['selectedOrganization']->show_bank_info_on_invoice;
+
         return Pdf::loadView('invoices.pdf', $context)
             ->setPaper('a4')
             ->download($invoice->pdf_filename);

@@ -568,7 +568,7 @@
         @include('partials.organization_print_selector')
         <button onclick="recordPrint('invoice', {{ $invoice->id }})" class="btn">Print Bill</button>
         <a href="{{ route('invoices.delivery-challan', ['invoice' => $invoice, 'organization_id' => $selectedOrganization->id, 'print' => 1]) }}" target="_blank" class="btn">Print Challan</a>
-        <a href="{{ route('invoices.pdf', ['invoice' => $invoice, 'organization_id' => $selectedOrganization->id]) }}" class="btn secondary">Download PDF</a>
+        <a id="downloadPdfLink" href="{{ route('invoices.pdf', ['invoice' => $invoice, 'organization_id' => $selectedOrganization->id]) }}" class="btn secondary">Download PDF</a>
         <a href="{{ route('invoices.show', $invoice) }}" class="btn light">Back to Invoice</a>
     </div>
 
@@ -718,15 +718,32 @@
         window.addEventListener('beforeprint', function () { document.title = @json($pdfName); });
 
         const noSignatureOption = document.getElementById('noSignatureOption');
+        const showBankInformationOption = document.getElementById('showBankInformationOption');
+        const downloadPdfLink = document.getElementById('downloadPdfLink');
+
+        // Keep the Download PDF link in step with the toolbar toggles so the
+        // generated PDF matches what is shown on screen.
+        function syncDownloadPdfLink() {
+            if (! downloadPdfLink) return;
+            const url = new URL(downloadPdfLink.href, window.location.origin);
+            url.searchParams.set('without_signature', noSignatureOption.checked ? '1' : '0');
+            if (showBankInformationOption) {
+                url.searchParams.set('show_bank_information', showBankInformationOption.checked ? '1' : '0');
+            }
+            downloadPdfLink.href = url.toString();
+        }
 
         noSignatureOption.addEventListener('change', function () {
             document.body.classList.toggle('no-signature', this.checked);
+            syncDownloadPdfLink();
         });
 
-        const showBankInformationOption = document.getElementById('showBankInformationOption');
         showBankInformationOption?.addEventListener('change', function () {
             document.body.classList.toggle('show-bank-information', this.checked);
+            syncDownloadPdfLink();
         });
+
+        syncDownloadPdfLink();
 
         document.querySelectorAll('input[name="print_mode"]').forEach((input) => {
             input.addEventListener('change', function () {

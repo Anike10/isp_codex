@@ -190,7 +190,7 @@
                         <div class="note-title" style="margin-top:6px">Invoice Note</div>
                         <div style="white-space:pre-line">{{ $invoice->public_note }}</div>
                     @endif
-                    @if($selectedOrganization->show_bank_info_on_invoice && filled($selectedOrganization->bank_account_number))
+                    @if(($showBankInformation ?? $selectedOrganization->show_bank_info_on_invoice) && filled($selectedOrganization->bank_account_number))
                         <div class="bank">
                             <div class="note-title">Bank Account</div>
                             @if($selectedOrganization->bank_name)<div>Bank: {{ $selectedOrganization->bank_name }}</div>@endif
@@ -218,7 +218,7 @@
 
     <div class="amount-words"><strong>Amount in Words:</strong> {{ $numberToWords((int) round($netTotal)) }} Taka Only</div>
 
-    @if($selectedOrganization->default_without_signature)
+    @if($withoutSignature ?? $selectedOrganization->default_without_signature)
         <div class="no-signature">Computer-generated bill<br>No signature required</div>
     @else
         <table class="signatures"><tr><td>Party Signature</td><td>Authorized Signature</td></tr></table>

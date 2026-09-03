@@ -56,6 +56,57 @@ class OrganizationPrintAuditTest extends TestCase
             ->assertSeeInOrder(['Payment Allocations', 'Print History']);
     }
 
+    public function test_invoice_pdf_signature_and_bank_blocks_follow_the_toolbar_toggles(): void
+    {
+        $organization = Organization::create([
+            'name' => 'Toggle Co', 'address' => 'Dhaka', 'mobile' => '01911111111', 'is_active' => true,
+            'default_without_signature' => true, 'show_bank_info_on_invoice' => true,
+            'bank_name' => 'Toggle Bank', 'bank_account_number' => '55554444', 'bank_branch' => 'Central',
+        ]);
+        $customer = Customer::create(['name' => 'Toggle Party', 'phone' => '01700000001', 'connection_id' => 'TGL-1', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true, 'is_vendor' => false]);
+        $invoice = Invoice::create(['customer_id' => $customer->id, 'invoice_no' => 'INV-TGL-1', 'billing_month' => '2026-07', 'invoice_type' => 'service', 'subtotal' => 100, 'discount' => 0, 'vat' => 0, 'total' => 100, 'paid_amount' => 0, 'due_amount' => 100, 'status' => 'unpaid']);
+        $invoice->load(['customer', 'items']);
+
+        $render = fn (array $overrides) => view('invoices.pdf', array_merge([
+            'invoice' => $invoice,
+            'paymentNote' => 'Pay soon.',
+            'organizations' => collect([$organization]),
+            'selectedOrganization' => $organization,
+            'withoutSignature' => (bool) $organization->default_without_signature,
+            'showBankInformation' => (bool) $organization->show_bank_info_on_invoice,
+        ], $overrides))->render();
+
+        // Organisation defaults: no signature block, bank info shown.
+        $defaults = $render([]);
+        $this->assertStringContainsString('No signature required', $defaults);
+        $this->assertStringNotContainsString('Authorized Signature', $defaults);
+        $this->assertStringContainsString('55554444', $defaults);
+
+        // Toolbar toggles flipped: signature block returns, bank info hidden.
+        $flipped = $render(['withoutSignature' => false, 'showBankInformation' => false]);
+        $this->assertStringContainsString('Authorized Signature', $flipped);
+        $this->assertStringNotContainsString('No signature required', $flipped);
+        $this->assertStringNotContainsString('55554444', $flipped);
+    }
+
+    public function test_invoice_pdf_route_honours_the_without_signature_query_flag(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_invoices')->firstOrFail());
+        $organization = Organization::create([
+            'name' => 'Flag Co', 'address' => 'Dhaka', 'mobile' => '01922222222', 'is_active' => true,
+            'default_without_signature' => true,
+        ]);
+        $customer = Customer::create(['name' => 'Flag Party', 'phone' => '01700000002', 'connection_id' => 'FLG-1', 'address' => 'Kushtia', 'status' => 'active', 'is_customer' => true, 'is_vendor' => false]);
+        $invoice = Invoice::create(['customer_id' => $customer->id, 'invoice_no' => 'INV-FLG-1', 'billing_month' => '2026-07', 'invoice_type' => 'service', 'subtotal' => 100, 'discount' => 0, 'vat' => 0, 'total' => 100, 'paid_amount' => 0, 'due_amount' => 100, 'status' => 'unpaid']);
+
+        $pdf = $this->actingAs($user)->get(route('invoices.pdf', [
+            'invoice' => $invoice, 'organization_id' => $organization->id, 'without_signature' => '0',
+        ]));
+        $pdf->assertOk();
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+    }
+
     public function test_only_one_organization_is_default_after_update(): void
     {
         $user = User::factory()->create();
