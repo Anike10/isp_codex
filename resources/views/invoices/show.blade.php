@@ -52,13 +52,8 @@
                 </form>
             @endif
         @endif
-        <details class="action-menu">
-            <summary class="btn light">Print</summary>
-            <div class="action-menu-panel">
-                <a class="btn light" href="{{ route('invoices.invoice', $invoice) }}" target="_blank">Invoice</a>
-                <a class="btn light" href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank">Challan</a>
-            </div>
-        </details>
+        <a class="btn light" href="{{ route('invoices.invoice', $invoice) }}" target="_blank">Print Bill</a>
+        <a class="btn light" href="{{ route('invoices.delivery-challan', $invoice) }}" target="_blank">Print Challan</a>
         <form method="post" action="{{ route('invoices.copy-next-month', $invoice) }}" onsubmit="return confirm('Copy this invoice for next month? Stock product links and serials will not be reused automatically.');">
             @csrf
             <button class="btn light" type="submit">Copy for Next Month</button>
