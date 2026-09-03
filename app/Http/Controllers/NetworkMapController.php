@@ -426,6 +426,7 @@ class NetworkMapController extends Controller
             'endpoint_links',
             'length_meters',
             'photos',
+            'note',
             'notes',
         ];
 

@@ -283,6 +283,33 @@ class NetworkMapControllerTest extends TestCase
             ->assertJsonFragment(['auto_drop_source' => 'spl-01|OUT-01']);
     }
 
+    public function test_node_note_field_is_persisted(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_mikrotik_routers')->firstOrFail());
+
+        $payload = [
+            'type' => 'FeatureCollection',
+            'features' => [[
+                'type' => 'Feature',
+                'id' => 'tj-note-1',
+                'geometry' => ['type' => 'Point', 'coordinates' => [90.41, 23.81]],
+                'properties' => [
+                    'id' => 'tj-note-1',
+                    'feature_type' => 'node',
+                    'component_type' => 'tj_box',
+                    'box_name' => 'TJ-NOTE-1',
+                    'note' => 'PON 1 | 16 ONU | sample: Access krish, Access Prime',
+                ],
+            ]],
+        ];
+
+        $this->actingAs($user)->postJson(route('network-map.features.store'), $payload)->assertOk();
+        $this->actingAs($user)->getJson(route('network-map.features.index'))
+            ->assertOk()
+            ->assertJsonFragment(['note' => 'PON 1 | 16 ONU | sample: Access krish, Access Prime']);
+    }
+
     public function test_network_map_photos_can_be_uploaded(): void
     {
         $user = User::factory()->create();

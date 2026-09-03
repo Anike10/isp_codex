@@ -5176,6 +5176,7 @@
                 ['Input Fiber', compactJoin([props.splitter_input_fiber_code, props.splitter_input_tube_color, props.splitter_input_core_color])],
                 ['Port Map', formatSplitterPortMap(props.splitter_ports)],
                 ['Outputs', props.splitter_output_map],
+                ['Note', props.note || props.notes],
             ].filter((row) => row[1]);
         }
 
@@ -5184,7 +5185,7 @@
                 ['IP', props.ip_address],
                 ['Ports', `${props.available_ports || 0}/${props.total_ports || 0} available`],
                 ['Linked PONs', formatOltPortLinks({ ...(props.olt_port_links || {}), ...(props.port_links || {}) })],
-                ['Note', props.note],
+                ['Note', props.note || props.notes],
             ].filter((row) => row[1]);
         }
 
@@ -5193,7 +5194,26 @@
                 ['IP', props.ip_address],
                 ['Ports', `${props.available_ports || 0}/${props.total_ports || 0} available`],
                 ['Linked Ports', formatOltPortLinks(props.port_links)],
-                ['Note', props.note],
+                ['Note', props.note || props.notes],
+            ].filter((row) => row[1]);
+        }
+
+        if (props.component_type === 'tj_box') {
+            return [
+                ['Address', props.address],
+                ['Fiber Core', props.fiber_core_color],
+                ['Connected Port', props.connected_port],
+                ['Note', props.note || props.notes],
+            ].filter((row) => row[1]);
+        }
+
+        if (props.component_type === 'onu') {
+            return [
+                ['Client', props.client_name],
+                ['Address', props.address],
+                ['Fiber Core', props.fiber_core_color],
+                ['Connected Port', props.connected_port],
+                ['Note', props.note || props.notes],
             ].filter((row) => row[1]);
         }
 
