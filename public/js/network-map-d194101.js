@@ -2414,13 +2414,12 @@
             state.relocatingFeatureId = null;
             state.map.getCanvas().style.cursor = '';
             if (feature && feature.geometry.type === 'Point') {
-                feature.geometry.coordinates = [event.lngLat.lng, event.lngLat.lat];
-                moveLinkedFiberEndpoints(feature);
+                moveNodeAndColocated(feature, event.lngLat.lng, event.lngLat.lat);
                 refreshSources();
                 selectFeature(feature.properties.id || feature.id);
                 state.dirty = true;
                 persistTopology();
-                setStatus(`${featureDisplayName(feature)} moved to the new location.`);
+                setStatus(`${featureDisplayName(feature)} moved. Everything at that spot moved with it.`);
             }
             return;
         }
@@ -2799,9 +2798,12 @@
         };
     }
 
-    function updatePointCoordinatesFromForm(feature, data) {
+    // Validate the lat/long fields and return {lng, lat}. Does NOT mutate the
+    // feature - the caller applies the move via moveNodeAndColocated so the
+    // location group travels together.
+    function readPointCoordinatesFromForm(feature, data) {
         if (feature.geometry.type !== 'Point') {
-            return;
+            return null;
         }
 
         const lat = Number(data.get('latitude'));
@@ -2814,7 +2816,7 @@
             throw new Error('Longitude must be between -180 and 180.');
         }
 
-        feature.geometry.coordinates = [lng, lat];
+        return { lng, lat };
     }
 
     function renderFields(componentType, properties) {
@@ -2933,7 +2935,7 @@
                 }
             }
 
-            updatePointCoordinatesFromForm(feature, data);
+            const formCoords = readPointCoordinatesFromForm(feature, data);
             const dynamicMaps = serializeDynamicMaps(event.currentTarget);
             if (feature.properties.component_type === 'splitter') {
                 clearDirectDeviceLinksForFeature(feature);
@@ -2948,8 +2950,18 @@
                 repairLegacySplitterLinks();
                 autoDrawSplitterDropFibers(feature);
             }
-            if (feature.geometry.type === 'Point') {
-                moveLinkedFiberEndpoints(feature);
+            if (formCoords) {
+                // A splitter placed inside a TJ box snaps onto the box; otherwise
+                // it lands on the typed coordinates. Either way the whole
+                // co-located group moves with it.
+                let target = formCoords;
+                if (feature.properties.component_type === 'splitter' && feature.properties.splitter_parent_tj_box_id) {
+                    const parent = state.features.get(feature.properties.splitter_parent_tj_box_id);
+                    if (parent?.geometry?.type === 'Point') {
+                        target = { lng: parent.geometry.coordinates[0], lat: parent.geometry.coordinates[1] };
+                    }
+                }
+                moveNodeAndColocated(feature, target.lng, target.lat);
             }
 
             if (feature.geometry.type === 'LineString') {
@@ -4786,8 +4798,7 @@
 
         if (link?.node_id && state.features.has(link.node_id)) {
             const node = state.features.get(link.node_id);
-            node.geometry.coordinates = coordinate;
-            moveLinkedFiberEndpoints(node);
+            moveNodeAndColocated(node, coordinate[0], coordinate[1]);
             return;
         }
 
@@ -4966,8 +4977,7 @@
         const feature = state.features.get(state.draggingNode.featureId);
         if (!feature) return;
 
-        feature.geometry.coordinates = [event.lngLat.lng, event.lngLat.lat];
-        moveLinkedFiberEndpoints(feature);
+        moveNodeAndColocated(feature, event.lngLat.lng, event.lngLat.lat);
         refreshSources();
     }
 
@@ -4987,30 +4997,80 @@
         }
     }
 
-    function moveLinkedFiberEndpoints(nodeFeature) {
-        const nodeId = nodeFeature.properties.id;
+    function coordKey(coordinate) {
+        return `${Number(coordinate[0]).toFixed(6)},${Number(coordinate[1]).toFixed(6)}`;
+    }
+
+    // Every point feature that should travel with `node`: anything sitting on
+    // the exact same spot, plus the "same TJ box" cluster (a TJ box and its
+    // inside splitters, and splitters that share a box).
+    function colocatedNodeIds(node) {
+        const ids = new Set([node.properties.id]);
+        const key = coordKey(node.geometry.coordinates);
+        const isTjBox = node.properties.component_type === 'tj_box';
+        const insideBoxId = node.properties.splitter_parent_tj_box_id || null;
+
         state.features.forEach((feature) => {
-            if (nodeFeature.properties.component_type === 'tj_box'
-                && feature.geometry.type === 'Point'
-                && feature.properties.component_type === 'splitter'
-                && feature.properties.splitter_parent_tj_box_id === nodeId) {
-                feature.geometry.coordinates = [...nodeFeature.geometry.coordinates];
+            if (feature.geometry.type !== 'Point' || ids.has(feature.properties.id)) return;
+
+            const sameSpot = coordKey(feature.geometry.coordinates) === key;
+            const insideThisBox = isTjBox && feature.properties.splitter_parent_tj_box_id === node.properties.id;
+            const isMyBox = insideBoxId && feature.properties.id === insideBoxId;
+            const sharesMyBox = insideBoxId && feature.properties.splitter_parent_tj_box_id === insideBoxId;
+
+            if (sameSpot || insideThisBox || isMyBox || sharesMyBox) {
+                ids.add(feature.properties.id);
+            }
+        });
+
+        return ids;
+    }
+
+    // Move `node` to (lng,lat) and drag its whole location group with it:
+    // co-located nodes, the same-TJ-box cluster, and every fibre vertex that
+    // was sitting on one of those old spots (formally linked or just coincident).
+    // Call BEFORE overwriting node.geometry.coordinates.
+    function moveNodeAndColocated(node, lng, lat) {
+        if (!node || node.geometry.type !== 'Point') return;
+
+        const groupIds = colocatedNodeIds(node);
+        const oldKeys = new Set();
+        groupIds.forEach((id) => {
+            const member = state.features.get(id);
+            if (member && member.geometry.type === 'Point') {
+                oldKeys.add(coordKey(member.geometry.coordinates));
+            }
+        });
+
+        groupIds.forEach((id) => {
+            const member = state.features.get(id);
+            if (member && member.geometry.type === 'Point') {
+                member.geometry.coordinates = [lng, lat];
+            }
+        });
+
+        state.features.forEach((link) => {
+            if (link.geometry.type !== 'LineString') return;
+
+            const coords = link.geometry.coordinates;
+            let changed = false;
+            for (let i = 0; i < coords.length; i++) {
+                if (oldKeys.has(coordKey(coords[i]))) {
+                    coords[i] = [lng, lat];
+                    changed = true;
+                }
             }
 
-            if (feature.geometry.type !== 'LineString') return;
+            const links = link.properties.endpoint_links || {};
+            if (links.a && groupIds.has(links.a.node_id)) { coords[0] = [lng, lat]; changed = true; }
+            if (links.z && groupIds.has(links.z.node_id)) { coords[coords.length - 1] = [lng, lat]; changed = true; }
 
-            const links = feature.properties.endpoint_links || {};
-            if (links.a?.node_id === nodeId) {
-                feature.geometry.coordinates[0] = [...nodeFeature.geometry.coordinates];
-            }
-            if (links.z?.node_id === nodeId) {
-                feature.geometry.coordinates[feature.geometry.coordinates.length - 1] = [...nodeFeature.geometry.coordinates];
-            }
-            if (links.a?.node_id === nodeId || links.z?.node_id === nodeId) {
-                feature.properties.length_meters = Number(lineLengthMeters(feature.geometry.coordinates).toFixed(2));
+            if (changed) {
+                link.properties.length_meters = Number(lineLengthMeters(coords).toFixed(2));
             }
         });
     }
+
 
     function syncSplitterParent(feature) {
         if (feature.properties.component_type !== 'splitter') return;
@@ -5023,7 +5083,8 @@
         }
 
         feature.properties.splitter_parent_tj_box_name = parent.properties.box_name || parent.properties.name || 'TJ Box';
-        feature.geometry.coordinates = [...parent.geometry.coordinates];
+        // The actual coordinate snap is done by the caller via moveNodeAndColocated
+        // so the splitter's own output fibres travel with it.
     }
 
     function setSourceData(sourceName, data) {

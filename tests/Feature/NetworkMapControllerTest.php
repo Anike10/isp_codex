@@ -67,6 +67,7 @@ class NetworkMapControllerTest extends TestCase
         $this->assertStringContainsString('network-map-endpoint-options-', $script);
         $this->assertStringContainsString('withParallelLineOffsets', $script);
         $this->assertStringContainsString('saveDirectDeviceLink', $script);
+        $this->assertStringContainsString('moveNodeAndColocated', $script);
         $this->assertStringContainsString('centerEmptyMapPoint', $script);
         $this->assertStringContainsString('state.map.jumpTo', $script);
         $this->assertStringNotContainsString('handleMapWheelZoom', $script);
