@@ -1069,7 +1069,16 @@
             values.push(row.in_point, row.out_point, row.note);
         });
 
-        return [...new Set(values.flatMap(extractPonPorts))];
+        const labels = values.flatMap(extractPonPorts);
+
+        // Carry the PON through the splitter: a distribution or drop fibre that
+        // names a splitter / TJ box inherits that node's PON so the whole
+        // branch keeps the feeder's colour instead of going plain green.
+        [props.a_end_device_port, props.z_end_device_port].forEach((text) => {
+            ponLabelsForEndpointText(text, 0).forEach((label) => labels.push(label));
+        });
+
+        return [...new Set(labels)];
     }
 
     function extractPonPorts(value) {
@@ -1077,6 +1086,50 @@
         const matches = text.match(/\bPON[\s:#-]*[A-Z0-9/.-]+/g) || [];
 
         return matches.map((match) => match.replace(/\s+/g, ' ').trim());
+    }
+
+    function matchesNodeName(node, text) {
+        const upper = String(text || '').toUpperCase().trim();
+        if (!upper) return false;
+        return [node.properties.name, node.properties.box_name]
+            .filter(Boolean)
+            .map((name) => String(name).toUpperCase().trim())
+            .some((name) => {
+                const head = name.split(/\s+[-–]\s+/)[0];
+                return upper === name
+                    || upper === head
+                    || upper.startsWith(head + ' ')
+                    || upper.startsWith(head + '-');
+            });
+    }
+
+    function ponLabelsForNode(node, depth) {
+        if (!node || depth > 3) return [];
+        const props = node.properties || {};
+
+        if (props.component_type === 'splitter') {
+            const direct = extractPonPorts(props.parent_olt_port);
+            if (direct.length) return direct;
+            return ponLabelsForEndpointText(props.parent_olt_port, depth + 1);
+        }
+        if (props.component_type === 'tj_box') {
+            const fromNote = extractPonPorts(props.note || props.notes);
+            if (fromNote.length) return fromNote;
+            return ponLabelsForEndpointText(props.connected_port, depth + 1);
+        }
+        return [];
+    }
+
+    function ponLabelsForEndpointText(text, depth) {
+        const raw = String(text || '').trim();
+        if (!raw || depth > 3) return [];
+
+        const node = [...state.features.values()].find((feature) =>
+            feature.geometry.type === 'Point'
+            && ['splitter', 'tj_box'].includes(feature.properties.component_type)
+            && matchesNodeName(feature, raw));
+
+        return node ? ponLabelsForNode(node, depth) : [];
     }
 
     function stableStringIndex(value, size) {
