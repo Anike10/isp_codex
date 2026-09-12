@@ -5228,7 +5228,15 @@
             `<p class="popup-title">${escapeHtml(title)}</p>`,
             `<p class="popup-meta">${escapeHtml(componentLabels[props.component_type] || props.component_type)}</p>`,
             rows.length ? `<dl class="popup-details">${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join('')}</dl>` : '',
-            `<div class="popup-actions"><button type="button" class="search-result-action search-result-action--primary" data-edit-feature="${escapeHtml(String(props.id || feature.id))}">Edit details</button>${feature.geometry.type === 'Point' ? `<button type="button" class="search-result-action" data-relocate-feature="${escapeHtml(String(props.id || feature.id))}">Relocate</button>` : ''}</div>`,
+            `<div class="popup-actions">`
+                + `<button type="button" class="search-result-action search-result-action--primary" data-edit-feature="${escapeHtml(String(props.id || feature.id))}">Edit details</button>`
+                + (feature.geometry.type === 'Point'
+                    ? `<button type="button" class="search-result-action" data-relocate-feature="${escapeHtml(String(props.id || feature.id))}">Relocate</button>`
+                    : '')
+                + (feature.geometry.type === 'LineString'
+                    ? `<button type="button" class="search-result-action" data-cut-feature="${escapeHtml(String(props.id || feature.id))}">Cut cable</button>`
+                    : '')
+            + `</div>`,
         ].join('');
     }
 
@@ -5264,6 +5272,93 @@
         popupEl.querySelector('[data-relocate-feature]')?.addEventListener('click', () => {
             startFeatureRelocate(id);
         });
+        popupEl.querySelector('[data-cut-feature]')?.addEventListener('click', () => {
+            startFiberCut(id);
+        });
+    }
+
+    // Arm "click a point on this cable to break it in two".
+    function startFiberCut(id) {
+        const feature = state.features.get(id);
+        if (!feature || feature.geometry.type !== 'LineString') return;
+
+        state.featurePopup?.remove();
+        state.featurePopup = null;
+        closeFeatureForm();
+        cancelDrawing();
+        state.cuttingFiberId = id;
+        selectFeature(id);
+        showPathMarkers(id);
+        state.map.getCanvas().style.cursor = 'crosshair';
+        setStatus('Cut mode: click a point on this cable to break it in two (Esc to cancel).');
+    }
+
+    function splitFiberAtPoint(fiber, clickLngLat) {
+        const coords = fiber.geometry.coordinates;
+        if (!Array.isArray(coords) || coords.length < 2) return;
+
+        let bestSegment = 0;
+        let bestPoint = coords[0];
+        let bestDistance = Number.POSITIVE_INFINITY;
+        for (let i = 0; i < coords.length - 1; i++) {
+            const projected = closestPointOnSegment(clickLngLat, coords[i], coords[i + 1]);
+            const distance = squaredDistance(clickLngLat, projected);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestPoint = projected;
+                bestSegment = i;
+            }
+        }
+
+        const nearlySame = (a, b) => squaredDistance(a, b) < 1e-12;
+        if (nearlySame(bestPoint, coords[0]) || nearlySame(bestPoint, coords[coords.length - 1])) {
+            setStatus('Pick a point along the cable, not right at an end.');
+            return;
+        }
+
+        const cut = [Number(bestPoint[0]), Number(bestPoint[1])];
+        const coordsA = [...coords.slice(0, bestSegment + 1).map((c) => [...c]), [...cut]];
+        const coordsB = [[...cut], ...coords.slice(bestSegment + 1).map((c) => [...c])];
+
+        const base = fiber.properties || {};
+        const code = base.fiber_code || base.name || 'FIBER';
+
+        const makeHalf = (lineCoords, suffix, keepA, keepZ) => {
+            const id = uuid();
+            const props = { ...base, id, name: `${code}-${suffix}`, fiber_code: `${code}-${suffix}`,
+                feature_type: 'link', component_type: 'fiber_cable' };
+            const links = { ...(base.endpoint_links || {}) };
+            if (!keepA) {
+                delete props.a_end_customer_id;
+                delete props.a_end_customer_name;
+                delete links.a;
+                props.a_end_device_port = 'Splice / cut point';
+            }
+            if (!keepZ) {
+                delete props.z_end_customer_id;
+                delete props.z_end_customer_name;
+                delete links.z;
+                props.z_end_device_port = 'Splice / cut point';
+            }
+            props.endpoint_links = links;
+            props.length_meters = Number(lineLengthMeters(lineCoords).toFixed(2));
+            return { type: 'Feature', id, geometry: { type: 'LineString', coordinates: lineCoords }, properties: props };
+        };
+
+        const halfA = makeHalf(coordsA, '1', true, false);
+        const halfB = makeHalf(coordsB, '2', false, true);
+
+        state.features.delete(base.id || fiber.id);
+        state.features.set(halfA.id, halfA);
+        state.features.set(halfB.id, halfB);
+        state.dirty = true;
+        clearPathMarkers();
+        refreshSources();
+        updateGeoJsonPreview();
+        selectFeature(halfA.id);
+        showPathMarkers(halfA.id);
+        persistTopology();
+        setStatus(`Cable cut into "${halfA.properties.fiber_code}" and "${halfB.properties.fiber_code}".`);
     }
 
     function popupRows(props) {

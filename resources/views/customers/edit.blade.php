@@ -10,7 +10,7 @@
     $selectedRouterIds = array_map('intval', old('mikrotik_router_ids', $savedRouterIds));
 @endphp
 
-<link rel="stylesheet" href="{{ asset('css/customer-edit.css') }}?v=20260813-2">
+<link rel="stylesheet" href="{{ asset('css/customer-edit.css') }}?v=20260912-2">
 
 <div class="party-edit-shell">
     <header class="party-edit-header">
@@ -34,6 +34,55 @@
     <form method="post" action="{{ route('customers.update', $customer) }}" class="party-edit-form">
         @csrf
         @method('PUT')
+
+        <section class="edit-panel edit-panel--priority" aria-label="Live Access &amp; Package">
+            <header class="edit-panel-head edit-panel-head--priority">
+                <span class="edit-panel-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0"/></svg>
+                </span>
+            </header>
+
+            <div class="edit-priority-grid">
+                <label class="edit-field edit-priority-item edit-priority-item--identity">
+                    <span class="edit-field-label edit-field-label--identity">User ID</span>
+                    <input name="connection_id" value="{{ old('connection_id', $customer->connection_id) }}">
+                </label>
+
+                <div class="edit-field edit-priority-item edit-priority-item--password">
+                    <span class="edit-field-label edit-field-label--password">Password</span>
+                    <div class="readonly-secret">
+                        <code>{{ \App\Services\MikrotikCustomerSyncService::DEFAULT_PASSWORD }}</code>
+                    </div>
+                </div>
+
+                <label class="edit-field edit-priority-item edit-priority-item--package">
+                    <span class="edit-field-label edit-field-label--package">Internet Package</span>
+                    <select name="internet_package_id">
+                        <option value="">No active package</option>
+                        @foreach ($packages as $package)
+                            <option value="{{ $package->id }}" @selected((int) old('internet_package_id', $customer->activeSubscription?->internet_package_id) === $package->id)>
+                                {{ $package->name }} - {{ $package->speed }} - {{ number_format($package->monthly_price, 2) }}
+                            </option>
+                        @endforeach
+                    </select>
+                </label>
+
+                <label class="edit-field edit-priority-item edit-priority-item--timing">
+                    <span class="edit-field-label edit-field-label--timing">Connection Start Date</span>
+                    <input type="date" name="start_date" value="{{ old('start_date', $customer->activeSubscription?->start_date?->format('Y-m-d') ?? now()->toDateString()) }}">
+                </label>
+
+                @if (auth()->user()?->hasPermission('set_special_package_price'))
+                    @php($spCurrent = $customer->activeSubscription?->custom_price)
+                    <label class="edit-field edit-priority-item edit-priority-item--special">
+                        <span class="edit-field-label edit-field-label--special">Special Price (optional)</span>
+                        <input type="text" inputmode="numeric" name="custom_price"
+                               value="{{ old('custom_price', $spCurrent !== null ? rtrim(rtrim(number_format((float) $spCurrent, 2, '.', ''), '0'), '.') : '') }}"
+                               placeholder="Leave blank to use package price">
+                    </label>
+                @endif
+            </div>
+        </section>
 
         <section class="edit-panel" aria-labelledby="basic-panel-title">
             <header class="edit-panel-head">
@@ -138,18 +187,6 @@
             </header>
 
             <div class="edit-field-grid">
-                <label class="edit-field">
-                    <span>Connection ID</span>
-                    <input name="connection_id" value="{{ old('connection_id', $customer->connection_id) }}" placeholder="Required for ISP service">
-                    <small>Leave empty only for product-only parties.</small>
-                </label>
-
-                <div class="edit-field">
-                    <span>MikroTik Password</span>
-                    <div class="readonly-secret"><code>4321</code><em>Read only</em></div>
-                    <small>Default credential used when a Connection ID is assigned.</small>
-                </div>
-
                 <div class="edit-field edit-field--wide">
                     <span>MikroTik Router Targets</span>
                     <div class="router-choice-grid">
@@ -201,34 +238,6 @@
                         </label>
                     </div>
                 </div>
-            </div>
-
-            <div class="edit-field-grid edit-field-grid--service">
-                <label class="edit-field">
-                    <span>Internet Package</span>
-                    <select name="internet_package_id">
-                        <option value="">No active package</option>
-                        @foreach ($packages as $package)
-                            <option value="{{ $package->id }}" @selected((int) old('internet_package_id', $customer->activeSubscription?->internet_package_id) === $package->id)>
-                                {{ $package->name }} - {{ $package->speed }} - {{ number_format($package->monthly_price, 2) }}
-                            </option>
-                        @endforeach
-                    </select>
-                </label>
-                <label class="edit-field">
-                    <span>Connection Start Date</span>
-                    <input type="date" name="start_date" value="{{ old('start_date', $customer->activeSubscription?->start_date?->format('Y-m-d') ?? now()->toDateString()) }}">
-                </label>
-                @if (auth()->user()?->hasPermission('set_special_package_price'))
-                    @php($spCurrent = $customer->activeSubscription?->custom_price)
-                    <label class="edit-field">
-                        <span>Special Price (optional)</span>
-                        <input type="text" inputmode="numeric" name="custom_price"
-                               value="{{ old('custom_price', $spCurrent !== null ? rtrim(rtrim(number_format((float) $spCurrent, 2, '.', ''), '0'), '.') : '') }}"
-                               placeholder="Leave blank to use the package price">
-                        <small class="muted">Replaces the package price in all billing for this party. Blank = package price.</small>
-                    </label>
-                @endif
             </div>
         </section>
 

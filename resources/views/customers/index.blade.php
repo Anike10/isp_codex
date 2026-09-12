@@ -285,6 +285,81 @@
         padding: 4px 6px;
     }
     td[data-inline-field="name"] input[type="text"] { min-width: 260px; }
+    td[data-inline-field="package"] { cursor: pointer; }
+    td[data-inline-field="package"]:focus-visible {
+        outline: 2px solid #116149;
+        outline-offset: -2px;
+    }
+    .inline-package-editor {
+        position: relative;
+        min-width: 280px;
+        text-align: left;
+    }
+    .inline-package-search {
+        width: 100%;
+        min-width: 280px;
+        box-sizing: border-box;
+        border: 1px solid #98a2b3;
+        border-radius: 6px;
+        padding: 7px 9px;
+        background: #fff;
+        color: #172033;
+        font: inherit;
+        font-size: 13px;
+    }
+    .inline-package-search:focus {
+        border-color: #116149;
+        box-shadow: 0 0 0 3px rgba(17, 97, 73, .14);
+        outline: 0;
+    }
+    .inline-package-results {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        z-index: 40;
+        width: 100%;
+        max-height: 240px;
+        overflow-y: auto;
+        border: 1px solid #d0d5dd;
+        border-radius: 7px;
+        background: #fff;
+        box-shadow: 0 12px 26px rgba(15, 23, 42, .18);
+    }
+    .inline-package-option {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border: 0;
+        border-bottom: 1px solid #eef2f6;
+        border-radius: 0;
+        padding: 8px 10px;
+        background: #fff;
+        color: #172033;
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        text-align: left;
+    }
+    .inline-package-option:last-child { border-bottom: 0; }
+    .inline-package-option:hover,
+    .inline-package-option.is-active {
+        background: #e7f7ef;
+        color: #07543e;
+    }
+    .inline-package-option small {
+        color: #667085;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+    .inline-package-empty {
+        padding: 10px;
+        color: #667085;
+        font-size: 12px;
+        text-align: center;
+    }
+    .inline-package-editor.is-saving .inline-package-results { display: none; }
     td.note-cell:has(textarea) { max-width: none; }
     .onu-sub { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #dbe2ec; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; line-height: 1.35; }
     .onu-sub__loc { font-weight: 700; color: #475467; }
@@ -461,7 +536,10 @@
                 $hasSpecialPrice = (bool) $assignedSubscription?->hasCustomPrice();
                 $fmtPrice = fn ($n) => rtrim(rtrim(number_format((float) $n, 2, '.', ''), '0'), '.');
             @endphp
-            <td class="col-center" data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}" data-package-id="{{ $assignedSubscription?->internet_package_id }}">
+            <td class="col-center" data-inline-field="package" data-inline-url="{{ route('customers.inline-update', $customer) }}"
+                data-package-id="{{ $assignedSubscription?->internet_package_id }}"
+                data-special-price-url="{{ $maySetSpecialPrice ? route('customers.special-price', $customer) : '' }}"
+                tabindex="0" role="button" aria-label="Change package for {{ $customer->name }}" title="Click to search and change package">
                 <span data-inline-value>{{ $currentPackageName }}</span>
                 @if ($assignedSubscription?->package)
                     <div class="pkg-price {{ $hasSpecialPrice ? 'has-sp' : '' }}">
@@ -608,9 +686,78 @@
 
 <div style="margin-top:16px">{{ $customers->links() }}</div>
 
+@php
+    $customerPackageOptions = ($packages ?? collect())->mapWithKeys(fn ($package) => [$package->id => [
+        'name' => $package->name,
+        'speed' => $package->speed,
+        'monthly_price' => $package->monthly_price,
+    ]])->toArray();
+@endphp
 <script>
 const customerCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
-const customerPackages = @json(($packages ?? collect())->mapWithKeys(fn ($package) => [$package->id => $package->name])->toArray());
+const customerPackages = @json($customerPackageOptions);
+
+function formatCustomerPackagePrice(value) {
+    const numericValue = Number(value || 0);
+    return Number.isInteger(numericValue)
+        ? String(numericValue)
+        : numericValue.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+function renderCustomerPackageCell(cell, valueNode, originalNodes, data) {
+    valueNode.textContent = data.value;
+    cell.dataset.packageId = data.package_id ? String(data.package_id) : '';
+
+    if (!data.package_id) {
+        cell.replaceChildren(valueNode);
+        return;
+    }
+
+    let priceWrap = originalNodes.find((node) => node.nodeType === Node.ELEMENT_NODE && node.classList.contains('pkg-price'));
+    if (!priceWrap) {
+        priceWrap = document.createElement('div');
+        priceWrap.className = 'pkg-price';
+
+        const listPrice = document.createElement('span');
+        listPrice.className = 'pkg-price-list';
+        priceWrap.append(listPrice);
+
+        const specialPrice = document.createElement('span');
+        specialPrice.className = 'pkg-price-sp';
+        specialPrice.append(document.createTextNode('\u09F3 '));
+        const effectiveValue = document.createElement('span');
+        effectiveValue.dataset.spEffective = '';
+        specialPrice.append(effectiveValue);
+        priceWrap.append(specialPrice);
+
+        if (cell.dataset.specialPriceUrl) {
+            const chip = document.createElement('span');
+            chip.className = 'sp-inline';
+            chip.dataset.spUrl = cell.dataset.specialPriceUrl;
+            chip.title = "Double-click to set this party's special price. Clear the box to remove it.";
+            chip.innerHTML = 'SP <span class="sp-value" data-sp-value>\u2014</span>';
+            priceWrap.append(chip);
+            initializeSpecialPriceChip(chip);
+        }
+    }
+
+    const listPrice = formatCustomerPackagePrice(data.list_price);
+    const effectivePrice = formatCustomerPackagePrice(data.effective_price);
+    const listNode = priceWrap.querySelector('.pkg-price-list');
+    const effectiveNode = priceWrap.querySelector('[data-sp-effective]');
+    const chip = priceWrap.querySelector('.sp-inline');
+
+    if (listNode) listNode.textContent = '\u09F3 ' + listPrice;
+    if (effectiveNode) effectiveNode.textContent = effectivePrice;
+    priceWrap.classList.toggle('has-sp', !!data.has_special_price);
+    if (chip) {
+        chip.dataset.listPrice = listPrice;
+        const specialValue = chip.querySelector('[data-sp-value]');
+        if (specialValue) specialValue.textContent = data.has_special_price ? effectivePrice : '\u2014';
+    }
+
+    cell.replaceChildren(valueNode, priceWrap);
+}
 
 function editCustomerInlineCell(cell, event) {
     if (cell.querySelector('input, select, textarea')) return;
@@ -619,32 +766,49 @@ function editCustomerInlineCell(cell, event) {
     const originalValue = valueNode ? valueNode.textContent.trim() : '';
 
     if (field === 'package') {
-        const select = document.createElement('select');
-        const option = new Option('No package', '');
-        option.selected = !(cell.dataset.packageId || cell.getAttribute('data-package-id'));
-        select.append(option);
+        const originalNodes = [...cell.childNodes];
+        const originalPackageId = cell.dataset.packageId || '';
+        const editor = document.createElement('div');
+        editor.className = 'inline-package-editor';
 
-        Object.entries(customerPackages).forEach(([id, packageName]) => {
-            const packageOption = new Option(packageName, id, false, String((cell.dataset.packageId || '').trim()) === String(id));
-            select.append(packageOption);
-        });
+        const input = document.createElement('input');
+        input.type = 'search';
+        input.className = 'inline-package-search';
+        input.placeholder = 'Search packages...';
+        input.autocomplete = 'off';
+        input.setAttribute('role', 'combobox');
+        input.setAttribute('aria-label', 'Search packages');
+        input.setAttribute('aria-autocomplete', 'list');
+        input.setAttribute('aria-expanded', 'true');
 
-        select.style.width = '100%';
-        cell.replaceChildren(select);
-        select.focus();
+        const results = document.createElement('div');
+        results.className = 'inline-package-results';
+        results.id = 'package-results-' + Math.random().toString(36).slice(2);
+        results.setAttribute('role', 'listbox');
+        input.setAttribute('aria-controls', results.id);
+        editor.append(input, results);
+        cell.replaceChildren(editor);
 
-        select.dataset.value = cell.dataset.packageId || '';
         let saving = false;
+        let activeIndex = 0;
+        let visibleOptions = [];
 
         const restoreCell = () => {
-            cell.innerHTML = '';
-            cell.append(valueNode);
+            if (saving) return;
+            cell.replaceChildren(...originalNodes);
         };
 
-        const savePackage = async () => {
+        const savePackage = async (packageId) => {
             if (saving) return;
+            if (String(packageId) === String(originalPackageId)) {
+                restoreCell();
+                return;
+            }
+
             saving = true;
-            select.disabled = true;
+            editor.classList.add('is-saving');
+            input.disabled = true;
+            input.value = 'Saving...';
             try {
                 const response = await fetch(cell.dataset.inlineUrl, {
                     method: 'PATCH',
@@ -653,28 +817,109 @@ function editCustomerInlineCell(cell, event) {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': customerCsrfToken,
                     },
-                    body: JSON.stringify({ field, value: select.value }),
+                    body: JSON.stringify({ field, value: packageId }),
                 });
-                const data = await response.json();
+                const data = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(data.message || 'Could not update package');
-                valueNode.textContent = data.value;
-                cell.dataset.packageId = data.package_id ? String(data.package_id) : '';
+                renderCustomerPackageCell(cell, valueNode, originalNodes, data);
+                if (data.warning) alert(data.warning);
             } catch (error) {
                 alert(error.message);
+                saving = false;
+                restoreCell();
             } finally {
                 saving = false;
-                select.disabled = false;
-                restoreCell();
             }
         };
 
-        select.addEventListener('blur', savePackage);
-        select.addEventListener('change', savePackage);
-        select.addEventListener('keydown', function (keyEvent) {
+        const renderOptions = () => {
+            const query = input.value.trim().toLocaleLowerCase();
+            const packageOptions = Object.entries(customerPackages)
+                .map(([id, packageData]) => ({ id, ...packageData }))
+                .filter((packageData) => {
+                    const haystack = [packageData.name, packageData.speed, packageData.monthly_price].join(' ').toLocaleLowerCase();
+                    return !query || haystack.includes(query);
+                });
+
+            visibleOptions = packageOptions;
+            activeIndex = Math.min(activeIndex, Math.max(visibleOptions.length - 1, 0));
+            results.replaceChildren();
+
+            if (!visibleOptions.length) {
+                const empty = document.createElement('div');
+                empty.className = 'inline-package-empty';
+                empty.textContent = 'No package found';
+                results.append(empty);
+                input.removeAttribute('aria-activedescendant');
+                return;
+            }
+
+            visibleOptions.forEach((packageData, index) => {
+                const option = document.createElement('button');
+                option.type = 'button';
+                option.className = 'inline-package-option' + (index === activeIndex ? ' is-active' : '');
+                option.id = results.id + '-option-' + index;
+                option.dataset.packageId = packageData.id;
+                option.setAttribute('role', 'option');
+                option.setAttribute('aria-selected', index === activeIndex ? 'true' : 'false');
+
+                const name = document.createElement('span');
+                name.textContent = packageData.name;
+                option.append(name);
+
+                if (packageData.id) {
+                    const details = document.createElement('small');
+                    const price = formatCustomerPackagePrice(packageData.monthly_price);
+                    details.textContent = [packageData.speed, price ? '\u09F3 ' + price : ''].filter(Boolean).join(' \u00B7 ');
+                    option.append(details);
+                }
+
+                option.addEventListener('mousedown', (mouseEvent) => mouseEvent.preventDefault());
+                option.addEventListener('click', () => savePackage(packageData.id));
+                option.addEventListener('mouseenter', () => {
+                    activeIndex = index;
+                    results.querySelectorAll('.inline-package-option').forEach((item, itemIndex) => {
+                        item.classList.toggle('is-active', itemIndex === activeIndex);
+                        item.setAttribute('aria-selected', itemIndex === activeIndex ? 'true' : 'false');
+                    });
+                    input.setAttribute('aria-activedescendant', option.id);
+                });
+                results.append(option);
+            });
+
+            input.setAttribute('aria-activedescendant', results.id + '-option-' + activeIndex);
+        };
+
+        input.addEventListener('input', () => {
+            activeIndex = 0;
+            renderOptions();
+        });
+        input.addEventListener('keydown', function (keyEvent) {
+            if (keyEvent.key === 'ArrowDown' || keyEvent.key === 'ArrowUp') {
+                keyEvent.preventDefault();
+                if (!visibleOptions.length) return;
+                const direction = keyEvent.key === 'ArrowDown' ? 1 : -1;
+                activeIndex = (activeIndex + direction + visibleOptions.length) % visibleOptions.length;
+                renderOptions();
+                results.querySelector('.inline-package-option.is-active')?.scrollIntoView({ block: 'nearest' });
+            }
+            if (keyEvent.key === 'Enter' && visibleOptions.length) {
+                keyEvent.preventDefault();
+                savePackage(visibleOptions[activeIndex].id);
+            }
             if (keyEvent.key === 'Escape') {
+                keyEvent.preventDefault();
                 restoreCell();
             }
         });
+        input.addEventListener('blur', () => {
+            window.setTimeout(() => {
+                if (!saving && !editor.contains(document.activeElement)) restoreCell();
+            }, 0);
+        });
+
+        renderOptions();
+        input.focus();
 
         return;
     }
@@ -752,19 +997,23 @@ document.querySelectorAll('[data-inline-field="name"], [data-inline-field="phone
 
 document.querySelectorAll('td[data-inline-field="package"]').forEach((cell) => {
     cell.addEventListener('click', function (event) {
+        if (event.target.closest('.sp-inline')) return;
         event.preventDefault();
         event.stopPropagation();
+        editCustomerInlineCell(this);
     });
-    cell.addEventListener('dblclick', function (event) {
+    cell.addEventListener('keydown', function (event) {
+        if (event.target !== cell || !['Enter', ' '].includes(event.key)) return;
         event.preventDefault();
-        event.stopPropagation();
         editCustomerInlineCell(this);
     });
 });
 
 // Inline "SP" special-price chip inside the Package cell: double-click to edit,
 // no button, saves on Enter/blur, clear the box to remove the special price.
-document.querySelectorAll('.sp-inline').forEach((chip) => {
+function initializeSpecialPriceChip(chip) {
+    if (chip.dataset.spInitialized === 'true') return;
+    chip.dataset.spInitialized = 'true';
     chip.addEventListener('click', (event) => event.stopPropagation());
 
     chip.addEventListener('dblclick', function (event) {
@@ -832,7 +1081,9 @@ document.querySelectorAll('.sp-inline').forEach((chip) => {
             if (keyEvent.key === 'Escape') { keyEvent.preventDefault(); cancel(); }
         });
     });
-});
+}
+
+document.querySelectorAll('.sp-inline').forEach(initializeSpecialPriceChip);
 
 document.querySelectorAll('.customer-action-menu').forEach((menu) => {
     menu.addEventListener('click', function (event) {

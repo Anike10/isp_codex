@@ -583,7 +583,8 @@ class CustomerController extends Controller
             });
 
             $freshCustomer = $customer->fresh(['activeSubscription.package', 'latestSubscription.package']);
-            $currentPackage = ($freshCustomer->activeSubscription ?: $freshCustomer->latestSubscription)?->package;
+            $currentSubscription = $freshCustomer->activeSubscription ?: $freshCustomer->latestSubscription;
+            $currentPackage = $currentSubscription?->package;
 
             $sync = $this->syncMikrotikCustomer($freshCustomer);
 
@@ -591,6 +592,9 @@ class CustomerController extends Controller
                 'message' => 'Party updated. MikroTik user '.$sync['status'].'.',
                 'value' => $currentPackage?->name ?? 'No package',
                 'package_id' => $currentPackage?->id,
+                'list_price' => $currentPackage ? (float) $currentPackage->monthly_price : null,
+                'effective_price' => $currentSubscription?->effectivePrice(),
+                'has_special_price' => (bool) $currentSubscription?->hasCustomPrice(),
                 'warning' => $sync['warning'],
             ]);
         }

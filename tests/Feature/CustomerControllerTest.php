@@ -379,7 +379,12 @@ class CustomerControllerTest extends TestCase
         $this->actingAs($user)->patchJson(route('customers.inline-update', $customer), [
             'field' => 'package',
             'value' => (string) $packageTwo->id,
-        ])->assertOk()->assertJsonPath('value', $packageTwo->name);
+        ])->assertOk()
+            ->assertJsonPath('value', $packageTwo->name)
+            ->assertJsonPath('package_id', $packageTwo->id)
+            ->assertJsonPath('list_price', 800)
+            ->assertJsonPath('effective_price', 800)
+            ->assertJsonPath('has_special_price', false);
 
         $subscription->refresh();
         $this->assertSame($packageTwo->id, $subscription->internet_package_id);
@@ -391,6 +396,33 @@ class CustomerControllerTest extends TestCase
         $this->assertNull($customer->learned_ip_package_id);
         $this->assertNull($customer->last_connected_ip);
         $this->assertNull($customer->last_connected_at);
+    }
+
+    public function test_customer_package_inline_editor_is_searchable_and_keyboard_accessible(): void
+    {
+        $user = User::factory()->create();
+        $user->permissions()->attach(Permission::where('name', 'manage_customers')->firstOrFail());
+        InternetPackage::create([
+            'name' => 'Searchable Package',
+            'speed' => '25 Mbps',
+            'monthly_price' => 900,
+            'status' => 'active',
+        ]);
+        Customer::create([
+            'name' => 'Search Package Party',
+            'phone' => '01722222224',
+            'connection_id' => 'SEARCH-PKG',
+            'address' => 'Kushtia',
+            'status' => 'active',
+            'is_customer' => true,
+        ]);
+
+        $this->actingAs($user)->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee('Click to search and change package')
+            ->assertSee("input.type = 'search'", false)
+            ->assertSee("input.placeholder = 'Search packages...'", false)
+            ->assertSee("input.setAttribute('role', 'combobox')", false);
     }
 
     public function test_customers_list_combines_mikrotik_id_and_ip_and_lists_routers(): void
