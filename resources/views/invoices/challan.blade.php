@@ -131,8 +131,6 @@
             letter-spacing: 1px;
         }
 
-        .print-document-label { display: none; }
-
         .status {
             display: inline-block;
             margin-top: 8px;
@@ -324,6 +322,7 @@
         body.bw-print .status { border-color: #111; background: #fff; }
 
         @page { size: A4; margin: 12mm 14mm; }
+        @page :first { margin-top: 5mm; }
 
         @media print {
             body { background: #fff; }
@@ -352,16 +351,6 @@
             }
             .toolbar,
             .page-help { display: none !important; }
-            .print-document-label {
-                display: block;
-                margin-bottom: 6mm;
-                color: var(--brand-dark);
-                font-size: 20px;
-                font-weight: 800;
-                letter-spacing: 1.5px;
-                text-align: right;
-            }
-            .page .brand-bar .bill-title h2 { display: none; }
             body.bw-print * {
                 text-shadow: none !important;
                 box-shadow: none !important;
@@ -594,7 +583,6 @@
     @include('partials.page_help', ['variant' => 'print'])
 
     <main class="page">
-        <div class="print-document-label">INVOICE</div>
         <section class="brand-bar">
             <div class="company">
                 <div>
