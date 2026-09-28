@@ -323,13 +323,32 @@
         body.bw-print .grand { background: #222; color: #fff; }
         body.bw-print .status { border-color: #111; background: #fff; }
 
-        @page { size: A4; margin: 0; }
+        @page { size: A4; margin: 12mm 14mm; }
 
         @media print {
             body { background: #fff; }
             table, th, td {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
+            }
+            table {
+                page-break-inside: auto;
+                break-inside: auto;
+            }
+            thead { display: table-header-group; }
+            tr {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .brand-bar,
+            .meta-grid,
+            .summary,
+            .amount-words,
+            .signatures,
+            .no-sign-note,
+            .footer {
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
             .toolbar,
             .page-help { display: none !important; }
@@ -370,13 +389,13 @@
                 border-color: #555 !important;
             }
             .page {
-                width: 210mm;
-                min-height: 287mm;
+                width: auto;
+                min-height: 0;
                 margin: 0;
-                padding: 12mm 14mm 10mm;
+                padding: 0;
                 box-shadow: none;
-                page-break-after: avoid;
-                break-after: avoid;
+                page-break-after: auto;
+                break-after: auto;
             }
 
             .signatures { margin-top: 22mm; }
@@ -388,10 +407,10 @@
             }
 
             body.compact-print .page {
-                height: 287mm;
+                height: auto;
                 min-height: 0;
-                padding: 7mm 9mm 6mm;
-                overflow: hidden;
+                padding: 0;
+                overflow: visible;
             }
 
             body.compact-print .brand-bar {
@@ -472,7 +491,7 @@
             }
 
             body.dense-print .page {
-                padding: 6mm 8mm;
+                padding: 0;
             }
 
             body.dense-print .brand-bar {
@@ -490,9 +509,8 @@
             body.dense-print th,
             body.dense-print td { padding: 2px 4px; line-height: 1.05; }
             body.dense-print tbody td:nth-child(2) {
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+                overflow-wrap: anywhere;
+                white-space: normal;
             }
             body.dense-print .summary { margin-top: 5px; }
             body.dense-print .notes,
