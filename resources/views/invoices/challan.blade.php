@@ -331,7 +331,8 @@
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
-            .toolbar { display: none; }
+            .toolbar,
+            .page-help { display: none !important; }
             .print-document-label {
                 display: block;
                 margin-bottom: 6mm;

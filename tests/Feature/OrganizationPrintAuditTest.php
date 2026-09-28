@@ -39,6 +39,7 @@ class OrganizationPrintAuditTest extends TestCase
             ->assertSee('id="printOrganization"', false)
             ->assertSee('id="showBankInformationOption" checked', false)
             ->assertSee('show-bank-information')
+            ->assertSee('.page-help { display: none !important; }', false)
             ->assertSee('Test Bank')->assertSee('123456789')->assertSee('987654');
 
         $pdf = $this->actingAs($user)->get(route('invoices.pdf', ['invoice' => $invoice, 'organization_id' => $organization->id]));
