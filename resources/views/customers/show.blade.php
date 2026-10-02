@@ -976,7 +976,7 @@
         @if ($overdueActive)
             <div class="customer-overdue-note {{ $syncFailing ? 'is-bad' : '' }}">
                 <strong>&#9888; Paid validity ended {{ abs($daysRemaining) }} day(s) ago &mdash; this party is still Active.</strong>
-                <div>The auto-disable job runs daily {{ \App\Support\BillingWindow::label() }}; a payment reactivates instantly at any time.</div>
+                <div>The auto-disable job runs {{ \App\Support\BillingWindow::scheduleLabel() }}; a payment reactivates instantly at any time.</div>
                 @if ($syncRouter)
                     <div>
                         Router &ldquo;{{ $syncRouter->name }}&rdquo; last synced

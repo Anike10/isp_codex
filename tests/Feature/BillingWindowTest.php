@@ -39,6 +39,17 @@ class BillingWindowTest extends TestCase
         $this->assertFalse(BillingWindow::isOpenNow(Carbon::parse('2026-08-28 15:00')));
     }
 
+    public function test_saved_skip_days_keep_the_window_closed_for_the_whole_day(): void
+    {
+        AppSetting::setValue(BillingWindow::SKIP_DAYS_KEY, json_encode([5]));
+
+        $this->assertSame([5], BillingWindow::skipDays());
+        $this->assertFalse(BillingWindow::isOpenNow(Carbon::parse('2026-08-28 12:00')));
+        $this->assertFalse(BillingWindow::isOpenNow(Carbon::parse('2026-08-28 17:00')));
+        $this->assertTrue(BillingWindow::isOpenNow(Carbon::parse('2026-08-27 12:00')));
+        $this->assertSame('12:00-17:00 except Friday', BillingWindow::scheduleLabel());
+    }
+
     public function test_end_before_start_collapses_to_the_start_hour(): void
     {
         AppSetting::setValue(BillingWindow::START_KEY, '16');
@@ -62,16 +73,20 @@ class BillingWindowTest extends TestCase
 
         $this->actingAs($user)->get(route('organizations.edit', $org))
             ->assertOk()
-            ->assertSee('Overdue Auto-Disable Schedule');
+            ->assertSee('Overdue Auto-Disable Schedule')
+            ->assertSee('Do not auto-disable on');
 
         $this->actingAs($user)->put(route('organizations.update', $org), [
             'name' => $org->name ?: 'Main',
             'is_active' => 1,
             'billing_disable_start_hour' => 10,
             'billing_disable_end_hour' => 16,
+            'billing_disable_skip_days_present' => 1,
+            'billing_disable_skip_days' => [5, 6],
         ])->assertRedirect(route('organizations.index'));
 
         $this->assertSame(['start' => 10, 'end' => 16], BillingWindow::window());
+        $this->assertSame([5, 6], BillingWindow::skipDays());
     }
 
     public function test_the_form_rejects_an_end_hour_before_the_start(): void
@@ -94,6 +109,23 @@ class BillingWindowTest extends TestCase
         $this->assertSame($originalName, $org->refresh()->name);
     }
 
+    public function test_the_form_can_clear_all_skip_days(): void
+    {
+        AppSetting::setValue(BillingWindow::SKIP_DAYS_KEY, json_encode([5]));
+        $user = $this->invoiceManager();
+        $org = Organization::defaultOrganization();
+
+        $this->actingAs($user)->put(route('organizations.update', $org), [
+            'name' => $org->name ?: 'Main',
+            'is_active' => 1,
+            'billing_disable_start_hour' => 12,
+            'billing_disable_end_hour' => 17,
+            'billing_disable_skip_days_present' => 1,
+        ])->assertRedirect(route('organizations.index'));
+
+        $this->assertSame([], BillingWindow::skipDays());
+    }
+
     public function test_the_command_skips_outside_the_window_unless_forced(): void
     {
         Carbon::setTestNow('2026-08-28 03:00:00');
@@ -101,6 +133,22 @@ class BillingWindowTest extends TestCase
         try {
             $this->assertSame(0, Artisan::call('billing:disable-overdue-customers'));
             $this->assertStringContainsString('Skipped', Artisan::output());
+
+            $this->assertSame(0, Artisan::call('billing:disable-overdue-customers', ['--force' => true]));
+            $this->assertStringContainsString('Disabled customers: 0', Artisan::output());
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_the_command_skips_a_configured_weekday_unless_forced(): void
+    {
+        AppSetting::setValue(BillingWindow::SKIP_DAYS_KEY, json_encode([5]));
+        Carbon::setTestNow('2026-08-28 13:00:00');
+
+        try {
+            $this->assertSame(0, Artisan::call('billing:disable-overdue-customers'));
+            $this->assertStringContainsString('Friday is configured as a no-auto-disable day', Artisan::output());
 
             $this->assertSame(0, Artisan::call('billing:disable-overdue-customers', ['--force' => true]));
             $this->assertStringContainsString('Disabled customers: 0', Artisan::output());

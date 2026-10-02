@@ -13,13 +13,25 @@ class OrganizationController extends Controller
     private const PAYMENT_NOTE_SETTING_KEY = 'invoice_payment_note';
 
     public function index() { return view('organizations.index', ['organizations' => Organization::orderByDesc('is_default')->orderBy('name')->get()]); }
-    public function create() { return view('organizations.form', ['organization' => new Organization, 'defaultPaymentNote' => $this->defaultPaymentNote(), 'billingWindow' => BillingWindow::window()]); }
+    public function create()
+    {
+        return view('organizations.form', [
+            'organization' => new Organization,
+            'defaultPaymentNote' => $this->defaultPaymentNote(),
+            'billingWindow' => BillingWindow::window(),
+            'billingSkipDays' => BillingWindow::skipDays(),
+            'billingDayOptions' => BillingWindow::dayOptions(),
+        ]);
+    }
+
     public function edit(Organization $organization)
     {
         return view('organizations.form', [
             'organization' => $organization,
             'defaultPaymentNote' => $this->defaultPaymentNote(),
             'billingWindow' => BillingWindow::window(),
+            'billingSkipDays' => BillingWindow::skipDays(),
+            'billingDayOptions' => BillingWindow::dayOptions(),
         ]);
     }
 
@@ -88,6 +100,9 @@ class OrganizationController extends Controller
             'is_default' => ['nullable', 'boolean'], 'is_active' => ['nullable', 'boolean'],
             'billing_disable_start_hour' => ['required_with:billing_disable_end_hour', 'integer', 'between:0,23'],
             'billing_disable_end_hour' => ['required_with:billing_disable_start_hour', 'integer', 'between:0,23', 'gte:billing_disable_start_hour'],
+            'billing_disable_skip_days_present' => ['nullable', 'boolean'],
+            'billing_disable_skip_days' => ['nullable', 'array'],
+            'billing_disable_skip_days.*' => ['integer', 'between:1,7', 'distinct'],
         ], [
             'billing_disable_end_hour.gte' => 'The auto-disable end hour must be the same as or later than the start hour.',
         ]);
@@ -105,31 +120,49 @@ class OrganizationController extends Controller
         return AppSetting::value(self::PAYMENT_NOTE_SETTING_KEY, '') ?: '';
     }
 
-    /** @return array{start: int, end: int}|null */
+    /** @return array{start: ?int, end: ?int, skip_days: ?array<int, int>}|null */
     private function extractBillingWindow(array &$data): ?array
     {
-        if (! array_key_exists('billing_disable_start_hour', $data)
-            && ! array_key_exists('billing_disable_end_hour', $data)) {
+        $hasWindow = array_key_exists('billing_disable_start_hour', $data)
+            || array_key_exists('billing_disable_end_hour', $data);
+        $hasSkipDays = array_key_exists('billing_disable_skip_days_present', $data)
+            || array_key_exists('billing_disable_skip_days', $data);
+
+        if (! $hasWindow && ! $hasSkipDays) {
             return null;
         }
 
         $window = [
-            'start' => (int) $data['billing_disable_start_hour'],
-            'end' => (int) $data['billing_disable_end_hour'],
+            'start' => $hasWindow ? (int) $data['billing_disable_start_hour'] : null,
+            'end' => $hasWindow ? (int) $data['billing_disable_end_hour'] : null,
+            'skip_days' => $hasSkipDays
+                ? array_values(array_unique(array_map('intval', $data['billing_disable_skip_days'] ?? [])))
+                : null,
         ];
-        unset($data['billing_disable_start_hour'], $data['billing_disable_end_hour']);
+        unset(
+            $data['billing_disable_start_hour'],
+            $data['billing_disable_end_hour'],
+            $data['billing_disable_skip_days_present'],
+            $data['billing_disable_skip_days']
+        );
 
         return $window;
     }
 
-    /** @param array{start: int, end: int}|null $window */
+    /** @param array{start: ?int, end: ?int, skip_days: ?array<int, int>}|null $window */
     private function saveBillingWindow(?array $window): void
     {
         if ($window === null) {
             return;
         }
 
-        AppSetting::setValue(BillingWindow::START_KEY, (string) $window['start']);
-        AppSetting::setValue(BillingWindow::END_KEY, (string) $window['end']);
+        if ($window['start'] !== null && $window['end'] !== null) {
+            AppSetting::setValue(BillingWindow::START_KEY, (string) $window['start']);
+            AppSetting::setValue(BillingWindow::END_KEY, (string) $window['end']);
+        }
+
+        if ($window['skip_days'] !== null) {
+            AppSetting::setValue(BillingWindow::SKIP_DAYS_KEY, json_encode($window['skip_days']));
+        }
     }
 }

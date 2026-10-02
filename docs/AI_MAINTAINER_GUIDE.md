@@ -1316,9 +1316,11 @@ account_balance - total_due_amount
 - A normal ISP customer with no paid service month/validity and no current grace period must be inactive, even when its RouterOS secret is enabled. Assigning a package or importing an enabled secret does not activate service.
 - Payment and grace are the normal activation paths. The former quick-activate action is no longer shown and its legacy endpoint rejects activation.
 - Organization settings define the daily window in which the hourly
-  `billing:disable-overdue-customers` job may run (default `12:00-17:00`). Both
-  the scheduler and command guard the window; an intentional out-of-window
-  manual run requires `--force`.
+  `billing:disable-overdue-customers` job may run (default `12:00-17:00`) and
+  the weekdays on which no new auto-disable may occur. A selected weekday is
+  blocked for its full calendar day. Both the scheduler and command guard the
+  complete schedule; an intentional out-of-schedule manual run requires
+  `--force`.
 
 ### Payment Allocation
 

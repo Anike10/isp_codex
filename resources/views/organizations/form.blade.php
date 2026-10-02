@@ -30,6 +30,10 @@
     $bwStart = (int) old('billing_disable_start_hour', $billingWindow['start']);
     $bwEnd = (int) old('billing_disable_end_hour', $billingWindow['end']);
     $bwHours = $bwEnd >= $bwStart ? range($bwStart, $bwEnd) : [$bwStart];
+    $bwSkipDays = old('billing_disable_skip_days_present') !== null
+        ? old('billing_disable_skip_days', [])
+        : $billingSkipDays;
+    $bwSkipDays = array_map('intval', (array) $bwSkipDays);
 @endphp
 <div>
     <label>Window start hour</label>
@@ -46,6 +50,19 @@
             <option value="{{ $h }}" @selected($bwEnd === $h)>{{ sprintf('%02d:00', $h) }}</option>
         @endfor
     </select>
+</div>
+<div class="full">
+    <label>Do not auto-disable on</label>
+    <input type="hidden" name="billing_disable_skip_days_present" value="1">
+    <div style="display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:8px">
+        @foreach ($billingDayOptions as $dayNumber => $dayLabel)
+            <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400">
+                <input type="checkbox" name="billing_disable_skip_days[]" value="{{ $dayNumber }}" style="width:auto" @checked(in_array($dayNumber, $bwSkipDays, true))>
+                {{ $dayLabel }}
+            </label>
+        @endforeach
+    </div>
+    <span class="muted">On selected days, no expired or overdue party will be newly set inactive. For example, select Friday to keep the auto-disable job off for all of Friday.</span>
 </div>
 <div class="full muted" id="billing-window-hint" data-tpl="The job fires on the hour at every step from start to end (%START% &rarr; %END% runs the check at %LIST%).">
     The job fires on the hour at every step from start to end ({{ sprintf('%02d:00', $bwStart) }} &rarr; {{ sprintf('%02d:00', $bwEnd) }} runs the check at {{ implode(', ', $bwHours) }}).

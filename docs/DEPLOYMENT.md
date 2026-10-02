@@ -368,8 +368,11 @@ Recommended cron entries use this path:
 
 The Laravel scheduler runs `billing:disable-overdue-customers` hourly only
 inside the configurable Organization auto-disable window (default
-`12:00-17:00`). The command also enforces the window for legacy direct cron
-calls; use `--force` only for an intentional manual run outside it.
+`12:00-17:00`) and skips every weekday selected under **Do not auto-disable
+on**. A selected day, such as Friday, is blocked for the full calendar day.
+The command enforces both the time window and skipped weekdays for legacy
+direct cron calls; use `--force` only for an intentional manual run outside
+the configured schedule.
 
 Confirm cron is installed for the correct user before changing it:
 

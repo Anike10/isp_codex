@@ -494,9 +494,9 @@ Artisan::command('bkash:prune-sms', function (BkashSmsRetentionService $retentio
     return self::SUCCESS;
 })->purpose('Delete old bKash SMS rows and non-payment junk failed SMS per the configured settings');
 
-Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defaults to today} {--force : Run even outside the configured daily window}', function (MikrotikCustomerSyncService $syncService) {
+Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defaults to today} {--force : Run even outside the configured schedule}', function (MikrotikCustomerSyncService $syncService) {
     if (! $this->option('force') && ! BillingWindow::isOpenNow()) {
-        $this->info('Skipped billing/service expiry disable outside the configured '.BillingWindow::label().' window. Use --force for an intentional manual run.');
+        $this->info('Skipped billing/service expiry disable because '.BillingWindow::closedReason().'. Use --force for an intentional manual run.');
 
         return self::SUCCESS;
     }
@@ -592,8 +592,9 @@ Artisan::command('billing:disable-overdue-customers {--date= : Cutoff date, defa
     return self::SUCCESS;
 })->purpose('Disable non-special customers after billing or service expiry and sync MikroTik inactive profile');
 
-// Runs every hour, but only inside the configurable daily window
-// (default 12:00–17:00) so parties are never cut off at night.
+// Runs every hour, but only inside the configurable daily window and outside
+// the selected no-auto-disable weekdays.
+// The default time window is 12:00-17:00.
 Schedule::command('billing:disable-overdue-customers')
     ->hourlyAt(0)
     ->when(fn (): bool => BillingWindow::isOpenNow())
