@@ -96,6 +96,47 @@ class MikrotikReconciliationTest extends TestCase
         $this->assertNotNull(MikrotikSyncIssue::firstOrFail()->resolved_at);
     }
 
+    public function test_mismatch_that_remains_after_sync_is_saved_as_a_failed_attempt(): void
+    {
+        $router = $this->router();
+        $customer = $this->customer($router, 'party-duplicate');
+
+        $customerSync = Mockery::mock(MikrotikCustomerSyncService::class);
+        $customerSync->shouldReceive('expectedProfile')->twice()->andReturn('inactive');
+        $customerSync->shouldReceive('syncRouter')->once()->andReturn([
+            'created' => 0,
+            'updated' => 1,
+            'moved_inactive' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'active_sessions_captured' => 0,
+            'messages' => [],
+        ]);
+
+        $duplicateRecords = [
+            ['.id' => '*1', 'name' => 'party-duplicate', 'profile' => 'inactive', 'service' => 'pppoe', 'disabled' => 'no'],
+            ['.id' => '*2', 'name' => 'PARTY-DUPLICATE', 'profile' => '20M', 'service' => 'pppoe', 'disabled' => 'no'],
+        ];
+        $import = Mockery::mock(MikrotikImportService::class);
+        $import->shouldReceive('liveRecords')->twice()->andReturn($duplicateRecords, $duplicateRecords);
+
+        $service = new MikrotikReconciliationService(
+            $customerSync,
+            $import,
+            app(MikrotikSyncAuditService::class),
+        );
+        $result = $service->reconcileRouter($router);
+
+        $this->assertSame(1, $result['mismatches']);
+        $this->assertSame(0, $result['corrected']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertDatabaseHas('mikrotik_sync_failures', [
+            'customer_id' => $customer->id,
+            'context' => 'nightly_reconciliation_unresolved',
+        ]);
+        $this->assertSame(1, MikrotikSyncIssue::whereNull('resolved_at')->firstOrFail()->attempt_count);
+    }
+
     public function test_dashboard_lists_only_issues_unresolved_for_at_least_24_hours(): void
     {
         $user = User::factory()->superAdmin()->create();

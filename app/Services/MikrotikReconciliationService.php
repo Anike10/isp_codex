@@ -57,6 +57,7 @@ class MikrotikReconciliationService
      */
     public function reconcileRouter(MikrotikRouter $router): array
     {
+        $startedAt = now()->startOfSecond();
         $customers = Customer::query()
             ->with('activeSubscription.package')
             ->assignedToMikrotikRouter($router->id)
@@ -94,6 +95,33 @@ class MikrotikReconciliationService
             $after = $this->importService->liveRecords($router, '/ppp/secret/print');
             $afterMismatchKeys = $this->inspectCustomers($router, $customers, $after);
             $this->syncAudit->resolveRouter($router);
+
+            $unloggedIssues = MikrotikSyncIssue::query()
+                ->where('mikrotik_router_id', $router->id)
+                ->whereIn('customer_id', $afterMismatchKeys)
+                ->whereNull('resolved_at')
+                ->where(function ($query) use ($startedAt): void {
+                    $query->whereNull('last_attempted_at')
+                        ->orWhere('last_attempted_at', '<', $startedAt);
+                })
+                ->with('customer')
+                ->get();
+
+            foreach ($unloggedIssues as $issue) {
+                if (! $issue->customer) {
+                    continue;
+                }
+
+                $failed++;
+                $message = 'Mismatch remains after reconciliation verification. '.($issue->details ?: 'RouterOS still differs from the app.');
+                $messages[] = "{$issue->username}: {$message}";
+                $this->syncAudit->recordFailure(
+                    $router,
+                    $issue->customer,
+                    'nightly_reconciliation_unresolved',
+                    $message
+                );
+            }
         } catch (Throwable $exception) {
             $failed++;
             $messages[] = 'Verification check failed: '.$exception->getMessage();
