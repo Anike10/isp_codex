@@ -14,7 +14,10 @@ class MikrotikCustomerSyncService
 {
     public const DEFAULT_PASSWORD = '4321';
 
-    public function __construct(private readonly MikrotikSyncAuditService $syncAudit) {}
+    public function __construct(
+        private readonly MikrotikSyncAuditService $syncAudit,
+        private readonly MikrotikInactivePortalService $inactivePortal,
+    ) {}
 
     public function sync(Customer $customer): string
     {
@@ -144,6 +147,7 @@ class MikrotikCustomerSyncService
             'skipped' => 0,
             'failed' => 0,
             'active_sessions_captured' => 0,
+            'inactive_portal_configured' => false,
             'messages' => [],
         ];
 
@@ -152,6 +156,16 @@ class MikrotikCustomerSyncService
             $this->assertRouterHasUniqueSecretNames($client);
             $summary['active_sessions_captured'] = $this->captureActiveSessions($client, $router);
             $this->ensurePppProfile($client, $router->inactive_pppoe_profile);
+
+            if ($this->inactivePortal->hasConfiguredNumbers()) {
+                try {
+                    $this->inactivePortal->configureWithClient($client, $router);
+                    $summary['inactive_portal_configured'] = true;
+                } catch (Throwable $exception) {
+                    // Portal setup must never stop the core PPPoE customer sync.
+                    $summary['messages'][] = 'Please Call redirect: '.$exception->getMessage();
+                }
+            }
 
             Customer::query()
                 ->with('activeSubscription.package')

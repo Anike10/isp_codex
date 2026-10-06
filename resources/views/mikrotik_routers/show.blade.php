@@ -39,6 +39,21 @@
     </div>
 @endif
 
+@unless ($mikrotikRouter->pushDisabled())
+    <div class="card" style="margin-bottom:16px; border:1px solid var(--line)">
+        <div class="actions" style="justify-content:space-between; align-items:center">
+            <div>
+                <strong>Please Call redirect</strong>
+                <div class="muted" style="margin-top:4px">Put every connected user of the inactive profile into the portal policy and redirect HTTP requests to <a href="{{ route('service-inactive') }}" target="_blank" rel="noopener">{{ route('service-inactive') }}</a>.</div>
+            </div>
+            <form method="post" action="{{ route('mikrotik-routers.inactive-portal.configure', $mikrotikRouter) }}" onsubmit="return confirm('Configure the inactive-profile Please Call redirect on this MikroTik now?')">
+                @csrf
+                <button class="btn" type="submit">Configure Please Call Redirect</button>
+            </form>
+        </div>
+    </div>
+@endunless
+
 <div class="card router-health-card" style="margin-bottom:16px; border:1px solid var(--line)">
     <div class="actions" style="justify-content:space-between; align-items:center">
         <div class="actions" style="gap:18px">

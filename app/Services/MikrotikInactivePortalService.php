@@ -1,0 +1,323 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\MikrotikRouter;
+use App\Models\Organization;
+use RuntimeException;
+use Throwable;
+
+class MikrotikInactivePortalService
+{
+    public const INACTIVE_ADDRESS_LIST = 'isp-codex-inactive';
+
+    public const PORTAL_ADDRESS_LIST = 'isp-codex-please-call';
+
+    private const RULE_PREFIX = 'ISP Codex Please Call';
+
+    public function portalUrl(): string
+    {
+        return route('service-inactive', [], true);
+    }
+
+    public function hasConfiguredNumbers(): bool
+    {
+        return (Organization::defaultOrganization()?->pleaseCallNumbers() ?? []) !== [];
+    }
+
+    /**
+     * @return array{configured: int, skipped: int, failed: int, messages: array<int, string>}
+     */
+    public function configureAll(): array
+    {
+        $summary = ['configured' => 0, 'skipped' => 0, 'failed' => 0, 'messages' => []];
+
+        foreach (MikrotikRouter::query()->where('status', 'active')->orderBy('id')->get() as $router) {
+            if ($router->pushDisabled()) {
+                $summary['skipped']++;
+                $summary['messages'][] = "{$router->name}: skipped (read-only or REST-import router).";
+
+                continue;
+            }
+
+            try {
+                $this->configure($router);
+                $summary['configured']++;
+            } catch (Throwable $exception) {
+                $summary['failed']++;
+                $summary['messages'][] = "{$router->name}: {$exception->getMessage()}";
+            }
+        }
+
+        return $summary;
+    }
+
+    /** @return array{profile: string, address_list: string, portal_url: string, proxy_port: int, reconnected: int} */
+    public function configure(MikrotikRouter $router): array
+    {
+        if ($router->pushDisabled()) {
+            throw new RuntimeException('This router is read-only or uses the REST import transport, so configuration cannot be pushed.');
+        }
+
+        $client = new RouterOsClient;
+
+        try {
+            $client->connect(
+                $router->ip_address,
+                $router->api_port,
+                $router->username,
+                $router->apiPassword(),
+                10
+            );
+
+            return $this->configureWithClient($client, $router);
+        } finally {
+            $client->close();
+        }
+    }
+
+    /** @return array{profile: string, address_list: string, portal_url: string, proxy_port: int, reconnected: int} */
+    public function configureWithClient(RouterOsClient $client, MikrotikRouter $router): array
+    {
+        if (! $this->hasConfiguredNumbers()) {
+            throw new RuntimeException('Add at least one Please Call number to the default Organization before applying the redirect.');
+        }
+
+        $profile = trim((string) $router->inactive_pppoe_profile);
+        if ($profile === '') {
+            throw new RuntimeException('The inactive PPPoE profile name is empty.');
+        }
+
+        $url = $this->portalUrl();
+        $urlParts = parse_url($url);
+        $scheme = mb_strtolower((string) ($urlParts['scheme'] ?? ''));
+        $host = trim((string) ($urlParts['host'] ?? ''));
+
+        if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
+            throw new RuntimeException("The generated Please Call URL is invalid: {$url}");
+        }
+
+        if (in_array(mb_strtolower($host), ['localhost', '127.0.0.1', '::1'], true)) {
+            throw new RuntimeException('APP_URL must use the public portal domain or server IP; localhost cannot be opened by PPPoE customers.');
+        }
+
+        $portalPorts = collect([80, 443, (int) ($urlParts['port'] ?? ($scheme === 'https' ? 443 : 80))])
+            ->filter(fn (int $port): bool => $port >= 1 && $port <= 65535)
+            ->unique()
+            ->implode(',');
+
+        $this->ensureInactiveProfileAddressList($client, $profile);
+
+        $proxyRules = $client->command('/ip/proxy/access/print', ['.proplist' => '.id,comment']);
+        $ownedProxyRules = array_values(array_filter($proxyRules, fn (array $row): bool => $this->isTagged($row)));
+        $unmanagedProxyRules = array_values(array_filter($proxyRules, fn (array $row): bool => ! $this->isTagged($row)));
+        $proxy = $client->command('/ip/proxy/print', [
+            '.proplist' => 'enabled,port',
+        ])[0] ?? [];
+        $proxyEnabled = $this->routerBoolean($proxy['enabled'] ?? false);
+
+        if (($proxyEnabled && $ownedProxyRules === []) || $unmanagedProxyRules !== []) {
+            throw new RuntimeException('RouterOS Web Proxy already has another configuration. The app left it unchanged to avoid breaking existing proxy rules.');
+        }
+
+        $proxyPort = $this->proxyPort($proxy, $router);
+
+        $this->removeTaggedRows($client, '/ip/proxy/access');
+        $this->removeTaggedRows($client, '/ip/firewall/nat');
+        $this->removeTaggedRows($client, '/ip/firewall/filter');
+        $this->removeTaggedRows($client, '/ip/firewall/address-list');
+
+        $client->command('/ip/firewall/address-list/add', [
+            'list' => self::PORTAL_ADDRESS_LIST,
+            'address' => $host,
+            'comment' => self::RULE_PREFIX.' destination',
+        ]);
+
+        // Proxy access rules are first-match. Add redirect first, then place the
+        // portal exception above it so the redirect cannot loop back on itself.
+        $client->command('/ip/proxy/access/add', [
+            'local-port' => (string) $proxyPort,
+            'action' => 'deny',
+            'redirect-to' => $url,
+            'comment' => self::RULE_PREFIX.' redirect',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/proxy/access/add', [
+            'local-port' => (string) $proxyPort,
+            'dst-host' => $host,
+            'action' => 'allow',
+            'comment' => self::RULE_PREFIX.' allow portal host',
+            'place-before' => '0',
+        ]);
+
+        // Enable only after the app-owned access rules exist. If a later command
+        // fails, the next apply can still recognise this proxy as app-managed.
+        $client->command('/ip/proxy/set', [
+            'enabled' => 'yes',
+            'port' => (string) $proxyPort,
+            'cache-on-disk' => 'no',
+            'max-cache-size' => 'none',
+        ]);
+
+        // Add restrictive rules first, then insert exceptions above them.
+        $client->command('/ip/firewall/filter/add', [
+            'chain' => 'input',
+            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+            'protocol' => 'tcp',
+            'dst-port' => (string) $proxyPort,
+            'action' => 'accept',
+            'comment' => self::RULE_PREFIX.' allow transparent proxy',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/firewall/filter/add', [
+            'chain' => 'forward',
+            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+            'action' => 'reject',
+            'reject-with' => 'icmp-network-unreachable',
+            'comment' => self::RULE_PREFIX.' block other traffic',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/firewall/filter/add', [
+            'chain' => 'forward',
+            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+            'protocol' => 'tcp',
+            'dst-port' => '53',
+            'action' => 'accept',
+            'comment' => self::RULE_PREFIX.' allow DNS TCP',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/firewall/filter/add', [
+            'chain' => 'forward',
+            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+            'protocol' => 'udp',
+            'dst-port' => '53',
+            'action' => 'accept',
+            'comment' => self::RULE_PREFIX.' allow DNS UDP',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/firewall/filter/add', [
+            'chain' => 'forward',
+            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+            'dst-address-list' => self::PORTAL_ADDRESS_LIST,
+            'protocol' => 'tcp',
+            'dst-port' => $portalPorts,
+            'action' => 'accept',
+            'comment' => self::RULE_PREFIX.' allow portal',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/firewall/nat/add', [
+            'chain' => 'dstnat',
+            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+            'protocol' => 'tcp',
+            'dst-port' => '80',
+            'action' => 'redirect',
+            'to-ports' => (string) $proxyPort,
+            'comment' => self::RULE_PREFIX.' HTTP redirect',
+            'place-before' => '0',
+        ]);
+
+        // The PPP profile address-list is attached when a session connects.
+        // Reconnect current inactive sessions once so the policy applies now.
+        $activeSessions = $client->command('/ppp/active/print', [
+            '?profile' => $profile,
+            '.proplist' => '.id,name,profile',
+        ]);
+        $reconnected = 0;
+        foreach ($activeSessions as $session) {
+            if (empty($session['.id']) || trim((string) ($session['profile'] ?? '')) !== $profile) {
+                continue;
+            }
+
+            $client->command('/ppp/active/remove', ['.id' => $session['.id']]);
+            $reconnected++;
+        }
+
+        return [
+            'profile' => $profile,
+            'address_list' => self::INACTIVE_ADDRESS_LIST,
+            'portal_url' => $url,
+            'proxy_port' => $proxyPort,
+            'reconnected' => $reconnected,
+        ];
+    }
+
+    private function ensureInactiveProfileAddressList(RouterOsClient $client, string $profile): void
+    {
+        $profiles = $client->command('/ppp/profile/print', [
+            '?name' => $profile,
+            '.proplist' => '.id,name,address-list,use-ipv6',
+        ]);
+
+        if ($profiles === []) {
+            $client->command('/ppp/profile/add', [
+                'name' => $profile,
+                'address-list' => self::INACTIVE_ADDRESS_LIST,
+                'use-ipv6' => 'no',
+            ]);
+
+            return;
+        }
+
+        if (count($profiles) !== 1 || trim((string) ($profiles[0]['name'] ?? '')) !== $profile) {
+            throw new RuntimeException("RouterOS returned a mismatched PPP profile while configuring {$profile}.");
+        }
+
+        $changes = [];
+        if (trim((string) ($profiles[0]['address-list'] ?? '')) !== self::INACTIVE_ADDRESS_LIST) {
+            $changes['address-list'] = self::INACTIVE_ADDRESS_LIST;
+        }
+        if (mb_strtolower(trim((string) ($profiles[0]['use-ipv6'] ?? ''))) !== 'no') {
+            $changes['use-ipv6'] = 'no';
+        }
+
+        if ($changes !== []) {
+            $client->command('/ppp/profile/set', [
+                '.id' => $profiles[0]['.id'],
+                ...$changes,
+            ]);
+        }
+    }
+
+    /** @return array<int, array<string, string>> */
+    private function taggedRows(RouterOsClient $client, string $printCommand): array
+    {
+        return array_values(array_filter(
+            $client->command($printCommand, ['.proplist' => '.id,comment']),
+            fn (array $row): bool => $this->isTagged($row)
+        ));
+    }
+
+    /** @param array<string, string> $row */
+    private function isTagged(array $row): bool
+    {
+        return str_starts_with(trim((string) ($row['comment'] ?? '')), self::RULE_PREFIX);
+    }
+
+    private function removeTaggedRows(RouterOsClient $client, string $menu): void
+    {
+        foreach ($this->taggedRows($client, $menu.'/print') as $row) {
+            if (! empty($row['.id'])) {
+                $client->command($menu.'/remove', ['.id' => $row['.id']]);
+            }
+        }
+    }
+
+    /** @param array<string, string> $proxy */
+    private function proxyPort(array $proxy, MikrotikRouter $router): int
+    {
+        $current = filter_var($proxy['port'] ?? null, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1, 'max_range' => 65535],
+        ]);
+
+        if ($current && (int) $current !== (int) $router->api_port) {
+            return (int) $current;
+        }
+
+        return (int) $router->api_port === 8080 ? 3128 : 8080;
+    }
+
+    private function routerBoolean(mixed $value): bool
+    {
+        return in_array(mb_strtolower(trim((string) $value)), ['true', 'yes', '1', 'on'], true);
+    }
+}

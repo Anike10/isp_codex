@@ -19,6 +19,7 @@ use App\Http\Controllers\FleetMaintenanceController;
 use App\Http\Controllers\FleetOperationController;
 use App\Http\Controllers\FleetReportController;
 use App\Http\Controllers\InHouseUseController;
+use App\Http\Controllers\InactivePortalController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MikrotikImportController;
 use App\Http\Controllers\MikrotikRouterController;
@@ -49,6 +50,8 @@ use App\Http\Controllers\WarehouseController;
 use App\Http\Controllers\WarrantyClaimController;
 use App\Models\MikrotikRouter;
 use Illuminate\Support\Facades\Route;
+
+Route::get('please-call', InactivePortalController::class)->name('service-inactive');
 
 Route::middleware('guest')->group(function () {
     Route::get('login', [AuthController::class, 'showLogin'])->name('login');
@@ -287,6 +290,7 @@ Route::middleware('auth')->group(function () {
         Route::post('mikrotik-routers/{mikrotikRouter}/import/secrets', [MikrotikImportController::class, 'importSecrets'])->name('mikrotik-routers.import.secrets');
         Route::post('mikrotik-routers/{mikrotikRouter}/import/active-users', [MikrotikImportController::class, 'importActiveUsers'])->name('mikrotik-routers.import.active-users');
         Route::post('mikrotik-routers/{mikrotikRouter}/inactive-profile/create', [MikrotikRouterController::class, 'ensureInactivePppProfile'])->name('mikrotik-routers.inactive-profile.create');
+        Route::post('mikrotik-routers/{mikrotikRouter}/inactive-portal/configure', [MikrotikRouterController::class, 'configureInactivePortal'])->name('mikrotik-routers.inactive-portal.configure');
         Route::get('mikrotik-routers/{mikrotikRouter}/profiles', [MikrotikRouterDataController::class, 'profiles'])->name('mikrotik-routers.profiles.index');
         Route::get('mikrotik-routers/{mikrotikRouter}/pools', [MikrotikRouterDataController::class, 'pools'])->name('mikrotik-routers.pools.index');
         Route::post('mikrotik-routers/{mikrotikRouter}/pools', [MikrotikRouterDataController::class, 'createPool'])->name('mikrotik-routers.pools.store');

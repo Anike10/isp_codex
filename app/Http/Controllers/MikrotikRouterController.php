@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\MikrotikRouter;
 use App\Services\MikrotikImportService;
+use App\Services\MikrotikInactivePortalService;
 use App\Services\RouterOsClient;
 use App\Services\RouterOsConnectionDiagnostic;
 use App\Services\RouterOsRestClient;
@@ -96,6 +97,22 @@ class MikrotikRouterController extends Controller
             return back()->with('success', "Inactive profile {$mikrotikRouter->inactive_pppoe_profile} already exists on {$mikrotikRouter->name}.");
         } catch (Throwable $exception) {
             return back()->with('error', 'Could not create inactive profile: '.$exception->getMessage());
+        }
+    }
+
+    public function configureInactivePortal(MikrotikRouter $mikrotikRouter, MikrotikInactivePortalService $inactivePortal)
+    {
+        try {
+            $result = $inactivePortal->configure($mikrotikRouter);
+
+            return back()->with(
+                'success',
+                "Please Call redirect configured on {$mikrotikRouter->name}. "
+                ."Inactive profile {$result['profile']} now redirects HTTP requests to {$result['portal_url']}. "
+                ."Reconnected {$result['reconnected']} active inactive-profile session(s)."
+            );
+        } catch (Throwable $exception) {
+            return back()->with('error', 'Could not configure Please Call redirect: '.$exception->getMessage());
         }
     }
 

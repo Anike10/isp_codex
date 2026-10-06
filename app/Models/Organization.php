@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Organization extends Model
 {
-    protected $fillable = ['name', 'address', 'mobile', 'phone', 'email', 'website', 'tax_id', 'logo_url', 'footer_note', 'default_without_signature', 'show_organization_selector', 'bank_name', 'bank_account_name', 'bank_account_number', 'bank_branch', 'bank_routing_number', 'show_bank_info_on_invoice', 'is_default', 'is_active'];
+    protected $fillable = ['name', 'address', 'mobile', 'phone', 'please_call_numbers', 'please_call_brand_name', 'please_call_title', 'please_call_message', 'please_call_footer', 'email', 'website', 'tax_id', 'logo_url', 'footer_note', 'default_without_signature', 'show_organization_selector', 'bank_name', 'bank_account_name', 'bank_account_number', 'bank_branch', 'bank_routing_number', 'show_bank_info_on_invoice', 'is_default', 'is_active'];
 
     protected function casts(): array
     {
@@ -28,5 +28,16 @@ class Organization extends Model
     public static function defaultOrganization(): ?self
     {
         return static::query()->where('is_active', true)->orderByDesc('is_default')->orderBy('name')->first();
+    }
+
+    /** @return array<int, string> */
+    public function pleaseCallNumbers(): array
+    {
+        return collect(preg_split('/\R/u', (string) $this->please_call_numbers))
+            ->map(fn (string $number) => trim($number))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 }

@@ -20,10 +20,12 @@ return new class extends Migration
             $table->text('details')->nullable();
             $table->text('last_error')->nullable();
             $table->unsignedInteger('attempt_count')->default(0);
-            $table->timestamp('first_detected_at');
-            $table->timestamp('last_detected_at');
-            $table->timestamp('last_attempted_at')->nullable();
-            $table->timestamp('resolved_at')->nullable();
+            // DATETIME avoids MariaDB's implicit-default rules for multiple
+            // non-null TIMESTAMP columns while preserving Laravel date casts.
+            $table->dateTime('first_detected_at');
+            $table->dateTime('last_detected_at');
+            $table->dateTime('last_attempted_at')->nullable();
+            $table->dateTime('resolved_at')->nullable();
             $table->timestamps();
 
             $table->index(['resolved_at', 'first_detected_at']);
@@ -39,7 +41,7 @@ return new class extends Migration
             $table->string('username')->nullable();
             $table->string('context');
             $table->text('error_message');
-            $table->timestamp('attempted_at');
+            $table->dateTime('attempted_at');
             $table->timestamps();
 
             $table->index(['mikrotik_router_id', 'attempted_at']);
