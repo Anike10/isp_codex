@@ -153,8 +153,8 @@ class MikrotikInactivePortalService
         ]);
         $client->command('/ip/proxy/access/add', [
             'local-port' => (string) $proxyPort,
-            'action' => 'deny',
-            'redirect-to' => $url,
+            'action' => 'redirect',
+            'action-data' => $url,
             'comment' => self::RULE_PREFIX.' redirect',
         ]);
 

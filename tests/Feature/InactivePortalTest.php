@@ -159,7 +159,9 @@ class InactivePortalTest extends TestCase
             && ($data['dst-port'] ?? null) === '80'
             && ($data['action'] ?? null) === 'redirect'
         );
-        $this->assertCommand($client, '/ip/proxy/access/add', fn (array $data): bool => ($data['redirect-to'] ?? null) === 'https://portal.example.test/please-call'
+        $this->assertCommand($client, '/ip/proxy/access/add', fn (array $data): bool => ($data['action'] ?? null) === 'redirect'
+            && ($data['action-data'] ?? null) === 'https://portal.example.test/please-call'
+            && ! array_key_exists('redirect-to', $data)
             && ! array_key_exists('place-before', $data)
         );
         $this->assertCommand($client, '/ip/firewall/filter/add', fn (array $data): bool => ($data['chain'] ?? null) === 'input'
