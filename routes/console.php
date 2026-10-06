@@ -10,6 +10,8 @@ use App\Models\User;
 use App\Services\BkashSmsRetentionService;
 use App\Services\MikrotikCustomerSyncService;
 use App\Services\MikrotikImportService;
+use App\Services\MikrotikReconciliationService;
+use App\Services\MikrotikSyncAuditService;
 use App\Services\NightlyLiveSyncService;
 use App\Services\OnuPowerHistoryService;
 use App\Services\PppSessionListenerService;
@@ -90,7 +92,7 @@ Artisan::command('mikrotik:sync-customers', function (MikrotikCustomerSyncServic
     return $failed === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Create or update MikroTik PPPoE users for all customers');
 
-Artisan::command('mikrotik:sync-router-users {--force : Sync every active router now, ignoring interval}', function (MikrotikCustomerSyncService $syncService) {
+Artisan::command('mikrotik:sync-router-users {--force : Sync every active router now, ignoring interval}', function (MikrotikCustomerSyncService $syncService, MikrotikSyncAuditService $syncAudit) {
     $synced = 0;
     $failed = 0;
 
@@ -121,6 +123,7 @@ Artisan::command('mikrotik:sync-router-users {--force : Sync every active router
                 $this->line("{$router->name} ({$router->ip_address}): {$summaryText}");
             } catch (Throwable $exception) {
                 $failed++;
+                $syncAudit->recordFailure($router, null, 'scheduled_router_sync', $exception);
                 $router->update([
                     'last_pppoe_sync_at' => now(),
                     'last_pppoe_sync_summary' => 'failed: '.$exception->getMessage(),
@@ -133,6 +136,32 @@ Artisan::command('mikrotik:sync-router-users {--force : Sync every active router
 
     return $failed === 0 ? self::SUCCESS : self::FAILURE;
 })->purpose('Verify and sync PPPoE users on MikroTik routers by each router interval');
+
+Artisan::command('mikrotik:reconcile-customers', function (MikrotikReconciliationService $reconciliation) {
+    $summary = $reconciliation->reconcileAll();
+
+    foreach ($summary['results'] as $result) {
+        $line = "{$result['router']}: customers={$result['customers']}, mismatches={$result['mismatches']}, corrected={$result['corrected']}, failed={$result['failed']}";
+        $result['failed'] > 0 ? $this->warn($line) : $this->line($line);
+    }
+
+    $this->info("Nightly MikroTik reconciliation finished. Routers: {$summary['routers']}. Customers: {$summary['customers']}. Mismatches: {$summary['mismatches']}. Corrected: {$summary['corrected']}. Failures: {$summary['failed']}.");
+
+    return $summary['failed'] === 0 ? self::SUCCESS : self::FAILURE;
+})->purpose('Nightly compare and correct every app-managed PPPoE secret/profile on active writable routers');
+
+Artisan::command('mikrotik:retry-failed-syncs', function (MikrotikReconciliationService $reconciliation) {
+    $summary = $reconciliation->retryUnresolved();
+
+    foreach ($summary['results'] as $result) {
+        $line = "{$result['router']}: customers={$result['customers']}, mismatches={$result['mismatches']}, corrected={$result['corrected']}, failed={$result['failed']}";
+        $result['failed'] > 0 ? $this->warn($line) : $this->line($line);
+    }
+
+    $this->info("Daily failed-sync retry finished. Routers: {$summary['routers']}. Corrected: {$summary['corrected']}. Failures: {$summary['failed']}.");
+
+    return $summary['failed'] === 0 ? self::SUCCESS : self::FAILURE;
+})->purpose('Retry routers that still have unresolved MikroTik sync failures or mismatches');
 
 Artisan::command('mikrotik:sync-active-macs {--force : Kept for compatibility; every active router is polled on every run}', function (MikrotikCustomerSyncService $syncService) {
     $synced = 0;
@@ -603,6 +632,14 @@ Schedule::command('billing:disable-overdue-customers')
 Schedule::command('mikrotik:sync-router-users')
     ->hourly()
     ->withoutOverlapping();
+
+Schedule::command('mikrotik:reconcile-customers')
+    ->dailyAt('02:30')
+    ->withoutOverlapping(360);
+
+Schedule::command('mikrotik:retry-failed-syncs')
+    ->dailyAt('12:30')
+    ->withoutOverlapping(360);
 
 Schedule::command('mikrotik:import-secrets')
     ->everyThreeHours()

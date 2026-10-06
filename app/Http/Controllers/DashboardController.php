@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\MikrotikImportedSecret;
+use App\Models\MikrotikSyncIssue;
 use App\Models\Product;
 use App\Models\SupportTicket;
 use App\Services\MikrotikImportService;
@@ -24,6 +25,16 @@ class DashboardController extends Controller
             $unmanagedRouterUsersCheckedAt = MikrotikImportedSecret::max('imported_at');
         }
 
+        $mikrotikIssueQuery = MikrotikSyncIssue::query()
+            ->whereNull('resolved_at')
+            ->where('first_detected_at', '<=', now()->subDay());
+        $mikrotikIssueCount = (clone $mikrotikIssueQuery)->count();
+        $mikrotikSyncIssues = $mikrotikIssueQuery
+            ->with(['router', 'customer'])
+            ->oldest('first_detected_at')
+            ->limit(100)
+            ->get();
+
         return view('dashboard', [
             'totalCustomers' => Customer::count(),
             'activeCustomers' => Customer::where('status', 'active')->count(),
@@ -35,6 +46,8 @@ class DashboardController extends Controller
             'recentTickets' => SupportTicket::with('customer')->where('status', '!=', 'closed')->latest()->limit(5)->get(),
             'unmanagedRouterUsers' => $unmanagedRouterUsers,
             'unmanagedRouterUsersCheckedAt' => $unmanagedRouterUsersCheckedAt,
+            'mikrotikSyncIssues' => $mikrotikSyncIssues,
+            'mikrotikIssueCount' => $mikrotikIssueCount,
         ]);
     }
 }

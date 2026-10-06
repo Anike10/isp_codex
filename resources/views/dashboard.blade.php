@@ -7,6 +7,7 @@
     $canOpenCustomers = auth()->user()?->hasPermission('manage_customers');
     $canOpenProducts = auth()->user()?->hasPermission('manage_products');
     $canSeeRouterUsers = auth()->user()?->hasPermission('view_unmanaged_router_users');
+    $canManageRouters = auth()->user()?->hasPermission('manage_mikrotik_routers');
 
     $statBlocks = [
         ['label' => 'Parties', 'value' => $totalCustomers, 'href' => $canOpenCustomers ? route('customers.index') : null],
@@ -50,6 +51,65 @@
         @endif
     @endforeach
 </div>
+
+@if ($mikrotikIssueCount > 0)
+    <section class="card" style="margin-top:16px;border-color:#f3b4b4" id="mikrotik-sync-issues">
+        <div class="section-head" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+            <div>
+                <h2 style="margin-bottom:2px">MikroTik mismatches unresolved for 24+ hours <span class="badge overdue">{{ $mikrotikIssueCount }}</span></h2>
+                <div class="muted">The daily retry and nightly reconciliation are still trying to correct these records. Every failed attempt is kept in the sync-failure log.</div>
+            </div>
+        </div>
+
+        <div class="table-scroll" style="margin-top:10px">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Router</th>
+                        <th>Party / username</th>
+                        <th>Mismatch</th>
+                        <th>Expected</th>
+                        <th>Actual</th>
+                        <th>Unresolved since</th>
+                        <th>Attempts</th>
+                        <th>Last failure</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($mikrotikSyncIssues as $issue)
+                        <tr>
+                            <td>
+                                @if ($canManageRouters && $issue->router)
+                                    <a href="{{ route('mikrotik-routers.show', $issue->router) }}">{{ $issue->router->name }}</a>
+                                @else
+                                    {{ $issue->router?->name ?? 'Removed router' }}
+                                @endif
+                            </td>
+                            <td>
+                                @if ($canOpenCustomers && $issue->customer)
+                                    <a href="{{ route('customers.show', $issue->customer) }}">{{ $issue->customer->name }}</a><br>
+                                @elseif ($issue->customer)
+                                    {{ $issue->customer->name }}<br>
+                                @endif
+                                <code>{{ $issue->username ?: 'router-wide' }}</code>
+                            </td>
+                            <td>{{ $issue->details ?: str_replace('_', ' ', $issue->issue_type) }}</td>
+                            <td>{{ $issue->expected_profile ?: '—' }}</td>
+                            <td>{{ $issue->actual_profile ?: '—' }}</td>
+                            <td title="{{ $issue->first_detected_at?->format('d/m/Y H:i:s') }}">{{ $issue->first_detected_at?->diffForHumans() }}</td>
+                            <td>{{ $issue->attempt_count }}</td>
+                            <td>{{ $issue->last_error ?: 'Mismatch remains after reconciliation.' }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+
+        @if ($mikrotikIssueCount > $mikrotikSyncIssues->count())
+            <p class="muted" style="margin:10px 0 0">Showing the oldest {{ $mikrotikSyncIssues->count() }} of {{ $mikrotikIssueCount }} unresolved mismatches.</p>
+        @endif
+    </section>
+@endif
 
 @if ($canSeeRouterUsers)
     @php $routerUserCount = $unmanagedRouterUsers->flatten(1)->count(); @endphp

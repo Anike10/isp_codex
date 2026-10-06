@@ -14,6 +14,8 @@ class MikrotikCustomerSyncService
 {
     public const DEFAULT_PASSWORD = '4321';
 
+    public function __construct(private readonly MikrotikSyncAuditService $syncAudit) {}
+
     public function sync(Customer $customer): string
     {
         $customer->loadMissing(['activeSubscription.package', 'mikrotikRouters']);
@@ -39,8 +41,10 @@ class MikrotikCustomerSyncService
                 $client->connect($router->ip_address, $router->api_port, $router->username, $router->apiPassword());
 
                 $results[] = "{$routerLabel}: ".$this->syncPppSecret($client, $customer, $router);
+                $this->syncAudit->resolveCustomerAfterAttempt($router, $customer);
             } catch (Throwable $exception) {
                 $failures[] = "{$routerLabel}: failed - ".$exception->getMessage();
+                $this->syncAudit->recordFailure($router, $customer, 'customer_sync', $exception);
             } finally {
                 $client->close();
             }
@@ -157,6 +161,7 @@ class MikrotikCustomerSyncService
                     foreach ($customers as $customer) {
                         try {
                             $status = $this->syncPppSecret($client, $customer, $router);
+                            $this->syncAudit->resolveCustomerAfterAttempt($router, $customer);
 
                             if ($status === 'created') {
                                 $summary['created']++;
@@ -170,6 +175,7 @@ class MikrotikCustomerSyncService
                         } catch (Throwable $exception) {
                             $summary['failed']++;
                             $summary['messages'][] = "{$customer->connection_id}: ".$exception->getMessage();
+                            $this->syncAudit->recordFailure($router, $customer, 'router_customer_sync', $exception);
                         }
                     }
                 });
@@ -463,6 +469,24 @@ class MikrotikCustomerSyncService
         return $this->updateActiveConnectionData($router, $sessions)['matched'];
     }
 
+    public function expectedProfile(Customer $customer, MikrotikRouter $router): string
+    {
+        $customer->loadMissing(['activeSubscription.package']);
+        $subscription = $customer->activeSubscription
+            ?: ($customer->never_suspend ? $customer->latestSubscription()->with('package')->first() : null);
+        $package = $subscription?->package;
+
+        if ($customer->never_suspend) {
+            $inactive = ! $package;
+        } else {
+            $inactive = $customer->status !== 'active' || ! $subscription || $subscription->status !== 'active' || ! $package;
+        }
+
+        return (string) ($inactive
+            ? $router->inactive_pppoe_profile
+            : ($package?->mikrotik_profile ?: $package?->name));
+    }
+
     private function syncPppSecret(RouterOsClient $client, Customer $customer, MikrotikRouter $router): string
     {
         $username = $customer->mikrotik_username ?: $customer->connection_id;
@@ -483,7 +507,7 @@ class MikrotikCustomerSyncService
         } else {
             $inactive = $customer->status !== 'active' || ! $subscription || $subscription->status !== 'active' || ! $package;
         }
-        $profile = $inactive ? $router->inactive_pppoe_profile : ($package?->mikrotik_profile ?: $package?->name);
+        $profile = $this->expectedProfile($customer, $router);
         if (! $customer->use_fixed_ip
             && ($customer->learned_ip_address !== null || $customer->learned_ip_package_id !== null)) {
             $customer->forceFill([
