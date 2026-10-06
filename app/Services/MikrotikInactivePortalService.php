@@ -13,9 +13,13 @@ class MikrotikInactivePortalService
 
     public const PORTAL_ADDRESS_LIST = 'isp-codex-please-call';
 
+    public const PUBLIC_DNS_ADDRESS_LIST = 'isp-codex-public-dns';
+
     private const RULE_PREFIX = 'ISP Codex Please Call';
 
     private const PORTAL_NETWORK = '162.4.6.0/23';
+
+    private const PUBLIC_DNS_SERVERS = ['8.8.8.8', '8.8.4.4', '1.1.1.1'];
 
     public function portalUrl(): string
     {
@@ -138,6 +142,13 @@ class MikrotikInactivePortalService
             'address' => $host,
             'comment' => self::RULE_PREFIX.' destination',
         ]);
+        foreach (self::PUBLIC_DNS_SERVERS as $dnsAddress) {
+            $client->command('/ip/firewall/address-list/add', [
+                'list' => self::PUBLIC_DNS_ADDRESS_LIST,
+                'address' => $dnsAddress,
+                'comment' => self::RULE_PREFIX.' public DNS',
+            ]);
+        }
 
         // Proxy access rules are first-match. The managed list is empty here,
         // so append the portal exception first and the catch-all redirect last.
@@ -217,6 +228,18 @@ class MikrotikInactivePortalService
             'comment' => self::RULE_PREFIX.' allow portal',
             'place-before' => '0',
         ]);
+        foreach (['tcp', 'udp'] as $protocol) {
+            $client->command('/ip/firewall/filter/add', [
+                'chain' => 'forward',
+                'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+                'dst-address-list' => self::PUBLIC_DNS_ADDRESS_LIST,
+                'protocol' => $protocol,
+                'dst-port' => '53',
+                'action' => 'accept',
+                'comment' => self::RULE_PREFIX.' allow public DNS '.strtoupper($protocol),
+                'place-before' => '0',
+            ]);
+        }
         $client->command('/ip/firewall/filter/add', [
             'chain' => 'forward',
             'src-address-list' => self::INACTIVE_ADDRESS_LIST,
@@ -245,6 +268,15 @@ class MikrotikInactivePortalService
             'action' => 'src-nat',
             'to-addresses' => $router->ip_address,
             'comment' => self::RULE_PREFIX.' portal source NAT',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/firewall/nat/add', [
+            'chain' => 'srcnat',
+            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+            'dst-address-list' => self::PUBLIC_DNS_ADDRESS_LIST,
+            'action' => 'src-nat',
+            'to-addresses' => $router->ip_address,
+            'comment' => self::RULE_PREFIX.' public DNS source NAT',
             'place-before' => '0',
         ]);
 

@@ -171,6 +171,17 @@ class InactivePortalTest extends TestCase
             && ($data['action'] ?? null) === 'src-nat'
             && ($data['to-addresses'] ?? null) === '10.0.0.1'
         );
+        foreach (['8.8.8.8', '8.8.4.4', '1.1.1.1'] as $dnsAddress) {
+            $this->assertCommand($client, '/ip/firewall/address-list/add', fn (array $data): bool => ($data['list'] ?? null) === MikrotikInactivePortalService::PUBLIC_DNS_ADDRESS_LIST
+                && ($data['address'] ?? null) === $dnsAddress
+            );
+        }
+        $this->assertCommand($client, '/ip/firewall/nat/add', fn (array $data): bool => ($data['chain'] ?? null) === 'srcnat'
+            && ($data['src-address-list'] ?? null) === MikrotikInactivePortalService::INACTIVE_ADDRESS_LIST
+            && ($data['dst-address-list'] ?? null) === MikrotikInactivePortalService::PUBLIC_DNS_ADDRESS_LIST
+            && ($data['action'] ?? null) === 'src-nat'
+            && ($data['to-addresses'] ?? null) === '10.0.0.1'
+        );
         $this->assertCommand($client, '/ip/proxy/access/add', fn (array $data): bool => ($data['action'] ?? null) === 'redirect'
             && ($data['action-data'] ?? null) === 'https://portal.example.test/please-call'
             && ! array_key_exists('local-port', $data)
@@ -202,6 +213,15 @@ class InactivePortalTest extends TestCase
             && ! array_key_exists('protocol', $data)
             && ! array_key_exists('dst-port', $data)
         );
+        foreach (['tcp', 'udp'] as $protocol) {
+            $this->assertCommand($client, '/ip/firewall/filter/add', fn (array $data): bool => ($data['chain'] ?? null) === 'forward'
+                && ($data['src-address-list'] ?? null) === MikrotikInactivePortalService::INACTIVE_ADDRESS_LIST
+                && ($data['dst-address-list'] ?? null) === MikrotikInactivePortalService::PUBLIC_DNS_ADDRESS_LIST
+                && ($data['protocol'] ?? null) === $protocol
+                && ($data['dst-port'] ?? null) === '53'
+                && ($data['action'] ?? null) === 'accept'
+            );
+        }
         $this->assertCommand($client, '/ip/firewall/filter/add', fn (array $data): bool => ($data['action'] ?? null) === 'reject'
             && str_contains((string) ($data['comment'] ?? ''), 'Please Call')
         );
