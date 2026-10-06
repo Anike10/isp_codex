@@ -195,6 +195,13 @@ class InactivePortalTest extends TestCase
             && ($data['dst-port'] ?? null) === '53'
             && ($data['action'] ?? null) === 'accept'
         );
+        $this->assertCommand($client, '/ip/firewall/filter/add', fn (array $data): bool => ($data['chain'] ?? null) === 'forward'
+            && ($data['src-address-list'] ?? null) === MikrotikInactivePortalService::INACTIVE_ADDRESS_LIST
+            && ($data['dst-address'] ?? null) === '162.4.6.0/23'
+            && ($data['action'] ?? null) === 'accept'
+            && ! array_key_exists('protocol', $data)
+            && ! array_key_exists('dst-port', $data)
+        );
         $this->assertCommand($client, '/ip/firewall/filter/add', fn (array $data): bool => ($data['action'] ?? null) === 'reject'
             && str_contains((string) ($data['comment'] ?? ''), 'Please Call')
         );

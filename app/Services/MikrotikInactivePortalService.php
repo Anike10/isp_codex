@@ -103,11 +103,6 @@ class MikrotikInactivePortalService
             throw new RuntimeException('APP_URL must use the public portal domain or server IP; localhost cannot be opened by PPPoE customers.');
         }
 
-        $portalPorts = collect([80, 443, (int) ($urlParts['port'] ?? ($scheme === 'https' ? 443 : 80))])
-            ->filter(fn (int $port): bool => $port >= 1 && $port <= 65535)
-            ->unique()
-            ->implode(',');
-
         $dnsServer = $this->ensureInactiveProfileNetworkPolicy($client, $profile);
         $dns = $client->command('/ip/dns/print', [
             '.proplist' => 'allow-remote-requests',
@@ -214,9 +209,10 @@ class MikrotikInactivePortalService
         $client->command('/ip/firewall/filter/add', [
             'chain' => 'forward',
             'src-address-list' => self::INACTIVE_ADDRESS_LIST,
-            'dst-address-list' => self::PORTAL_ADDRESS_LIST,
-            'protocol' => 'tcp',
-            'dst-port' => $portalPorts,
+            // The portal server is inside this routed network. Permit the full
+            // network before the inactive catch-all reject so ICMP diagnostics
+            // and both HTTP/HTTPS can use the source-NAT rule below.
+            'dst-address' => self::PORTAL_NETWORK,
             'action' => 'accept',
             'comment' => self::RULE_PREFIX.' allow portal',
             'place-before' => '0',
