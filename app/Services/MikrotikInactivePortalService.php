@@ -52,7 +52,7 @@ class MikrotikInactivePortalService
         return $summary;
     }
 
-    /** @return array{profile: string, address_list: string, portal_url: string, proxy_port: int, reconnected: int} */
+    /** @return array{profile: string, address_list: string, portal_url: string, proxy_port: int, dns_server: string, reconnected: int} */
     public function configure(MikrotikRouter $router): array
     {
         if ($router->pushDisabled()) {
@@ -76,7 +76,7 @@ class MikrotikInactivePortalService
         }
     }
 
-    /** @return array{profile: string, address_list: string, portal_url: string, proxy_port: int, reconnected: int} */
+    /** @return array{profile: string, address_list: string, portal_url: string, proxy_port: int, dns_server: string, reconnected: int} */
     public function configureWithClient(RouterOsClient $client, MikrotikRouter $router): array
     {
         if (! $this->hasConfiguredNumbers()) {
@@ -106,7 +106,16 @@ class MikrotikInactivePortalService
             ->unique()
             ->implode(',');
 
-        $this->ensureInactiveProfileAddressList($client, $profile);
+        $dnsServer = $this->ensureInactiveProfileNetworkPolicy($client, $profile);
+        $dns = $client->command('/ip/dns/print', [
+            '.proplist' => 'allow-remote-requests',
+        ])[0] ?? [];
+
+        if (! $this->routerBoolean($dns['allow-remote-requests'] ?? false)) {
+            $client->command('/ip/dns/set', [
+                'allow-remote-requests' => 'yes',
+            ]);
+        }
 
         $proxyRules = $client->command('/ip/proxy/access/print', ['.proplist' => '.id,comment']);
         $ownedProxyRules = array_values(array_filter($proxyRules, fn (array $row): bool => $this->isTagged($row)));
@@ -133,21 +142,20 @@ class MikrotikInactivePortalService
             'comment' => self::RULE_PREFIX.' destination',
         ]);
 
-        // Proxy access rules are first-match. Add redirect first, then place the
-        // portal exception above it so the redirect cannot loop back on itself.
-        $client->command('/ip/proxy/access/add', [
-            'local-port' => (string) $proxyPort,
-            'action' => 'deny',
-            'redirect-to' => $url,
-            'comment' => self::RULE_PREFIX.' redirect',
-            'place-before' => '0',
-        ]);
+        // Proxy access rules are first-match. The managed list is empty here,
+        // so append the portal exception first and the catch-all redirect last.
+        // `place-before=0` fails on RouterOS when the access list has no row 0.
         $client->command('/ip/proxy/access/add', [
             'local-port' => (string) $proxyPort,
             'dst-host' => $host,
             'action' => 'allow',
             'comment' => self::RULE_PREFIX.' allow portal host',
-            'place-before' => '0',
+        ]);
+        $client->command('/ip/proxy/access/add', [
+            'local-port' => (string) $proxyPort,
+            'action' => 'deny',
+            'redirect-to' => $url,
+            'comment' => self::RULE_PREFIX.' redirect',
         ]);
 
         // Enable only after the app-owned access rules exist. If a later command
@@ -170,29 +178,29 @@ class MikrotikInactivePortalService
             'place-before' => '0',
         ]);
         $client->command('/ip/firewall/filter/add', [
+            'chain' => 'input',
+            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+            'protocol' => 'tcp',
+            'dst-port' => '53',
+            'action' => 'accept',
+            'comment' => self::RULE_PREFIX.' allow router DNS TCP',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/firewall/filter/add', [
+            'chain' => 'input',
+            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+            'protocol' => 'udp',
+            'dst-port' => '53',
+            'action' => 'accept',
+            'comment' => self::RULE_PREFIX.' allow router DNS UDP',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/firewall/filter/add', [
             'chain' => 'forward',
             'src-address-list' => self::INACTIVE_ADDRESS_LIST,
             'action' => 'reject',
             'reject-with' => 'icmp-network-unreachable',
             'comment' => self::RULE_PREFIX.' block other traffic',
-            'place-before' => '0',
-        ]);
-        $client->command('/ip/firewall/filter/add', [
-            'chain' => 'forward',
-            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
-            'protocol' => 'tcp',
-            'dst-port' => '53',
-            'action' => 'accept',
-            'comment' => self::RULE_PREFIX.' allow DNS TCP',
-            'place-before' => '0',
-        ]);
-        $client->command('/ip/firewall/filter/add', [
-            'chain' => 'forward',
-            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
-            'protocol' => 'udp',
-            'dst-port' => '53',
-            'action' => 'accept',
-            'comment' => self::RULE_PREFIX.' allow DNS UDP',
             'place-before' => '0',
         ]);
         $client->command('/ip/firewall/filter/add', [
@@ -216,15 +224,33 @@ class MikrotikInactivePortalService
             'place-before' => '0',
         ]);
 
-        // The PPP profile address-list is attached when a session connects.
-        // Reconnect current inactive sessions once so the policy applies now.
-        $activeSessions = $client->command('/ppp/active/print', [
+        // `/ppp/active` does not expose the profile on RouterOS 7. Match active
+        // sessions to inactive secrets (and the profile's dynamic address list)
+        // so only inactive users reconnect and receive the MikroTik DNS address.
+        $inactiveNames = collect($client->command('/ppp/secret/print', [
             '?profile' => $profile,
-            '.proplist' => '.id,name,profile',
+            '.proplist' => 'name,profile',
+        ]))
+            ->filter(fn (array $secret): bool => trim((string) ($secret['profile'] ?? '')) === $profile)
+            ->mapWithKeys(fn (array $secret): array => [trim((string) ($secret['name'] ?? '')) => true])
+            ->forget('')
+            ->all();
+        $inactiveAddresses = collect($client->command('/ip/firewall/address-list/print', [
+            '?list' => self::INACTIVE_ADDRESS_LIST,
+            '.proplist' => 'list,address',
+        ]))
+            ->filter(fn (array $row): bool => trim((string) ($row['list'] ?? '')) === self::INACTIVE_ADDRESS_LIST)
+            ->mapWithKeys(fn (array $row): array => [trim((string) ($row['address'] ?? '')) => true])
+            ->forget('')
+            ->all();
+        $activeSessions = $client->command('/ppp/active/print', [
+            '.proplist' => '.id,name,address',
         ]);
         $reconnected = 0;
         foreach ($activeSessions as $session) {
-            if (empty($session['.id']) || trim((string) ($session['profile'] ?? '')) !== $profile) {
+            $name = trim((string) ($session['name'] ?? ''));
+            $address = trim((string) ($session['address'] ?? ''));
+            if (empty($session['.id']) || (! isset($inactiveNames[$name]) && ! isset($inactiveAddresses[$address]))) {
                 continue;
             }
 
@@ -237,15 +263,16 @@ class MikrotikInactivePortalService
             'address_list' => self::INACTIVE_ADDRESS_LIST,
             'portal_url' => $url,
             'proxy_port' => $proxyPort,
+            'dns_server' => $dnsServer,
             'reconnected' => $reconnected,
         ];
     }
 
-    private function ensureInactiveProfileAddressList(RouterOsClient $client, string $profile): void
+    private function ensureInactiveProfileNetworkPolicy(RouterOsClient $client, string $profile): string
     {
         $profiles = $client->command('/ppp/profile/print', [
             '?name' => $profile,
-            '.proplist' => '.id,name,address-list,use-ipv6',
+            '.proplist' => '.id,name,address-list,use-ipv6,local-address,dns-server',
         ]);
 
         if ($profiles === []) {
@@ -255,11 +282,16 @@ class MikrotikInactivePortalService
                 'use-ipv6' => 'no',
             ]);
 
-            return;
+            throw new RuntimeException("Inactive PPP profile {$profile} was created, but it needs a router IPv4 local-address before the Please Call redirect can use MikroTik DNS.");
         }
 
         if (count($profiles) !== 1 || trim((string) ($profiles[0]['name'] ?? '')) !== $profile) {
             throw new RuntimeException("RouterOS returned a mismatched PPP profile while configuring {$profile}.");
+        }
+
+        $dnsServer = trim((string) ($profiles[0]['local-address'] ?? ''));
+        if (filter_var($dnsServer, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            throw new RuntimeException("Inactive PPP profile {$profile} must have a router IPv4 local-address before the Please Call redirect can use MikroTik DNS.");
         }
 
         $changes = [];
@@ -269,6 +301,9 @@ class MikrotikInactivePortalService
         if (mb_strtolower(trim((string) ($profiles[0]['use-ipv6'] ?? ''))) !== 'no') {
             $changes['use-ipv6'] = 'no';
         }
+        if (trim((string) ($profiles[0]['dns-server'] ?? '')) !== $dnsServer) {
+            $changes['dns-server'] = $dnsServer;
+        }
 
         if ($changes !== []) {
             $client->command('/ppp/profile/set', [
@@ -276,6 +311,8 @@ class MikrotikInactivePortalService
                 ...$changes,
             ]);
         }
+
+        return $dnsServer;
     }
 
     /** @return array<int, array<string, string>> */

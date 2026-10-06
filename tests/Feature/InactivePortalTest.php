@@ -145,11 +145,14 @@ class InactivePortalTest extends TestCase
         $this->assertSame('inactive', $result['profile']);
         $this->assertSame(MikrotikInactivePortalService::INACTIVE_ADDRESS_LIST, $result['address_list']);
         $this->assertSame('https://portal.example.test/please-call', $result['portal_url']);
+        $this->assertSame('10.99.99.1', $result['dns_server']);
         $this->assertSame(1, $result['reconnected']);
 
         $this->assertCommand($client, '/ppp/profile/set', fn (array $data): bool => ($data['.id'] ?? null) === '*PROFILE'
             && ($data['address-list'] ?? null) === MikrotikInactivePortalService::INACTIVE_ADDRESS_LIST
+            && ($data['dns-server'] ?? null) === '10.99.99.1'
         );
+        $this->assertCommand($client, '/ip/dns/set', fn (array $data): bool => ($data['allow-remote-requests'] ?? null) === 'yes');
         $this->assertCommand($client, '/ip/proxy/set', fn (array $data): bool => ($data['enabled'] ?? null) === 'yes' && ($data['port'] ?? null) === '8080'
         );
         $this->assertCommand($client, '/ip/firewall/nat/add', fn (array $data): bool => ($data['src-address-list'] ?? null) === MikrotikInactivePortalService::INACTIVE_ADDRESS_LIST
@@ -157,6 +160,19 @@ class InactivePortalTest extends TestCase
             && ($data['action'] ?? null) === 'redirect'
         );
         $this->assertCommand($client, '/ip/proxy/access/add', fn (array $data): bool => ($data['redirect-to'] ?? null) === 'https://portal.example.test/please-call'
+            && ! array_key_exists('place-before', $data)
+        );
+        $this->assertCommand($client, '/ip/firewall/filter/add', fn (array $data): bool => ($data['chain'] ?? null) === 'input'
+            && ($data['src-address-list'] ?? null) === MikrotikInactivePortalService::INACTIVE_ADDRESS_LIST
+            && ($data['protocol'] ?? null) === 'udp'
+            && ($data['dst-port'] ?? null) === '53'
+            && ($data['action'] ?? null) === 'accept'
+        );
+        $this->assertCommand($client, '/ip/firewall/filter/add', fn (array $data): bool => ($data['chain'] ?? null) === 'input'
+            && ($data['src-address-list'] ?? null) === MikrotikInactivePortalService::INACTIVE_ADDRESS_LIST
+            && ($data['protocol'] ?? null) === 'tcp'
+            && ($data['dst-port'] ?? null) === '53'
+            && ($data['action'] ?? null) === 'accept'
         );
         $this->assertCommand($client, '/ip/firewall/filter/add', fn (array $data): bool => ($data['action'] ?? null) === 'reject'
             && str_contains((string) ($data['comment'] ?? ''), 'Please Call')
@@ -217,6 +233,11 @@ class PortalFakeRouterOsClient extends RouterOsClient
                 'name' => 'inactive',
                 'address-list' => '',
                 'use-ipv6' => 'yes',
+                'local-address' => '10.99.99.1',
+                'dns-server' => '',
+            ]],
+            '/ip/dns/print' => [[
+                'allow-remote-requests' => 'no',
             ]],
             '/ip/proxy/print' => [[
                 'enabled' => $this->proxyEnabled ? 'yes' : 'no',
@@ -224,6 +245,10 @@ class PortalFakeRouterOsClient extends RouterOsClient
             ]],
             '/ppp/active/print' => $this->activeSession ? [[
                 '.id' => '*ACTIVE',
+                'name' => 'inactive-user',
+                'address' => '10.99.99.10',
+            ]] : [],
+            '/ppp/secret/print' => $this->activeSession ? [[
                 'name' => 'inactive-user',
                 'profile' => 'inactive',
             ]] : [],

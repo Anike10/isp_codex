@@ -109,6 +109,7 @@ class MikrotikRouterController extends Controller
                 'success',
                 "Please Call redirect configured on {$mikrotikRouter->name}. "
                 ."Inactive profile {$result['profile']} now redirects HTTP requests to {$result['portal_url']}. "
+                ."Inactive clients now use MikroTik DNS {$result['dns_server']}. "
                 ."Reconnected {$result['reconnected']} active inactive-profile session(s)."
             );
         } catch (Throwable $exception) {
