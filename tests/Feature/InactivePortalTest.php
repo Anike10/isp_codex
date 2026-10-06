@@ -179,6 +179,15 @@ class InactivePortalTest extends TestCase
         $this->assertCommand($client, '/ip/firewall/filter/add', fn (array $data): bool => ($data['action'] ?? null) === 'reject'
             && str_contains((string) ($data['comment'] ?? ''), 'Please Call')
         );
+        $filterComments = collect($client->commands)
+            ->where('command', '/ip/firewall/filter/add')
+            ->pluck('attributes.comment')
+            ->values();
+        $portalPosition = $filterComments->search('ISP Codex Please Call allow portal');
+        $blockPosition = $filterComments->search('ISP Codex Please Call block other traffic');
+        $this->assertIsInt($portalPosition);
+        $this->assertIsInt($blockPosition);
+        $this->assertLessThan($blockPosition, $portalPosition);
         $this->assertCommand($client, '/ppp/active/remove', fn (array $data): bool => ($data['.id'] ?? null) === '*ACTIVE');
     }
 

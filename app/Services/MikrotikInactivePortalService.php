@@ -198,19 +198,19 @@ class MikrotikInactivePortalService
         $client->command('/ip/firewall/filter/add', [
             'chain' => 'forward',
             'src-address-list' => self::INACTIVE_ADDRESS_LIST,
-            'action' => 'reject',
-            'reject-with' => 'icmp-network-unreachable',
-            'comment' => self::RULE_PREFIX.' block other traffic',
-            'place-before' => '0',
-        ]);
-        $client->command('/ip/firewall/filter/add', [
-            'chain' => 'forward',
-            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
             'dst-address-list' => self::PORTAL_ADDRESS_LIST,
             'protocol' => 'tcp',
             'dst-port' => $portalPorts,
             'action' => 'accept',
             'comment' => self::RULE_PREFIX.' allow portal',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/firewall/filter/add', [
+            'chain' => 'forward',
+            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+            'action' => 'reject',
+            'reject-with' => 'icmp-network-unreachable',
+            'comment' => self::RULE_PREFIX.' block other traffic',
             'place-before' => '0',
         ]);
         $client->command('/ip/firewall/nat/add', [
