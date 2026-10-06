@@ -165,6 +165,12 @@ class InactivePortalTest extends TestCase
             && ($data['to-addresses'] ?? null) === '10.99.99.1'
             && ($data['to-ports'] ?? null) === '8080'
         );
+        $this->assertCommand($client, '/ip/firewall/nat/add', fn (array $data): bool => ($data['chain'] ?? null) === 'srcnat'
+            && ($data['src-address-list'] ?? null) === MikrotikInactivePortalService::INACTIVE_ADDRESS_LIST
+            && ($data['dst-address'] ?? null) === '162.4.6.0/23'
+            && ($data['action'] ?? null) === 'src-nat'
+            && ($data['to-addresses'] ?? null) === '10.0.0.1'
+        );
         $this->assertCommand($client, '/ip/proxy/access/add', fn (array $data): bool => ($data['action'] ?? null) === 'redirect'
             && ($data['action-data'] ?? null) === 'https://portal.example.test/please-call'
             && ! array_key_exists('local-port', $data)

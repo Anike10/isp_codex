@@ -15,6 +15,8 @@ class MikrotikInactivePortalService
 
     private const RULE_PREFIX = 'ISP Codex Please Call';
 
+    private const PORTAL_NETWORK = '162.4.6.0/23';
+
     public function portalUrl(): string
     {
         return route('service-inactive', [], true);
@@ -238,6 +240,15 @@ class MikrotikInactivePortalService
             'to-addresses' => $dnsServer,
             'to-ports' => (string) $proxyPort,
             'comment' => self::RULE_PREFIX.' HTTP redirect',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/firewall/nat/add', [
+            'chain' => 'srcnat',
+            'src-address-list' => self::INACTIVE_ADDRESS_LIST,
+            'dst-address' => self::PORTAL_NETWORK,
+            'action' => 'src-nat',
+            'to-addresses' => $router->ip_address,
+            'comment' => self::RULE_PREFIX.' portal source NAT',
             'place-before' => '0',
         ]);
 
