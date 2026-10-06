@@ -163,8 +163,11 @@ class MikrotikInactivePortalService
         $client->command('/ip/proxy/set', [
             'enabled' => 'yes',
             'port' => (string) $proxyPort,
+            'src-address' => $router->ip_address,
             'cache-on-disk' => 'no',
-            'max-cache-size' => 'none',
+            // RouterOS 7 on TILE remains in passthrough mode and does not
+            // accept transparent-proxy connections with cache disabled.
+            'max-cache-size' => '1024',
         ]);
 
         // Add restrictive rules first, then insert exceptions above them.
@@ -196,6 +199,14 @@ class MikrotikInactivePortalService
             'place-before' => '0',
         ]);
         $client->command('/ip/firewall/filter/add', [
+            'chain' => 'input',
+            'protocol' => 'tcp',
+            'dst-port' => (string) $proxyPort,
+            'action' => 'drop',
+            'comment' => self::RULE_PREFIX.' block other proxy clients',
+            'place-before' => '0',
+        ]);
+        $client->command('/ip/firewall/filter/add', [
             'chain' => 'forward',
             'src-address-list' => self::INACTIVE_ADDRESS_LIST,
             'dst-address-list' => self::PORTAL_ADDRESS_LIST,
@@ -218,7 +229,11 @@ class MikrotikInactivePortalService
             'src-address-list' => self::INACTIVE_ADDRESS_LIST,
             'protocol' => 'tcp',
             'dst-port' => '80',
-            'action' => 'redirect',
+            // RouterOS 7 on this PPPoE concentrator does not bind Web Proxy to
+            // the repeated dynamic profile local-address. Target the router's
+            // static management IPv4 address, where the proxy is listening.
+            'action' => 'dst-nat',
+            'to-addresses' => $router->ip_address,
             'to-ports' => (string) $proxyPort,
             'comment' => self::RULE_PREFIX.' HTTP redirect',
             'place-before' => '0',
