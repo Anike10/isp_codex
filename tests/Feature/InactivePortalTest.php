@@ -153,19 +153,21 @@ class InactivePortalTest extends TestCase
             && ($data['dns-server'] ?? null) === '10.99.99.1'
         );
         $this->assertCommand($client, '/ip/dns/set', fn (array $data): bool => ($data['allow-remote-requests'] ?? null) === 'yes');
+        $this->assertCommand($client, '/ip/proxy/set', fn (array $data): bool => ($data['enabled'] ?? null) === 'no');
         $this->assertCommand($client, '/ip/proxy/set', fn (array $data): bool => ($data['enabled'] ?? null) === 'yes'
             && ($data['port'] ?? null) === '8080'
-            && ($data['src-address'] ?? null) === '10.0.0.1'
-            && ($data['max-cache-size'] ?? null) === '1024'
+            && ($data['src-address'] ?? null) === '10.99.99.1'
+            && ($data['max-cache-size'] ?? null) === 'unlimited'
         );
         $this->assertCommand($client, '/ip/firewall/nat/add', fn (array $data): bool => ($data['src-address-list'] ?? null) === MikrotikInactivePortalService::INACTIVE_ADDRESS_LIST
             && ($data['dst-port'] ?? null) === '80'
-            && ($data['action'] ?? null) === 'dst-nat'
-            && ($data['to-addresses'] ?? null) === '10.0.0.1'
+            && ($data['action'] ?? null) === 'redirect'
+            && ($data['to-addresses'] ?? null) === '10.99.99.1'
             && ($data['to-ports'] ?? null) === '8080'
         );
         $this->assertCommand($client, '/ip/proxy/access/add', fn (array $data): bool => ($data['action'] ?? null) === 'redirect'
             && ($data['action-data'] ?? null) === 'https://portal.example.test/please-call'
+            && ! array_key_exists('local-port', $data)
             && ! array_key_exists('redirect-to', $data)
             && ! array_key_exists('place-before', $data)
         );

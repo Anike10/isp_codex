@@ -146,28 +146,31 @@ class MikrotikInactivePortalService
         // so append the portal exception first and the catch-all redirect last.
         // `place-before=0` fails on RouterOS when the access list has no row 0.
         $client->command('/ip/proxy/access/add', [
-            'local-port' => (string) $proxyPort,
             'dst-host' => $host,
             'action' => 'allow',
             'comment' => self::RULE_PREFIX.' allow portal host',
         ]);
         $client->command('/ip/proxy/access/add', [
-            'local-port' => (string) $proxyPort,
             'action' => 'redirect',
             'action-data' => $url,
             'comment' => self::RULE_PREFIX.' redirect',
         ]);
 
-        // Enable only after the app-owned access rules exist. If a later command
-        // fails, the next apply can still recognise this proxy as app-managed.
+        // RouterOS keeps the existing proxy process alive when its bind address
+        // or cache mode changes. Restart it so the inactive profile gateway is
+        // listening before users are reconnected below.
+        $client->command('/ip/proxy/set', [
+            'enabled' => 'no',
+        ]);
         $client->command('/ip/proxy/set', [
             'enabled' => 'yes',
             'port' => (string) $proxyPort,
-            'src-address' => $router->ip_address,
+            'src-address' => $dnsServer,
             'cache-on-disk' => 'no',
-            // RouterOS 7 on TILE remains in passthrough mode and does not
-            // accept transparent-proxy connections with cache disabled.
-            'max-cache-size' => '1024',
+            // On the live TILE router a small cache left the listener unable to
+            // serve redirected PPPoE connections. RouterOS' supported RAM-cache
+            // mode keeps the proxy running; these rules only return redirects.
+            'max-cache-size' => 'unlimited',
         ]);
 
         // Add restrictive rules first, then insert exceptions above them.
@@ -229,11 +232,10 @@ class MikrotikInactivePortalService
             'src-address-list' => self::INACTIVE_ADDRESS_LIST,
             'protocol' => 'tcp',
             'dst-port' => '80',
-            // RouterOS 7 on this PPPoE concentrator does not bind Web Proxy to
-            // the repeated dynamic profile local-address. Target the router's
-            // static management IPv4 address, where the proxy is listening.
-            'action' => 'dst-nat',
-            'to-addresses' => $router->ip_address,
+            // Redirect to the router address assigned as the inactive PPP
+            // profile gateway. This is also the address the proxy binds above.
+            'action' => 'redirect',
+            'to-addresses' => $dnsServer,
             'to-ports' => (string) $proxyPort,
             'comment' => self::RULE_PREFIX.' HTTP redirect',
             'place-before' => '0',
